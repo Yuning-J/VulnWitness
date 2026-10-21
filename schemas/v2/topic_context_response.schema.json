@@ -1,0 +1,1785 @@
+{
+  "$defs": {
+    "AffectedProduct": {
+      "additionalProperties": false,
+      "properties": {
+        "cpe": {
+          "anyOf": [
+            {
+              "pattern": "^cpe:2\\.3:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpe"
+        },
+        "product": {
+          "minLength": 1,
+          "title": "Product",
+          "type": "string"
+        },
+        "purl": {
+          "anyOf": [
+            {
+              "pattern": "^pkg:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Purl"
+        },
+        "status": {
+          "enum": [
+            "affected",
+            "unaffected",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "vendor": {
+          "minLength": 1,
+          "title": "Vendor",
+          "type": "string"
+        },
+        "version_ranges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VersionRange"
+          },
+          "title": "Version Ranges",
+          "type": "array"
+        }
+      },
+      "required": [
+        "vendor",
+        "product",
+        "cpe",
+        "purl",
+        "status",
+        "version_ranges"
+      ],
+      "title": "AffectedProduct",
+      "type": "object"
+    },
+    "AffectednessDetail": {
+      "description": "The server's sentence for each ``AffectednessFailure``: the ``detail`` of an\naffectedness check and of an unavailable ``affectedness`` capability.",
+      "enum": [
+        "BLOCKED_UNVERIFIED: no affectedness adapter is verified against a deployed Trustify; trustify-mcp ac8955f calls /api/v2 routes Trustify removed in v0.5.0 (ADR 0003). Affectedness is not checked.",
+        "The affectedness source could not be reached. Affectedness is not established.",
+        "The affectedness source did not answer within its time limit. Affectedness is not established.",
+        "The affectedness source refused this server's credentials. Affectedness is not established.",
+        "The affectedness source's tools differ from the pinned trustify-mcp surface. Affectedness is not established."
+      ],
+      "title": "AffectednessDetail",
+      "type": "string"
+    },
+    "AssertionKind": {
+      "description": "Whether a source states a fact directly or this service derived it.",
+      "enum": [
+        "asserted",
+        "inferred"
+      ],
+      "title": "AssertionKind",
+      "type": "string"
+    },
+    "BackendFailureDetail": {
+      "description": "The server's sentence for each ``BackendFailure``.",
+      "enum": [
+        "The backend is not configured.",
+        "The backend's adapter cannot be loaded.",
+        "The backend could not be reached.",
+        "The backend failed while searching.",
+        "The backend's index holds no entries for the searched records.",
+        "The backend cannot apply the search's filters before its limit.",
+        "The backend returned nothing and does not report its own errors."
+      ],
+      "title": "BackendFailureDetail",
+      "type": "string"
+    },
+    "BackendStatus": {
+      "description": "Typed outcome of one retrieval backend invocation.",
+      "enum": [
+        "ok",
+        "unavailable",
+        "incomplete_index",
+        "error"
+      ],
+      "title": "BackendStatus",
+      "type": "string"
+    },
+    "Candidate": {
+      "additionalProperties": false,
+      "description": "A ranked record.\n\nExact-ID hits rank first in request order, then records matched directly by the\nlexical or semantic channel, then records reached only through the graph. Within\na tier, ties on ``relevance_score`` are broken by ascending CVE ID.",
+      "properties": {
+        "channel_hits": {
+          "items": {
+            "$ref": "#/$defs/ChannelHit"
+          },
+          "minItems": 1,
+          "title": "Channel Hits",
+          "type": "array"
+        },
+        "missing_fields": {
+          "description": "Record fields no source supplied; unknown, not evidence of low risk.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Fields",
+          "type": "array"
+        },
+        "rank": {
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "record": {
+          "$ref": "#/$defs/CveRecord"
+        },
+        "relevance_score": {
+          "description": "Reciprocal-rank-fusion score over the exact-ID, lexical, semantic and graph hits. Measures relevance to the query only — not severity, exploitability or confidence. Structured hits record why the candidate satisfied the filters and add no score.",
+          "minimum": 0.0,
+          "title": "Relevance Score",
+          "type": "number"
+        },
+        "scope_assessment": {
+          "$ref": "#/$defs/ScopeAssessment"
+        }
+      },
+      "required": [
+        "rank",
+        "record",
+        "relevance_score",
+        "channel_hits",
+        "scope_assessment",
+        "missing_fields"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "ChannelHit": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/RetrievalChannel"
+        },
+        "channel_rank": {
+          "minimum": 1,
+          "title": "Channel Rank",
+          "type": "integer"
+        },
+        "graph_paths": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GraphPath"
+          },
+          "title": "Graph Paths",
+          "type": "array"
+        },
+        "matched_fields": {
+          "items": {
+            "$ref": "#/$defs/MatchedField"
+          },
+          "title": "Matched Fields",
+          "type": "array"
+        },
+        "matched_terms": {
+          "description": "Terms the server can vouch for: the caller's query terms (lexical) or filter values (structured), relation values both records carry (graph), or the requested CVE ID; none for the semantic channel.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Matched Terms",
+          "type": "array"
+        },
+        "raw_score": {
+          "description": "The channel's own score; scales differ by channel.",
+          "minimum": 0.0,
+          "title": "Raw Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "channel",
+        "channel_rank",
+        "raw_score",
+        "matched_fields",
+        "matched_terms",
+        "graph_paths"
+      ],
+      "title": "ChannelHit",
+      "type": "object"
+    },
+    "ChannelOutcome": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "detail": {
+            "not": {
+              "type": "null"
+            }
+          }
+        },
+        "required": [
+          "detail"
+        ]
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        }
+      },
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/RetrievalChannel"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackendFailureDetail"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The server's sentence for why the channel failed; null when it answered."
+        },
+        "status": {
+          "$ref": "#/$defs/BackendStatus"
+        }
+      },
+      "required": [
+        "channel",
+        "status",
+        "detail"
+      ],
+      "then": {
+        "properties": {
+          "detail": {
+            "type": "null"
+          }
+        }
+      },
+      "title": "ChannelOutcome",
+      "type": "object"
+    },
+    "CveRecord": {
+      "additionalProperties": false,
+      "description": "An implementation-level vulnerability record.\n\n``protocol_design_claim`` and ``formal_seed_eligible`` are fixed: a CVE never\nestablishes a protocol-design vulnerability and never seeds formal analysis.",
+      "properties": {
+        "affected": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AffectedProduct"
+          },
+          "title": "Affected",
+          "type": "array"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "cvss": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CvssMetric"
+          },
+          "title": "Cvss",
+          "type": "array"
+        },
+        "cwe_ids": {
+          "default": [],
+          "items": {
+            "maxLength": 16,
+            "pattern": "^CWE-[0-9]+$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Cwe Ids",
+          "type": "array"
+        },
+        "descriptions": {
+          "items": {
+            "$ref": "#/$defs/LocalizedText"
+          },
+          "minItems": 1,
+          "title": "Descriptions",
+          "type": "array"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "formal_seed_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Formal Seed Eligible",
+          "type": "boolean"
+        },
+        "kev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KevEntry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA KEV entry, when a consulted source lists one."
+        },
+        "last_modified": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Modified"
+        },
+        "protocol_design_claim": {
+          "const": "not_established",
+          "default": "not_established",
+          "title": "Protocol Design Claim",
+          "type": "string"
+        },
+        "published": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published"
+        },
+        "record_kind": {
+          "const": "cve",
+          "default": "cve",
+          "title": "Record Kind",
+          "type": "string"
+        },
+        "references": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "title": "References",
+          "type": "array"
+        },
+        "vulnerability_origin": {
+          "$ref": "#/$defs/VulnerabilityOrigin",
+          "default": "unknown"
+        }
+      },
+      "required": [
+        "record_kind",
+        "cve_id",
+        "descriptions",
+        "published",
+        "last_modified",
+        "cvss",
+        "cwe_ids",
+        "affected",
+        "references",
+        "kev",
+        "vulnerability_origin",
+        "protocol_design_claim",
+        "formal_seed_eligible",
+        "evidence_ids"
+      ],
+      "title": "CveRecord",
+      "type": "object"
+    },
+    "CvssMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "base_score": {
+          "maximum": 10.0,
+          "minimum": 0.0,
+          "title": "Base Score",
+          "type": "number"
+        },
+        "base_severity": {
+          "anyOf": [
+            {
+              "enum": [
+                "NONE",
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "CRITICAL"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Severity"
+        },
+        "scorer": {
+          "description": "Organization that produced this score.",
+          "minLength": 1,
+          "title": "Scorer",
+          "type": "string"
+        },
+        "scorer_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "primary",
+                "secondary"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer Type"
+        },
+        "vector_string": {
+          "minLength": 1,
+          "title": "Vector String",
+          "type": "string"
+        },
+        "version": {
+          "enum": [
+            "2.0",
+            "3.0",
+            "3.1",
+            "4.0"
+          ],
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "vector_string",
+        "base_score",
+        "base_severity",
+        "scorer",
+        "scorer_type"
+      ],
+      "title": "CvssMetric",
+      "type": "object"
+    },
+    "EvidenceAnchor": {
+      "additionalProperties": false,
+      "description": "A pointer to one source record, precise enough to re-fetch and re-hash it.",
+      "else": {
+        "properties": {
+          "inference_method": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "assertion_kind": {
+            "const": "inferred"
+          }
+        }
+      },
+      "properties": {
+        "assertion_kind": {
+          "$ref": "#/$defs/AssertionKind"
+        },
+        "authoritative_record_id": {
+          "description": "Identifier of the record in its source of record, e.g. a CVE ID.",
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Authoritative Record Id",
+          "type": "string"
+        },
+        "content_sha256": {
+          "description": "SHA-256 of the canonical JSON of the source record this anchor points at.",
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "evidence_id": {
+          "description": "'ev:' and the first 24 hex digits of the SHA-256 of the canonical JSON of every other anchor field; it changes when any provenance field changes. The server re-derives it and rejects a mismatch. An integrity check, not proof of origin: a holder can recompute it.",
+          "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bounded excerpt, present only when the source's terms permit redistribution.",
+          "title": "Excerpt"
+        },
+        "inference_method": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How an inferred anchor was derived; required iff inferred.",
+          "title": "Inference Method"
+        },
+        "license_or_terms_ref": {
+          "minLength": 1,
+          "title": "License Or Terms Ref",
+          "type": "string"
+        },
+        "locator": {
+          "description": "Field path or JSON pointer inside the source.",
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/KnowledgeScope"
+        },
+        "source_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source Name",
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/SourceType"
+        },
+        "source_uri": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Source Uri",
+          "type": "string"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Release, commit, ETag or snapshot identifier, when the source exposes one.",
+          "title": "Source Version"
+        },
+        "trust_level": {
+          "$ref": "#/$defs/TrustLevel"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "source_name",
+        "source_type",
+        "authoritative_record_id",
+        "source_uri",
+        "source_version",
+        "retrieved_at",
+        "content_sha256",
+        "locator",
+        "excerpt",
+        "scope",
+        "assertion_kind",
+        "inference_method",
+        "license_or_terms_ref",
+        "trust_level"
+      ],
+      "then": {
+        "properties": {
+          "inference_method": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "inference_method"
+        ]
+      },
+      "title": "EvidenceAnchor",
+      "type": "object"
+    },
+    "ExcludedCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "$ref": "#/$defs/TopicCandidate"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate",
+        "reason"
+      ],
+      "title": "ExcludedCandidate",
+      "type": "object"
+    },
+    "ExcludedTerm": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "term": {
+          "title": "Term",
+          "type": "string"
+        },
+        "topic_id": {
+          "pattern": "^[a-z0-9]+:[a-z0-9][a-z0-9-]*$(?!\\n)",
+          "title": "Topic Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic_id",
+        "term",
+        "reason"
+      ],
+      "title": "ExcludedTerm",
+      "type": "object"
+    },
+    "GraphPath": {
+      "additionalProperties": false,
+      "description": "One asserted relation a graph hit shares with the seed record it was reached from.",
+      "properties": {
+        "relation": {
+          "enum": [
+            "cwe",
+            "vendor",
+            "product",
+            "cpe",
+            "purl"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "seed_cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Seed Cve Id",
+          "type": "string"
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seed_cve_id",
+        "relation",
+        "value"
+      ],
+      "title": "GraphPath",
+      "type": "object"
+    },
+    "KevEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "date_added": {
+          "format": "date",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+          "title": "Date Added",
+          "type": "string"
+        },
+        "due_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Due Date"
+        },
+        "known_ransomware_campaign_use": {
+          "anyOf": [
+            {
+              "enum": [
+                "known",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA's own Known/Unknown assessment; null when the consulted source does not carry it.",
+          "title": "Known Ransomware Campaign Use"
+        }
+      },
+      "required": [
+        "date_added",
+        "due_date",
+        "known_ransomware_campaign_use"
+      ],
+      "title": "KevEntry",
+      "type": "object"
+    },
+    "KnowledgeScope": {
+      "description": "What kind of knowledge a record, evidence anchor or claim represents.",
+      "enum": [
+        "formal_protocol_finding",
+        "protocol_threat_context",
+        "implementation_vulnerability",
+        "unknown"
+      ],
+      "title": "KnowledgeScope",
+      "type": "string"
+    },
+    "KnowledgeSource": {
+      "enum": [
+        "cve_search",
+        "mitre_fight",
+        "affectedness"
+      ],
+      "title": "KnowledgeSource",
+      "type": "string"
+    },
+    "LocalizedText": {
+      "additionalProperties": false,
+      "properties": {
+        "lang": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$(?!\\n)",
+          "title": "Lang",
+          "type": "string"
+        },
+        "source": {
+          "description": "Who authored this text, e.g. a CNA.",
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "lang",
+        "value",
+        "source"
+      ],
+      "title": "LocalizedText",
+      "type": "object"
+    },
+    "MatchedField": {
+      "description": "A field a retrieval channel matched a record in, so no channel can name anything\nelse: the lexical index's fields, the structured filter's fields, the semantic\nembedding, the graph's relations and the exact CVE ID.",
+      "enum": [
+        "cve_id",
+        "description",
+        "vendor",
+        "product",
+        "cwe_ids",
+        "affected.vendor",
+        "affected.product",
+        "affected.purl",
+        "cvss.base_severity",
+        "vulnerability_origin",
+        "published.year",
+        "kev",
+        "semantic.embedding",
+        "relation.cwe",
+        "relation.vendor",
+        "relation.product",
+        "relation.cpe",
+        "relation.purl"
+      ],
+      "title": "MatchedField",
+      "type": "string"
+    },
+    "ObservationStatus": {
+      "description": "FiGHT's own maturity label, normalized; ``source_status`` keeps the original text.",
+      "enum": [
+        "theoretical",
+        "proof_of_concept",
+        "observed",
+        "observed_outside_5g"
+      ],
+      "title": "ObservationStatus",
+      "type": "string"
+    },
+    "QueryScope": {
+      "enum": [
+        "protocol_context_only",
+        "implementation_only",
+        "mixed"
+      ],
+      "title": "QueryScope",
+      "type": "string"
+    },
+    "Reference": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "url": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "source",
+        "tags"
+      ],
+      "title": "Reference",
+      "type": "object"
+    },
+    "RelevanceAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "matched_terms": {
+          "description": "Card terms (alias, entity or ecosystem term) found in the record.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Matched Terms",
+          "type": "array"
+        },
+        "tier": {
+          "$ref": "#/$defs/RelevanceTier"
+        }
+      },
+      "required": [
+        "tier",
+        "matched_terms",
+        "basis"
+      ],
+      "title": "RelevanceAssessment",
+      "type": "object"
+    },
+    "RelevanceTier": {
+      "description": "How a candidate relates to a topic. Relevance only: never severity or affectedness.",
+      "enum": [
+        "explicit_protocol_mention",
+        "protocol_component_implementation",
+        "telecom_ecosystem_adjacent",
+        "semantic_only"
+      ],
+      "title": "RelevanceTier",
+      "type": "string"
+    },
+    "ResultStatus": {
+      "description": "Outcome of a request. An unavailable backend is never reported as ``no_match``.",
+      "enum": [
+        "ok",
+        "no_match",
+        "partial",
+        "incomplete_index",
+        "source_unavailable",
+        "backend_error",
+        "policy_blocked"
+      ],
+      "title": "ResultStatus",
+      "type": "string"
+    },
+    "RetrievalChannel": {
+      "description": "Retrieval channels whose scores and reasons stay inspectable per candidate.",
+      "enum": [
+        "exact_id",
+        "lexical",
+        "structured",
+        "graph",
+        "semantic"
+      ],
+      "title": "RetrievalChannel",
+      "type": "string"
+    },
+    "ReviewStatus": {
+      "enum": [
+        "reviewed",
+        "pending_review"
+      ],
+      "title": "ReviewStatus",
+      "type": "string"
+    },
+    "ScopeAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "description": "Why the candidate carries this scope.",
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/KnowledgeScope"
+        }
+      },
+      "required": [
+        "scope",
+        "basis"
+      ],
+      "title": "ScopeAssessment",
+      "type": "object"
+    },
+    "SnapshotCoverage": {
+      "enum": [
+        "full",
+        "excerpt"
+      ],
+      "title": "SnapshotCoverage",
+      "type": "string"
+    },
+    "SourceOutcome": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "coverage": {
+                "type": "null"
+              },
+              "source_version": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "ok",
+                  "no_match"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "affectedness"
+              }
+            }
+          },
+          "then": {
+            "else": {
+              "properties": {
+                "detail": {
+                  "not": {
+                    "type": "null"
+                  }
+                }
+              },
+              "required": [
+                "detail"
+              ]
+            },
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "ok",
+                    "no_match"
+                  ]
+                }
+              }
+            },
+            "properties": {
+              "channel_failures": {
+                "maxItems": 0
+              },
+              "detail": {
+                "enum": [
+                  "BLOCKED_UNVERIFIED: no affectedness adapter is verified against a deployed Trustify; trustify-mcp ac8955f calls /api/v2 routes Trustify removed in v0.5.0 (ADR 0003). Affectedness is not checked.",
+                  "The affectedness source could not be reached. Affectedness is not established.",
+                  "The affectedness source did not answer within its time limit. Affectedness is not established.",
+                  "The affectedness source refused this server's credentials. Affectedness is not established.",
+                  "The affectedness source's tools differ from the pinned trustify-mcp surface. Affectedness is not established.",
+                  null
+                ]
+              }
+            },
+            "then": {
+              "properties": {
+                "detail": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "mitre_fight"
+              }
+            }
+          },
+          "then": {
+            "else": {
+              "properties": {
+                "detail": {
+                  "not": {
+                    "type": "null"
+                  }
+                }
+              },
+              "required": [
+                "detail"
+              ]
+            },
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "ok",
+                    "no_match"
+                  ]
+                }
+              }
+            },
+            "properties": {
+              "channel_failures": {
+                "maxItems": 0
+              },
+              "detail": {
+                "enum": [
+                  "The backend is not configured.",
+                  "The backend's adapter cannot be loaded.",
+                  "The backend could not be reached.",
+                  "The backend failed while searching.",
+                  "The backend's index holds no entries for the searched records.",
+                  "The backend cannot apply the search's filters before its limit.",
+                  "The backend returned nothing and does not report its own errors.",
+                  null
+                ]
+              }
+            },
+            "then": {
+              "properties": {
+                "detail": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "cve_search"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "channel_failures": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "not": {
+                        "const": "ok"
+                      }
+                    }
+                  }
+                }
+              },
+              "detail": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "description": "What one knowledge source answered. Every word of it is the server's: a failed\nFiGHT source and the affectedness source carry one of the server's sentences in\n``detail``, and a CVE search lists its channels' failures in ``channel_failures``.",
+      "properties": {
+        "channel_failures": {
+          "default": [],
+          "description": "Each distinct failure of a cve_search's channels, once; a channel that failed in different ways appears once per way. Empty for other sources.",
+          "items": {
+            "$ref": "#/$defs/ChannelOutcome"
+          },
+          "title": "Channel Failures",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SnapshotCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether the snapshot is complete or an excerpt."
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AffectednessDetail"
+            },
+            {
+              "$ref": "#/$defs/BackendFailureDetail"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The server's sentence for why the source gave no answer: an AffectednessDetail for affectedness, a BackendFailureDetail for mitre_fight, and null for cve_search, whose failures are its channel_failures.",
+          "title": "Detail"
+        },
+        "source": {
+          "$ref": "#/$defs/KnowledgeSource"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Snapshot identity of the source consulted, when it has one.",
+          "title": "Source Version"
+        },
+        "status": {
+          "$ref": "#/$defs/ResultStatus"
+        }
+      },
+      "required": [
+        "source",
+        "status",
+        "detail",
+        "channel_failures",
+        "source_version",
+        "coverage"
+      ],
+      "title": "SourceOutcome",
+      "type": "object"
+    },
+    "SourceType": {
+      "description": "Kind of source an evidence anchor points into. Values are added with their adapters.",
+      "enum": [
+        "synthetic_fixture",
+        "nvd_api_2",
+        "nvd_json_11",
+        "cisa_kev",
+        "mitre_fight_yaml"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    },
+    "TechniqueField": {
+      "description": "A field of a FiGHT technique a search can match, so no source names anything else.",
+      "enum": [
+        "name",
+        "bluf",
+        "description",
+        "procedureexamples",
+        "tactics"
+      ],
+      "title": "TechniqueField",
+      "type": "string"
+    },
+    "ThreatContextItem": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "matched_fields": {
+          "items": {
+            "$ref": "#/$defs/TechniqueField"
+          },
+          "title": "Matched Fields",
+          "type": "array"
+        },
+        "matched_terms": {
+          "description": "Terms of the topic the server searched for; the search checks each.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Matched Terms",
+          "type": "array"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "scope": {
+          "const": "protocol_threat_context",
+          "default": "protocol_threat_context",
+          "title": "Scope",
+          "type": "string"
+        },
+        "source_status": {
+          "description": "The status text exactly as published.",
+          "minLength": 1,
+          "title": "Source Status",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ObservationStatus"
+        },
+        "subtechnique_of": {
+          "anyOf": [
+            {
+              "pattern": "^FGT[0-9]{4}(\\.[0-9]{3})?$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subtechnique Of"
+        },
+        "tactic_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Tactic Ids",
+          "type": "array"
+        },
+        "tactic_names": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Tactic Names",
+          "type": "array"
+        },
+        "technique_id": {
+          "pattern": "^FGT[0-9]{4}(\\.[0-9]{3})?$(?!\\n)",
+          "title": "Technique Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "technique_id",
+        "name",
+        "status",
+        "source_status",
+        "tactic_ids",
+        "tactic_names",
+        "subtechnique_of",
+        "scope",
+        "matched_fields",
+        "matched_terms",
+        "evidence_ids"
+      ],
+      "title": "ThreatContextItem",
+      "type": "object"
+    },
+    "TopicCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "$ref": "#/$defs/Candidate",
+          "description": "The candidate from its best-ranked search."
+        },
+        "relevance": {
+          "$ref": "#/$defs/RelevanceAssessment"
+        },
+        "retrieval_channels": {
+          "description": "Every channel that retrieved the record, in any template.",
+          "items": {
+            "$ref": "#/$defs/RetrievalChannel"
+          },
+          "minItems": 1,
+          "title": "Retrieval Channels",
+          "type": "array"
+        },
+        "topic_rank": {
+          "description": "Order by relevance tier, then search rank, then CVE ID.",
+          "minimum": 1,
+          "title": "Topic Rank",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "topic_rank",
+        "candidate",
+        "retrieval_channels",
+        "relevance"
+      ],
+      "title": "TopicCandidate",
+      "type": "object"
+    },
+    "TopicContextWarning": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/TopicContextWarningCode"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "subject"
+      ],
+      "title": "TopicContextWarning",
+      "type": "object"
+    },
+    "TopicContextWarningCode": {
+      "enum": [
+        "topic_not_resolved",
+        "excluded_term",
+        "additional_topic_not_explored",
+        "unrelated_candidates_dropped",
+        "source_snapshot_is_excerpt"
+      ],
+      "title": "TopicContextWarningCode",
+      "type": "string"
+    },
+    "TopicMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "context_terms": {
+          "default": [],
+          "description": "Context terms that licensed a contextual alias.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Context Terms",
+          "type": "array"
+        },
+        "match_kind": {
+          "$ref": "#/$defs/TopicMatchKind"
+        },
+        "matched_alias": {
+          "description": "The card's alias or name that matched.",
+          "title": "Matched Alias",
+          "type": "string"
+        },
+        "review_status": {
+          "$ref": "#/$defs/ReviewStatus"
+        },
+        "topic_id": {
+          "pattern": "^[a-z0-9]+:[a-z0-9][a-z0-9-]*$(?!\\n)",
+          "title": "Topic Id",
+          "type": "string"
+        },
+        "topic_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Topic Sha256",
+          "type": "string"
+        },
+        "topic_version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$(?!\\n)",
+          "title": "Topic Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic_id",
+        "topic_version",
+        "topic_sha256",
+        "review_status",
+        "match_kind",
+        "matched_alias",
+        "context_terms"
+      ],
+      "title": "TopicMatch",
+      "type": "object"
+    },
+    "TopicMatchKind": {
+      "enum": [
+        "canonical_name",
+        "exact_alias",
+        "contextual_alias"
+      ],
+      "title": "TopicMatchKind",
+      "type": "string"
+    },
+    "TopicResolution": {
+      "additionalProperties": false,
+      "description": "Every topic the query names, and every excluded term it used instead.",
+      "properties": {
+        "excluded_terms": {
+          "items": {
+            "$ref": "#/$defs/ExcludedTerm"
+          },
+          "title": "Excluded Terms",
+          "type": "array"
+        },
+        "matches": {
+          "items": {
+            "$ref": "#/$defs/TopicMatch"
+          },
+          "title": "Matches",
+          "type": "array"
+        },
+        "normalized_query": {
+          "title": "Normalized Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "normalized_query",
+        "matches",
+        "excluded_terms"
+      ],
+      "title": "TopicResolution",
+      "type": "object"
+    },
+    "TrustLevel": {
+      "description": "How far a consumer may rely on an evidence anchor's source.",
+      "enum": [
+        "authoritative",
+        "secondary",
+        "derived",
+        "synthetic"
+      ],
+      "title": "TrustLevel",
+      "type": "string"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "One affected version or bounded range; at least one bound or ``exact`` is set.",
+      "oneOf": [
+        {
+          "properties": {
+            "end_excluding": {
+              "type": "null"
+            },
+            "end_including": {
+              "type": "null"
+            },
+            "exact": {
+              "type": "string"
+            },
+            "start_excluding": {
+              "type": "null"
+            },
+            "start_including": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "exact"
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "properties": {
+                "start_including": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start_including"
+              ]
+            },
+            {
+              "properties": {
+                "start_excluding": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start_excluding"
+              ]
+            },
+            {
+              "properties": {
+                "end_including": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "end_including"
+              ]
+            },
+            {
+              "properties": {
+                "end_excluding": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "end_excluding"
+              ]
+            }
+          ],
+          "properties": {
+            "exact": {
+              "type": "null"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "end_excluding": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Excluding"
+        },
+        "end_including": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Including"
+        },
+        "exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exact"
+        },
+        "start_excluding": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Excluding"
+        },
+        "start_including": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Including"
+        }
+      },
+      "required": [
+        "exact",
+        "start_including",
+        "start_excluding",
+        "end_including",
+        "end_excluding"
+      ],
+      "title": "VersionRange",
+      "type": "object"
+    },
+    "VulnerabilityOrigin": {
+      "description": "Where a CVE's defect lives. A CVE never describes a protocol-design flaw here.",
+      "enum": [
+        "implementation",
+        "configuration",
+        "dependency",
+        "unknown"
+      ],
+      "title": "VulnerabilityOrigin",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "evidence": {
+      "description": "Every anchor the items and candidates cite, ordered by evidence_id.",
+      "items": {
+        "$ref": "#/$defs/EvidenceAnchor"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "excluded_implementation_candidates": {
+      "description": "CVEs kept out of a protocol_context_only answer, with the reason.",
+      "items": {
+        "$ref": "#/$defs/ExcludedCandidate"
+      },
+      "title": "Excluded Implementation Candidates",
+      "type": "array"
+    },
+    "implementation_candidates": {
+      "description": "CVE candidates; empty under protocol_context_only.",
+      "items": {
+        "$ref": "#/$defs/TopicCandidate"
+      },
+      "title": "Implementation Candidates",
+      "type": "array"
+    },
+    "normalized_query": {
+      "title": "Normalized Query",
+      "type": "string"
+    },
+    "protocol_context": {
+      "description": "Threat context for the topic; empty under implementation_only.",
+      "items": {
+        "$ref": "#/$defs/ThreatContextItem"
+      },
+      "title": "Protocol Context",
+      "type": "array"
+    },
+    "query": {
+      "title": "Query",
+      "type": "string"
+    },
+    "requested_scope": {
+      "$ref": "#/$defs/QueryScope"
+    },
+    "resolution": {
+      "$ref": "#/$defs/TopicResolution"
+    },
+    "result_sha256": {
+      "description": "SHA-256 of the canonical JSON of this response without this field; the server recomputes it and rejects a mismatch.",
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Result Sha256",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.20",
+      "default": "2.0.0-dev.20",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_outcomes": {
+      "items": {
+        "$ref": "#/$defs/SourceOutcome"
+      },
+      "title": "Source Outcomes",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/ResultStatus"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/TopicContextWarning"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "query",
+    "normalized_query",
+    "requested_scope",
+    "status",
+    "resolution",
+    "protocol_context",
+    "implementation_candidates",
+    "excluded_implementation_candidates",
+    "source_outcomes",
+    "evidence",
+    "warnings",
+    "result_sha256"
+  ],
+  "title": "TopicContextResponse",
+  "type": "object"
+}

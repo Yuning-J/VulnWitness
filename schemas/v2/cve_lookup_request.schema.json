@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cve_id": {
+      "maxLength": 32,
+      "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+      "title": "Cve Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "cve_id"
+  ],
+  "title": "CveLookupRequest",
+  "type": "object"
+}

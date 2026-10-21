@@ -1,0 +1,585 @@
+{
+  "$defs": {
+    "AffectednessDetail": {
+      "description": "The server's sentence for each ``AffectednessFailure``: the ``detail`` of an\naffectedness check and of an unavailable ``affectedness`` capability.",
+      "enum": [
+        "BLOCKED_UNVERIFIED: no affectedness adapter is verified against a deployed Trustify; trustify-mcp ac8955f calls /api/v2 routes Trustify removed in v0.5.0 (ADR 0003). Affectedness is not checked.",
+        "The affectedness source could not be reached. Affectedness is not established.",
+        "The affectedness source did not answer within its time limit. Affectedness is not established.",
+        "The affectedness source refused this server's credentials. Affectedness is not established.",
+        "The affectedness source's tools differ from the pinned trustify-mcp surface. Affectedness is not established."
+      ],
+      "title": "AffectednessDetail",
+      "type": "string"
+    },
+    "FightUnavailableDetail": {
+      "description": "The server's sentence for an unavailable ``mitre_fight`` capability.",
+      "enum": [
+        "no pinned FiGHT snapshot is served"
+      ],
+      "title": "FightUnavailableDetail",
+      "type": "string"
+    },
+    "KnowledgeSource": {
+      "enum": [
+        "cve_search",
+        "mitre_fight",
+        "affectedness"
+      ],
+      "title": "KnowledgeSource",
+      "type": "string"
+    },
+    "ModelPlannerUnavailableDetail": {
+      "description": "The server's sentence for a model planner that is configured but cannot plan; the\ndeterministic policy plans in its place.",
+      "enum": [
+        "the model planner is enabled but no API key is configured",
+        "the model planner adapter is not installed or could not be used"
+      ],
+      "title": "ModelPlannerUnavailableDetail",
+      "type": "string"
+    },
+    "SemanticUnavailableDetail": {
+      "description": "The server's sentence for an enabled semantic channel that cannot search.",
+      "enum": [
+        "the semantic adapter is not installed or could not be loaded"
+      ],
+      "title": "SemanticUnavailableDetail",
+      "type": "string"
+    },
+    "SnapshotCoverage": {
+      "enum": [
+        "full",
+        "excerpt"
+      ],
+      "title": "SnapshotCoverage",
+      "type": "string"
+    },
+    "SourceCapability": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "cve_search"
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "else": {
+                  "properties": {
+                    "version": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "state": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "version": {
+                      "not": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  "required": [
+                    "version"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "coverage": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "detail": {
+                    "enum": [
+                      null
+                    ]
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "available"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "mitre_fight"
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "else": {
+                  "properties": {
+                    "version": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "state": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "version": {
+                      "not": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  "required": [
+                    "version"
+                  ]
+                }
+              },
+              {
+                "else": {
+                  "properties": {
+                    "coverage": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "state": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "coverage": {
+                      "not": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  "required": [
+                    "coverage"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "detail": {
+                    "enum": [
+                      "no pinned FiGHT snapshot is served",
+                      null
+                    ]
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "available",
+                  "unavailable"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "affectedness"
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "properties": {
+                  "version": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "coverage": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "detail": {
+                    "enum": [
+                      "BLOCKED_UNVERIFIED: no affectedness adapter is verified against a deployed Trustify; trustify-mcp ac8955f calls /api/v2 routes Trustify removed in v0.5.0 (ADR 0003). Affectedness is not checked.",
+                      "The affectedness source could not be reached. Affectedness is not established.",
+                      "The affectedness source did not answer within its time limit. Affectedness is not established.",
+                      "The affectedness source refused this server's credentials. Affectedness is not established.",
+                      "The affectedness source's tools differ from the pinned trustify-mcp surface. Affectedness is not established.",
+                      null
+                    ]
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "unavailable"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "semantic_channel"
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "properties": {
+                  "version": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "coverage": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "detail": {
+                    "enum": [
+                      "the semantic adapter is not installed or could not be loaded",
+                      null
+                    ]
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "available",
+                  "not_configured",
+                  "unavailable"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "model_planner"
+              }
+            }
+          },
+          "then": {
+            "allOf": [
+              {
+                "else": {
+                  "properties": {
+                    "version": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "state": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "version": {
+                      "not": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  "required": [
+                    "version"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "coverage": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "detail": {
+                    "enum": [
+                      "the model planner is enabled but no API key is configured",
+                      "the model planner adapter is not installed or could not be used",
+                      null
+                    ]
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "available",
+                  "not_configured",
+                  "unavailable"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "else": {
+            "properties": {
+              "detail": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "state": {
+                "const": "unavailable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "detail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "detail"
+            ]
+          }
+        }
+      ],
+      "description": "The validator checks every capability's shape, which the published schema states.",
+      "properties": {
+        "coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SnapshotCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set exactly for an available mitre_fight."
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FightUnavailableDetail"
+            },
+            {
+              "$ref": "#/$defs/AffectednessDetail"
+            },
+            {
+              "$ref": "#/$defs/SemanticUnavailableDetail"
+            },
+            {
+              "$ref": "#/$defs/ModelPlannerUnavailableDetail"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The server's sentence for why the source is unavailable; set exactly for an unavailable capability.",
+          "title": "Detail"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KnowledgeSource"
+            },
+            {
+              "enum": [
+                "semantic_channel",
+                "model_planner"
+              ],
+              "type": "string"
+            }
+          ],
+          "title": "Source"
+        },
+        "state": {
+          "$ref": "#/$defs/SourceCapabilityState"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Set exactly for an available cve_search, mitre_fight or model_planner.",
+          "title": "Version"
+        }
+      },
+      "required": [
+        "source",
+        "state",
+        "version",
+        "coverage",
+        "detail"
+      ],
+      "title": "SourceCapability",
+      "type": "object"
+    },
+    "SourceCapabilityState": {
+      "enum": [
+        "available",
+        "not_configured",
+        "unavailable"
+      ],
+      "title": "SourceCapabilityState",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What the deployment serves, in the shape every evidence set reports it.",
+  "properties": {
+    "schema_version": {
+      "const": "2.0.0-dev.20",
+      "default": "2.0.0-dev.20",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_capabilities": {
+      "description": "cve_search, mitre_fight, affectedness, semantic_channel and model_planner, once each and in that order.",
+      "items": false,
+      "minItems": 5,
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SourceCapability"
+            },
+            {
+              "properties": {
+                "source": {
+                  "const": "cve_search"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SourceCapability"
+            },
+            {
+              "properties": {
+                "source": {
+                  "const": "mitre_fight"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SourceCapability"
+            },
+            {
+              "properties": {
+                "source": {
+                  "const": "affectedness"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SourceCapability"
+            },
+            {
+              "properties": {
+                "source": {
+                  "const": "semantic_channel"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SourceCapability"
+            },
+            {
+              "properties": {
+                "source": {
+                  "const": "model_planner"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "title": "Source Capabilities",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_capabilities"
+  ],
+  "title": "KnowledgeCapabilities",
+  "type": "object"
+}

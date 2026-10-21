@@ -1,0 +1,286 @@
+{
+  "$defs": {
+    "ContextualAlias": {
+      "additionalProperties": false,
+      "description": "A term that stands for the topic only beside one of its context terms.",
+      "properties": {
+        "alias": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Alias",
+          "type": "string"
+        },
+        "requires_any": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Requires Any",
+          "type": "array"
+        }
+      },
+      "required": [
+        "alias",
+        "requires_any"
+      ],
+      "title": "ContextualAlias",
+      "type": "object"
+    },
+    "ReviewStatus": {
+      "enum": [
+        "reviewed",
+        "pending_review"
+      ],
+      "title": "ReviewStatus",
+      "type": "string"
+    },
+    "TopicEntity": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "role"
+      ],
+      "title": "TopicEntity",
+      "type": "object"
+    },
+    "TopicExclusion": {
+      "additionalProperties": false,
+      "description": "A term that must not resolve to the topic on its own, with the reason.",
+      "properties": {
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "term": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Term",
+          "type": "string"
+        }
+      },
+      "required": [
+        "term",
+        "reason"
+      ],
+      "title": "TopicExclusion",
+      "type": "object"
+    },
+    "TopicReference": {
+      "additionalProperties": false,
+      "properties": {
+        "locator": {
+          "description": "Clause or section inside the reference.",
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "uri": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "uri",
+        "locator"
+      ],
+      "title": "TopicReference",
+      "type": "object"
+    },
+    "TopicReview": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "reviewed_on": {
+            "type": "null"
+          },
+          "reviewer": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "reviewed"
+          }
+        }
+      },
+      "properties": {
+        "basis": {
+          "description": "Where each part of the card came from.",
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "reviewed_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reviewed On"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Who reviewed the card; null until a human review is recorded.",
+          "title": "Reviewer"
+        },
+        "status": {
+          "$ref": "#/$defs/ReviewStatus"
+        }
+      },
+      "required": [
+        "status",
+        "reviewer",
+        "reviewed_on",
+        "basis"
+      ],
+      "then": {
+        "properties": {
+          "reviewed_on": {
+            "type": "string"
+          },
+          "reviewer": {
+            "type": "string"
+          }
+        }
+      },
+      "title": "TopicReview",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "canonical_name": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Canonical Name",
+      "type": "string"
+    },
+    "contextual_aliases": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ContextualAlias"
+      },
+      "title": "Contextual Aliases",
+      "type": "array"
+    },
+    "ecosystem_terms": {
+      "default": [],
+      "description": "Terms of the wider technology the protocol lives in.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Ecosystem Terms",
+      "type": "array"
+    },
+    "entities": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TopicEntity"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "exact_aliases": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Exact Aliases",
+      "type": "array"
+    },
+    "exclusions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TopicExclusion"
+      },
+      "title": "Exclusions",
+      "type": "array"
+    },
+    "query_templates": {
+      "description": "Lexical queries that retrieve material about the topic.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Query Templates",
+      "type": "array"
+    },
+    "references": {
+      "items": {
+        "$ref": "#/$defs/TopicReference"
+      },
+      "minItems": 1,
+      "title": "References",
+      "type": "array"
+    },
+    "review": {
+      "$ref": "#/$defs/TopicReview"
+    },
+    "topic_id": {
+      "pattern": "^[a-z0-9]+:[a-z0-9][a-z0-9-]*$(?!\\n)",
+      "title": "Topic Id",
+      "type": "string"
+    },
+    "topic_schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Topic Schema Version",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$(?!\\n)",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "topic_id",
+    "version",
+    "canonical_name",
+    "exact_aliases",
+    "query_templates",
+    "review",
+    "references"
+  ],
+  "title": "ProtocolTopic",
+  "type": "object"
+}

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Local settings, which may hold keys (ADR 0004)
+.env
+.env.*
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Logs and temp
+*.log
+*.tmp
+*.swp
+
+# Build outputs
+dist/
+build/

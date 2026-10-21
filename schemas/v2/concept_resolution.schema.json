@@ -1,0 +1,147 @@
+{
+  "$defs": {
+    "ExcludedTerm": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "term": {
+          "title": "Term",
+          "type": "string"
+        },
+        "topic_id": {
+          "pattern": "^[a-z0-9]+:[a-z0-9][a-z0-9-]*$(?!\\n)",
+          "title": "Topic Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic_id",
+        "term",
+        "reason"
+      ],
+      "title": "ExcludedTerm",
+      "type": "object"
+    },
+    "ReviewStatus": {
+      "enum": [
+        "reviewed",
+        "pending_review"
+      ],
+      "title": "ReviewStatus",
+      "type": "string"
+    },
+    "TopicMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "context_terms": {
+          "default": [],
+          "description": "Context terms that licensed a contextual alias.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Context Terms",
+          "type": "array"
+        },
+        "match_kind": {
+          "$ref": "#/$defs/TopicMatchKind"
+        },
+        "matched_alias": {
+          "description": "The card's alias or name that matched.",
+          "title": "Matched Alias",
+          "type": "string"
+        },
+        "review_status": {
+          "$ref": "#/$defs/ReviewStatus"
+        },
+        "topic_id": {
+          "pattern": "^[a-z0-9]+:[a-z0-9][a-z0-9-]*$(?!\\n)",
+          "title": "Topic Id",
+          "type": "string"
+        },
+        "topic_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Topic Sha256",
+          "type": "string"
+        },
+        "topic_version": {
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$(?!\\n)",
+          "title": "Topic Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic_id",
+        "topic_version",
+        "topic_sha256",
+        "review_status",
+        "match_kind",
+        "matched_alias",
+        "context_terms"
+      ],
+      "title": "TopicMatch",
+      "type": "object"
+    },
+    "TopicMatchKind": {
+      "enum": [
+        "canonical_name",
+        "exact_alias",
+        "contextual_alias"
+      ],
+      "title": "TopicMatchKind",
+      "type": "string"
+    },
+    "TopicResolution": {
+      "additionalProperties": false,
+      "description": "Every topic the query names, and every excluded term it used instead.",
+      "properties": {
+        "excluded_terms": {
+          "items": {
+            "$ref": "#/$defs/ExcludedTerm"
+          },
+          "title": "Excluded Terms",
+          "type": "array"
+        },
+        "matches": {
+          "items": {
+            "$ref": "#/$defs/TopicMatch"
+          },
+          "title": "Matches",
+          "type": "array"
+        },
+        "normalized_query": {
+          "title": "Normalized Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "normalized_query",
+        "matches",
+        "excluded_terms"
+      ],
+      "title": "TopicResolution",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "resolution": {
+      "$ref": "#/$defs/TopicResolution"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.20",
+      "default": "2.0.0-dev.20",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "resolution"
+  ],
+  "title": "ConceptResolution",
+  "type": "object"
+}

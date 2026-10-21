@@ -1,0 +1,136 @@
+# Hand-labelled answers of the knowledge tools over the synthetic CVE fixture, the packaged
+# 5G-AKA topic card and FiGHT 3.1.0 excerpt, the disabled affectedness adapter and the
+# deterministic planner. Edit only when the labelled truth changes; tests compare against
+# this file and never regenerate it.
+#
+# Each row names the tool, the arguments it is called with and what its answer must show:
+# - search_vulnerabilities, lookup_cve: status, channels executed, candidate CVE IDs in
+#   rank order, and warnings as [code, subject];
+# - resolve_telecom_concept: matched topics as [topic_id, match_kind], and excluded terms;
+# - search_fight: status, protocol-context technique IDs, and implementation and excluded
+#   candidate CVE IDs;
+# - check_affectedness: applicability and failure;
+# - get_knowledge_capabilities: each capability's state;
+# - investigate_telecom_topic: stop reason, status, the basis of the move to validate, and
+#   per-product applicability;
+# - a call answered with a failure: its failure code.
+rows:
+  # The low-signal rule (m5-mcp-and-sources.md, "Compatibility change: low-signal query
+  # terms"): cve and cves leave the search text, and a query with nothing left searches
+  # no channel.
+  - id: search_cve_alone
+    tool: search_vulnerabilities
+    request: {query: "cve"}
+    expected: {status: no_match, channels: [], candidates: [], warnings: [[no_searchable_terms, "cve"]]}
+  - id: search_cves_alone
+    tool: search_vulnerabilities
+    request: {query: "CVEs"}
+    expected: {status: no_match, channels: [], candidates: [], warnings: [[no_searchable_terms, "cves"]]}
+  # Filters only narrow what the query finds; they never create a candidate.
+  - id: search_cve_with_a_severity_filter
+    tool: search_vulnerabilities
+    request: {query: "cve", filters: {severities: ["CRITICAL"]}}
+    expected: {status: no_match, channels: [structured], candidates: [], warnings: [[no_searchable_terms, "cve"]]}
+  - id: search_cve_ausf_crash
+    tool: search_vulnerabilities
+    request: {query: "cve ausf crash"}
+    expected: {status: ok, channels: [lexical], candidates: ["CVE-9999-0003"], warnings: []}
+  - id: search_cve_2022_log4j
+    tool: search_vulnerabilities
+    request: {query: "CVE 2022 log4j"}
+    expected: {status: no_match, channels: [lexical], candidates: [], warnings: []}
+  - id: search_id_then_cve
+    tool: search_vulnerabilities
+    request: {query: "CVE-9999-0003 cve"}
+    expected: {status: ok, channels: [exact_id], candidates: ["CVE-9999-0003"], warnings: []}
+  # M5/M7 measurement for the low-signal set; ADR 0002 and the m5 doc. These rows record
+  # how the fixture answers and do not change the rule.
+  - id: measure_vulnerability
+    tool: search_vulnerabilities
+    request: {query: "vulnerability"}
+    expected: {status: ok, channels: [lexical], candidates: ["CVE-9999-0008"], warnings: []}
+  - id: measure_vulnerabilities
+    tool: search_vulnerabilities
+    request: {query: "vulnerabilities"}
+    expected: {status: no_match, channels: [lexical], candidates: [], warnings: []}
+  - id: measure_vuln
+    tool: search_vulnerabilities
+    request: {query: "vuln"}
+    expected: {status: no_match, channels: [lexical], candidates: [], warnings: []}
+  - id: measure_ausf_vulnerability
+    tool: search_vulnerabilities
+    request: {query: "ausf vulnerability"}
+    expected: {status: ok, channels: [lexical], candidates: ["CVE-9999-0008", "CVE-9999-0003"], warnings: []}
+
+  - id: lookup_known_cve
+    tool: lookup_cve
+    request: {cve_id: "CVE-9999-0003"}
+    expected: {status: ok, channels: [exact_id], candidates: ["CVE-9999-0003"], warnings: []}
+  - id: lookup_unknown_cve
+    tool: lookup_cve
+    request: {cve_id: "CVE-9999-4242"}
+    expected: {status: no_match, channels: [exact_id], candidates: [], warnings: [[unknown_cve_id, "CVE-9999-4242"]]}
+
+  - id: resolve_5gaka
+    tool: resolve_telecom_concept
+    request: {query: "5gaka"}
+    expected: {matches: [["3gpp:5g-aka", exact_alias]], excluded: []}
+  - id: resolve_bare_aka
+    tool: resolve_telecom_concept
+    request: {query: "aka"}
+    expected: {matches: [], excluded: ["aka"]}
+
+  # The m3_topic_queries.yaml protocol_context_only row: CVEs only as excluded evidence.
+  - id: fight_5gaka
+    tool: search_fight
+    request: {query: "5gaka"}
+    expected:
+      status: ok
+      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
+      implementation_candidates: []
+      excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
+  # A bare aka resolves to no topic, so FiGHT is not searched.
+  - id: fight_bare_aka
+    tool: search_fight
+    request: {query: "aka"}
+    expected: {status: no_match, protocol_context: [], implementation_candidates: [], excluded_implementation_candidates: []}
+
+  - id: affectedness_open5gs
+    tool: check_affectedness
+    request: {cve_id: "CVE-9999-0003", purl: "pkg:generic/open5gs@2.7.0"}
+    expected: {applicability: unknown, failure: blocked_unverified}
+
+  - id: evidence_unknown_id
+    tool: get_evidence
+    request: {evidence_id: "ev:000000000000000000000000"}
+    expected: {failure_code: unknown_evidence_id}
+
+  - id: capabilities
+    tool: get_knowledge_capabilities
+    request: {}
+    expected:
+      states:
+        cve_search: available
+        mitre_fight: available
+        affectedness: unavailable
+        semantic_channel: not_configured
+        model_planner: not_configured
+
+  # A product question needs the affectedness source, which is unavailable: the answer is
+  # partial and each named product's applicability unknown.
+  - id: investigate_impl_5gaka_open5gs
+    tool: investigate_telecom_topic
+    request: {query: "5gaka", scope: implementation_only, filters: {products: ["open5gs"]}}
+    expected:
+      stop_reason: source_unavailable
+      status: partial
+      validate_basis: no_answer_after_refinement
+      applicability: [{product: "open5gs", status: unknown}]
+  - id: investigate_impl_5gaka_f5gc
+    tool: investigate_telecom_topic
+    request: {query: "5gaka", scope: implementation_only, filters: {products: ["f5gc"]}}
+    expected:
+      stop_reason: source_unavailable
+      status: partial
+      validate_basis: affectedness_unavailable
+      applicability: [{product: "f5gc", status: unknown}]

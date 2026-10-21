@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "CveExactLookupCall": {
+      "additionalProperties": false,
+      "properties": {
+        "cve_ids": {
+          "items": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Cve Ids",
+          "type": "array"
+        },
+        "tool": {
+          "const": "cve_exact_lookup",
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "cve_ids"
+      ],
+      "title": "CveExactLookupCall",
+      "type": "object"
+    },
+    "CveSearchCall": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        },
+        "tool": {
+          "const": "cve_search",
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "query"
+      ],
+      "title": "CveSearchCall",
+      "type": "object"
+    },
+    "TopicContextCall": {
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "const": "topic_context",
+          "title": "Tool",
+          "type": "string"
+        },
+        "topic_id": {
+          "pattern": "^[a-z0-9]+:[a-z0-9][a-z0-9-]*$(?!\\n)",
+          "title": "Topic Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "topic_id"
+      ],
+      "title": "TopicContextCall",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The only shape a model planner may emit.",
+  "properties": {
+    "steps": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "cve_exact_lookup": "#/$defs/CveExactLookupCall",
+            "cve_search": "#/$defs/CveSearchCall",
+            "topic_context": "#/$defs/TopicContextCall"
+          },
+          "propertyName": "tool"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/CveExactLookupCall"
+          },
+          {
+            "$ref": "#/$defs/CveSearchCall"
+          },
+          {
+            "$ref": "#/$defs/TopicContextCall"
+          }
+        ]
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    }
+  },
+  "required": [
+    "steps"
+  ],
+  "title": "QueryPlan",
+  "type": "object"
+}

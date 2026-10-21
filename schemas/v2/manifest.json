@@ -1,0 +1,26 @@
+{
+  "files": {
+    "affectedness_check.schema.json": "9bb25fff19f713cae15099ff52d5e4a956cd947cbe5fe6578c100a2730b2c0da",
+    "affectedness_request.schema.json": "4d6b683650dd67cc9a5fd4c0616e384224181d6f01e39c1757c32df7fe76e2dc",
+    "capabilities_request.schema.json": "a42b34b30a110e62a91d18b6ac940a76e61e63962f3fed364c3bede6ac290fd1",
+    "concept_resolution.schema.json": "ef38b4ce01bf8a24a7f14bf49e4cab1b2a62c2ea69abb59917932e692b701429",
+    "concept_resolution_request.schema.json": "cab3d093f48fc23812e74b054922c667620b48a305f51c3ad55ae479cba28a8a",
+    "cve_lookup_request.schema.json": "9b9b161cf601930fd969051281dcd5a2ddefaa1348637694deebc9df56cca965",
+    "cve_record.schema.json": "de71ef9486177042b277dbf5587af2aa468e378f51483c14b54def84af056ddf",
+    "evidence_anchor.schema.json": "8e12c850ee915d3af1b68cd4c4fa8ac0d0d94fb4d4339e7789f5823478d1710b",
+    "evidence_lookup.schema.json": "3b1191b614cf28010429a1c08ba85859113462b5a3df75b8a65a96a1eeb4ecc1",
+    "evidence_lookup_request.schema.json": "38a9e13e8d079bf9f82a29576c5cb27709f206a0665edfd3e464aed0e1ed4a13",
+    "fight_search_request.schema.json": "70a5f013f476a883d228c728fa6f4e6e7eda8a64deb00a8b2a969da3c449f79e",
+    "investigation_request.schema.json": "9629ea510a1e516df0561523783906182dcd65049b3c93ad48318db3f0321c96",
+    "knowledge_capabilities.schema.json": "b19401593d76222ddec6c27514e74e22cbc2e3bb9db635da41513cc2a73b82a9",
+    "knowledge_evidence_set.schema.json": "886170987e5d9f41904444939d28e7927ed805e312693f383fea8987d4d22aa2",
+    "protocol_topic.schema.json": "a39c8686f58070d93fb2e3e85aa77056911a12b5ac694478c62b5dacf85df2c5",
+    "query_plan.schema.json": "d6af55f142e9709d0263a1b724d01adae995f4c640ecd03231a107a1f46baca2",
+    "search_request.schema.json": "762c6cc28bfbe64d9ade10143c8bf4b4823cc33d54c7c2e9465b62e4d7744e03",
+    "search_response.schema.json": "0517aebb0ad5eedcca4aebc707ffe6e94f0d4c00bb1366327335d0c6a5243cfe",
+    "tool_failure.schema.json": "e56d75fcc46818b0118e35821a9dcc53f58d35b3b19bda9ee651e9d739198448",
+    "topic_context_request.schema.json": "2cd1bf9ffceaa3917343cddc64ca8b6d64150e5e2abed5cf376c8aa87d108b1f",
+    "topic_context_response.schema.json": "e1ad0f4cc5492b33d17a5abbb3cbf86284c536d078ce70b8df4d71ab73cc7156"
+  },
+  "schema_version": "2.0.0-dev.20"
+}

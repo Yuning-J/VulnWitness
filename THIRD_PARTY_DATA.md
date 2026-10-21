@@ -1,0 +1,97 @@
+# Third-party data and provenance
+
+The MIT licence of this repository covers its code only. Every data source is a
+separate provenance subject; the machine-readable registry is
+`src/cve_kgrag/knowledge/sources.yaml`. Terms below were read from the official
+pages on 2026-10-14, and the trustify-mcp licence on 2026-10-17. Where they could
+not be verified the entry says so, and this repository commits no data from that
+source.
+
+| Source | Terms | Redistribution | Stored here |
+|---|---|---|---|
+| NVD | https://nvd.nist.gov/developers/terms-of-use | allowed with conditions | operator-supplied feeds only |
+| CVE Program | https://www.cve.org/Legal/TermsOfUse | allowed with conditions | operator-supplied only |
+| CISA KEV | https://www.cisa.gov/sites/default/files/licenses/kev/license.txt | allowed (CC0 1.0) | operator-supplied only |
+| MITRE FiGHT | https://fight.mitre.org/resources/terms/ | allowed with conditions (FiGHT Terms of Use; ATT&CK terms for derived content) | six-technique excerpt (`src/cve_kgrag/fixtures/fight/`) |
+| MITRE ATT&CK | https://attack.mitre.org/resources/legal-and-branding/terms-of-use/ | allowed with conditions | inside the FiGHT excerpt only: five ATT&CK tactics and two FiGHT sub-techniques of ATT&CK techniques |
+| MITRE CWE | https://cwe.mitre.org/about/termsofuse.html | copies allowed with conditions | CWE IDs only |
+| MITRE CAPEC | https://capec.mitre.org/about/termsofuse.html | copies allowed with conditions | nothing |
+| 3GPP TS 33.501 | not verified | unknown | clause citations only |
+| Trustify software | not verified; no adapter ships | unknown | nothing |
+| Data returned by Trustify | per upstream source; not verified; no adapter ships | unknown | nothing |
+| trustify-mcp tool schemas (commit ac8955f) | Apache-2.0 (LICENSE at that commit) | allowed with conditions | unmodified excerpt in `tests/contract/data/trustify_mcp_ac8955f/` |
+| Synthetic CVE fixture | this repository (MIT) | allowed | `src/cve_kgrag/fixtures/synthetic/` |
+
+## Conditions, quoted
+
+- **NVD.** "All NIST publications are available in the public domain according to
+  Title 17 of the United States Code, however services which utilize or access
+  the NVD are asked to display the following notice prominently within the
+  application: 'This product uses data from the NVD API but is not endorsed or
+  certified by the NVD.'" and "If you modify the content accessed through the API,
+  you may not attribute the source as the NVD." NVD records also carry CVE List
+  text; whether NVD's public-domain status overrides the CVE terms is unverified.
+- **CVE Program.** "MITRE hereby grants you a perpetual, worldwide, non-exclusive,
+  no-charge, royalty-free, irrevocable copyright license to reproduce, prepare
+  derivative works of, publicly display, publicly perform, sublicense, and
+  distribute Common Vulnerabilities and Exposures (CVE™). Any copy you make for
+  such purposes is authorized provided that you reproduce MITRE's copyright
+  designation and this license in any such copy." The page does not state the
+  designation's wording.
+- **CISA KEV.** "The KEV database is distributed under the Creative Commons 0 1.0
+  License. You may use this data in any legal manner but note that information
+  provided at any 3rd party links included in the KEV database are bound by the
+  policies and licenses of those 3rd party websites. Use of the information does
+  not authorize you to use the CISA Logo or DHS Seal, nor should such use be
+  interpreted as an endorsement by CISA or DHS."
+- **MITRE FiGHT.** The website grants: "a non-exclusive, royalty-free license to
+  use FiGHT™ for research, development, and commercial purposes. Any copy you make
+  for such purposes is authorized provided that you reproduce MITRE's copyright
+  designation and this license in any such copy." MITRE also publishes an
+  Apache-2.0 header in the repository's `LICENSE.txt`, "ALL RIGHTS RESERVED"
+  notices in the README and site footer, and a U.S. Government contract notice in
+  `fight-data/README.md`.
+
+  **Decision (M3 review, 2026-10-15; an engineering decision, not legal advice):**
+  1. FiGHT techniques and data are governed by the FiGHT Terms of Use.
+  2. ATT&CK-derived tactics and techniques must also meet the ATT&CK Terms of Use.
+  3. The Apache-2.0 header licenses the repository's software and files; it does
+     not replace the FiGHT-specific terms for the content.
+  4. "ALL RIGHTS RESERVED" reserves copyright; it does not revoke the limited
+     licence MITRE grants alongside it. "Distribution Unlimited" is a
+     public-release marking, not a separate licence.
+  5. The `fight-data` contract notice covers that directory's tooling; keeping it
+     in the notice is the conservative choice.
+
+  `src/cve_kgrag/fixtures/fight/NOTICE.md` reproduces every one of these texts
+  verbatim, which meets this attribution policy. Before a commercial public
+  release, confirm the position with counsel or in writing with MITRE.
+- **MITRE ATT&CK / CWE / CAPEC.** Each grants a royalty-free licence whose copies
+  must reproduce MITRE's copyright designation and the licence. CWE and CAPEC word
+  the grant as "use" and "copy", not "distribute".
+- **trustify-mcp.** Apache-2.0 §4: "(a) You must give any other recipients of the
+  Work or Derivative Works a copy of this License; and (b) You must cause any
+  modified files to carry prominent notices stating that You changed the files".
+  The excerpt is unmodified and its directory holds the licence text; the commit
+  has no `NOTICE` file.
+
+## Committed third-party data
+
+Two excerpts.
+
+`src/cve_kgrag/fixtures/fight/fight-excerpt.yaml` holds six technique entries
+(FGT1499.503, FGT1562.501, FGT5019, FGT5019.005, FGT5040, FGT5044) and their five
+tactics, cut byte for byte from `fight.yaml` at commit
+`097cd5f73811dc34916ef84d5acc3fe7aba70450` (upstream SHA-256
+`59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8`). Its manifest
+pins the excerpt's and the notice's SHA-256; the loader refuses either if changed.
+The reviewed snapshot catalog (`src/cve_kgrag/knowledge/fight_snapshots.yaml`)
+records both the full upstream file and the excerpt, with their coverage and
+contents; a FiGHT file is served only when its hash is catalogued there.
+
+`tests/contract/data/trustify_mcp_ac8955f/tools.json` is the string
+`EXPECTED_TOOLS_LIST_RESPONSE` from `tests/integration_test.rs` of guacsec/trustify-mcp
+at commit `ac8955f768a5bfef6f1c9a5c1d02ec5b5cf9bf5e`, byte for byte (SHA-256
+`a877d200e29b8aeea33e81c1ee1453b1575e15e33d9cc3613e4158a3332baa64`): the names,
+descriptions and input schemas of its twelve tools. The commit's `LICENSE` sits beside it. Only the
+contract tests read them; the wheel does not include them.

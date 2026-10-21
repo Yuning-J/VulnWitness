@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "AffectednessDetail": {
+      "description": "The server's sentence for each ``AffectednessFailure``: the ``detail`` of an\naffectedness check and of an unavailable ``affectedness`` capability.",
+      "enum": [
+        "BLOCKED_UNVERIFIED: no affectedness adapter is verified against a deployed Trustify; trustify-mcp ac8955f calls /api/v2 routes Trustify removed in v0.5.0 (ADR 0003). Affectedness is not checked.",
+        "The affectedness source could not be reached. Affectedness is not established.",
+        "The affectedness source did not answer within its time limit. Affectedness is not established.",
+        "The affectedness source refused this server's credentials. Affectedness is not established.",
+        "The affectedness source's tools differ from the pinned trustify-mcp surface. Affectedness is not established."
+      ],
+      "title": "AffectednessDetail",
+      "type": "string"
+    },
+    "AffectednessFailure": {
+      "description": "Why the affectedness source gave no answer.\n\n``blocked_unverified``: no adapter is verified against a deployed Trustify, so none\nis called; the other members are the failures a verified adapter reports.",
+      "enum": [
+        "blocked_unverified",
+        "source_unavailable",
+        "timeout",
+        "auth_failed",
+        "tool_mismatch"
+      ],
+      "title": "AffectednessFailure",
+      "type": "string"
+    },
+    "AffectednessRequest": {
+      "additionalProperties": false,
+      "description": "One CVE against one package version. A product name is not accepted: no Trustify\ntool maps a name to a package.",
+      "properties": {
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "purl": {
+          "maxLength": 512,
+          "pattern": "^pkg:[a-z][a-z0-9.+-]*(?:/[A-Za-z0-9._~%-]*[A-Za-z0-9_~%-][A-Za-z0-9._~%-]*)+@[A-Za-z0-9._~%+:-]+$(?!\\n)",
+          "title": "Purl",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cve_id",
+        "purl"
+      ],
+      "title": "AffectednessRequest",
+      "type": "object"
+    },
+    "ApplicabilityStatus": {
+      "enum": [
+        "unknown"
+      ],
+      "title": "ApplicabilityStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The published answer to an affectedness check: always ``unknown``, with the failure\nthat kept applicability from being established and the server's sentence for it.",
+  "properties": {
+    "applicability": {
+      "$ref": "#/$defs/ApplicabilityStatus"
+    },
+    "detail": {
+      "$ref": "#/$defs/AffectednessDetail"
+    },
+    "failure": {
+      "$ref": "#/$defs/AffectednessFailure"
+    },
+    "request": {
+      "$ref": "#/$defs/AffectednessRequest"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.20",
+      "default": "2.0.0-dev.20",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "request",
+    "applicability",
+    "failure",
+    "detail"
+  ],
+  "title": "AffectednessCheck",
+  "type": "object"
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One CVE against one package version. A product name is not accepted: no Trustify\ntool maps a name to a package.",
+  "properties": {
+    "cve_id": {
+      "maxLength": 32,
+      "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+      "title": "Cve Id",
+      "type": "string"
+    },
+    "purl": {
+      "maxLength": 512,
+      "pattern": "^pkg:[a-z][a-z0-9.+-]*(?:/[A-Za-z0-9._~%-]*[A-Za-z0-9_~%-][A-Za-z0-9._~%-]*)+@[A-Za-z0-9._~%+:-]+$(?!\\n)",
+      "title": "Purl",
+      "type": "string"
+    }
+  },
+  "required": [
+    "cve_id",
+    "purl"
+  ],
+  "title": "AffectednessRequest",
+  "type": "object"
+}

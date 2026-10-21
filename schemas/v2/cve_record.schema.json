@@ -1,0 +1,566 @@
+{
+  "$defs": {
+    "AffectedProduct": {
+      "additionalProperties": false,
+      "properties": {
+        "cpe": {
+          "anyOf": [
+            {
+              "pattern": "^cpe:2\\.3:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpe"
+        },
+        "product": {
+          "minLength": 1,
+          "title": "Product",
+          "type": "string"
+        },
+        "purl": {
+          "anyOf": [
+            {
+              "pattern": "^pkg:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Purl"
+        },
+        "status": {
+          "enum": [
+            "affected",
+            "unaffected",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "vendor": {
+          "minLength": 1,
+          "title": "Vendor",
+          "type": "string"
+        },
+        "version_ranges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VersionRange"
+          },
+          "title": "Version Ranges",
+          "type": "array"
+        }
+      },
+      "required": [
+        "vendor",
+        "product",
+        "cpe",
+        "purl",
+        "status",
+        "version_ranges"
+      ],
+      "title": "AffectedProduct",
+      "type": "object"
+    },
+    "CvssMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "base_score": {
+          "maximum": 10.0,
+          "minimum": 0.0,
+          "title": "Base Score",
+          "type": "number"
+        },
+        "base_severity": {
+          "anyOf": [
+            {
+              "enum": [
+                "NONE",
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "CRITICAL"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Severity"
+        },
+        "scorer": {
+          "description": "Organization that produced this score.",
+          "minLength": 1,
+          "title": "Scorer",
+          "type": "string"
+        },
+        "scorer_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "primary",
+                "secondary"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer Type"
+        },
+        "vector_string": {
+          "minLength": 1,
+          "title": "Vector String",
+          "type": "string"
+        },
+        "version": {
+          "enum": [
+            "2.0",
+            "3.0",
+            "3.1",
+            "4.0"
+          ],
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "vector_string",
+        "base_score",
+        "base_severity",
+        "scorer",
+        "scorer_type"
+      ],
+      "title": "CvssMetric",
+      "type": "object"
+    },
+    "KevEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "date_added": {
+          "format": "date",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+          "title": "Date Added",
+          "type": "string"
+        },
+        "due_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Due Date"
+        },
+        "known_ransomware_campaign_use": {
+          "anyOf": [
+            {
+              "enum": [
+                "known",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA's own Known/Unknown assessment; null when the consulted source does not carry it.",
+          "title": "Known Ransomware Campaign Use"
+        }
+      },
+      "required": [
+        "date_added",
+        "due_date",
+        "known_ransomware_campaign_use"
+      ],
+      "title": "KevEntry",
+      "type": "object"
+    },
+    "LocalizedText": {
+      "additionalProperties": false,
+      "properties": {
+        "lang": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$(?!\\n)",
+          "title": "Lang",
+          "type": "string"
+        },
+        "source": {
+          "description": "Who authored this text, e.g. a CNA.",
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "lang",
+        "value",
+        "source"
+      ],
+      "title": "LocalizedText",
+      "type": "object"
+    },
+    "Reference": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "url": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "source",
+        "tags"
+      ],
+      "title": "Reference",
+      "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "One affected version or bounded range; at least one bound or ``exact`` is set.",
+      "oneOf": [
+        {
+          "properties": {
+            "end_excluding": {
+              "type": "null"
+            },
+            "end_including": {
+              "type": "null"
+            },
+            "exact": {
+              "type": "string"
+            },
+            "start_excluding": {
+              "type": "null"
+            },
+            "start_including": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "exact"
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "properties": {
+                "start_including": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start_including"
+              ]
+            },
+            {
+              "properties": {
+                "start_excluding": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start_excluding"
+              ]
+            },
+            {
+              "properties": {
+                "end_including": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "end_including"
+              ]
+            },
+            {
+              "properties": {
+                "end_excluding": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "end_excluding"
+              ]
+            }
+          ],
+          "properties": {
+            "exact": {
+              "type": "null"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "end_excluding": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Excluding"
+        },
+        "end_including": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Including"
+        },
+        "exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exact"
+        },
+        "start_excluding": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Excluding"
+        },
+        "start_including": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Including"
+        }
+      },
+      "required": [
+        "exact",
+        "start_including",
+        "start_excluding",
+        "end_including",
+        "end_excluding"
+      ],
+      "title": "VersionRange",
+      "type": "object"
+    },
+    "VulnerabilityOrigin": {
+      "description": "Where a CVE's defect lives. A CVE never describes a protocol-design flaw here.",
+      "enum": [
+        "implementation",
+        "configuration",
+        "dependency",
+        "unknown"
+      ],
+      "title": "VulnerabilityOrigin",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "An implementation-level vulnerability record.\n\n``protocol_design_claim`` and ``formal_seed_eligible`` are fixed: a CVE never\nestablishes a protocol-design vulnerability and never seeds formal analysis.",
+  "properties": {
+    "affected": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AffectedProduct"
+      },
+      "title": "Affected",
+      "type": "array"
+    },
+    "cve_id": {
+      "maxLength": 32,
+      "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+      "title": "Cve Id",
+      "type": "string"
+    },
+    "cvss": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CvssMetric"
+      },
+      "title": "Cvss",
+      "type": "array"
+    },
+    "cwe_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 16,
+        "pattern": "^CWE-[0-9]+$(?!\\n)",
+        "type": "string"
+      },
+      "title": "Cwe Ids",
+      "type": "array"
+    },
+    "descriptions": {
+      "items": {
+        "$ref": "#/$defs/LocalizedText"
+      },
+      "minItems": 1,
+      "title": "Descriptions",
+      "type": "array"
+    },
+    "evidence_ids": {
+      "items": {
+        "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "formal_seed_eligible": {
+      "const": false,
+      "default": false,
+      "title": "Formal Seed Eligible",
+      "type": "boolean"
+    },
+    "kev": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/KevEntry"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "CISA KEV entry, when a consulted source lists one."
+    },
+    "last_modified": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Modified"
+    },
+    "protocol_design_claim": {
+      "const": "not_established",
+      "default": "not_established",
+      "title": "Protocol Design Claim",
+      "type": "string"
+    },
+    "published": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Published"
+    },
+    "record_kind": {
+      "const": "cve",
+      "default": "cve",
+      "title": "Record Kind",
+      "type": "string"
+    },
+    "references": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Reference"
+      },
+      "title": "References",
+      "type": "array"
+    },
+    "vulnerability_origin": {
+      "$ref": "#/$defs/VulnerabilityOrigin",
+      "default": "unknown"
+    }
+  },
+  "required": [
+    "record_kind",
+    "cve_id",
+    "descriptions",
+    "published",
+    "last_modified",
+    "cvss",
+    "cwe_ids",
+    "affected",
+    "references",
+    "kev",
+    "vulnerability_origin",
+    "protocol_design_claim",
+    "formal_seed_eligible",
+    "evidence_ids"
+  ],
+  "title": "CveRecord",
+  "type": "object"
+}

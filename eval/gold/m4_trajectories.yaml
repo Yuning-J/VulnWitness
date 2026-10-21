@@ -1,0 +1,484 @@
+# Hand-labelled investigation trajectories over the packaged 5G-AKA topic card, the
+# FiGHT 3.1.0 excerpt and the synthetic CVE fixture, with the deterministic policy
+# m4.1 and no model planner. Edit only when the labelled truth changes; tests compare
+# against this file and never regenerate it.
+#
+# Each row names the request, which FiGHT source the deployment serves
+# (`packaged` excerpt or `unavailable`), and what the run must show: the intent, every
+# state transition as [from, to, basis], every tool step, the stop, the answer sections,
+# the per-product applicability, the warning codes in emitted order, the backend
+# queries charged and the rounds run. A step's `channels`, when given, are the
+# retrieval channels its CVE search executed. Implementation candidates carry their
+# relevance tier, null when no topic resolved.
+trajectories:
+  - id: exact_id
+    request: {query: "CVE-9999-0003", scope: implementation_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: exact_id
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_exact_lookup, reason: query_cve_ids, charged_tool_calls: 1, admission: admitted, status: ok, channels: [exact_id]}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0003", tier: null}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0003"]
+      applicability: []
+      warning_codes: []
+      tool_calls: 1
+      rounds: 1
+
+  - id: exact_id_mixed
+    request: {query: "CVE-9999-0003", scope: mixed}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: exact_id
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_exact_lookup, reason: query_cve_ids, charged_tool_calls: 1, admission: admitted, status: ok, channels: [exact_id]}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0003", tier: null}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0003"]
+      applicability: []
+      warning_codes: []
+      tool_calls: 1
+      rounds: 1
+
+  - id: cve_under_protocol
+    request: {query: "CVE-9999-0003", scope: protocol_context_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: exact_id
+      transitions:
+        - [interpret, validate, cve_ids_outside_scope]
+        - [validate, return, answer_validated]
+      steps: []
+      stop_reason: policy_blocked
+      status: policy_blocked
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: []
+      applicability: []
+      warning_codes: []
+      tool_calls: 0
+      rounds: 0
+
+  - id: protocol_5gaka
+    request: {query: "5gaka", scope: protocol_context_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: topic
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 5, admission: admitted, status: ok}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates: []
+      excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
+      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
+      claims:
+        - "fight:FGT1499.503"
+        - "fight:FGT5019"
+        - "fight:FGT5019.005"
+        - "fight:FGT5040"
+        - "fight:FGT5044"
+      applicability: []
+      warning_codes: [topic_pending_review]
+      tool_calls: 5
+      rounds: 1
+
+  # No fixture record names Open5GS, so neither the literal search nor the topic's
+  # template searches find one; affectedness is required but unavailable.
+  - id: impl_5gaka_open5gs
+    request: {query: "5gaka", scope: implementation_only, filters: {products: ["open5gs"]}}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: topic
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, refine, no_answer_refinable]
+        - [refine, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, no_answer_after_refinement]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [structured, lexical]}
+        - {round: 2, tool: topic_context, reason: topic_after_literal_miss, charged_tool_calls: 4, admission: admitted, status: no_match}
+      stop_reason: source_unavailable
+      status: partial
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: []
+      applicability:
+        - {product: "open5gs", status: unknown}
+      warning_codes: [topic_pending_review, applicability_unknown]
+      tool_calls: 5
+      rounds: 2
+
+  - id: impl_5gaka_f5gc
+    request: {query: "5gaka", scope: implementation_only, filters: {products: ["f5gc"]}}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: topic
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, refine, no_answer_refinable]
+        - [refine, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, affectedness_unavailable]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [structured, lexical]}
+        - {round: 2, tool: topic_context, reason: topic_after_literal_miss, charged_tool_calls: 4, admission: admitted, status: ok}
+      stop_reason: source_unavailable
+      status: partial
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
+        - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
+      applicability:
+        - {product: "f5gc", status: unknown}
+      warning_codes: [topic_pending_review, applicability_unknown]
+      tool_calls: 5
+      rounds: 2
+
+  # FiGHT fails inside the one topic step; nothing retries it.
+  - id: fight_unavailable_mixed
+    request: {query: "5gaka", scope: mixed}
+    sources: {mitre_fight: unavailable}
+    expected:
+      intent: topic
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_source_failed]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 5, admission: admitted, status: partial}
+      stop_reason: source_unavailable
+      status: partial
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
+        - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
+      applicability: []
+      warning_codes: [topic_pending_review]
+      tool_calls: 5
+      rounds: 1
+
+  - id: fight_unavailable_protocol
+    request: {query: "5gaka", scope: protocol_context_only}
+    sources: {mitre_fight: unavailable}
+    expected:
+      intent: topic
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_source_failed]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 5, admission: admitted, status: source_unavailable}
+      stop_reason: source_unavailable
+      status: source_unavailable
+      implementation_candidates: []
+      excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
+      protocol_context: []
+      claims: []
+      applicability: []
+      warning_codes: [topic_pending_review]
+      tool_calls: 5
+      rounds: 1
+
+  # The compact alias misses literally, so the one refinement explores the topic.
+  - id: impl_5gaka_refines
+    request: {query: "5gaka", scope: implementation_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: topic
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, refine, no_answer_refinable]
+        - [refine, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [lexical]}
+        - {round: 2, tool: topic_context, reason: topic_after_literal_miss, charged_tool_calls: 4, admission: admitted, status: ok}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
+        - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
+      applicability: []
+      warning_codes: [topic_pending_review]
+      tool_calls: 5
+      rounds: 2
+
+  # The spelled-out alias finds both records literally: no refinement is needed.
+  - id: impl_5g_aka_no_refine
+    request: {query: "5G-AKA", scope: implementation_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: topic
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
+        - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
+      applicability: []
+      warning_codes: [topic_pending_review]
+      tool_calls: 1
+      rounds: 1
+
+  - id: unknown_id_residual
+    request: {query: "CVE-9999-4242 AUSF resynchronization crash", scope: implementation_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: exact_id
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, refine, no_answer_refinable]
+        - [refine, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_exact_lookup, reason: query_cve_ids, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [exact_id]}
+        - {round: 2, tool: cve_search, reason: residual_terms_after_unknown_ids, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0003", tier: null}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0003"]
+      applicability: []
+      warning_codes: []
+      tool_calls: 2
+      rounds: 2
+
+  # An unknown ID with nothing else to search: the policy has no refinement to offer.
+  - id: unknown_id_alone
+    request: {query: "CVE-9999-4242", scope: implementation_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: exact_id
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, refine, no_answer_refinable]
+        - [refine, validate, no_refinement_available]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_exact_lookup, reason: query_cve_ids, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [exact_id]}
+      stop_reason: no_evidence
+      status: no_match
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: []
+      applicability: []
+      warning_codes: []
+      tool_calls: 1
+      rounds: 1
+
+  - id: unknown_id_zzqx
+    request: {query: "CVE-9999-4242 zzqx", scope: mixed}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: exact_id
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, refine, no_answer_refinable]
+        - [refine, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, no_answer_after_refinement]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_exact_lookup, reason: query_cve_ids, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [exact_id]}
+        - {round: 2, tool: cve_search, reason: residual_terms_after_unknown_ids, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [lexical]}
+      stop_reason: no_evidence
+      status: no_match
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: []
+      applicability: []
+      warning_codes: []
+      tool_calls: 2
+      rounds: 2
+
+  # A bare ambiguous alias is never searched: it would launder into an unrelated hit.
+  - id: bare_aka
+    request: {query: "aka", scope: mixed}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: excluded_terms_only
+      transitions:
+        - [interpret, validate, excluded_terms_only]
+        - [validate, return, answer_validated]
+      steps: []
+      stop_reason: no_evidence
+      status: no_match
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: []
+      applicability: []
+      warning_codes: [excluded_term, topic_not_resolved]
+      tool_calls: 0
+      rounds: 0
+
+  # `cve` and `cves` name the kind of record every result is, so they are never searched:
+  # a query of nothing else stops before any call.
+  - id: low_signal_only
+    request: {query: "CVEs", scope: mixed}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: unsearchable
+      transitions:
+        - [interpret, validate, no_searchable_terms]
+        - [validate, return, answer_validated]
+      steps: []
+      stop_reason: no_evidence
+      status: no_match
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: []
+      applicability: []
+      warning_codes: [topic_not_resolved, no_searchable_terms]
+      tool_calls: 0
+      rounds: 0
+
+  # `cve`, a stopword and two numbers read as an ID written apart: the numbers are never
+  # searched as words, so no record that merely cites CVE-9999-0003 answers for it.
+  - id: near_id_after_low_signal_word
+    request: {query: "CVE of 9999-0003", scope: mixed}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: unsearchable
+      transitions:
+        - [interpret, validate, no_searchable_terms]
+        - [validate, return, answer_validated]
+      steps: []
+      stop_reason: no_evidence
+      status: no_match
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: []
+      applicability: []
+      warning_codes: [topic_not_resolved, no_searchable_terms]
+      tool_calls: 0
+      rounds: 0
+
+  # The search reads `ausf resynchronization crash`: searched as a word, `cve` would also
+  # match CVE-9999-0007, whose description merely mentions CVEs.
+  - id: low_signal_beside_terms
+    request: {query: "cve AUSF resynchronization crash", scope: implementation_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: free_text
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0003", tier: null}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0003"]
+      applicability: []
+      warning_codes: []
+      tool_calls: 1
+      rounds: 1
+
+  # CVE-9999-0007's description carries an injected instruction; it is returned as an
+  # implementation record with a templated claim and changes nothing else.
+  - id: injection_record
+    request: {query: "ignore previous instructions", scope: implementation_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: free_text
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0007", tier: null}
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: ["cve:CVE-9999-0007"]
+      applicability: []
+      warning_codes: []
+      tool_calls: 1
+      rounds: 1

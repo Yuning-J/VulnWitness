@@ -1,0 +1,52 @@
+# Hand-labelled expectations over the packaged 5G-AKA topic card, the FiGHT 3.1.0
+# excerpt and the synthetic CVE fixture. Edit only when the labelled truth changes;
+# tests compare against this file and never regenerate it.
+resolution:
+  - {query: "5gaka", topic: "3gpp:5g-aka", match_kind: exact_alias, excluded: []}
+  - {query: "5G-AKA", topic: "3gpp:5g-aka", match_kind: exact_alias, excluded: []}
+  - {query: "5G AKA", topic: "3gpp:5g-aka", match_kind: exact_alias, excluded: []}
+  - {query: "5G Authentication and Key Agreement", topic: "3gpp:5g-aka", match_kind: canonical_name, excluded: []}
+  - {query: "flaws in 5g authentication-and-key-agreement", topic: "3gpp:5g-aka", match_kind: canonical_name, excluded: []}
+  - {query: "aka", topic: null, match_kind: null, excluded: ["aka"]}
+  - {query: "AKA vulnerabilities", topic: null, match_kind: null, excluded: ["aka"]}
+  - {query: "EAP-AKA'", topic: null, match_kind: null, excluded: ["EAP-AKA'"]}
+  - {query: "EPS AKA", topic: null, match_kind: null, excluded: ["EPS AKA"]}
+  - {query: "5G-AKA versus EAP-AKA'", topic: "3gpp:5g-aka", match_kind: exact_alias, excluded: ["EAP-AKA'"]}
+  - {query: "akamai edge", topic: null, match_kind: null, excluded: []}
+  - {query: "5G Authentication and Key Agreement (5G-AKA)", topic: "3gpp:5g-aka", match_kind: canonical_name, excluded: []}
+  - {query: "Huawei 5G, aka NR, modem flaws", topic: null, match_kind: null, excluded: ["aka"]}
+  - {query: "Qualcomm 5G (aka NR) firmware", topic: null, match_kind: null, excluded: ["aka"]}
+  - {query: "5G a.k.a. New Radio", topic: null, match_kind: null, excluded: []}
+  - {query: "5Géaka", topic: null, match_kind: null, excluded: []}
+context:
+  - query: "5gaka"
+    scope: protocol_context_only
+    status: ok
+    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
+    implementation_candidates: []
+    excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
+  - query: "5gaka"
+    scope: implementation_only
+    status: ok
+    protocol_context: []
+    implementation_candidates:
+      - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
+      - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+    excluded_implementation_candidates: []
+  - query: "5G Authentication and Key Agreement"
+    scope: mixed
+    status: ok
+    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
+    implementation_candidates:
+      - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
+      - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+    excluded_implementation_candidates: []
+  - query: "aka"
+    scope: mixed
+    status: no_match
+    protocol_context: []
+    implementation_candidates: []
+    excluded_implementation_candidates: []
+# FGT1562.501 names generic "Authentication and Key Agreement (AKA)", not 5G AKA:
+# it must never appear as 5G-AKA threat context.
+never_in_protocol_context: ["FGT1562.501"]

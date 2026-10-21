@@ -1,0 +1,29 @@
+# Reviewed FiGHT snapshot files, keyed by SHA-256. A FiGHT source serves a file only
+# when its hash is listed here; coverage and expected contents come from this file,
+# never from the caller. The full 3.1.0 entry was verified on 2026-10-14 against
+# https://raw.githubusercontent.com/mitre/FiGHT/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
+# (git blob 309ca20618eea176b806ce5e3a6b2a9e59de6722).
+snapshots:
+  - snapshot_sha256: "59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8"
+    repository_url: "https://github.com/mitre/FiGHT"
+    commit: "097cd5f73811dc34916ef84d5acc3fe7aba70450"
+    data_version: "3.1.0"
+    upstream_path: "fight.yaml"
+    coverage: full
+    technique_count: 183
+    tactic_count: 15
+    retrieved_at: "2026-10-14T00:00:00Z"
+    terms_ref: "https://fight.mitre.org/resources/terms/"
+  - snapshot_sha256: "08cd11d579889c819c00888ecbb85d6d4b470b8fdf9fea833324441e28635726"
+    repository_url: "https://github.com/mitre/FiGHT"
+    commit: "097cd5f73811dc34916ef84d5acc3fe7aba70450"
+    data_version: "3.1.0"
+    upstream_path: "fight.yaml"
+    coverage: excerpt
+    derived_from_sha256: "59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8"
+    technique_count: 6
+    tactic_count: 5
+    technique_ids: ["FGT1499.503", "FGT1562.501", "FGT5019", "FGT5019.005", "FGT5040", "FGT5044"]
+    tactic_ids: ["TA0005", "TA0006", "TA0007", "TA0009", "TA0040"]
+    retrieved_at: "2026-10-14T00:00:00Z"
+    terms_ref: "https://fight.mitre.org/resources/terms/"

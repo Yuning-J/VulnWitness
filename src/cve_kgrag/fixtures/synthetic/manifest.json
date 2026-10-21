@@ -1,0 +1,11 @@
+{
+  "fixture_id": "synthetic-cves",
+  "version": "1",
+  "generated_at": "2026-10-13T00:00:00Z",
+  "synthetic": true,
+  "description": "Authored test records for offline tests and the CLI demo. IDs use the CVE-9999-* range and every vendor, product and URL (.example) is fictional; no record describes a real product or real CVE.",
+  "license": "MIT (repository LICENSE); authored for this repository, no third-party content",
+  "files": [
+    {"path": "records.json", "sha256": "cd476ed6c0402549a39e58ba61ce0ead334c106ff343cd9f937d1b97c06ad8a1"}
+  ]
+}

@@ -1,0 +1,45 @@
+"""What an investigation runs against, as the composition root wired it."""
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
+
+from cve_kgrag.application.investigation_tools import ToolExecutor
+from cve_kgrag.application.search import SearchService
+from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
+from cve_kgrag.application.topic_context import TopicContextService
+from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
+from cve_kgrag.domain.investigation import SourceCapability
+from cve_kgrag.domain.threat_context import KnownFightSnapshot
+from cve_kgrag.ports.affectedness import TrustifyPort
+from cve_kgrag.topics.registry import TopicRegistry
+
+
+@dataclass(frozen=True)
+class InvestigationDeployment:
+    """A deployment's sources, the catalog and pin its served content is checked against,
+    the capabilities it serves, and its call runner and clocks. The investigation service
+    runs every request against it, and replay runs a recorded request against it again.
+
+    ``source_capabilities`` is what the composition root found the deployment's sources
+    serve: every capability subject but ``model_planner``, which describes the planner of
+    the service running against the deployment. ``search_service`` and
+    ``topic_context_service`` are the ones the tool executor searches and explores topics
+    with, and ``trustify_port`` the port whose reason affectedness is unavailable the
+    ``affectedness`` capability states, for callers that use them outside an
+    investigation. ``monotonic_clock``
+    must be a real monotonic clock in production (``time.monotonic``): the call runner
+    waits in real seconds.
+    """
+
+    topic_registry: TopicRegistry
+    tool_executor: ToolExecutor
+    search_service: SearchService
+    topic_context_service: TopicContextService
+    trustify_port: TrustifyPort
+    source_capabilities: tuple[SourceCapability, ...]
+    pinned_fight_snapshot: KnownFightSnapshot | None
+    evidence_catalog: EvidenceCatalog
+    call_runner: ThreadedCallRunner
+    wall_clock: Callable[[], datetime]
+    monotonic_clock: Callable[[], float]

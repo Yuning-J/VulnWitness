@@ -1,0 +1,214 @@
+{
+  "$defs": {
+    "InvalidField": {
+      "additionalProperties": false,
+      "description": "One argument that failed to parse: where it is and the parser's error type, never\nthe value sent.",
+      "properties": {
+        "error_type": {
+          "maxLength": 64,
+          "pattern": "^[a-z_]+$(?!\\n)",
+          "title": "Error Type",
+          "type": "string"
+        },
+        "location": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Location",
+          "type": "string"
+        }
+      },
+      "required": [
+        "location",
+        "error_type"
+      ],
+      "title": "InvalidField",
+      "type": "object"
+    },
+    "ToolFailureCode": {
+      "enum": [
+        "invalid_arguments",
+        "arguments_too_large",
+        "unknown_evidence_id",
+        "server_busy",
+        "timed_out",
+        "response_too_large",
+        "integrity_check_failed",
+        "internal_error"
+      ],
+      "title": "ToolFailureCode",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "invalid_arguments"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The arguments do not match the tool's input schema."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "arguments_too_large"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The arguments exceed the size limit."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "unknown_evidence_id"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "No evidence anchor has that evidence ID."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "server_busy"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "Too many calls are in flight; retry later."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "timed_out"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The call did not finish within the tool's time limit."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "response_too_large"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The response exceeds the size limit; lower the limit argument."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "integrity_check_failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The service rejected its own result as invalid."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "internal_error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The call failed with an internal error."
+          }
+        }
+      }
+    }
+  ],
+  "description": "Why a tool call gave no answer. Keys the request contract does not declare are\ncounted, never named.",
+  "properties": {
+    "code": {
+      "$ref": "#/$defs/ToolFailureCode"
+    },
+    "invalid_fields": {
+      "items": {
+        "$ref": "#/$defs/InvalidField"
+      },
+      "maxItems": 20,
+      "title": "Invalid Fields",
+      "type": "array"
+    },
+    "message": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.20",
+      "default": "2.0.0-dev.20",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "unexpected_field_count": {
+      "minimum": 0,
+      "title": "Unexpected Field Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "code",
+    "message",
+    "invalid_fields",
+    "unexpected_field_count"
+  ],
+  "title": "ToolFailure",
+  "type": "object"
+}

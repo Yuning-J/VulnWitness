@@ -1,0 +1,15 @@
+{
+  "fixture": "fight-excerpt",
+  "description": "Verbatim excerpt of the official MITRE FiGHT data file (see NOTICE.md); its provenance, coverage and contents are catalogued in knowledge/fight_snapshots.yaml.",
+  "data_file": "fight-excerpt.yaml",
+  "files": [
+    {
+      "path": "fight-excerpt.yaml",
+      "sha256": "08cd11d579889c819c00888ecbb85d6d4b470b8fdf9fea833324441e28635726"
+    },
+    {
+      "path": "NOTICE.md",
+      "sha256": "32f97360408da023c576d8ab4f116e93784e039d76a53a1b7395c56a2848771b"
+    }
+  ]
+}

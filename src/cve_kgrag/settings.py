@@ -1,0 +1,252 @@
+"""The typed settings boundary: the only code that reads configuration (ADR 0004).
+
+Settings come from the environment variables named here, read once at the entry point;
+an empty variable counts as unset, and an unset one takes its default. Nothing else is
+read: no configuration file, no ``.env`` file, and no command-line flag, which would leave
+a key in shell history and process listings.
+
+A setting may be a credential, so no error names a value: ``SettingsError`` names the
+variables and what was wrong with each, and the API key is a ``SecretStr``, masked in
+every repr and JSON dump, until an adapter builds its request header from it.
+"""
+
+import hashlib
+import ipaddress
+import re
+from collections.abc import Mapping
+from typing import TypeVar
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
+
+from cve_kgrag.domain.planning import MODEL_NAME_PATTERN, REASONING_EFFORT_PATTERN
+
+PLANNER_ENABLED_VARIABLE = "CVE_KGRAG_PLANNER_ENABLED"
+# The variables an enabled planner reads, and the field each sets.
+PLANNER_VARIABLES = {
+    "CVE_KGRAG_PLANNER_BASE_URL": "base_url",
+    "CVE_KGRAG_PLANNER_MODEL_NAME": "model_name",
+    "CVE_KGRAG_PLANNER_API_KEY": "api_key",
+    "CVE_KGRAG_PLANNER_REASONING_EFFORT": "reasoning_effort",
+}
+SEMANTIC_ENABLED_VARIABLE = "CVE_KGRAG_SEMANTIC_ENABLED"
+# The variables an enabled semantic channel reads, and the field each sets.
+SEMANTIC_VARIABLES = {
+    "CVE_KGRAG_SEMANTIC_COLLECTION_NAME": "collection_name",
+    "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": "persist_directory",
+    "CVE_KGRAG_SEMANTIC_MODEL_NAME": "model_name",
+}
+# Chroma's collection name rule; a sentence-transformers model is a hub name or a path.
+COLLECTION_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{1,61}[A-Za-z0-9]$"
+EMBEDDING_MODEL_PATTERN = r"^[A-Za-z0-9._/-]{1,256}$"
+TRUE_SPELLINGS = frozenset({"true", "1", "yes", "on"})
+FALSE_SPELLINGS = frozenset({"false", "0", "no", "off"})
+LOOPBACK_HOST_NAME = "localhost"
+DEFAULT_PORTS = {"https": 443, "http": 80}
+# Characters no endpoint URL holds: each of the first could make two URL parsers disagree
+# on its host, and ``?`` and ``#`` start a query or a fragment, even an empty one.
+FORBIDDEN_URL_CHARACTERS = frozenset(" \t\r\n\\%?#")
+INVALID_ENDPOINT_URL = (
+    "must be an ASCII https URL, or an http URL to a loopback host, with a host and without "
+    "credentials, a query or a fragment"
+)
+# A key is sent in an HTTP header, so it is printable ASCII without whitespace.
+API_KEY_PATTERN = r"^[\x21-\x7e]{1,1024}$"
+INVALID_API_KEY = "must be 1 to 1024 printable ASCII characters without whitespace"
+
+
+class SettingsError(ValueError):
+    """The environment holds invalid settings; the message names variables, never values."""
+
+
+SectionSettings = TypeVar("SectionSettings", bound=BaseModel)
+
+
+def is_loopback_host(host: str) -> bool:
+    if host == LOOPBACK_HOST_NAME:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def check_endpoint_url(url: str) -> str:
+    """``url`` as an endpoint a credential may be sent to: ASCII, https or http only to a
+    loopback host, with a host, a port other than 0 if any, and no user information, query or
+    fragment; returned with one trailing ``/`` removed, the one spelling difference the
+    adapter contract makes equivalent (``ModelPortFactory``). Raises ``ValueError`` with a
+    message that does not quote the URL."""
+    if not url.isascii() or any(
+        character in FORBIDDEN_URL_CHARACTERS or not character.isprintable() for character in url
+    ):
+        raise ValueError(INVALID_ENDPOINT_URL)
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+        # Reading the port raises ValueError for one that is not a number in range.
+        port = parts.port
+    except ValueError:
+        raise ValueError(INVALID_ENDPOINT_URL) from None
+    has_credentials = parts.username is not None or parts.password is not None
+    if not host or port == 0 or has_credentials or parts.query or parts.fragment:
+        raise ValueError(INVALID_ENDPOINT_URL)
+    is_allowed_scheme = parts.scheme == "https" or (
+        parts.scheme == "http" and is_loopback_host(host)
+    )
+    if not is_allowed_scheme:
+        raise ValueError(INVALID_ENDPOINT_URL)
+    return url.removesuffix("/")
+
+
+def fingerprint_endpoint(url: str) -> str:
+    """SHA-256 of ``url`` normalized to scheme, lower-case host and port (the scheme's
+    default when none is written), with its path exactly as written, so spellings of one
+    endpoint share one fingerprint, any other difference (another port, another path)
+    gives another, and the fingerprint names no host. ``check_endpoint_url`` has already
+    removed the one trailing ``/`` the adapter contract makes equivalent. Raises
+    ``ValueError`` for a URL without a host."""
+    parts = urlsplit(url)
+    host = parts.hostname
+    if host is None:
+        raise ValueError(INVALID_ENDPOINT_URL)
+    port = parts.port if parts.port is not None else DEFAULT_PORTS[parts.scheme]
+    normalized_url = f"{parts.scheme}://{host}:{port}{parts.path}"
+    return hashlib.sha256(normalized_url.encode()).hexdigest()
+
+
+class ModelPlannerSettings(BaseModel):
+    """An enabled model planner: the OpenAI-compatible endpoint it plans through, the model
+    it names, and the key that authenticates it. A missing key leaves the planner
+    unavailable rather than failing the service (brief §15)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    base_url: str
+    model_name: str = Field(pattern=MODEL_NAME_PATTERN)
+    api_key: SecretStr | None = None
+    reasoning_effort: str | None = Field(
+        default=None,
+        pattern=REASONING_EFFORT_PATTERN,
+        description="Sent as the request's reasoning_effort only when set.",
+    )
+
+    @field_validator("base_url")
+    @classmethod
+    def check_base_url(cls, base_url: str) -> str:
+        return check_endpoint_url(base_url)
+
+    @field_validator("api_key")
+    @classmethod
+    def check_api_key(cls, api_key: SecretStr | None) -> SecretStr | None:
+        if api_key is not None and not re.fullmatch(API_KEY_PATTERN, api_key.get_secret_value()):
+            raise ValueError(INVALID_API_KEY)
+        return api_key
+
+
+class SemanticSettings(BaseModel):
+    """An enabled semantic channel: the Chroma collection it searches, the directory that
+    holds it (relative to the working directory unless absolute; required, since this
+    repository builds no store) and the sentence-transformers model that embeds queries.
+    The collection and model defaults are those of the store CVE-KGRAG's RAG pipeline
+    builds, which the adapter reads (ADR 0006)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    collection_name: str = Field(default="cve_documents", pattern=COLLECTION_NAME_PATTERN)
+    persist_directory: str = Field(min_length=1, max_length=4096)
+    model_name: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2", pattern=EMBEDDING_MODEL_PATTERN
+    )
+
+    @field_validator("persist_directory")
+    @classmethod
+    def check_persist_directory(cls, persist_directory: str) -> str:
+        if not persist_directory.isprintable():
+            raise ValueError("must hold no control character")
+        return persist_directory
+
+
+class ServiceSettings(BaseModel):
+    """Every setting a service reads; a section is ``None`` unless it is enabled."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    model_planner: ModelPlannerSettings | None = None
+    semantic: SemanticSettings | None = None
+
+
+def find_section_variable(section_variables: Mapping[str, str], field_name: str) -> str:
+    """The variable of a section that sets ``field_name``."""
+    for variable_name, variable_field in section_variables.items():
+        if variable_field == field_name:
+            return variable_name
+    raise ValueError(f"no variable sets {field_name}")
+
+
+def parse_switch(environment: Mapping[str, str], variable_name: str) -> bool | SettingsError:
+    """Whether the switch ``variable_name`` is on (off when unset or empty)."""
+    spelling = environment.get(variable_name, "").strip().lower()
+    if not spelling or spelling in FALSE_SPELLINGS:
+        return False
+    if spelling in TRUE_SPELLINGS:
+        return True
+    return SettingsError(f"invalid settings: {variable_name}: must be true or false")
+
+
+def parse_section(
+    environment: Mapping[str, str],
+    section_variables: Mapping[str, str],
+    section_model: type[SectionSettings],
+) -> SectionSettings | SettingsError:
+    """A section's settings, or one error naming each invalid variable and what was wrong,
+    read without the input. Returned rather than raised, so the caller raises it outside
+    this ``except`` and it carries no reference to the error that held the values."""
+    section_fields: dict[str, str] = {}
+    for variable_name, field_name in section_variables.items():
+        value = environment.get(variable_name, "")
+        if value:
+            section_fields[field_name] = value
+    try:
+        return section_model.model_validate(section_fields)
+    except ValidationError as error:
+        problems: list[str] = []
+        for field_error in error.errors(
+            include_url=False, include_context=False, include_input=False
+        ):
+            variable_name = find_section_variable(section_variables, str(field_error["loc"][0]))
+            problems.append(f"{variable_name}: {field_error['msg']}")
+        return SettingsError("invalid settings: " + "; ".join(problems))
+
+
+def load_section(
+    environment: Mapping[str, str],
+    switch_variable: str,
+    section_variables: Mapping[str, str],
+    section_model: type[SectionSettings],
+) -> SectionSettings | None:
+    """A section's settings when its switch is on, else ``None`` with its other variables
+    unread. Raises ``SettingsError`` for an invalid switch or variable."""
+    is_enabled = parse_switch(environment, switch_variable)
+    if isinstance(is_enabled, SettingsError):
+        raise is_enabled
+    if not is_enabled:
+        return None
+    section_settings = parse_section(environment, section_variables, section_model)
+    if isinstance(section_settings, SettingsError):
+        raise section_settings
+    return section_settings
+
+
+def load_settings(environment: Mapping[str, str]) -> ServiceSettings:
+    """The settings ``environment`` holds. Raises ``SettingsError``, naming the variables
+    and never their values, when any is invalid. A section's variables are read only when
+    its switch (``CVE_KGRAG_PLANNER_ENABLED``, ``CVE_KGRAG_SEMANTIC_ENABLED``) is on."""
+    return ServiceSettings(
+        model_planner=load_section(
+            environment, PLANNER_ENABLED_VARIABLE, PLANNER_VARIABLES, ModelPlannerSettings
+        ),
+        semantic=load_section(
+            environment, SEMANTIC_ENABLED_VARIABLE, SEMANTIC_VARIABLES, SemanticSettings
+        ),
+    )

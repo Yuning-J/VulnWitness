@@ -1,0 +1,578 @@
+# Verbatim excerpt of fight.yaml from https://github.com/mitre/FiGHT at commit
+# 097cd5f73811dc34916ef84d5acc3fe7aba70450 (FiGHT 3.1.0). Selected tactic and technique
+# entries are copied byte for byte; other sections are omitted. See NOTICE.md for the
+# MITRE copyright designation and license terms that govern this excerpt.
+id: FiGHT
+name: FiGHT Threat Matrix
+tactics:
+- description: The adversary is trying to avoid being detected.
+  id: TA0005
+  name: Defense Evasion
+  object-type: tactic
+- description: The adversary is trying to steal account names and passwords.
+  id: TA0006
+  name: Credential Access
+  object-type: tactic
+- description: The adversary is trying to figure out your environment.
+  id: TA0007
+  name: Discovery
+  object-type: tactic
+- description: The adversary is trying to gather data of interest to their goal.
+  id: TA0009
+  name: Collection
+  object-type: tactic
+- description: The adversary is trying to manipulate, interrupt, or destroy your systems
+    and data.
+  id: TA0040
+  name: Impact
+  object-type: tactic
+techniques:
+- architecture-segment: RAN, Control Plane, User Plane
+  bluf: An adversary controlling a gNB or control plane or user plane core Network
+    Function (NF) may manipulate signaling to result in DoS for one or more UEs.
+  campaigns: []
+  criticalassets:
+  - description: 5G network communications is denied to legitimate UEs.
+    name: 5G data services
+  description: "An adversary controlling a gNB or control plane or user plane core\
+    \ Network Function (NF) may manipulate signaling to result in DoS for one or more\
+    \ UEs.\r\n\r\nAdversary may use a false base station to deny service to a User\
+    \ Equipment (UE) by issuing registration reject messages or other such messages\
+    \ to deny radio access, or posing as a legitimate base station, but not relaying\
+    \ traffic to or from the intended recipient. Adversary may compromise a core NF\
+    \ and thus manipulate signaling for the UE registration or session management\
+    \ procedures, in order to deny service to that UE."
+  detections:
+  - component: MNO logs for service issues in core
+    detects: Subscriber notifies service provider of no or degraded service.
+    fgdsid: FGDS5011.001
+    name: MNO logs in core for subscriber service complaints
+  - component: Application Log Content
+    detects: Monitor core network logs for APIs that de-register or delete an NF in
+      the NRF or an entry of a UE in UDM and APIs that de-activate UE's PDU sessions.
+    fgdsid: FGDS0015.001
+    name: Application Log
+  groups: []
+  id: FGT1499.503
+  mitigations:
+  - fgmid: FGM1030
+    mitigates: Implement industry standard core and edge network function security
+      protection using network segmentation.
+    name: Network Segmentation
+  - fgmid: FGM5023
+    mitigates: Periodically re-authenticate NFs in the network to assess whether they
+      have been compromised. Remote attestation may also be employed.
+    name: Periodic Authentication & Authorization Of NFs
+  name: DOS A UE Via gNB Or NF Signaling
+  object-type: technique
+  platforms: RAN, core
+  postconditions: []
+  preconditions:
+  - description: Adversary needs access to a false or compromised gNB or a compromised
+      core NF.
+    name: Compromise gNB or NF
+  procedureexamples:
+  - description: UE initiated de-registration:Adversary with a false UE can send a
+      fake de-registration request NAS message to the victim UE's AMF with the victim's
+      5G-GUTI. The victim UE's connection to 5G network is dropped by the network.
+      Clause 4.2.2.3.2 of [7] & [2].Network initiated de-registration:Adversary with
+      a false gNB can send a fake deregistration request NAS message to the victim
+      UE. Victim UE drops the connection that was previously established to 5G network.
+      Clause 4.2.2.3.3 of [7] & [2].
+    name: DOS via UE or gNB control
+  - description: Adversary with false UE can try to register as the victim UE, and
+      when the victim UE tries to RRC connect again, it will be rejected. [2]
+    name: DOS via impersonating UE
+  - description: Adversary controlling Access and Mobility Management Function (AMF)
+      can cause authentication to fail or deny SMS service by deactivating SMS for
+      a given SUPI [1]. Control of AMF (with or without its Security Anchor Function
+      (SEAF) functionality) can give an adversary the ability to manipulate the AKA
+      procedure (e.g. change parameters exchanged) between the AMF and any other UE,
+      so that (at the simplest) the UE authentication fails and it cannot get services.
+      Alternatively, rogue or misconfigured AMF modifies the registration accept message
+      for legitimate subscribers to deny access to some or all services that are configured
+      in their profile. For the UEs it already serves, whose registration was successful
+      in the past, a rogue AMF can simply de-register one or more of those UEs.
+    name: DOS via AMF control
+  - description: Adversary controlling Session Management Function (SMF) can release
+      an existing PDU session or not create a new one; or send a N4 Session Release
+      request to User Plane Function (UPF) currently serving the UE.Alternately, a
+      compromised SMF sends a DELETE message to the UDM to de-register a UE. [5]/{ueId}/registrations/smf-registrations/{pduSessionId}
+    name: DOS via SMF control
+  - description: Adversary controlling UPF can send a report of PDU session inactivity
+      to SMF, which results in de-activating the UE session. Or the UPF can alter
+      secondary authentication between DN AAA and SMF, so it fails.
+    name: DOS via UPF control
+  - description: Adversary controlling Authentication Server Function (AUSF) can produce
+      incorrect AKA parameters or change data out of UDM to fail the UE authentication.
+    name: DOS via AUSF control
+  - description: Adversary controlling Unified Data Management (UDM) can fail the
+      SUPI de-concealing operation, so that the UE key will be different and Non-Access
+      Stratum (NAS) Security Mode Command (SMC) will fail (e.g., responding to SUCI
+      de-concealment with an incorrect SUPI). See clause E.2.2.1 of [3].
+    name: DOS via UDM control
+  - description: Adversary controlling Authentication Credential Repository and Processing
+      Function (ARPF) can either (a) Alter the root key (K) or provide wrong root
+      key for the UE; or (b) Generate wrong authentication vector (AV) during UE authentication
+      procedure using EAP-AKA' or 5G AKA.Both will result in authentication failure
+      for the UE. Clause 6.1.3 of [4].
+    name: DOS via ARPF control
+  - description: Adversary controlling the Unified Data Repository (UDR) may give
+      UDM incorrect security parameters or remove UE authentication status. This will
+      cause UE authentication to fail.
+    name: DOS via UDR control
+  - description: Adversary controlling Policy and Charging Function (PCF) may return
+      a very restrictive policy for a UE. The UE will not be able to avail some or
+      all services which are allowed in its profile.
+    name: DOS via PCF control
+  - description: Adversary controlling the Network Slicing Selection Function (NSSF)
+      and/or the Network Slicing Selection Authentication and Authorization Function
+      (NSSAAF) may deny UE access to a slice by mishandling NSSAI (saying it's unavailable)
+      or altering authentication parameters so that authentication procedure fails.
+    name: DOS via NSSF and NSSAAF control
+  - description: Adversary controlling Charging Function (CHF) may send a message
+      to SMF to start PDU session release of a particular UE.
+    name: DOS via CHF control
+  - description: Adversary controlling SMS Function (SMSF) may achieve DoS only for
+      SMS for a given UE; i.e. the device does not receive or send text messages.Compromised
+      SMSF sends a DELETE message to the UDM via N21 interface to de-register a UE.
+      [5]/{ueId}/registrations/smsf-3gpp-access.
+    name: DOS via SMSF control
+  - description: Adversary controlling 5G Equipment Identity Register (5G EIR) can
+      mark UE as stolen. The UE will be denied service when it attempts to connect
+      to 5G network.
+    name: DOS via 5G EIR control
+  - description: Adversary controlling home network Security Edge Protection Proxy
+      (SEPP) or visited SEPP can alter or discard registration request/response message
+      and/or other signaling messages to deny access for a UE.
+    name: DOS via Home or visited network SEPP
+  - description: Adversary discovers the UPF instance by querying NRF using fraudulent
+      APIs. Then they delete the UPF and SMF entry in the NRF. They also delete the
+      PDU session information of the target UE in SMF and UPF. All PDU sessions of
+      the target UE will be dropped. [6]
+    name: DoS a UE via NRF and SMF/UPF
+  references:
+  - '<a name="1"> \[1\] </a> [European Union Agency for Cybersecurity (ENISA): "ENISA
+    Threat Landscape for 5G Networks" Report, December 2020.](https://www.enisa.europa.eu/publications/enisa-threat-landscape-report-for-5g-networks)'
+  - '<a name="2"> \[2\] </a> [Hu, X. et al: "A Systematic Analysis Method for 5G Non-Access
+    Stratum Signalling Security", August 2019.](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8817957)'
+  - '<a name="3"> \[3\] </a> [3GPP TR 33.926: "Security Assurance Specification (SCAS)
+    threats and critical assets in 3GPP network product classes", Technical Report,
+    v17.3.0, December. 2021.](https://www.3gpp.org/DynaReport/33926.htm)'
+  - '<a name="4"> \[4\] </a> [3GPP TS 33.501: "Security architecture and procedures
+    for 5G System", Technical Specification, v17.6.0, June 2022.](https://www.3gpp.org/DynaReport/33501.htm)'
+  - '<a name="5"> \[5\] </a> [Mobileum: "OAuth2.0 Security and Protocol Exploit Analysis
+    in 5G Ecosystem".](https://www.researchgate.net/publication/371401470_OAuth20_Security_and_Protocol_Exploit_Analysis_in_5G_Ecosystem)'
+  - '<a name="6"> \[6\] </a> [GSMA: "Intruding 5G SA core networks from outside and
+    inside".](https://penthertz.com/resources/Intruding%205G%20SA%20core%20networks%20from%20outside%20and%20inside.pdf)'
+  - '<a name="7"> \[7\] </a> [3GPP TS 23.502: "Procedures for the 5G System (5GS);
+    Stage 2", Technical Specification, v17.3.0, December 2021.](https://www.3gpp.org/DynaReport/23502.htm)'
+  software: []
+  status: Proof Of Concept
+  subtechnique-of: FGT1499
+  tactics:
+  - TA0040
+  typecode: fight_subtechnique_to_attack_technique
+- architecture-segment: RAN
+  bluf: An adversary may employ a false base station to bid down (downgrade) the victim
+    UE to a less secure Radio Access Network in order to exploit the vulnerabilities
+    in that network.
+  campaigns: []
+  criticalassets:
+  - description: Sensitive subscriber data that the UE sends to/from the network (including
+      identifiers).
+    name: User data
+  description: "An adversary may employ a false base station to bid down (downgrade)\
+    \ the victim UE to a less secure Radio Access Network in order to exploit the\
+    \ vulnerabilities in that network.\r\n\r\nAn adversary located between the victim\
+    \ UE and real base stations may jam the 5G radio frequencies and use the false\
+    \ base station to generate illegitimate over-the-air signaling to deny service\
+    \ to 5G and induce the UE to operate over a less secure radio access network,\
+    \ such as 3G or 4G. This requires a UE profile that permits attaching to networks\
+    \ other than 5G.\r\n\r\nWhen the security profile in the UE allows connection\
+    \ to a less secure service, adversary denies service to 5G, bids down victim UE\
+    \ to less secure network (4G or 3G) with illegitimate signaling. Then the adversary\
+    \ bids down the UE to 2G network and orders the UE to transmit with no or weak\
+    \ encryption/integrity protection. However, note that 5G (Release 15 and later)\
+    \ supports an anti-bid-down feature: during the Authentication and Key Agreement\
+    \ (AKA) procedure, the network sends to the UE an \"ABBA\" parameter (Anti Bidding\
+    \ Down between Architectures), which indicates the security features that the\
+    \ network possesses. When this feature is enabled, the UE is not to attach to\
+    \ earlier generation networks.\r\n\r\nAlso known as downgrading, the bidding down\
+    \ enables the adversary to perform additional follow up techniques using over\
+    \ the air interfaces, such as eavesdropping of user SMS and voice calls, user\
+    \ data or signaling manipulation, and privacy breaches. These privacy breaches\
+    \ may include exposure of the IMSI, location tracking of user, and impersonation\
+    \ of a user. "
+  detections:
+  - component: UE logs for radio network transition events
+    detects: UE logs of RAT transition event to less secure service e.g. from 5G to
+      4G or 3G. UE responds to requests that were not sent by legitimate network.
+    fgdsid: FGDS5010.001
+    name: UE  logs
+  - component: Signals sent by UEs
+    detects: gNB logs of UE measurement reports of received power levels from all
+      base stations nearby, and their identifiers. Clause 6.24 of [4].
+    fgdsid: FGDS5002.001
+    name: Radio interface
+  groups: []
+  id: FGT1562.501
+  mitigations:
+  - fgmid: FGM5002
+    mitigates: UE should discard RRC redirection messages that are not integrity protected,
+      and go search for other gNBs. UE should only accept to register to networks
+      that require mutual authentication and strong encryption, also integrity protection
+      of user plane. [2]
+    name: Discard RAN Signaling Received Without Integrity Protection
+  - fgmid: FGM5092
+    mitigates: UE warns user of connecting to a less secure network (and the user
+      can take action to limit data or type of data, or to disconnect).
+    name: Warn User
+  - fgmid: FGM5006
+    mitigates: Set security UE profile to prohibit bidding down to less secure service.
+    name: Restrictive User Profile
+  name: Bid Down UE
+  object-type: technique
+  platforms: RAN
+  postconditions:
+  - description: UE is connected to legacy network and is now vulnerable to privacy
+      threats.
+    name: UE is connected to a less secure network
+  preconditions:
+  - description: Adversary has procured a UE and gNB under its control, and the victim
+      UE is nearby.
+    name: False base station with strong signal and UE system
+  procedureexamples:
+  - description: UEs tend to attach to gNBs which have better signal condition than
+      the gNB the UE is currently attached. False gNB with stronger signal strength
+      than legitimate gNBs lures UE to connect, then sends RRC redirection message
+      that is not integrity protected, so that the UE can't check its legitimacy.
+      This RRCRelease message has the instruction for the UE to attach to a 4G cell
+      instead (i.e, RedirectInfo as E-UTRA Absolute Radio Frequency Channel Number
+      (E-ARFCN) [2][3].
+    name: False gNB redirects UE to 4G.
+  references:
+  - '<a name="1"> \[1\] </a> [S.P. Rao, S. Holtmanns, T. Aura: "Threat modeling framework
+    for mobile communication systems", May 2020.](https://arxiv.org/abs/2005.05110v1)'
+  - <a name="2"> \[2\] </a> [DEFCON 24 article "Forcing Targeted LTE Cellphone Into
+    Unsafe Network".](https://www.scribd.com/document/350156530/forcing-targeted-lte-cellphone-into-unsafe-network)
+  - '<a name="3"> \[3\] </a> [GSMA paper: "Never let me down again: Bidding-Down Attacks
+    and Mitigations in 5G and 4G".](https://www.gsma.com/solutions-and-impact/technologies/security/wp-content/uploads/2023/10/0064-Never-let-me-down-again-Bidding-Down-Attacks.pdf)'
+  - '<a name="4"> \[4\] </a> [3GPP TR 33.809: "Study on 5G security enhancements against
+    False Base Stations (FBS)", Technical Report, v0.18.0, February 2022.](https://www.3gpp.org/DynaReport/33809.htm)'
+  software: []
+  status: Theoretical
+  subtechnique-of: FGT1562
+  tactics:
+  - TA0005
+  typecode: fight_subtechnique_to_attack_technique
+- architecture-segment: RAN, Control Plane, Roaming, UE
+  bluf: An adversary may obtain a UE permanent identifier via various means.
+  campaigns: []
+  criticalassets:
+  - description: UE/User IMSI, SUPI
+    name: User identifiers - permanent or temporary
+  description: "An adversary may obtain a UE permanent identifier via various means.\r\
+    \n\r\nAn adversary may obtain UE identifying information from 5G UEs after the\
+    \ UE has been bid down (downgraded) to a lower security protocol e.g. 4G, since\
+    \ in 4G and 3G it is possible for the network to ask the UE to send its IMSI (International\
+    \ Subscriber Identifier) in the clear over the radio interface. The UE identity\
+    \ can also be obtained by the adversary if NULL scheme is used for Subscriber\
+    \ Permanent Identifier (SUPI) concealment, or by fraudulent use of legitimate\
+    \ 5G core network APIs.\r\n\r\nThe 5G UE sends an encrypted identifier (called\
+    \ Subscriber Concealed Identifier (SUCI)) over the radio interface as part of\
+    \ the initial registration to the 5G network. Some non-UE specific information\
+    \ is part of the Subscriber Permanent Identifier or SUPI and is not encrypted\
+    \ (e.g., home network name)."
+  detections: []
+  groups: []
+  id: FGT5019
+  mitigations: []
+  name: Subscriber Profile Identifier Discovery
+  object-type: technique
+  platforms: 5G Core, 5G RAN
+  postconditions: []
+  preconditions: []
+  procedureexamples:
+  - description: Adversary may use the radio access network to determine the IMSI
+      of a particular UE is in the area.
+    name: Use radio access to obtain UE permanent identifier
+  - description: Adversary may use the core network signaling find the IMSI of a particular
+      UE, given e.g., MSISDN
+    name: Use core network signaling to obtain UE permanent identifier
+  references:
+  - '<a name="1"> \[1\] </a> [European Union Agency for Cybersecurity (ENISA): "ENISA
+    Threat Landscape for 5G Networks" Report, December 2020.](https://www.enisa.europa.eu/publications/enisa-threat-landscape-report-for-5g-networks)'
+  - '<a name="2"> \[2\] </a> [S.P. Rao, S. Holtmanns, T. Aura: "Threat modeling framework
+    for mobile communication systems", May 2020](https://arxiv.org/abs/2005.05110v1)'
+  software: []
+  status: Observed
+  tactics:
+  - TA0007
+  - TA0009
+  typecode: fight_technique
+- access-required: IPX, Network
+  architecture-segment: Control Plane, Roaming
+  bluf: An adversary may send an unsolicited SS7/Diameter message to the core network
+    of a UE that will cause the core network to provide IMSI/SUPI of the UE.
+  campaigns: []
+  criticalassets:
+  - description: IMSI/SUPI of the subscriber may be discovered.
+    name: User identifier
+  description: "An adversary may send an unsolicited SS7/Diameter message to the core\
+    \ network of a UE that will cause the core network to provide IMSI/SUPI of the\
+    \ UE.\r\n\r\nAn operator's network consists of a 5G Core and also auxiliary systems\
+    \ such as the IP Multimedia System (IMS). The IMS is used to provide voice and\
+    \ SMS services; this is accomplished via traditional protocols SS7 and Diameter\
+    \ between the IMS and 5G core functions. This subtechnique covers the abuse of\
+    \ such legitimate signaling to obtain the permanent identifier of a UE. \r\n\r\
+    \nOnce the IMSI/SUPI is obtained, adversary may proceed to other follow-on behaviors\
+    \ such as retrieving location of the UE, the identifier of the network slice and\
+    \ data network that are being used by the UE etc.\r\n\r\n \r\n\r\nBackground info:\r\
+    \n\r\n5G SA core has interfaces to IMS core to support voice and SMS services.\
+    \ Diameter/SS7 attacks. In signaling plane, voice service uses Diameter based\
+    \ Rx interface between PCF and P-CSCF in IMS, Diameter based Sh interface between\
+    \ HSS/UDM and TAS in IMS, Diameter based Cx interface between HSS/UDM and I/S-CSCF.\
+    \ It also uses SIP/SDP based Gm interface between UPF and P-CSCF in the user plane.\
+    \ SMS over NAS service uses SS7 (MAP) based interface and S6c Diameter based interface\
+    \ from UDM to SMSC. It also uses MAP and SGd (Diameter) interfaces from SMSF to\
+    \ SMSC."
+  detections:
+  - component: Network Traffic Content
+    detects: Monitor all communications over Diameter and SS7/MAP based interfaces
+      to/from core network.
+    fgdsid: FGDS0029.002
+    name: Network Traffic
+  groups:
+  - description: HiddenArt retrieved of UE location via using the SS7 -sending SS7
+      messages from the GRX/IPX or a compromised operator to the home PLMN of a user
+      being targeted ([4]).
+    fggid: FGG5003
+    name: HIddenArt
+  id: FGT5019.005
+  mitigations:
+  - fgmid: FGM5513
+    mitigates: Use Diameter End-to-end Signaling Security (DESS). Section 6.5.3 of
+      [4].
+    name: Use DESS Security
+  - fgmid: FGM5004
+    mitigates: Use SMS router or firewall
+    name: Correctly Configure SMS Firewall
+  - fgmid: FGM1014
+    mitigates: Use SS7/MAP and Diameter firewalls depending on signaling method used.
+      [3]
+    name: Interconnection Filtering
+  name: SS7 Or Diameter Signaling
+  object-type: technique
+  platforms: 5G Core
+  postconditions:
+  - description: Now the adversary can proceed with other follow-on behaviors towards
+      the victim subscriber whose IMSI/SUPI has been discovered, such as geolocation,
+      DOS/degradation of service, or retrieval of sensitive information or user data.
+    name: IMSI of subscriber is discovered
+  preconditions:
+  - description: Adversary collects victim UE's phone number from subscriber's physical
+      address using internet based services such as numlooker.com.
+    name: MSISDN or phone number of victim UE is known to adversary
+  procedureexamples:
+  - description: Diameter protocol:Adversary sets up a fake SMSC and then sends a
+      specially crafted Send Routing Info for Short Message Request (SRR) with victim
+      UE's MSISDN to HSS/UDM. If SMS router/firewall is not setup or if it is setup
+      incorrectly, HSS/UDM will return the IMSI/SUPI of the UE and the ID of AMF/MME's
+      ID currently serving the UE in response Send Routing Info for SM Answer (SRA)
+      message.SS7 protocol:Adversary sets up a fake SMSC and then sends a specially
+      crafted MAP SRI_SM Send Routing Info for Short Message Request (SRR) with victim
+      UE's MSISDN to HSS/UDM. If SMS router/firewall is not setup or if it is setup
+      incorrectly, HSS/UDM will return the IMSI/SUPI of the UE and the ID of AMF/MME's
+      ID currently serving the UE in response Send Routing Info for SM Answer (SRA)
+      message. [1, 2]
+    name: UE's IMSI/SUPI is retrieved using SRR message
+  - description: 'Diameter protocol: Adversary sets up an application server and sends
+      a specially crafted User Data Request (UDR) message with victim UE''s MSISDN
+      to HSS/UDM. If HSS/UDM is not configured properly, HSS/UDM will return the IMSI/SUPI
+      of the UE in User Data Answer (UDA) response message. [2]'
+    name: UE's IMSI/SUPI is retrieved using Diameter UDR message
+  references:
+  - '<a name="1"> \[1\] </a> [International Conference on Cyber Conflict 2016: "We
+    know where you are".](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7529440)'
+  - <a name="2"> \[2\] </a> [B.T. Kotte, "Analysis and Experimental Verification of
+    Diameter Attacks in Long Term Evolution Networks", KTH Royal Institute of Technology,
+    2016.](http://www.diva-portal.org/smash/get/diva2:951619/FULLTEXT01.pdf)
+  - <a name="3"> \[3\] </a> [Broadforward's SS7/MAP Firewall.](https://www.broadforward.com/ss7-firewall-ss7fw/)
+  - <a name="4"> \[4\] </a> [GSMA IR.88 "EPS Roaming Guidelines".](https://www.gsma.com/newsroom/wp-content/uploads/IR.88-v22.0.pdf)
+  - <a name="5"> \[5\] </a> [Enea (2022). HiddenArt - A Russian-linked SS7 Threat
+    Actor](https://www.enea.com/insights/the-hunt-for-hiddenart/)
+  software: []
+  status: Observed In Earlier 3GPP Generations And Expected In 5G
+  subtechnique-of: FGT5019
+  tactics:
+  - TA0007
+  - TA0009
+  typecode: fight_subtechnique
+- access-required: User/Subscriber
+  architecture-segment: Control Plane
+  bluf: Adversary sends many arbitrary but cryptographically weak SUCI values in registration
+    requests in order to discover private key of MNO using information received from
+    failure/success responses.
+  campaigns: []
+  criticalassets:
+  - description: MNO private key used for SUCI de-concealment operations
+    name: MNO crypto material
+  description: "Adversary sends many arbitrary but cryptographically weak SUCI values\
+    \ in registration requests in order to discover private key of MNO using information\
+    \ received from failure/success responses.\r\n\r\nSUCI concealment and de-concealment\
+    \ is based on a public/private key pair of the home Mobile Network Operator of\
+    \ that user. The MNO makes known its public key to its subscribers so that they\
+    \ can use it to conceal the SUPI and send the SUCI in the registration messages\
+    \ sent to the visited network.\r\n\r\nThis adversarial behavior is also known\
+    \ as the \"Invalid curve attack\". It is a type of brute-force private key guessing,\
+    \ where the adversary (for example via a user device /UE) sends many arbitrary\
+    \ SUCIs in registration messages to the AMF; then AMF then passes the SUCI to\
+    \ the UDM function in the core network, which tries to decrypt them via both its\
+    \ private key and the adversary's public key. If the public key of the adversary\
+    \ uses a weaker \"Profile B\" (instead of \"Profile A\") for elliptic curves,\
+    \ and if the public key validation is not first performed before SUCI deconcealment\
+    \ is attempted, then it is possible to recover the private key of the MNO (used\
+    \ for SUCI computation) via brute force. This is based on the response obtained\
+    \ from the network on whether the decryption was successful or not. \r\n\r\nIn\
+    \ the context of elliptic curve cryptography, by sending an invalid point (valid\
+    \ point on an invalid curve) as an uncompressed public key to the network, it\
+    \ is possible to eventually compute the shared secret. \r\n\r\nThis behavior can\
+    \ be used for follow-on behaviors such as SUCI decryption."
+  detections:
+  - component: Slice performance counters and KPIs of core NFs in MANO
+    detects: Inspect SUCI parameters from the UE registration call flow- the public
+      key the UE sends should be on the expected elliptic curve.
+    fgdsid: FGDS5026.001
+    name: Slice performance counters, KPIs
+  groups: []
+  id: FGT5040
+  mitigations:
+  - fgmid: FGM5093
+    mitigates: UDM should check that received public key from the UE for the SUCI
+      is on the expected elliptic curve.
+    name: SUCI Parameter Checks
+  name: Discover Operator Private Key
+  object-type: technique
+  platforms: 5G Core
+  postconditions: []
+  preconditions: []
+  procedureexamples:
+  - description: The UE sends many such legitimate registration requests, each with
+      a new SUCI, then notes the result - most of the time instead of "Authentication
+      request", the result is a "MAC Failure". The authors call this a decryption
+      oracle ([1]). Where the public key used for SUCI calculation at the UE side
+      is an "invalid elliptic curve point", then after recording the result of many
+      such attempts (e.g, 6000), it is possible to recover the MNO private key used
+      for SUCI deconcealing at the network side. In [1], private key of MNO was recovered
+      it in about 4 hours or 6000 registration requests.
+    name: Adversary uses a UE to send multiple registration requests with different
+      SUCIs.
+  - description: An adversary does not have to use a UE, if already in the SBA, it
+      can send multiple Nudm_UEAuthentication Get requests with different SUCIs and
+      note the result- which is a SUPI if successful and an error if not. Similar
+      of MNO private key recovery is possible as in the example where the SUCIs are
+      delivered from a UE via registration messages.
+    name: Adversary already in the 5G core network sends messages to the UDM directly
+  references:
+  - <a name="1"> \[1\] </a> [T. Funke, D. Rupprecht, "Invalid Curve Attack on the
+    5G SUCI Privacy Feature", Oct 2023](https://www.gsma.com/solutions-and-impact/technologies/security/wp-content/uploads/2023/10/0073-invalid_curve.pdf)
+  - <a name="2"> \[2\] </a> [CVE-2023-46324](https://nvd.nist.gov/vuln/detail/CVE-2023-46324)
+  software: []
+  status: Theoretical
+  tactics:
+  - TA0007
+  typecode: fight_technique
+- access-required: Expanded Privilege
+  architecture-segment: RAN, Roaming
+  bluf: An adversary may attempt to subvert the roaming authentication process by
+    forcing the home network to derive and send keys for a victim UE.
+  campaigns: []
+  criticalassets:
+  - description: User plane data sent /received by the UE is revealed to the adversary.
+    name: User data (calls/data/SMS)
+  description: "An adversary may attempt to subvert the roaming authentication process\
+    \ by forcing the home network to derive and send keys for a victim UE.\r\n\r\n\
+    The adversary, having obtained the permanent identifier of the UE (SUPI/IMSI)\
+    \ via some means, uses access to the IPX roaming network, or a compromised or\
+    \ colluding cellular operator (PLMN) to send a fraudulent request for keys (subscriber\
+    \ authentication vectors) to the home network of the victim UE. This technique\
+    \ then enables an adversary to successfully decrypt the user data that passes\
+    \ through a fake or compromised base station that the adversary is using. \r\n\
+    \r\nThe false base station deployed in locations close to the subscriber of interest\
+    \ lures the UE to connect to it and start a registration procedure. The false\
+    \ base station may advertise a spoofed PLMN ID and cell ID in order to trigger\
+    \ a new registration. \r\n\r\nFor 4G, this request for keys is carried over the\
+    \ Diameter protocol (e.g., the AIR- Authentication-Information-Request), and it\
+    \ has as origin a spoofed PLMN ID (e.g., the PLMN ID of the home network of the\
+    \ UE (as in [1]), or another PLMN ID (of a legitimate roaming partner) that is\
+    \ accepted by the Diameter firewall of the home network of the victim UE) (see\
+    \ FGT1036.501). Then, the home network returns the authentication vectors and\
+    \ the false base station completes the registration procedure and the user data\
+    \ session is started, encrypted with the radio interface keys that the false base\
+    \ station has obtained. Thus, the adversary can decrypt all traffic from the UE,\
+    \ all the while providing data service (in order to remain undetected by the user).\
+    \ \r\n\r\nFor 5G, the attack is more complex because it requires the cooperation\
+    \ of a colluding cellular operator. The UE must first be tricked to connect to\
+    \ the false base station advertising the PLMN ID of the colluding roaming partner.\
+    \ After this, the adversary sends a fraudulent HTTP/2 message carrying an authentication\
+    \ request. The 5G authentication procedure takes place between the UE, the colluding\
+    \ PLMN, and the home PLMN of the UE. After this, the false base station is finally\
+    \ in possession of the keys for radio interface and is able to decrypt user traffic.\
+    \ Thus, the adversary can decrypt all traffic from the UE, all the while providing\
+    \ data service. The UE may or may not show to the user the PLMN that the UE is\
+    \ attaching to, thus this attack may remain undetected at the subscriber side.\
+    \ In addition to user traffic decryption, an adversary can send user plane data\
+    \ to the UE and possibly achieve remote code execution (RCE). "
+  detections:
+  - component: System Notifications
+    detects: Configure UE / SIM to display current PLMN name, or to detect suspicious
+      broadcast PLMN names.
+    fgdsid: FGDS0042.002
+    name: User Interface
+  - component: Firewall metadata
+    detects: Check Diameter or SEPP firewall logs for unexpected signaling sources
+    fgdsid: FGDS0018.003
+    name: Firewall
+  groups: []
+  id: FGT5044
+  mitigations:
+  - fgmid: FGM5542
+    mitigates: Employ strict rules in the Diameter firewall to filter out incoming
+      messages from suspicious origins or with unexpected content (including UE -
+      plausibility of location and velocity checks)
+    name: Application Layer Firewall
+  name: Force Generation Of Subscriber Keys
+  object-type: technique
+  platforms: 5G RAN platform, Interconnect
+  postconditions:
+  - description: Decrypt all user data sent by the UE to the base station encrypted
+    name: Reveal user data
+  preconditions:
+  - description: Adversary obtains a false base station and places it in the vicinity
+      of the victim UE, setting it to broadcast a spoofed PLMN ID and cell ID
+    name: Obtain and deploy false base station
+  - description: The adversary buys access or fraudulently obtains access to the IPX
+      network in order to send Diameter or HTTP/2 messages
+    name: Obtain access to roaming network (IPX)
+  - description: Adversaries uses a technique to obtain subscriber identifier (See
+      FGT5019).
+    name: Obtain UE IMSI/SUPI (for FORCE)
+  procedureexamples:
+  - description: An adversary sends from the IPX or a compromised PLMN a Diameter
+      or HTTP/2 message to the home PLMN of a victim UE, having as a source (visited
+      PLMN) a spoofed PLMN ID, in order to the force the home PLMN to derive air interface
+      keys for that UE, and send them to the adversary in response to this request.
+    name: Send fraudulent Diameter or HTTP/2 message to obtain UE keys
+  references:
+  - <a name="1"> \[1\] </a> [P1 security (2021). All authentication vectors are not
+    made equal.](https://labs.p1sec.com/2021/09/30/all-authentication-vectors-are-not-made-equal/)
+  - "<a name=\"2\"> \\[2\\] </a> [Lange, S., Gringoli, F., Hollick, M., Classen, J.\
+    \ (2024). Wherever I May Roam: Stealthy Interception and\_Injection Attacks Through\
+    \ Roaming Agreements. In: ESORICS 2024. Lecture Notes in Computer Science, vol\
+    \ 14985.](https://doi.org/10.1007/978-3-031-70903-6_11)"
+  software: []
+  status: Theoretical
+  tactics:
+  - TA0006
+  typecode: fight_technique

@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cve-kgrag"
+version = "2.0.0.dev0"
+description = "Telecom-focused, evidence-bound CVE and protocol threat-context knowledge service"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9,<3",
+    # Reviewed topic cards and FiGHT snapshots are YAML, read only with a SafeLoader subclass.
+    "pyyaml>=6.0.2,<7",
+]
+
+[project.urls]
+Repository = "https://github.com/Yuning-J/telecom-cve-kgrag"
+
+[project.optional-dependencies]
+semantic = [
+    "chromadb>=1.0,<2",
+    "sentence-transformers>=3.3,<6",
+]
+# The MCP server runner; the server imports anyio directly.
+mcp = [
+    "mcp>=2.3,<3",
+    "anyio>=4.9,<5",
+]
+
+[project.entry-points."cve_kgrag.adapters"]
+semantic = "cve_kgrag.adapters.semantic.chroma_retriever:build_semantic_retriever"
+mcp_server = "cve_kgrag.interfaces.mcp.stdio_runner:serve_stdio"
+model_planner = "cve_kgrag.adapters.planner.openai_compatible:build_model_port"
+
+[project.scripts]
+cve-kgrag = "cve_kgrag.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    # Contract tests check that the committed schemas accept what the models accept.
+    "jsonschema>=4.23",
+    "types-pyyaml>=6.0.12",
+    # The MCP server and its tests run in the default lane.
+    "cve-kgrag[mcp]",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cve_kgrag"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src/cve_kgrag", "/README.md", "/LICENSE", "/pyproject.toml"]
+
+[tool.pytest.ini_options]
+# The repository root is on the path so tests import `tests.support`.
+pythonpath = ["."]
+testpaths = ["tests/unit", "tests/contract", "tests/integration"]
+addopts = ["-p", "no:cacheprovider", "--strict-markers"]
+# tests/live is outside testpaths; its tests also need CVE_KGRAG_LIVE_TESTS=1.
+markers = ["live: calls a real model endpoint; opt-in only (tests/live, ADR 0005)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+files = ["src/cve_kgrag"]
+strict = true
+plugins = ["pydantic.mypy"]
