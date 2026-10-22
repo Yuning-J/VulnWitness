@@ -205,11 +205,13 @@ amended to match.
   widens it), pins each action to a commit, installs uv 0.12.17, passes each matrix
   Python to setup-uv and keeps no checkout credentials; `tests/contract/test_ci_workflow.py`
   checks all of these.
-- A `pytest_runtest_protocol` hook in `tests/conftest.py` refuses every connect outside
-  loopback (`tests/support/network_guard.py`) while each test is set up, run and torn
-  down, so fixtures of every scope are covered, except in the opt-in live tests under
-  `tests/live`. `tests/unit/test_network_guard.py` checks that a documentation address is
-  refused and loopback is allowed.
+- `pytest_configure` in `tests/conftest.py` installs a guard that refuses every connect
+  outside loopback (`tests/support/network_guard.py`) before collection, so test modules
+  are guarded while they are imported, and keeps it to the end of the run. Only an
+  explicitly enabled live run (`CVE_KGRAG_LIVE_TESTS=1`) goes without it.
+  `tests/unit/test_network_guard.py` checks that a documentation address is refused,
+  loopback is allowed, and a test module that connects at import fails collection with
+  the guard's refusal.
 - The first run on GitHub Actions passed: the offline lane gave 2407 passed on Python
   3.11 and on 3.12, the core-only lane 2349 passed. With the review fixes the local
   offline lane (3.12) gives 2409 passed and the core-only lane 2351 passed.

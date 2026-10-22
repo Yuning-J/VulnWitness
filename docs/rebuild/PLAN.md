@@ -106,6 +106,7 @@ scripts/ci/offline_lane.sh            # tests, ruff, format, mypy, schema check,
 scripts/ci/core_only_lane.sh 3.12     # the wheel in a fresh venv, no dev group, no extra
 ```
 
-A network guard (`tests/conftest.py`) refuses connects outside loopback while each test
-is set up, run and torn down, fixtures of every scope included, except the opt-in live
-tests in `tests/live`. Collection, which imports the test modules, runs before it.
+A network guard (`tests/conftest.py`) refuses connects outside loopback from before
+collection to the end of the run, so module-level test code is covered too. Only an
+explicitly enabled live run (`CVE_KGRAG_LIVE_TESTS=1`, the live lane above) goes without
+it.

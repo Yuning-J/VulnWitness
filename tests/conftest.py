@@ -1,10 +1,10 @@
 """Shared fixtures for the v2 test tiers. Imports only the core package."""
 
+import os
 import socket
 import threading
 from collections.abc import Iterator
 from functools import partialmethod
-from pathlib import Path
 
 import pytest
 
@@ -27,8 +27,9 @@ from tests.support.clocks import read_fixed_clock
 from tests.support.fake_chat_server import FakeChatServers
 from tests.support.network_guard import NetworkGuard, guarded_connect, guarded_connect_ex
 
-LIVE_TESTS_DIRECTORY = Path(__file__).parent / "live"
+LIVE_TESTS_VARIABLE = "CVE_KGRAG_LIVE_TESTS"
 NETWORK_GUARD_KEY = pytest.StashKey[NetworkGuard]()
+NETWORK_GUARD_PATCH_KEY = pytest.StashKey[pytest.MonkeyPatch]()
 
 
 @pytest.fixture
@@ -78,28 +79,34 @@ def fake_chat_servers() -> Iterator[FakeChatServers]:
     servers.stop_all()
 
 
-@pytest.hookimpl(wrapper=True)
-def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> Iterator[None]:
-    """Refuses every connect outside loopback while a test is set up, run and torn down.
+def pytest_configure(config: pytest.Config) -> None:
+    """Refuses every connect outside loopback from before collection to the end of the run.
 
-    The guard covers each test's fixtures at every scope, since a module- or
-    session-scoped fixture is built and finalized inside some test's protocol. The opt-in
-    live tests (tests/live) are exempt; collection, which imports the test modules, runs
-    before any guard.
+    Collection imports the test modules, so the guard is in place before any test code
+    runs, at module level included. Only an explicitly enabled live run
+    (CVE_KGRAG_LIVE_TESTS=1, see tests/live) goes without it.
     """
-    if LIVE_TESTS_DIRECTORY in item.path.parents:
-        return (yield)
+    if os.environ.get(LIVE_TESTS_VARIABLE) == "1":
+        return
     guard = NetworkGuard(
         loopback_connect=socket.socket.connect, loopback_connect_ex=socket.socket.connect_ex
     )
-    item.stash[NETWORK_GUARD_KEY] = guard
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(socket.socket, "connect", partialmethod(guarded_connect, guard))
-        patch.setattr(socket.socket, "connect_ex", partialmethod(guarded_connect_ex, guard))
-        return (yield)
+    patch = pytest.MonkeyPatch()
+    patch.setattr(socket.socket, "connect", partialmethod(guarded_connect, guard))
+    patch.setattr(socket.socket, "connect_ex", partialmethod(guarded_connect_ex, guard))
+    config.stash[NETWORK_GUARD_KEY] = guard
+    config.stash[NETWORK_GUARD_PATCH_KEY] = patch
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    patch = config.stash.get(NETWORK_GUARD_PATCH_KEY, None)
+    if patch is not None:
+        patch.undo()
 
 
 @pytest.fixture
 def network_guard(request: pytest.FixtureRequest) -> NetworkGuard:
-    """The guard installed around the requesting test, with the addresses it refused."""
-    return request.node.stash[NETWORK_GUARD_KEY]
+    """The run's guard, with the addresses refused during the requesting test only."""
+    guard = request.config.stash[NETWORK_GUARD_KEY]
+    guard.refused_addresses.clear()
+    return guard
