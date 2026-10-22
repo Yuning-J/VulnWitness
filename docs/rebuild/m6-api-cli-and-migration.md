@@ -11,7 +11,7 @@ one as it lands.
 | — | Model planner adapter (OpenAI-compatible, off by default, opt-in live test; ADR 0005); a separate task between WP1 and WP2 | done; live tests passed against DeepSeek `deepseek-flash` on 2026-10-21 |
 | WP2 | Semantic settings from the environment, with `semantic_channel` reporting a failed load as unavailable and every command that can run the channel wired to the same settings | done |
 | WP-S | Repository split bootstrap: this repository's first commit (ADR 0006) | done |
-| WP3′ | ADR 0007, HTTP surfaces (documentation only) | not started |
+| WP3′ | ADR 0007, HTTP surfaces (documentation only) | done |
 | WP4 | Offline CI: lane scripts, GitHub workflow, test-time network guard | not started |
 | WP5 | Full CLI, verification report contract, served-bundle seam | not started |
 | WP6 | HTTP guard, HTTP settings, health and readiness, opt-in Streamable HTTP for MCP | not started |
@@ -177,3 +177,14 @@ Decisions: ADR 0006.
 - The dev group does not list FastAPI or httpx2 (httpx2 still arrives through the `mcp`
   extra), and `testpaths` lists
   `tests/unit`, `tests/contract` and `tests/integration`.
+
+## WP3′ — HTTP surfaces (ADR 0007)
+
+Documentation only; no listener, setting or contract changes. ADR 0007 fixes what WP6
+and WP7 build: Starlette and uvicorn; REST and MCP over HTTP as separate processes,
+with the `mcp` extra owning MCP over HTTP and a new `api` extra; loopback hosts only; a
+bearer token on both servers, with `/health` the only open route; the deterministic
+planner and no semantic channel on HTTP; stateless MCP sessions; an `HttpRejection`
+envelope for rejections before any tool runs; the `ToolFailureCode` to HTTP status
+table; the REST endpoints, verification included; ports 8765 and 8766 from settings
+only. ADR 0001 §2 and ADR 0003 §12 are amended to match.

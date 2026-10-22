@@ -1,0 +1,79 @@
+# ADR 0007 — HTTP surfaces
+
+Status: accepted (M6 WP3′). Applies to the HTTP guard and settings (M6 WP6), MCP over
+Streamable HTTP (WP6) and the v2 REST API (WP7). Amends ADR 0001 §2 and ADR 0003 §12.
+No HTTP listener exists yet; this ADR fixes the decisions the packages implement.
+
+## Context
+
+The server answers over stdio only (ADR 0003). M6 adds two HTTP surfaces: MCP over
+Streamable HTTP and a v2 REST API. Both reach the same `KnowledgeToolbox`, whose
+`ToolLimits` and sanitized `ToolFailure` already bound what a remote caller can do,
+and both run on a developer machine where other local processes and any browser page
+can reach a loopback port.
+
+## Decisions
+
+1. **One ASGI stack.** Starlette and uvicorn, declared explicitly in the extras that
+   need them. Routes pass the raw JSON body to the toolbox, so `ToolLimits` and the
+   sanitized `ToolFailure` apply unchanged; a framework that validates bodies itself
+   would duplicate the `schemas/v2` contracts and answer with its own error detail,
+   which echoes input. FastAPI is in no dependency group.
+2. **Two processes, two extras.** REST (`cve-kgrag api`) and MCP over HTTP
+   (`cve-kgrag mcp --http`) run as separate processes. They share the guard, the host,
+   the token and the limits, and each has its own port variable. The `mcp` extra owns
+   MCP over HTTP, so a user who wants it installs nothing REST needs; `api` is a new
+   extra. There is no `neo4j` extra: no v2 Neo4j adapter exists, and ADR 0001 declares
+   no empty extra.
+3. **Loopback only.** The host setting accepts loopback addresses only, and a server
+   asked for any other host refuses to start. DNS-rebinding settings for other hosts are
+   a later decision.
+4. **Bearer token on both servers**, even on loopback, from settings only. A server
+   without a token refuses to start. `/health` is open; `/ready` and every other route
+   require the token, so readiness tells an unauthenticated caller nothing.
+5. **Deterministic planner, no semantic channel.** Both HTTP surfaces plan with the
+   deterministic policy and serve no semantic channel, and their capabilities report
+   both as not served. The toolbox's concurrency accounting assumes deterministic
+   planning (`KnowledgeToolbox`), and Chroma has no read-only client, so opening its
+   store could write during a read. This matches stdio `mcp`.
+6. **Stateless MCP sessions.** MCP over HTTP runs with `stateless_http=True` and
+   `json_response=True`: every tool is one read-only call, a request deadline cannot cut
+   a stream, and the server holds no session state.
+7. **A separate envelope for HTTP rejections.** Authentication, Host, Origin, size and
+   deadline rejections happen before any tool runs, so they answer with their own
+   `HttpRejection` contract, not a `ToolFailure`.
+8. **`ToolFailureCode` to HTTP status.**
+
+   | Code | Status |
+   |---|---|
+   | `invalid_arguments` | 422 |
+   | `arguments_too_large` | 413 |
+   | `unknown_evidence_id` | 404 |
+   | `server_busy` | 503 |
+   | `timed_out` | 504 |
+   | `response_too_large`, `integrity_check_failed`, `internal_error` | 500 |
+
+   The body is the bare `ToolFailure` with its fixed sentence, so the mapping needs no
+   new envelope and no contract change. A test iterates every `ToolFailureCode` member.
+9. **REST endpoints, verification included.** `POST /api/v2/search`,
+   `POST /api/v2/investigate`, `GET /api/v2/evidence/{evidence_id}`,
+   `GET /api/v2/capabilities` and `POST /api/v2/verify`, plus `/health` and `/ready`.
+   Verification over HTTP settles ADR 0003 §10: its route has a 4 MiB body cap (the
+   CLI's `MAX_EVIDENCE_SET_FILE_BYTES`), runs one request at a time and has a deadline of
+   the investigation wall time plus a margin. It answers 200 with the verdict for every
+   verdict; 413, 503 and 504 stay for the bounds, because a verification answer is not a
+   request failure. MCP keeps its eight tools.
+10. **Ports from settings only.** The defaults are 8765 for MCP over HTTP and 8766 for
+    the API. Host and ports come from the settings boundary (ADR 0004) and nowhere else:
+    no `--host` or `--port` flag.
+
+## Consequences
+
+- WP6 adds `HttpSettings`, the guard and `mcp --http`; WP7 adds the `api` extra and its
+  routes. Each states its contract change when it lands; this ADR changes none.
+- Nothing listens on a network address other than loopback, and nothing answers an
+  unauthenticated caller beyond `/health`.
+- The REST surface covers less than the CLI (for example, topic context has no route).
+  That is deliberate: every route is one toolbox call or verification.
+- A model planner or the semantic channel over HTTP needs a new decision: the toolbox's
+  concurrency accounting and the no-writes-on-read rule would both have to change.

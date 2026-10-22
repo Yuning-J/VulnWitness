@@ -1,7 +1,8 @@
 # ADR 0001 — Packaging, optional adapters, and strangler migration
 
 Status: accepted (M0). Applies to the whole v2 rebuild. §6 is superseded and the
-Context, §1, §2, §5 and Consequences are amended by ADR 0006 (repository split).
+Context, §1, §2, §5 and Consequences are amended by ADR 0006 (repository split); §2's
+`mcp`, `api` and `neo4j` rows are amended by ADR 0007 (HTTP surfaces).
 
 ## Context
 
@@ -31,12 +32,12 @@ optional adapters (semantic, Neo4j, Trustify, API, MCP) remain available.
 | Profile | Mechanism | Contents | Introduced |
 |---|---|---|---|
 | core | `[project].dependencies` | `pydantic`; `PyYAML` from M3 (a `SafeLoader` subclass only, for reviewed topic cards and FiGHT snapshots, which protocol-context retrieval needs in a core-only install) | M1 / M3 |
-| dev | `[dependency-groups].dev` | pytest, ruff, mypy, types-PyYAML, jsonschema (schema/model agreement tests), and the `mcp` extra from M5, so the default lane runs the MCP server's tests | M0 |
+| dev | `[dependency-groups].dev` | pytest, ruff, mypy, types-PyYAML, jsonschema (schema/model agreement tests), and the `mcp` extra from M5, so the default lane runs the MCP server's tests; an HTTP test client (`httpx2`) once a test imports one | M0 |
 | semantic | extra | Chroma / sentence-transformers adapter | M2 |
 | trustify | extra | MCP client for the official Trustify MCP server | introduced with the verified Trustify adapter (ADR 0003); not in M5 |
-| mcp | extra | official MCP SDK for the CVE-KGRAG server | M5 |
-| api | extra | FastAPI + uvicorn | M6 |
-| neo4j | extra | only if a Neo4j adapter is retained | M6 decision |
+| mcp | extra | official MCP SDK for the CVE-KGRAG server; Starlette and uvicorn, declared explicitly, for MCP over Streamable HTTP (ADR 0007) | M5; HTTP in M6 WP6 |
+| api | extra | Starlette + uvicorn for the v2 REST API (ADR 0007) | M6 WP7 |
+| neo4j | — | none: no v2 Neo4j adapter exists (ADR 0007) | — |
 
 An extra is added in the milestone that adds the adapter which needs it; no
 empty extras are declared ahead of their code. The core must never depend on

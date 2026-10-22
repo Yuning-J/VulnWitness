@@ -4,7 +4,7 @@ Status: accepted (M5). Applies to `ports/affectedness.py`, `adapters/trustify/`,
 `domain/affectedness.py`, `domain/tool_contracts.py`, the capability contract in
 `domain/investigation.py`, `application/affectedness.py`,
 `application/evidence_set_verification.py`, `interfaces/` and the `mcp` and
-`verify` CLI commands.
+`verify` CLI commands. §12 is amended by ADR 0007 (HTTP surfaces).
 
 ## Context
 
@@ -542,11 +542,11 @@ a re-derived ID.
 
 | Item | Deferred to | Recorded in |
 |---|---|---|
-| Streamable HTTP: opt-in, 127.0.0.1, bearer auth, DNS-rebinding settings for other hosts, separate health and readiness | M6, with the API extra | PLAN.md M6 row |
+| Streamable HTTP: opt-in, 127.0.0.1, bearer auth, separate health and readiness; DNS-rebinding settings for other hosts stay a later decision | M6 WP6, owned by the `mcp` extra | ADR 0007 |
 | Typed settings boundary: no M5 path has an endpoint, a credential or an optional adapter to enable | M6 (planner settings: ADR 0004) | PLAN.md M6 row |
 | `semantic_channel` reporting a failed adapter load | M6 WP2: `unavailable` with a server sentence (ADR 0004 §1) | m6 doc |
 | Real Trustify adapter, verdicts and Trustify anchors, drift detection against the pinned snapshot, retries, product-to-purl mapping, investigation wiring, `live` marker | Verified-adapter task | PLAN.md "Follow-up: verified Trustify adapter" |
-| Whole-set verification over HTTP | M6 | PLAN.md M6 row |
+| Whole-set verification over HTTP | M6 WP7: `POST /api/v2/verify` | ADR 0007 |
 
 ## Consequences
 
