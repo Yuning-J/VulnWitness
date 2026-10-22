@@ -6,7 +6,7 @@ extensible, review-governed topic registry. The first topic card is 5G-AKA. It i
 V19.7.0 but has no named reviewer, so every answer that uses it says so.
 
 Every answer cites evidence: a claim that no served record supports is not returned. CVE
-evidence and protocol threat context (MITRE FiGHT, reviewed topic cards) stay separate,
+evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
 Status: pre-release. The contracts are at `2.0.0-dev.20` and may change between versions
