@@ -48,13 +48,14 @@ The first commit adapts the carried files as ADR 0006 records:
 The legacy RAG pipeline, the FastAPI `/api/v1` service, the Gradio UI, Neo4j and graph
 construction, collectors, processors, mapper and training code, `data/`, `doc/`,
 `scripts/`, `config.py`, `docker-compose.yml`, `requirements.txt`, the legacy fine-tuned
-model (`models/fine_tuned_cve_production/`). Security fixes for that code belong there.
+model (`models/fine_tuned_cve_production/`). Security fixes for that code are made there.
 
-Three artefacts of the rebuild describe the legacy code and belong with it, not here: the
-M0 baseline audit of the legacy repository (which ADR 0001 cites), the legacy migration
-map and the `/api/v1` characterization tests. They were written on the rebuild branch, so
-for now they exist only in the archived history; CVE-KGRAG's `main` does not hold them
-until its owner adds them there.
+Three artefacts of the rebuild describe the legacy code and live with it in CVE-KGRAG's
+`main` (merge commit `b64eef3`): the M0 baseline audit of the legacy repository
+(`docs/rebuild/baseline.md`, which ADR 0001 cites), the legacy migration map
+(`docs/rebuild/migration-map.md`) and the `/api/v1` characterization tests
+(`tests/characterization/`). CVE-KGRAG holds edited versions of them, written for that
+repository; the versions on the rebuild branch are in the archived history.
 
 ## Original commits
 

@@ -6,7 +6,7 @@ milestone once its exit criterion is met and the offline lane is green.
 
 | Milestone | Scope | Status |
 |---|---|---|
-| M0 | Baseline, v1 consumer check, characterization tests, packaging/migration ADR (the baseline and the characterization tests belong with the legacy code, not here; see `PROVENANCE.md`) | done |
+| M0 | Baseline, v1 consumer check, characterization tests, packaging/migration ADR (the baseline and the characterization tests live in CVE-KGRAG: `docs/rebuild/baseline.md`, `tests/characterization/`) | done |
 | M1 | `pyproject`, `cve_kgrag` core: canonical contracts + JSON Schemas, synthetic fixture + manifest, in-memory repository, exact-ID and lexical search, claim/evidence validator, minimal CLI | done |
 | M2 | Structured filters, graph channel, typed backend outcomes, legacy ports, optional semantic adapter, NVD normalizer; review fixes (filter semantics, CVE-anchor scope rule, legacy wrapper, NVD boundary validation); the legacy wrapper is not part of this repository (ADR 0006) | done |
 | M3 | Topic registry + 5G-AKA card (`pending_review` by owner decision while the design is experimental: technically checked against TS 33.501 V19.7.0, no named reviewer, every answer that uses it carries `topic_pending_review`), pinned FiGHT YAML source + licensed excerpt, relevance tiers, scoped topic-context service, gold queries, source registry and THIRD_PARTY_DATA.md | done |
@@ -84,8 +84,8 @@ An adapter for Trustify v0.4.x is out of scope.
 
 ## Follow-ups from the legacy migration map
 
-The migration map belongs with the legacy modules it describes, not here (`PROVENANCE.md`
-says where it is kept). Its rows not yet covered here:
+The migration map lives with the legacy modules it describes, in CVE-KGRAG
+(`docs/rebuild/migration-map.md`). Its rows not yet covered here:
 
 - CSAF import and the legacy pipeline commands (collect, process, export) have no v2
   counterpart; M6 WP9 records them and WP10 lists the follow-up.

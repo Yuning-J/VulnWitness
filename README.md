@@ -95,9 +95,8 @@ package, command, MCP server name and `CVE_KGRAG_*` settings keep the original n
 the repository is named differently.
 
 CVE-KGRAG keeps the legacy RAG pipeline, the FastAPI `/api/v1` service, the Gradio UI
-and the Neo4j knowledge-graph tooling; security fixes for that code are made there. This
-repository does not provide or emulate any of them and makes no compatibility promise
-with them.
+and the Neo4j knowledge-graph tooling, and receives their security fixes. This repository
+does not provide or emulate any of them and makes no compatibility promise with them.
 
 ## Licence
 

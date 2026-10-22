@@ -8,8 +8,8 @@ Context, §1, §2, §5 and Consequences are amended by ADR 0006 (repository spli
 The legacy code in CVE-KGRAG installs from one `requirements.txt` that pulls
 Torch, transformers, Chroma, Neo4j, Gradio and the training stack, and its modules
 do I/O and directory creation at import or construction time (findings 20 and 22
-of the M0 baseline audit of the legacy repository; `PROVENANCE.md` says where it is
-kept). It is imported as an implicit `src.*` namespace from the repository root with
+of the M0 baseline audit of the legacy repository, CVE-KGRAG's
+`docs/rebuild/baseline.md`). It is imported as an implicit `src.*` namespace from the repository root with
 `sys.path` edits. Nothing in it is packaged, and the audit found no verifiable
 consumer of `/api/v1` outside that repository.
 
@@ -87,8 +87,8 @@ appear.
   legacy modules. Legacy parsing knowledge (NVD 1.1/2.0 field paths, CPE/KEV/CSAF
   handling) is reused when the canonical importer is written, with the defects
   recorded in the baseline fixed in the new code.
-- The legacy modules stay in CVE-KGRAG, and their migration map and
-  characterization tests belong with them (ADR 0006, `PROVENANCE.md`). No `_deprecated` markers, aliases or re-exports are
+- The legacy modules stay in CVE-KGRAG, with their migration map and
+  characterization tests (ADR 0006, `PROVENANCE.md`). No `_deprecated` markers, aliases or re-exports are
   added.
 
 ### 6. `/api/v1` is internal

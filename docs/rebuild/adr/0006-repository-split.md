@@ -24,8 +24,8 @@ own repository and to keep the legacy system, and its security fixes, in CVE-KGR
    `CVE_KGRAG_*` settings keep their names. The URIs `urn:cve-kgrag:fixture:` and
    `urn:cve-kgrag:test` are identifiers hashed into evidence IDs and are never renamed.
 3. **v1 is out of scope.** `/api/v1`, the Gradio UI and the legacy modules stay in
-   CVE-KGRAG, and the `/api/v1` characterization tests belong with them; they exist
-   only in the archived history until CVE-KGRAG's owner adds them to its `main`. This repository provides no v1 facade, no
+   CVE-KGRAG, and so do the `/api/v1` characterization tests (its
+   `tests/characterization/`). This repository provides no v1 facade, no
    deprecation headers and no compatibility promise. ADR 0001 §6 is superseded.
 4. **No legacy wrapper.** `LegacyRagRetriever` had no production wiring and has no
    legacy object to wrap here, so it is not carried. Legacy data enters only through
@@ -42,16 +42,16 @@ own repository and to keep the legacy system, and its security fixes, in CVE-KGR
    describe the store format the adapter reads.
 6. **Provenance subjects.** The legacy fine-tuned model is not in this repository; its
    registry entry and `LocalStoragePolicy.COMMITTED_ARTIFACT` are not carried, and its
-   provenance belongs to CVE-KGRAG.
+   provenance is recorded in CVE-KGRAG's `THIRD_PARTY_DATA.md`.
 
 ## Deviations from the brief
 
 | Brief item | In this repository |
 |---|---|
-| M6 exit "v1 and v2 contract tests pass" | "v2 contract tests pass" (M6 WP7). The v1 characterization tests belong to CVE-KGRAG (Decision 3). |
+| M6 exit "v1 and v2 contract tests pass" | "v2 contract tests pass" (M6 WP7). The v1 characterization tests run in CVE-KGRAG (Decision 3). |
 | B1 tested v1 compatibility with deprecation header and window; B2 v1 incompatibility list; §19 v1 compatibility tests | Not provided. Optional in CVE-KGRAG. |
-| B3 legacy wildcard CORS and 0.0.0.0 bind; E2 hard-coded Neo4j passwords; E3 `requirements.txt` and docker-compose review | Out of scope here: that code lives in CVE-KGRAG, where the fixes belong. |
-| E5 provenance of the legacy model | Belongs to CVE-KGRAG's `THIRD_PARTY_DATA.md`. |
+| B3 legacy wildcard CORS and 0.0.0.0 bind; E2 hard-coded Neo4j passwords; E3 `requirements.txt` and docker-compose review | Out of scope here: that code lives in CVE-KGRAG, which fixed them (merge commit `b64eef3`): loopback binds without wildcard CORS, no default Neo4j password, docker-compose on loopback with required credentials, and a `requirements.txt` that installs on Python 3.11 with its remaining advisories recorded. |
+| E5 provenance of the legacy model | Recorded in CVE-KGRAG's `THIRD_PARTY_DATA.md`. |
 | D13 `search_cves` filtered seam | Dropped with the legacy wrapper. |
 | §22 no deletion of legacy modules | Met: no legacy module is deleted; they stay in CVE-KGRAG. |
 
