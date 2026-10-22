@@ -12,7 +12,7 @@ milestone once its exit criterion is met and the offline lane is green.
 | M3 | Topic registry + 5G-AKA card (`pending_review` by owner decision while the design is experimental: technically checked against TS 33.501 V19.7.0, no named reviewer, every answer that uses it carries `topic_pending_review`), pinned FiGHT YAML source + licensed excerpt, relevance tiers, scoped topic-context service, gold queries, source registry and THIRD_PARTY_DATA.md | done |
 | M4 | Bounded investigation state machine, deterministic policy m4.1, model-planner port with plan gate and deterministic fallback, budgets, replayable trajectory, gold trajectories, hard wall time via abandoning call runner, per-request result cap, catalog re-check of served content, trajectory cross-validation (network LLM adapter follows separately) | done |
 | M5 | Trustify port + disabled adapter (real adapter BLOCKED_UNVERIFIED, ADR 0003), read-only stdio MCP server with eight bounded tools, evidence-set verification (`cve-kgrag verify`), server-owned text at the MCP boundary (typed affectedness and backend failures, vouched match explanations), search-tool boundary below; contracts `2.0.0-dev.16` | done |
-| M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, 127.0.0.1, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; contracts `2.0.0-dev.20`) | in progress |
+| M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, 127.0.0.1, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; WP4 offline CI; contracts `2.0.0-dev.20`) | in progress |
 | M7 | Evaluation, review packet | not started |
 
 ## M5 acceptance: the search-tool boundary
@@ -98,23 +98,13 @@ The migration map lives with the legacy modules it describes, in CVE-KGRAG
 
 ## Offline lane
 
-```bash
-uv run pytest -q
-uv run ruff check
-uv run ruff format --check
-uv run mypy
-uv run cve-kgrag schema check
-uv lock --check
-```
-
-Core-only check (wheel in a fresh venv, no dev group):
+The lanes live in `scripts/ci/`; the CI workflow (`.github/workflows/offline.yml`) runs
+the same scripts, with no service, no secret and no live test.
 
 ```bash
-uv build --out-dir <scratch>/dist
-uv venv -p 3.12 <scratch>/core-venv
-uv pip install -p <scratch>/core-venv/bin/python <scratch>/dist/cve_kgrag-*.whl
-<scratch>/core-venv/bin/cve-kgrag demo
-<scratch>/core-venv/bin/cve-kgrag mcp </dev/null; test $? -eq 1
-uv pip install -p <scratch>/core-venv/bin/python pytest jsonschema
-<scratch>/core-venv/bin/python -m pytest tests/unit tests/contract tests/integration --ignore=tests/integration/interfaces/mcp
+scripts/ci/offline_lane.sh            # tests, ruff, format, mypy, schema check, lock
+scripts/ci/core_only_lane.sh 3.12     # the wheel in a fresh venv, no dev group, no extra
 ```
+
+Every test runs under a network guard (`tests/conftest.py`) that refuses connects
+outside loopback, except the opt-in live tests in `tests/live`.

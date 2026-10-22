@@ -12,7 +12,7 @@ one as it lands.
 | WP2 | Semantic settings from the environment, with `semantic_channel` reporting a failed load as unavailable and every command that can run the channel wired to the same settings | done |
 | WP-S | Repository split bootstrap: this repository's first commit (ADR 0006) | done |
 | WP3′ | ADR 0007, HTTP surfaces (documentation only) | done |
-| WP4 | Offline CI: lane scripts, GitHub workflow, test-time network guard | not started |
+| WP4 | Offline CI: lane scripts, GitHub workflow, test-time network guard | done |
 | WP5 | Full CLI, verification report contract, served-bundle seam | not started |
 | WP6 | HTTP guard, HTTP settings, health and readiness, opt-in Streamable HTTP for MCP | not started |
 | WP7 | v2 REST API, set verification over HTTP, `api` extra | not started |
@@ -188,3 +188,22 @@ planner and no semantic channel on HTTP; stateless MCP sessions; an `HttpRejecti
 envelope for rejections before any tool runs; the `ToolFailureCode` to HTTP status
 table; the REST endpoints, verification included; ports 8765 and 8766 from settings
 only. ADR 0001 §2 and ADR 0003 §12 are amended to match.
+
+## WP4 — offline CI
+
+- `scripts/ci/offline_lane.sh` runs `uv sync --locked`, pytest, `ruff check`,
+  `ruff format --check`, mypy, `cve-kgrag schema check` and `uv lock --check`.
+  `scripts/ci/core_only_lane.sh [python]` builds the wheel, installs it alone in a fresh
+  venv, runs `cve-kgrag demo`, expects `cve-kgrag mcp` to exit 1 without the `mcp` extra,
+  and runs the unit, contract and integration tests outside the MCP interface. PLAN.md
+  calls these scripts.
+- `.github/workflows/offline.yml` runs the offline lane on Python 3.11 and 3.12 and the
+  core-only lane on 3.12, on pushes to `main` and on pull requests. It starts no service,
+  reads no secret, sets no live-test variable, gives its token read access only and pins
+  each action to a commit; `tests/contract/test_ci_workflow.py` checks all of these.
+- An autouse fixture in `tests/conftest.py` refuses every connect outside loopback
+  (`tests/support/network_guard.py`), except in the opt-in live tests under `tests/live`.
+  `tests/unit/test_network_guard.py` checks that a documentation address is refused and
+  loopback is allowed.
+- Local run before the push: the offline lane gave 2407 passed on Python 3.11 and on
+  3.12; the core-only lane gave 2349 passed.

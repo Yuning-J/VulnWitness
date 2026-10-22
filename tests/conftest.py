@@ -1,7 +1,10 @@
 """Shared fixtures for the v2 test tiers. Imports only the core package."""
 
+import socket
 import threading
 from collections.abc import Iterator
+from functools import partialmethod
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +25,9 @@ from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.clocks import read_fixed_clock
 from tests.support.fake_chat_server import FakeChatServers
+from tests.support.network_guard import NetworkGuard, guarded_connect, guarded_connect_ex
+
+LIVE_TESTS_DIRECTORY = Path(__file__).parent / "live"
 
 
 @pytest.fixture
@@ -69,3 +75,19 @@ def fake_chat_servers() -> Iterator[FakeChatServers]:
     servers = FakeChatServers()
     yield servers
     servers.stop_all()
+
+
+@pytest.fixture(autouse=True)
+def network_guard(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[NetworkGuard | None]:
+    """Refuses every connect outside loopback, except in the opt-in live tests (tests/live)."""
+    if LIVE_TESTS_DIRECTORY in request.node.path.parents:
+        yield None
+        return
+    guard = NetworkGuard(
+        loopback_connect=socket.socket.connect, loopback_connect_ex=socket.socket.connect_ex
+    )
+    monkeypatch.setattr(socket.socket, "connect", partialmethod(guarded_connect, guard))
+    monkeypatch.setattr(socket.socket, "connect_ex", partialmethod(guarded_connect_ex, guard))
+    yield guard
