@@ -5,9 +5,8 @@ Supersedes ADR 0001 §6; amends ADR 0001 Context, §1, §2, §5 and Consequences
 
 ## Context
 
-The v2 rebuild was developed in CVE-KGRAG on branch `claude/cve-kgrag-adaptive-v2`
-beside the legacy RAG pipeline, `/api/v1`, the Gradio UI and the Neo4j tooling. It
-imports nothing from the legacy `src.*` namespace, and it never changed a legacy file:
+The v2 rebuild was developed in CVE-KGRAG on a branch beside the legacy RAG pipeline,
+`/api/v1`, the Gradio UI and the Neo4j tooling. It imports nothing from the legacy `src.*` namespace, and it never changed a legacy file:
 over the legacy paths, the branch adds only the characterization tests and two
 `.gitignore` groups (local `.env` files and build outputs). The owner decided to develop the telecom knowledge service in its
 own repository and to keep the legacy system, and its security fixes, in CVE-KGRAG.
@@ -16,7 +15,7 @@ own repository and to keep the legacy system, and its security fixes, in CVE-KGR
 
 1. **Scope.** This repository holds the `cve_kgrag` package, its tests, `schemas/v2`,
    `eval/gold` and the rebuild docs. They were imported from CVE-KGRAG at commit
-   `6557578` without history, and this repository's first commit already contains the
+   `53d75e3` without history, and this repository's first commit already contains the
    changes this ADR makes. The original commits are archived by the owner, not
    published; `PROVENANCE.md` lists the carried paths with their git object IDs at the
    split commit and the original commits by hash and subject.

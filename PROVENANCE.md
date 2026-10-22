@@ -1,9 +1,9 @@
 # Provenance
 
 This repository was split from https://github.com/Yuning-J/CVE-KGRAG at commit
-`6557578772be5aa67eed4b70c9d07fb30fb32ea1` (branch `claude/cve-kgrag-adaptive-v2`, based
+`53d75e312a871184aba2e3a95ed8b4b5e46e0127` (the rebuild branch, based
 on `772ea055fc9171dd8140e6fd65319626f04b7e5f`). That commit's code is identical to the
-reviewed commit `1fd447e52f906d554c07aa3fee157df84cfa4e59`; the two commits after it
+reviewed commit `8d0c47015cc19eff5ea05aa97bcb2e21f7761fe6`; the two commits after it
 change documentation only.
 
 History was not carried. This repository's first commit imports the files below and
@@ -62,43 +62,43 @@ The code was developed in these 37 commits on CVE-KGRAG, 2026-10-13 to 2026-10-2
 
 | Commit | Date | Subject |
 |---|---|---|
-| `a528aff` | 2026-10-13 | test: M0 baseline, characterization tests and packaging ADR |
-| `1aea9e2` | 2026-10-13 | feat: M1 canonical core, synthetic fixture and offline search |
-| `7ce35bf` | 2026-10-13 | feat: M2 typed retrieval and NVD normalization |
-| `ee87635` | 2026-10-14 | fix: M2 review findings in filters, evidence scope, adapters and NVD parsing |
-| `41df749` | 2026-10-14 | fix: M2 third review — legacy filtered search, request contract, NVD negate |
-| `f7b69b6` | 2026-10-14 | fix: run the semantic channel only for queries with searchable terms |
-| `2fc092f` | 2026-10-14 | feat: M3 reviewed topics, pinned FiGHT threat context and scoped topic context |
-| `a944234` | 2026-10-15 | fix: M3 review — FiGHT snapshot identity, contextual-alias exclusions, empty snapshots |
-| `7e9395d` | 2026-10-15 | fix: M3 review — bind FiGHT coverage to a reviewed snapshot catalog and the deployment pin |
-| `88c1e1b` | 2026-10-15 | docs: record the 5G-AKA card scope and its CCS 2018 calibration reference |
-| `e9d111c` | 2026-10-15 | feat: M4 bounded investigation with deterministic policy and gated model planner |
-| `ae5a439` | 2026-10-15 | fix: M4 review — bound anchor provenance, per-request caps, hard wall time, trajectory cross-checks |
-| `6d7e612` | 2026-10-16 | fix: M4 second review — planner identity at construction, decision-path audit, source capabilities |
-| `d6ee4af` | 2026-10-16 | fix: M4 third review — record the typed model reply, bind replay to tool responses |
-| `165ebcd` | 2026-10-16 | fix: M4 fourth review — named CVE IDs, replay through the controller, planner identity, schema parity |
-| `cff8a55` | 2026-10-16 | fix: M4 fifth review — malformed CVE-ID tokens never name another ID; calendar-exact time patterns |
-| `6d249e0` | 2026-10-17 | fix: M4 sixth review — near-ID spellings and invisible characters inside an ID fail closed |
-| `d959822` | 2026-10-17 | docs: mark M4 done; add the search-tool boundary to M5 acceptance |
-| `999cef4` | 2026-10-17 | feat: low-signal query terms cve/cves leave every search text (M5 compatibility change) |
-| `a312c95` | 2026-10-18 | fix: a disguised low-signal word leaves the search text whole |
-| `71041e3` | 2026-10-18 | feat: M5 batch 1 — affectedness contracts, Trustify port and disabled adapter, pinned trustify-mcp surface |
-| `3b735c2` | 2026-10-18 | feat: M5 batch 2 — evidence-set verification and the SDK-free knowledge toolbox |
-| `1b17b54` | 2026-10-20 | feat: M5 batch 3 — read-only MCP server over stdio, mcp extra, M5 docs |
-| `eeaaad1` | 2026-10-20 | fix: M5 whole-milestone review — request text, toolbox wiring, docs truth |
-| `bfa8542` | 2026-10-20 | fix: M5 acceptance review — get_evidence anchor rules, server-owned affectedness text, live-call cap |
-| `f956337` | 2026-10-20 | fix: no adapter text crosses the MCP boundary — typed backend failures, vouched match explanations (dev.16) |
-| `2b8ab70` | 2026-10-20 | docs: mark M5 done; record the model planner adapter follow-up |
-| `a62304a` | 2026-10-21 | feat: M6 WP1 — typed settings boundary, secret handling, model planner discovery (dev.17) |
-| `d775b7a` | 2026-10-21 | fix: M6 WP1 review — no adapter text in replies, guarded enumeration, server-built planner identity (dev.18) |
-| `5eca2f2` | 2026-10-21 | fix: M6 WP1 re-review — distinct endpoints never share a fingerprint, no replay-only reply reason |
-| `00f8647` | 2026-10-21 | docs: mark M6 WP1 done; state the planner request target exactly in ADR 0004 |
-| `6a0b77b` | 2026-10-21 | feat: OpenAI-compatible model planner adapter (DeepSeek) with opt-in live tests (dev.19) |
-| `202a8ca` | 2026-10-21 | feat: M6 WP2 — semantic settings, unavailable semantic capability, CLI wiring (dev.20) |
-| `5701ae8` | 2026-10-21 | fix: enforce the planner's share of the run; keep the semantic store out of mcp and verify |
-| `1fd447e` | 2026-10-21 | fix: a planner reply landing after its share of the run is not read |
-| `e5561b7` | 2026-10-21 | docs: mark the model planner adapter and M6 WP2 done |
-| `6557578` | 2026-10-21 | docs: record the model planner live test run against DeepSeek |
+| `fae497e` | 2026-10-13 | test: M0 baseline, characterization tests and packaging ADR |
+| `ab6a49a` | 2026-10-13 | feat: M1 canonical core, synthetic fixture and offline search |
+| `035b321` | 2026-10-13 | feat: M2 typed retrieval and NVD normalization |
+| `15ed474` | 2026-10-14 | fix: M2 review findings in filters, evidence scope, adapters and NVD parsing |
+| `d33d25d` | 2026-10-14 | fix: M2 third review — legacy filtered search, request contract, NVD negate |
+| `6f3fedd` | 2026-10-14 | fix: run the semantic channel only for queries with searchable terms |
+| `1d154f5` | 2026-10-14 | feat: M3 reviewed topics, pinned FiGHT threat context and scoped topic context |
+| `8347a04` | 2026-10-15 | fix: M3 review — FiGHT snapshot identity, contextual-alias exclusions, empty snapshots |
+| `81705d3` | 2026-10-15 | fix: M3 review — bind FiGHT coverage to a reviewed snapshot catalog and the deployment pin |
+| `a385c67` | 2026-10-15 | docs: record the 5G-AKA card scope and its CCS 2018 calibration reference |
+| `dca9921` | 2026-10-15 | feat: M4 bounded investigation with deterministic policy and gated model planner |
+| `424f8a2` | 2026-10-15 | fix: M4 review — bound anchor provenance, per-request caps, hard wall time, trajectory cross-checks |
+| `fd65b3b` | 2026-10-16 | fix: M4 second review — planner identity at construction, decision-path audit, source capabilities |
+| `f6aeb41` | 2026-10-16 | fix: M4 third review — record the typed model reply, bind replay to tool responses |
+| `724a65a` | 2026-10-16 | fix: M4 fourth review — named CVE IDs, replay through the controller, planner identity, schema parity |
+| `29dc915` | 2026-10-16 | fix: M4 fifth review — malformed CVE-ID tokens never name another ID; calendar-exact time patterns |
+| `2350ca4` | 2026-10-17 | fix: M4 sixth review — near-ID spellings and invisible characters inside an ID fail closed |
+| `23b29db` | 2026-10-17 | docs: mark M4 done; add the search-tool boundary to M5 acceptance |
+| `349ed24` | 2026-10-17 | feat: low-signal query terms cve/cves leave every search text (M5 compatibility change) |
+| `734be25` | 2026-10-18 | fix: a disguised low-signal word leaves the search text whole |
+| `6e10e0a` | 2026-10-18 | feat: M5 batch 1 — affectedness contracts, Trustify port and disabled adapter, pinned trustify-mcp surface |
+| `54a1e0e` | 2026-10-18 | feat: M5 batch 2 — evidence-set verification and the SDK-free knowledge toolbox |
+| `4d246e2` | 2026-10-20 | feat: M5 batch 3 — read-only MCP server over stdio, mcp extra, M5 docs |
+| `6c36132` | 2026-10-20 | fix: M5 whole-milestone review — request text, toolbox wiring, docs truth |
+| `1fc23da` | 2026-10-20 | fix: M5 acceptance review — get_evidence anchor rules, server-owned affectedness text, live-call cap |
+| `24f17eb` | 2026-10-20 | fix: no adapter text crosses the MCP boundary — typed backend failures, vouched match explanations (dev.16) |
+| `746487c` | 2026-10-20 | docs: mark M5 done; record the model planner adapter follow-up |
+| `8bf5c99` | 2026-10-21 | feat: M6 WP1 — typed settings boundary, secret handling, model planner discovery (dev.17) |
+| `104c1e0` | 2026-10-21 | fix: M6 WP1 review — no adapter text in replies, guarded enumeration, server-built planner identity (dev.18) |
+| `b221540` | 2026-10-21 | fix: M6 WP1 re-review — distinct endpoints never share a fingerprint, no replay-only reply reason |
+| `6f22cee` | 2026-10-21 | docs: mark M6 WP1 done; state the planner request target exactly in ADR 0004 |
+| `115af72` | 2026-10-21 | feat: OpenAI-compatible model planner adapter (DeepSeek) with opt-in live tests (dev.19) |
+| `7ba3101` | 2026-10-21 | feat: M6 WP2 — semantic settings, unavailable semantic capability, CLI wiring (dev.20) |
+| `fe082d8` | 2026-10-21 | fix: enforce the planner's share of the run; keep the semantic store out of mcp and verify |
+| `8d0c470` | 2026-10-21 | fix: a planner reply landing after its share of the run is not read |
+| `cf1f893` | 2026-10-21 | docs: mark the model planner adapter and M6 WP2 done |
+| `53d75e3` | 2026-10-21 | docs: record the model planner live test run against DeepSeek |
 
 ## Names
 

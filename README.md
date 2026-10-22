@@ -89,7 +89,7 @@ the ADRs in `docs/rebuild/adr/`.
 
 This repository holds the evidence-bound CVE and telecom knowledge service (Python
 package `cve_kgrag`, distribution and command `cve-kgrag`). It was split from
-[CVE-KGRAG](https://github.com/Yuning-J/CVE-KGRAG) at commit `6557578`;
+[CVE-KGRAG](https://github.com/Yuning-J/CVE-KGRAG) at commit `53d75e3`;
 [`PROVENANCE.md`](PROVENANCE.md) lists what was carried and under which licences. The
 package, command, MCP server name and `CVE_KGRAG_*` settings keep the original name; only
 the repository is named differently.
