@@ -73,6 +73,23 @@ can reach a loopback port.
 10. **Ports from settings only.** The defaults are 8765 for MCP over HTTP and 8766 for
     the API. Host and ports come from the settings boundary (ADR 0004) and nowhere else:
     no `--host` or `--port` flag.
+11. **Body caps counted on the wire, before parsing.** The toolbox's 64 KiB argument cap
+    applies only after the transport has decoded the JSON and the toolbox has serialized
+    the arguments again, so it cannot stop a server from buffering and parsing a huge
+    body. Every HTTP route, REST and MCP alike, therefore reads its body through the
+    guard, which counts the bytes as they arrive and enforces a fixed cap before any JSON
+    parsing and before the MCP SDK sees the request:
+
+    | Route | Body cap |
+    |---|---|
+    | `POST /api/v2/verify` | 4 MiB (decision 9) |
+    | every other route, MCP's endpoint included | 256 KiB |
+
+    A `Content-Length` over the cap is refused before the body is read; a body without one
+    (chunked) is refused as soon as the count passes the cap. Both answer 413 with
+    `HttpRejection`. Whitespace, escapes and the MCP JSON-RPC envelope count against the
+    cap, which is why it is four times the toolbox's argument cap; the toolbox still
+    applies its own cap to the decoded arguments. The caps are constants, not settings.
 
 ## Consequences
 

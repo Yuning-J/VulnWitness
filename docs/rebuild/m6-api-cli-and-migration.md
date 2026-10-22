@@ -187,7 +187,8 @@ bearer token on both servers, with `/health` the only open route; the determinis
 planner and no semantic channel on HTTP; stateless MCP sessions; an `HttpRejection`
 envelope for rejections before any tool runs and for the request deadline; the
 `ToolFailureCode` to HTTP status table; the REST endpoints, verification included;
-ports 8765 and 8766 from settings only. ADR 0001 §2 and ADR 0003 §10 and §12 are
+ports 8765 and 8766 from settings only; body caps counted on the wire before any
+parsing (4 MiB for verification, 256 KiB for every other route). ADR 0001 §2 and ADR 0003 §10 and §12 are
 amended to match.
 
 ## WP4 — offline CI
