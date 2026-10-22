@@ -15,11 +15,13 @@ uv pip install -p "$core_python" "$work_dir"/dist/cve_kgrag-*.whl
 
 "$work_dir/core-venv/bin/cve-kgrag" demo > /dev/null
 
-# Without the mcp extra the MCP server refuses to start, with exit status 1.
+# Without the mcp extra the MCP server refuses to start: exit status 1 and the
+# refusal naming the extra, not some other failure that also exits 1.
 mcp_status=0
-"$work_dir/core-venv/bin/cve-kgrag" mcp < /dev/null || mcp_status=$?
-if [ "$mcp_status" -ne 1 ]; then
-  echo "cve-kgrag mcp exited $mcp_status without the mcp extra; expected 1" >&2
+mcp_stderr="$("$work_dir/core-venv/bin/cve-kgrag" mcp < /dev/null 2>&1 > /dev/null)" || mcp_status=$?
+if [ "$mcp_status" -ne 1 ] || ! grep -qF "the 'mcp' extra is not installed" <<< "$mcp_stderr"; then
+  echo "cve-kgrag mcp without the mcp extra: expected exit 1 and the missing-extra refusal," \
+    "got exit $mcp_status: $mcp_stderr" >&2
   exit 1
 fi
 

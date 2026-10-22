@@ -10,6 +10,8 @@ from tests.support.paths import REPOSITORY_ROOT
 
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "offline.yml"
 PINNED_ACTION = re.compile(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}")
+SECRETS_CONTEXT = re.compile(r"\bsecrets\s*[.[]")
+UV_VERSION = "0.12.17"
 
 
 def read_workflow() -> dict[str, Any]:
@@ -56,10 +58,40 @@ def test_lane_scripts_exist_and_are_executable() -> None:
     assert executable_scripts == lane_scripts
 
 
+def find_action_steps(action_name: str) -> list[dict[str, Any]]:
+    action_steps = []
+    for step in list_steps():
+        if step.get("uses", "").startswith(f"{action_name}@"):
+            action_steps.append(step)
+    return action_steps
+
+
 def test_offline_lane_runs_on_every_supported_python() -> None:
     offline_job = read_workflow()["jobs"]["offline-lane"]
 
+    python_inputs = []
+    for step in offline_job["steps"]:
+        if step.get("uses", "").startswith("astral-sh/setup-uv@"):
+            python_inputs.append(step["with"]["python-version"])
+
     assert offline_job["strategy"]["matrix"]["python-version"] == ["3.11", "3.12"]
+    assert python_inputs == ["${{ matrix.python-version }}"]
+
+
+def test_every_job_installs_the_uv_version_the_lock_was_made_with() -> None:
+    uv_versions = []
+    for step in find_action_steps("astral-sh/setup-uv"):
+        uv_versions.append(step["with"]["version"])
+
+    assert uv_versions == [UV_VERSION, UV_VERSION]
+
+
+def test_checkout_keeps_no_credentials_in_the_workspace() -> None:
+    persisted_credentials = []
+    for step in find_action_steps("actions/checkout"):
+        persisted_credentials.append(step["with"]["persist-credentials"])
+
+    assert persisted_credentials == [False, False]
 
 
 def test_workflow_starts_no_service_container() -> None:
@@ -74,12 +106,20 @@ def test_workflow_starts_no_service_container() -> None:
 def test_workflow_reads_no_secret_and_enables_no_live_test() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    assert "secrets." not in workflow_text
+    assert SECRETS_CONTEXT.search(workflow_text) is None
     assert "CVE_KGRAG_LIVE_TESTS" not in workflow_text
 
 
 def test_workflow_token_can_only_read_the_repository() -> None:
-    assert read_workflow()["permissions"] == {"contents": "read"}
+    workflow = read_workflow()
+
+    widened_jobs = []
+    for job_name, job in workflow["jobs"].items():
+        if job.get("permissions", {"contents": "read"}) != {"contents": "read"}:
+            widened_jobs.append(job_name)
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert widened_jobs == []
 
 
 def test_every_action_is_pinned_to_a_commit() -> None:

@@ -22,11 +22,11 @@ def loopback_listener() -> Iterator[socket.socket]:
 
 
 def test_connect_outside_loopback_is_refused_and_recorded(network_guard: NetworkGuard) -> None:
-    with (
-        socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection,
-        pytest.raises(NonLoopbackConnectRefused),
-    ):
-        connection.connect(DOCUMENTATION_ADDRESS)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+        # Should the guard ever let the connect through, it fails fast instead of hanging.
+        connection.settimeout(1)
+        with pytest.raises(NonLoopbackConnectRefused):
+            connection.connect(DOCUMENTATION_ADDRESS)
 
     assert network_guard.refused_addresses == [DOCUMENTATION_ADDRESS]
 
@@ -40,9 +40,11 @@ def test_create_connection_outside_loopback_is_refused(network_guard: NetworkGua
 
 def test_connect_ex_outside_loopback_returns_an_error_code(network_guard: NetworkGuard) -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+        connection.settimeout(1)
         error_code = connection.connect_ex(DOCUMENTATION_ADDRESS)
 
     assert error_code == errno.ENETUNREACH
+    assert network_guard.refused_addresses == [DOCUMENTATION_ADDRESS]
 
 
 def test_connect_to_loopback_is_allowed(

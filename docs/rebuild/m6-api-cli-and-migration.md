@@ -195,16 +195,20 @@ amended to match.
 - `scripts/ci/offline_lane.sh` runs `uv sync --locked`, pytest, `ruff check`,
   `ruff format --check`, mypy, `cve-kgrag schema check` and `uv lock --check`.
   `scripts/ci/core_only_lane.sh [python]` builds the wheel, installs it alone in a fresh
-  venv, runs `cve-kgrag demo`, expects `cve-kgrag mcp` to exit 1 without the `mcp` extra,
-  and runs the unit, contract and integration tests outside the MCP interface. PLAN.md
+  venv, runs `cve-kgrag demo`, expects `cve-kgrag mcp` to exit 1 with the missing-extra
+  refusal, and runs the unit, contract and integration tests outside the MCP interface. PLAN.md
   calls these scripts.
 - `.github/workflows/offline.yml` runs the offline lane on Python 3.11 and 3.12 and the
   core-only lane on 3.12, on pushes to `main` and on pull requests. It starts no service,
-  reads no secret, sets no live-test variable, gives its token read access only and pins
-  each action to a commit; `tests/contract/test_ci_workflow.py` checks all of these.
-- An autouse fixture in `tests/conftest.py` refuses every connect outside loopback
-  (`tests/support/network_guard.py`), except in the opt-in live tests under `tests/live`.
-  `tests/unit/test_network_guard.py` checks that a documentation address is refused and
-  loopback is allowed.
-- Local run before the push: the offline lane gave 2407 passed on Python 3.11 and on
-  3.12; the core-only lane gave 2349 passed.
+  reads no secret, sets no live-test variable, gives its token read access only (no job
+  widens it), pins each action to a commit, installs uv 0.12.17, passes each matrix
+  Python to setup-uv and keeps no checkout credentials; `tests/contract/test_ci_workflow.py`
+  checks all of these.
+- A `pytest_runtest_protocol` hook in `tests/conftest.py` refuses every connect outside
+  loopback (`tests/support/network_guard.py`) while each test is set up, run and torn
+  down, so fixtures of every scope are covered, except in the opt-in live tests under
+  `tests/live`. `tests/unit/test_network_guard.py` checks that a documentation address is
+  refused and loopback is allowed.
+- The first run on GitHub Actions passed: the offline lane gave 2407 passed on Python
+  3.11 and on 3.12, the core-only lane 2349 passed. With the review fixes the local
+  offline lane (3.12) gives 2409 passed and the core-only lane 2351 passed.

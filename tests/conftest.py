@@ -28,6 +28,7 @@ from tests.support.fake_chat_server import FakeChatServers
 from tests.support.network_guard import NetworkGuard, guarded_connect, guarded_connect_ex
 
 LIVE_TESTS_DIRECTORY = Path(__file__).parent / "live"
+NETWORK_GUARD_KEY = pytest.StashKey[NetworkGuard]()
 
 
 @pytest.fixture
@@ -77,17 +78,28 @@ def fake_chat_servers() -> Iterator[FakeChatServers]:
     servers.stop_all()
 
 
-@pytest.fixture(autouse=True)
-def network_guard(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[NetworkGuard | None]:
-    """Refuses every connect outside loopback, except in the opt-in live tests (tests/live)."""
-    if LIVE_TESTS_DIRECTORY in request.node.path.parents:
-        yield None
-        return
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> Iterator[None]:
+    """Refuses every connect outside loopback while a test is set up, run and torn down.
+
+    The guard covers each test's fixtures at every scope, since a module- or
+    session-scoped fixture is built and finalized inside some test's protocol. The opt-in
+    live tests (tests/live) are exempt; collection, which imports the test modules, runs
+    before any guard.
+    """
+    if LIVE_TESTS_DIRECTORY in item.path.parents:
+        return (yield)
     guard = NetworkGuard(
         loopback_connect=socket.socket.connect, loopback_connect_ex=socket.socket.connect_ex
     )
-    monkeypatch.setattr(socket.socket, "connect", partialmethod(guarded_connect, guard))
-    monkeypatch.setattr(socket.socket, "connect_ex", partialmethod(guarded_connect_ex, guard))
-    yield guard
+    item.stash[NETWORK_GUARD_KEY] = guard
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(socket.socket, "connect", partialmethod(guarded_connect, guard))
+        patch.setattr(socket.socket, "connect_ex", partialmethod(guarded_connect_ex, guard))
+        return (yield)
+
+
+@pytest.fixture
+def network_guard(request: pytest.FixtureRequest) -> NetworkGuard:
+    """The guard installed around the requesting test, with the addresses it refused."""
+    return request.node.stash[NETWORK_GUARD_KEY]

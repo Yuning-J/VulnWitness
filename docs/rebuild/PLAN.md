@@ -106,5 +106,6 @@ scripts/ci/offline_lane.sh            # tests, ruff, format, mypy, schema check,
 scripts/ci/core_only_lane.sh 3.12     # the wheel in a fresh venv, no dev group, no extra
 ```
 
-Every test runs under a network guard (`tests/conftest.py`) that refuses connects
-outside loopback, except the opt-in live tests in `tests/live`.
+A network guard (`tests/conftest.py`) refuses connects outside loopback while each test
+is set up, run and torn down, fixtures of every scope included, except the opt-in live
+tests in `tests/live`. Collection, which imports the test modules, runs before it.
