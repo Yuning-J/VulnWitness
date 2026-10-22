@@ -2,13 +2,13 @@
 
 import json
 import logging
-import threading
-import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator
+from pydantic import TypeAdapter
 
 from cve_kgrag.adapter_discovery import MCP_EXTRA_MISSING_DETAIL, InterfaceUnavailable
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
@@ -17,8 +17,21 @@ from cve_kgrag.cli import (
     MAX_EVIDENCE_SET_FILE_BYTES,
     OVERSIZED_EVIDENCE_SET_MESSAGE,
     main,
+    print_verification,
+    run_evidence_lookup,
     run_mcp_server,
-    run_verify,
+)
+from cve_kgrag.composition import (
+    build_investigation_deployment,
+    build_search_service,
+    build_topic_context_service,
+)
+from cve_kgrag.domain.affectedness import AffectednessCheck, ApplicabilityStatus
+from cve_kgrag.domain.budget import InvestigationBudget
+from cve_kgrag.domain.evidence import seal_evidence_anchor
+from cve_kgrag.domain.evidence_set_verification_report import (
+    VerificationReport,
+    VerificationVerdict,
 )
 from cve_kgrag.domain.investigation import (
     KnowledgeEvidenceSet,
@@ -32,9 +45,21 @@ from cve_kgrag.domain.planning import (
     ModelPlannerUnavailableDetail,
     ModelReplyFailureDetail,
 )
-from cve_kgrag.domain.search import ChannelOutcome, SearchResponse, SemanticUnavailableDetail
-from cve_kgrag.domain.taxonomy import BackendFailureDetail, BackendStatus, RetrievalChannel
-from cve_kgrag.domain.topic_context import TopicContextResponse
+from cve_kgrag.domain.search import (
+    ChannelOutcome,
+    SearchFilters,
+    SearchRequest,
+    SearchResponse,
+    SemanticUnavailableDetail,
+)
+from cve_kgrag.domain.taxonomy import (
+    AssertionKind,
+    BackendFailureDetail,
+    BackendStatus,
+    RetrievalChannel,
+)
+from cve_kgrag.domain.tool_contracts import ConceptResolution, EvidenceLookup, KnowledgeCapabilities
+from cve_kgrag.domain.topic_context import TopicContextRequest, TopicContextResponse
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName
 from tests.support.fake_chat_server import (
@@ -43,20 +68,18 @@ from tests.support.fake_chat_server import (
     ScriptedAnswer,
     build_completion_body,
 )
-from tests.support.fakes import BlockingRetriever
+from tests.support.fakes import ExtraEvidenceFightSource
 from tests.support.investigation import (
     DEPLOYMENT_VIOLATION,
-    ONE_SECOND_REQUEST,
-    build_test_deployment,
-    build_test_investigation_service,
+    choose_fight_source,
+    list_packaged_fight_anchors,
     reseal_evidence_set,
     rewrite_step,
 )
 from tests.support.investigation_runs import run_model_accepted
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
-from tests.support.planners import DETERMINISTIC_VERIFIER
 from tests.support.secrets import assert_secret_absent
-from tests.support.toolbox import require_answer
+from tests.support.toolbox import FIXTURE_EVIDENCE_ID, UNKNOWN_EVIDENCE_ID, require_answer
 
 FORGED_SHA256 = "f" * 64
 NO_SETTINGS: Mapping[str, str] = {}
@@ -324,23 +347,10 @@ def test_verify_missing_file_exits_two(tmp_path: Path) -> None:
     assert raised.value.code == 2
 
 
-def test_verify_replay_past_its_deadline_reports_replay_timed_out(
-    fixture_bundle: FixtureBundle,
+def test_report_other_than_verified_prints_and_exits_one(
     capsys: pytest.CaptureFixture[str],
-    blocked_call_release: threading.Event,
 ) -> None:
-    evidence_set = build_test_investigation_service(fixture_bundle).investigate(ONE_SECOND_REQUEST)
-    blocking_deployment = build_test_deployment(
-        fixture_bundle,
-        monotonic_clock=time.monotonic,
-        lexical_retriever=BlockingRetriever(blocked_call_release),
-    )
-
-    exit_code = run_verify(
-        evidence_set.model_dump_json().encode(),
-        blocking_deployment,
-        DETERMINISTIC_VERIFIER,
-    )
+    exit_code = print_verification(VerificationReport(verdict=VerificationVerdict.REPLAY_TIMED_OUT))
 
     assert exit_code == 1
     assert json.loads(capsys.readouterr().out) == {
@@ -639,8 +649,22 @@ def test_semantic_topic_on_an_unusable_adapter_reports_the_channel_failed(
         ["search", "ausf crash"],
         ["topic", "5gaka", "--scope", "mixed"],
         ["investigate", "5G-AKA", "--scope", "implementation_only"],
+        ["capabilities"],
+        ["resolve", "5G-AKA"],
+        ["evidence", FIXTURE_EVIDENCE_ID],
+        ["affectedness", "CVE-9999-0003", "--purl", "pkg:generic/open5gs@2.7.0"],
     ],
-    ids=["lookup", "demo", "search", "topic", "investigate"],
+    ids=[
+        "lookup",
+        "demo",
+        "search",
+        "topic",
+        "investigate",
+        "capabilities",
+        "resolve",
+        "evidence",
+        "affectedness",
+    ],
 )
 def test_command_that_does_not_ask_for_the_semantic_channel_loads_no_adapter(
     tmp_path: Path, caplog: pytest.LogCaptureFixture, arguments: list[str]
@@ -653,3 +677,382 @@ def test_command_that_does_not_ask_for_the_semantic_channel_loads_no_adapter(
     assert exit_code in (0, 1)
     assert caplog.records == []
     assert not (tmp_path / "vectors").exists()
+
+
+# A query every vendor's records answer, so each filter has records to narrow.
+BROAD_QUERY = "democorp fictional5g examplenet exampleorg"
+BROAD_QUERY_IDS = [
+    "CVE-9999-0005",
+    "CVE-9999-0006",
+    "CVE-9999-0001",
+    "CVE-9999-0002",
+    "CVE-9999-0003",
+    "CVE-9999-0007",
+    "CVE-9999-0004",
+]
+OPEN5GS_PURL = "pkg:generic/open5gs@2.7.0"
+
+
+def list_distinct_cve_ids(count: int) -> list[str]:
+    cve_ids: list[str] = []
+    for number in range(count):
+        cve_ids.append(f"CVE-9999-{1000 + number}")
+    return cve_ids
+
+
+def list_candidate_ids(response: SearchResponse) -> list[str]:
+    candidate_ids: list[str] = []
+    for candidate in response.candidates:
+        candidate_ids.append(candidate.record.cve_id)
+    return candidate_ids
+
+
+def test_search_without_filters_returns_every_record_the_broad_query_names(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_cli(["search", BROAD_QUERY, "--limit", "20"])
+
+    response = SearchResponse.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert list_candidate_ids(response) == BROAD_QUERY_IDS
+
+
+@pytest.mark.parametrize(
+    ("filter_arguments", "expected_ids"),
+    [
+        (["--vendor", "democorp"], ["CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0007"]),
+        (["--product", "f5gc"], ["CVE-9999-0003", "CVE-9999-0004"]),
+        (["--purl", "pkg:pypi/example-parser"], ["CVE-9999-0006"]),
+        (["--cwe", "cwe-20"], ["CVE-9999-0003", "CVE-9999-0007"]),
+        (["--severity", "critical"], ["CVE-9999-0005", "CVE-9999-0001"]),
+        (["--year", "2025"], []),
+        (["--origin", "configuration"], ["CVE-9999-0005"]),
+        (["--kev-only"], ["CVE-9999-0005"]),
+        (
+            ["--severity", "HIGH", "--severity", "MEDIUM", "--vendor", "fictional5g"],
+            ["CVE-9999-0003", "CVE-9999-0004"],
+        ),
+    ],
+    ids=["vendor", "product", "purl", "cwe", "severity", "year", "origin", "kev_only", "combined"],
+)
+def test_search_filter_option_narrows_the_results_to_the_matching_records(
+    capsys: pytest.CaptureFixture[str], filter_arguments: list[str], expected_ids: list[str]
+) -> None:
+    exit_code = run_cli(["search", BROAD_QUERY, "--limit", "20", *filter_arguments])
+
+    response = SearchResponse.model_validate_json(capsys.readouterr().out)
+    assert list_candidate_ids(response) == expected_ids
+    assert exit_code == (0 if expected_ids else 1)
+
+
+def test_search_year_keeps_the_dated_records_and_drops_the_undated_one(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_cli(["search", "democorp vulnerability", "--year", "2026"])
+
+    response = SearchResponse.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert list_candidate_ids(response) == ["CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0007"]
+
+
+def test_search_graph_expand_adds_the_records_the_graph_links(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_cli(["search", "injection", "--graph-expand"])
+
+    response = SearchResponse.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert list_candidate_ids(response) == ["CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0007"]
+
+
+def test_search_with_options_answers_as_the_service_does_for_the_same_request(
+    fixture_bundle: FixtureBundle, capsys: pytest.CaptureFixture[str]
+) -> None:
+    expected_response = build_search_service(fixture_bundle).search(
+        SearchRequest(
+            query=BROAD_QUERY,
+            limit=5,
+            filters=SearchFilters(vendors=("democorp", "fictional5g"), cwe_ids=("CWE-20",)),
+            graph_expand=True,
+        )
+    )
+
+    run_cli(
+        [
+            "search",
+            BROAD_QUERY,
+            "--limit",
+            "5",
+            "--vendor",
+            "democorp",
+            "--vendor",
+            "fictional5g",
+            "--cwe",
+            "CWE-20",
+            "--graph-expand",
+        ]
+    )
+
+    assert capsys.readouterr().out == expected_response.model_dump_json(indent=2) + "\n"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["search", "q", "--cwe", "20"],
+        ["search", "q", "--severity", "SEVERE"],
+        ["search", "q", "--year", "twenty"],
+        ["search", "q", "--origin", "elsewhere"],
+        ["search", "q", "--vendor", "a", "--vendor", "a"],
+        ["topic", "5gaka", "--scope", "mixed", "--max-results-per-search", "0"],
+        ["investigate", "5gaka", "--scope", "mixed", "--max-rounds", "3"],
+        ["investigate", "5gaka", "--scope", "mixed", "--max-wall-time-seconds", "0"],
+        ["resolve", ""],
+        ["evidence", "ev:not-hex"],
+        ["affectedness", "CVE-9999-0003", "--purl", "pkg:generic/open5gs"],
+        ["affectedness", "CVE-9999-0003"],
+        ["lookup", "CVE-2020-" + "1" * 600],
+        ["affectedness", *list_distinct_cve_ids(21), "--purl", OPEN5GS_PURL],
+    ],
+    ids=[
+        "cwe_without_prefix",
+        "unknown_severity",
+        "year_not_a_number",
+        "unknown_origin",
+        "repeated_vendor",
+        "max_results_per_search_zero",
+        "rounds_over_the_cap",
+        "zero_wall_time",
+        "empty_resolve_query",
+        "malformed_evidence_id",
+        "unversioned_purl",
+        "affectedness_without_purl",
+        "lookup_id_over_the_length_cap",
+        "affectedness_over_twenty_ids",
+    ],
+)
+def test_argument_the_contract_rejects_is_a_usage_error(arguments: list[str]) -> None:
+    with pytest.raises(SystemExit) as raised:
+        run_cli(arguments)
+
+    assert raised.value.code == 2
+
+
+@pytest.mark.parametrize(
+    ("budget_option", "budget_field", "value"),
+    [
+        ("--max-rounds", "max_rounds", 1),
+        ("--max-tool-calls", "max_tool_calls", 3),
+        ("--max-sources", "max_sources", 2),
+        ("--max-results-per-call", "max_results_per_call", 5),
+        ("--max-wall-time-seconds", "max_wall_time_seconds", 5),
+        ("--max-context-bytes", "max_context_bytes", 65_536),
+    ],
+    ids=["rounds", "tool_calls", "sources", "results_per_call", "wall_time", "context_bytes"],
+)
+def test_investigate_budget_option_sets_its_field_and_leaves_the_others_at_their_caps(
+    capsys: pytest.CaptureFixture[str], budget_option: str, budget_field: str, value: int
+) -> None:
+    expected_budget = InvestigationBudget().model_copy(update={budget_field: value})
+
+    run_cli(
+        [
+            "investigate",
+            "CVE-9999-0003",
+            "--scope",
+            "implementation_only",
+            budget_option,
+            str(value),
+        ]
+    )
+
+    evidence_set = KnowledgeEvidenceSet.model_validate_json(capsys.readouterr().out)
+    assert evidence_set.request.budget == expected_budget
+
+
+def test_topic_max_results_per_search_reaches_the_request(
+    fixture_bundle: FixtureBundle, capsys: pytest.CaptureFixture[str]
+) -> None:
+    expected_response = build_topic_context_service(fixture_bundle).explore(
+        TopicContextRequest(query="5gaka", scope="mixed", max_results_per_search=1)
+    )
+
+    run_cli(["topic", "5gaka", "--scope", "mixed", "--max-results-per-search", "1"])
+
+    assert capsys.readouterr().out == expected_response.model_dump_json(indent=2) + "\n"
+
+
+def build_no_settings(tmp_path: Path) -> Mapping[str, str]:
+    return NO_SETTINGS
+
+
+def build_planner_without_a_key(tmp_path: Path) -> Mapping[str, str]:
+    return PLANNER_WITHOUT_A_KEY
+
+
+def build_unusable_semantic_adapter(tmp_path: Path) -> Mapping[str, str]:
+    return build_semantic_environment(tmp_path / "vectors")
+
+
+@pytest.mark.parametrize(
+    ("build_environment", "semantic_arguments"),
+    [
+        (build_no_settings, []),
+        (build_planner_without_a_key, []),
+        (build_unusable_semantic_adapter, ["--semantic"]),
+    ],
+    ids=["no_settings", "planner_without_a_key", "unusable_semantic_adapter"],
+)
+def test_capabilities_prints_the_sources_investigate_reports_and_exits_zero(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    build_environment: Callable[[Path], Mapping[str, str]],
+    semantic_arguments: list[str],
+) -> None:
+    environment = build_environment(tmp_path)
+
+    exit_code = run_cli(["capabilities", *semantic_arguments], environment)
+    capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
+    run_cli(
+        ["investigate", "CVE-9999-0003", "--scope", "implementation_only", *semantic_arguments],
+        environment,
+    )
+    evidence_set = KnowledgeEvidenceSet.model_validate_json(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert capabilities.source_capabilities == evidence_set.source_capabilities
+
+
+def test_resolve_known_topic_prints_its_match_and_exits_zero(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_cli(["resolve", "5G-AKA"])
+
+    resolution = ConceptResolution.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert resolution.resolution.matches != ()
+
+
+def test_resolve_query_naming_no_topic_exits_one(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = run_cli(["resolve", "printer driver"])
+
+    resolution = ConceptResolution.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 1
+    assert resolution.resolution.matches == ()
+
+
+def test_evidence_served_under_its_id_prints_it_and_exits_zero(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_cli(["evidence", FIXTURE_EVIDENCE_ID])
+
+    evidence_lookup = EvidenceLookup.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert evidence_lookup.evidence.evidence_id == FIXTURE_EVIDENCE_ID
+
+
+def test_unknown_evidence_id_exits_one_with_one_line_on_stderr(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_cli(["evidence", UNKNOWN_EVIDENCE_ID])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == f"no evidence anchor is served under {UNKNOWN_EVIDENCE_ID}\n"
+
+
+def test_catalogued_anchor_failing_the_anchor_rules_exits_one_with_one_line_on_stderr(
+    fixture_bundle: FixtureBundle, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fight_anchor = list_packaged_fight_anchors()[0]
+    inferred_anchor = seal_evidence_anchor(
+        fight_anchor.model_copy(update={"assertion_kind": AssertionKind.INFERRED})
+    )
+    packaged_fight_source, pinned_fight_snapshot = choose_fight_source("packaged")
+    deployment = build_investigation_deployment(
+        fixture_bundle,
+        fight_source=ExtraEvidenceFightSource(
+            packaged_fight_source, extra_evidence=(inferred_anchor,)
+        ),
+        pinned_fight_snapshot=pinned_fight_snapshot,
+    )
+
+    exit_code = run_evidence_lookup(inferred_anchor.evidence_id, deployment)
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == (
+        f"the anchor catalogued under {inferred_anchor.evidence_id} fails the anchor rules, "
+        "so it is not served\n"
+    )
+
+
+def test_affectedness_prints_one_unknown_answer_per_cve_and_exits_one(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_cli(["affectedness", "CVE-9999-0003", "cve-9999-0004", "--purl", OPEN5GS_PURL])
+
+    answers = TypeAdapter(list[AffectednessCheck]).validate_json(capsys.readouterr().out)
+    answered_ids: list[str] = []
+    applicabilities: list[ApplicabilityStatus] = []
+    for answer in answers:
+        answered_ids.append(answer.request.cve_id)
+        applicabilities.append(answer.applicability)
+    assert exit_code == 1
+    assert answered_ids == ["CVE-9999-0003", "CVE-9999-0004"]
+    assert applicabilities == [ApplicabilityStatus.UNKNOWN, ApplicabilityStatus.UNKNOWN]
+
+
+def test_verify_prints_the_verified_report_text_exactly(
+    tmp_path: Path, sealed_set: KnowledgeEvidenceSet, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evidence_set_path = write_evidence_set_file(tmp_path, sealed_set.model_dump_json().encode())
+
+    run_cli(["verify", str(evidence_set_path)])
+
+    assert capsys.readouterr().out == (
+        '{\n  "verdict": "verified",\n  "violations": [],\n  "differences": []\n}\n'
+    )
+
+
+def test_verify_prints_the_malformed_report_text_exactly(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evidence_set_path = write_evidence_set_file(tmp_path, b"[]")
+
+    run_cli(["verify", str(evidence_set_path)])
+
+    assert capsys.readouterr().out == (
+        '{\n  "verdict": "malformed",\n  "violations": [\n'
+        '    "Input should be an object"\n  ],\n  "differences": []\n}\n'
+    )
+
+
+def test_verify_prints_non_ascii_violation_text_ascii_escaped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evidence_set_path = write_evidence_set_file(tmp_path, '{"été": 1}'.encode())
+
+    run_cli(["verify", str(evidence_set_path)])
+
+    first_violation_line = capsys.readouterr().out.splitlines()[3]
+    assert first_violation_line == '    "\\u00e9t\\u00e9: Extra inputs are not permitted",'
+
+
+@pytest.mark.parametrize(
+    "evidence_set_bytes",
+    [b"[]", b'{"unknown_field": 1}'],
+    ids=["not_an_object", "unknown_field"],
+)
+def test_verify_output_is_valid_under_the_verification_report_schema(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], evidence_set_bytes: bytes
+) -> None:
+    schema = json.loads((REPOSITORY_SCHEMA_DIR / "verification_report.schema.json").read_text())
+    evidence_set_path = write_evidence_set_file(tmp_path, evidence_set_bytes)
+
+    run_cli(["verify", str(evidence_set_path)])
+
+    report = json.loads(capsys.readouterr().out)
+    assert list(Draft202012Validator(schema).iter_errors(report)) == []

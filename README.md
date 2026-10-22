@@ -9,7 +9,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.20` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.21` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 ## What it does
@@ -45,15 +45,26 @@ Optional extras: `mcp` (the MCP server) and `semantic` (Chroma and sentence-tran
 uv run cve-kgrag demo                                   # sample queries on the fixture
 uv run cve-kgrag lookup CVE-9999-0001                   # exact CVE-ID lookup
 uv run cve-kgrag search "authentication bypass"         # ranked search
+uv run cve-kgrag search gateway --vendor democorp --severity critical --graph-expand
 uv run cve-kgrag topic 5G-AKA --scope mixed             # scoped topic context
 uv run cve-kgrag investigate 5G-AKA --scope mixed       # bounded investigation
+uv run cve-kgrag investigate 5G-AKA --scope mixed --max-rounds 1
+uv run cve-kgrag capabilities                           # the sources and what each serves
+uv run cve-kgrag resolve 5G-AKA                         # the reviewed topics a query names
+uv run cve-kgrag affectedness CVE-9999-0003 --purl pkg:generic/open5gs@2.7.0
+uv run cve-kgrag evidence ev:d8097ae9c31b754d26a1ef92   # one served evidence anchor
 uv run cve-kgrag verify evidence-set.json               # validate, audit and replay a set
 uv run cve-kgrag mcp                                    # MCP server on stdio (mcp extra)
 uv run cve-kgrag schema check                           # compare schemas with the snapshots
 ```
 
-The query commands and `verify` print JSON. `--scope` is one of `protocol_context_only`,
-`implementation_only` or `mixed`.
+Every command but `mcp` and `schema` prints JSON. `--scope` is one of
+`protocol_context_only`, `implementation_only` or `mixed`. `search` filters by
+`--vendor`, `--product`, `--purl`, `--cwe`, `--severity`, `--year`, `--origin` (each
+repeatable) and `--kev-only`; `investigate` takes the product options and the budget
+options `--max-rounds`, `--max-tool-calls`, `--max-sources`, `--max-results-per-call`,
+`--max-wall-time-seconds` and `--max-context-bytes`. `cve-kgrag <command> --help` lists
+each command's options.
 
 ## Configuration
 

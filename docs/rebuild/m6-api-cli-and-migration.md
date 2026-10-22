@@ -1,6 +1,6 @@
 # M6 — API, CLI and migration
 
-Schema version `2.0.0-dev.20`. M6 is built in work packages; this document records each
+Schema version `2.0.0-dev.21`. M6 is built in work packages; this document records each
 one as it lands.
 
 ## Work packages
@@ -13,7 +13,7 @@ one as it lands.
 | WP-S | Repository split bootstrap: this repository's first commit (ADR 0006) | done |
 | WP3′ | ADR 0007, HTTP surfaces (documentation only) | done |
 | WP4 | Offline CI: lane scripts, GitHub workflow, test-time network guard | done |
-| WP5 | Full CLI, verification report contract, served-bundle seam | not started |
+| WP5 | Full CLI, verification report contract, served-bundle seam | done |
 | WP6 | HTTP guard, HTTP settings, health and readiness, opt-in Streamable HTTP for MCP | not started |
 | WP7 | v2 REST API, set verification over HTTP, `api` extra | not started |
 | WP9 | Read-only legacy-data importer (ADR 0008) | not started |
@@ -215,3 +215,62 @@ amended to match.
 - The first run on GitHub Actions passed: the offline lane gave 2407 passed on Python
   3.11 and on 3.12, the core-only lane 2349 passed. With the review fixes the local
   offline lane (3.12) gives 2409 passed and the core-only lane 2351 passed.
+
+## WP5 — full CLI, verification report, served bundle
+
+Decisions: the CLI calls the application services directly rather than going through the
+toolbox, whose limits exist for remote callers; ADR 0003 §10.
+
+- **Verification report.** `VerificationReport` (`domain/evidence_set_verification_report.py`)
+  is the verdict, at most `MAX_REPORTED_VIOLATIONS` (100) violations and each replay
+  difference as `step_index` (null for a set-level part) and `part`; a validator ties the
+  findings to the verdict (violations only for `malformed` and `invalid`, differences only
+  for `replay_differs`), and the published schema states the same rule.
+  `application/evidence_set_verification.check_evidence_set` parses the bytes and
+  verifies them into a report, so the CLI, and later the API, share one path.
+  `cve-kgrag verify` prints the keys in declaration order (`verdict`, `violations`,
+  `differences`) with non-ASCII text escaped, and exits 0 only for `verified`; tests pin
+  the exact text of a `verified` and a `malformed` report and the escaping.
+- **Served bundle.** `composition.load_served_bundle()` returns the records and evidence
+  every surface serves, the packaged fixture until WP10; the CLI and `mcp` both use it. It
+  takes no settings yet: none names a store before WP10.
+- **Search options.** `search` takes `--vendor`, `--product`, `--purl`, `--cwe`,
+  `--severity`, `--year`, `--origin` (each repeatable; `--cwe` and `--severity` are read
+  case-insensitively), `--kev-only` and `--graph-expand`, mapped onto `SearchFilters` and
+  `SearchRequest`.
+- **Investigation budget.** `investigate` takes `--max-rounds`, `--max-tool-calls`,
+  `--max-sources`, `--max-results-per-call`, `--max-wall-time-seconds` and
+  `--max-context-bytes`; a budget option left out keeps the contract's default, the cap.
+- **Topic.** `topic` takes `--max-results-per-search`.
+- **New commands**, each printing its tool contract:
+  - `capabilities [--semantic]`: the source capabilities `investigate` would report, with
+    the planner the settings configure; always exits 0.
+  - `resolve QUERY`: the `ConceptResolution`; exits 0 when the query names a topic, 1
+    otherwise.
+  - `affectedness CVE_ID... --purl PURL`: a JSON list of `AffectednessCheck`, one per CVE
+    (at most 20); exits 0 only when every answer establishes applicability, so 1 while no
+    verified affectedness source exists.
+  - `evidence EVIDENCE_ID`: the `EvidenceLookup`; exits 1 with one stderr line when no
+    anchor is served under the ID or the catalogued one fails the anchor rules.
+  FiGHT has no command of its own: `topic` reaches it (`--scope protocol_context_only` for
+  FiGHT context alone), and so does `investigate`.
+- **Usage errors.** Every request the CLI builds goes through its contract (`lookup`'s
+  `CveLookupRequest` included), and an argument the contract rejects is a usage error
+  (exit 2) naming the problem without the input.
+- **Shared lookups.** `application/knowledge_lookup.py` holds `lookup_cve`, used by the CLI's
+  `lookup` and the toolbox's `lookup_cve`, and `find_served_evidence`, used by the CLI's
+  `evidence` and the toolbox's `get_evidence`.
+- **Import side effects.** `tests/contract/test_import_side_effects.py` imports every core
+  module in a fresh interpreter under an audit hook, from an empty working directory with
+  empty home, cache, data and temporary directories, and expects no file written, no
+  directory created, no network use (name lookups included) and no process started.
+  The module walk (`tests/support/module_walk.py`) fails on a package that cannot be
+  imported rather than skipping it.
+
+### Contracts at `2.0.0-dev.21`
+
+- New snapshot `verification_report.schema.json` (`VerificationReport`), stating the
+  verdict-to-findings rule as `if`/`then`; step indices start at 1.
+- Every versioned schema moves to `2.0.0-dev.21`; no other contract changes.
+- `test_schema_snapshots.py` also checks that no snapshot states a bound under a pydantic
+  name (`ge`, `le`, `gt`, `lt`), which a JSON Schema validator ignores.

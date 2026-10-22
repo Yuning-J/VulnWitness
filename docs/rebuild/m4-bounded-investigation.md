@@ -786,6 +786,7 @@ only.
   M5 and M7 gold queries.
 - **The claim-subject rule** requires every cited anchor to be about the claim's
   subject; derived CVE→CWE→FiGHT mappings will need a relaxed rule.
-- **No budget or planner flags on the CLI.** `cve-kgrag investigate QUERY --scope
-  SCOPE [--vendor V]... [--product P]... [--purl U]...` prints the evidence set
-  and exits 0 only when the status is `ok`.
+- **No planner flags on the CLI.** The planner comes from the settings (ADR 0004).
+  `cve-kgrag investigate QUERY --scope SCOPE [--vendor V]... [--product P]... [--purl U]...`
+  and the budget options of M6 WP5 print the evidence set and exit 0 only when the
+  status is `ok`.

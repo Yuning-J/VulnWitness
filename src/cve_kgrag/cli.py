@@ -1,11 +1,13 @@
 """Command-line interface over the offline search, topic-context and investigation
-services, the verification of an evidence set handed back, and the MCP server over stdio.
+services, the knowledge lookups (capabilities, topic resolution, affectedness, evidence),
+the verification of an evidence set handed back, and the MCP server over stdio.
 
-Exit codes: 0 when the result status is ok (for ``verify``, when the verdict is
-``verified``; for ``mcp``, when the client closes stdin), 1 for any other status or verdict,
-for schema drift and for ``mcp`` without a usable server runner, 2 for invalid usage,
-including invalid settings and a ``verify`` file that cannot be read or is larger than
-``MAX_EVIDENCE_SET_FILE_BYTES``.
+Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
+a query that resolves to a topic, an evidence ID the catalogue serves, every affectedness
+answer established, capabilities always, and for ``mcp`` the client closing stdin. 1 for
+any other status, verdict or answer, for schema drift and for ``mcp`` without a usable
+server runner. 2 for invalid usage: an argument a contract rejects, invalid settings, and
+a ``verify`` file that cannot be read or is larger than ``MAX_EVIDENCE_SET_FILE_BYTES``.
 """
 
 import argparse
@@ -15,8 +17,8 @@ import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
-from enum import StrEnum
 from pathlib import Path
+from typing import Any, TypeVar
 
 from pydantic import ValidationError
 
@@ -26,35 +28,48 @@ from cve_kgrag.adapter_discovery import (
     discover_mcp_server_runner,
     discover_planner_setup,
 )
-from cve_kgrag.adapters.fixture.synthetic_fixture import default_fixture_dir, load_fixture_bundle
-from cve_kgrag.application.evidence_set_verification import verify_evidence_set
+from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
+from cve_kgrag.application.affectedness import check_affectedness
+from cve_kgrag.application.evidence_set_verification import check_evidence_set
+from cve_kgrag.application.investigate import describe_service_capabilities
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
+from cve_kgrag.application.knowledge_lookup import find_served_evidence, lookup_cve
 from cve_kgrag.application.search import SearchService
-from cve_kgrag.application.trajectory_replay import ReplayDifference, ReplayTimedOut
 from cve_kgrag.composition import (
     build_investigation_deployment,
     build_investigation_service,
     build_knowledge_toolbox,
     build_search_service,
     build_topic_context_service,
+    build_topic_registry,
     list_accepted_planner_capabilities,
+    load_served_bundle,
 )
+from cve_kgrag.domain.affectedness import AffectednessRequest, ApplicabilityStatus
+from cve_kgrag.domain.contract_model import ContractModel, list_validation_problems
 from cve_kgrag.domain.cve import CVE_ID_PATTERN
-from cve_kgrag.domain.investigation import (
-    InvestigationRequest,
-    KnowledgeEvidenceSet,
-    SourceCapability,
+from cve_kgrag.domain.evidence_set_verification_report import (
+    VerificationReport,
+    VerificationVerdict,
 )
+from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.search import (
     MAX_FILTER_VALUES,
     MAX_RESULTS_PER_CALL,
-    SearchFilters,
     SearchRequest,
     SearchResponse,
 )
 from cve_kgrag.domain.taxonomy import ResultStatus
+from cve_kgrag.domain.tool_contracts import (
+    ConceptResolution,
+    ConceptResolutionRequest,
+    CveLookupRequest,
+    EvidenceLookupRequest,
+    KnowledgeCapabilities,
+)
 from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, TopicContextResponse
 from cve_kgrag.domain.validation import EvidenceValidationError
+from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
 from cve_kgrag.settings import SemanticSettings, ServiceSettings, SettingsError, load_settings
 
@@ -73,28 +88,40 @@ SEMANTIC_HELP = (
 # Logged when `mcp` or `verify` runs with the semantic channel enabled: neither serves it,
 # since its store cannot be opened read-only (ADR 0004 §1).
 SEMANTIC_NOT_SERVED = "the semantic channel is not served by cve-kgrag %s"
-# Product-context options of `investigate` and the filter field each one fills.
-PRODUCT_OPTIONS = (("--vendor", "vendors"), ("--product", "products"), ("--purl", "purls"))
+# Filter options, each repeatable, with the `SearchFilters` field it fills and how its text
+# is read. The product ones are also `investigate`'s product context.
+PRODUCT_OPTIONS = (
+    ("--vendor", "vendors", str),
+    ("--product", "products", str),
+    ("--purl", "purls", str),
+)
+RECORD_FILTER_OPTIONS = (
+    ("--cwe", "cwe_ids", str.upper),
+    ("--severity", "severities", str.upper),
+    ("--year", "published_years", int),
+    ("--origin", "origins", str),
+)
+# `investigate`'s budget options and the `InvestigationBudget` field each one sets; an
+# option left out keeps the budget's default.
+BUDGET_OPTIONS = (
+    ("--max-rounds", "max_rounds"),
+    ("--max-tool-calls", "max_tool_calls"),
+    ("--max-sources", "max_sources"),
+    ("--max-results-per-call", "max_results_per_call"),
+    ("--max-wall-time-seconds", "max_wall_time_seconds"),
+    ("--max-context-bytes", "max_context_bytes"),
+)
 # `verify` reads at most this many bytes of the file it is handed, and refuses a larger one.
 MAX_EVIDENCE_SET_FILE_BYTES = 4 * 1024 * 1024
 OVERSIZED_EVIDENCE_SET_MESSAGE = (
     f"the evidence set file is larger than {MAX_EVIDENCE_SET_FILE_BYTES // (1024 * 1024)} MiB"
 )
-# `verify` reports at most this many violations.
-MAX_REPORTED_VIOLATIONS = 100
+UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
+UNSERVED_EVIDENCE_MESSAGE = (
+    "the anchor catalogued under {evidence_id} fails the anchor rules, so it is not served"
+)
 
-
-class VerificationVerdict(StrEnum):
-    """What `verify` found: the set parsed (``malformed`` when not); passed the validator and
-    the decision-path audit, and its replay passed the checks the controller runs at seal
-    (``invalid`` when not); and replayed to the recorded set (``replay_differs`` or
-    ``replay_timed_out`` when not)."""
-
-    VERIFIED = "verified"
-    MALFORMED = "malformed"
-    INVALID = "invalid"
-    REPLAY_DIFFERS = "replay_differs"
-    REPLAY_TIMED_OUT = "replay_timed_out"
+ContractT = TypeVar("ContractT", bound=ContractModel)
 
 
 def parse_cve_id(text: str) -> str:
@@ -113,12 +140,15 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser = commands.add_parser("search", help="search the fixture; prints JSON")
     search_parser.add_argument("query")
     search_parser.add_argument("--semantic", action="store_true", help=SEMANTIC_HELP)
+    add_result_limit_option(search_parser, "--limit")
+    add_filter_options(search_parser, (*PRODUCT_OPTIONS, *RECORD_FILTER_OPTIONS))
     search_parser.add_argument(
-        "--limit",
-        type=int,
-        default=10,
-        choices=range(1, MAX_RESULTS_PER_CALL + 1),
-        metavar=f"1..{MAX_RESULTS_PER_CALL}",
+        "--kev-only", action="store_true", help="only records listed as known exploited"
+    )
+    search_parser.add_argument(
+        "--graph-expand",
+        action="store_true",
+        help="also add the records the relation graph links to the matches",
     )
 
     topic_parser = commands.add_parser(
@@ -127,12 +157,12 @@ def build_parser() -> argparse.ArgumentParser:
     topic_parser.add_argument("query")
     topic_parser.add_argument("--scope", required=True, choices=list(QueryScope))
     topic_parser.add_argument("--semantic", action="store_true", help=SEMANTIC_HELP)
-    topic_parser.add_argument(
-        "--limit",
-        type=int,
-        default=10,
-        choices=range(1, MAX_RESULTS_PER_CALL + 1),
-        metavar=f"1..{MAX_RESULTS_PER_CALL}",
+    add_result_limit_option(topic_parser, "--limit")
+    add_result_limit_option(
+        topic_parser,
+        "--max-results-per-search",
+        default=MAX_RESULTS_PER_CALL,
+        help_text="results each CVE search and the FiGHT search may return",
     )
 
     investigate_parser = commands.add_parser(
@@ -145,17 +175,42 @@ def build_parser() -> argparse.ArgumentParser:
     investigate_parser.add_argument("query")
     investigate_parser.add_argument("--scope", required=True, choices=list(QueryScope))
     investigate_parser.add_argument("--semantic", action="store_true", help=SEMANTIC_HELP)
-    for product_option, product_field in PRODUCT_OPTIONS:
+    add_filter_options(investigate_parser, PRODUCT_OPTIONS)
+    for budget_option, budget_field in BUDGET_OPTIONS:
         investigate_parser.add_argument(
-            product_option,
-            action="append",
-            default=[],
-            dest=product_field,
-            help=f"product context; repeat for up to {MAX_FILTER_VALUES} values",
+            budget_option,
+            type=int,
+            dest=budget_field,
+            help="investigation budget; defaults to the cap the contract allows",
         )
 
     lookup_parser = commands.add_parser("lookup", help="exact CVE-ID lookup; prints JSON")
     lookup_parser.add_argument("cve_id", type=parse_cve_id)
+
+    capabilities_parser = commands.add_parser(
+        "capabilities",
+        help="the sources `investigate` would use and what each serves; prints JSON",
+    )
+    capabilities_parser.add_argument("--semantic", action="store_true", help=SEMANTIC_HELP)
+
+    resolve_parser = commands.add_parser(
+        "resolve", help="resolve a query to the reviewed protocol topics; prints JSON"
+    )
+    resolve_parser.add_argument("query")
+
+    affectedness_parser = commands.add_parser(
+        "affectedness",
+        help="whether a package version is affected by each CVE; prints a JSON list",
+    )
+    affectedness_parser.add_argument("cve_ids", metavar="CVE_ID", nargs="+", type=parse_cve_id)
+    affectedness_parser.add_argument(
+        "--purl", required=True, help="the package and version, as a versioned package URL"
+    )
+
+    evidence_parser = commands.add_parser(
+        "evidence", help="the evidence anchor served under an evidence ID; prints JSON"
+    )
+    evidence_parser.add_argument("evidence_id")
 
     verify_parser = commands.add_parser(
         "verify",
@@ -180,34 +235,98 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_investigation_request(
-    parser: argparse.ArgumentParser, arguments: argparse.Namespace
-) -> InvestigationRequest:
-    """The request, or a usage error (exit 2) naming what the contract rejected."""
-    try:
-        return InvestigationRequest(
-            query=arguments.query,
-            scope=QueryScope(arguments.scope),
-            filters=SearchFilters(
-                vendors=arguments.vendors, products=arguments.products, purls=arguments.purls
-            ),
-            semantic=arguments.semantic,
+def add_result_limit_option(
+    parser: argparse.ArgumentParser,
+    option: str,
+    default: int = 10,
+    help_text: str | None = None,
+) -> None:
+    parser.add_argument(
+        option,
+        type=int,
+        default=default,
+        choices=range(1, MAX_RESULTS_PER_CALL + 1),
+        metavar=f"1..{MAX_RESULTS_PER_CALL}",
+        help=help_text,
+    )
+
+
+def add_filter_options(
+    parser: argparse.ArgumentParser, filter_options: Sequence[tuple[str, str, Any]]
+) -> None:
+    for filter_option, filter_field, read_value in filter_options:
+        parser.add_argument(
+            filter_option,
+            action="append",
+            default=[],
+            dest=filter_field,
+            type=read_value,
+            help=f"repeat for up to {MAX_FILTER_VALUES} values; any of them matches",
         )
+
+
+def collect_filters(
+    arguments: argparse.Namespace, filter_options: Sequence[tuple[str, str, Any]]
+) -> dict[str, object]:
+    """The ``SearchFilters`` fields the given filter options were set for."""
+    filters: dict[str, object] = {}
+    for _, filter_field, _ in filter_options:
+        values = getattr(arguments, filter_field)
+        if values:
+            filters[filter_field] = values
+    return filters
+
+
+def collect_budget(arguments: argparse.Namespace) -> dict[str, int]:
+    """The ``InvestigationBudget`` fields the budget options were set for."""
+    budget: dict[str, int] = {}
+    for _, budget_field in BUDGET_OPTIONS:
+        value = getattr(arguments, budget_field)
+        if value is not None:
+            budget[budget_field] = value
+    return budget
+
+
+def build_contract(
+    parser: argparse.ArgumentParser, contract_type: type[ContractT], **fields: object
+) -> ContractT:
+    """The contract built from the command's arguments, or a usage error (exit 2) naming
+    each problem the contract found, without the rejected input."""
+    try:
+        return contract_type.model_validate(fields)
     except ValidationError as error:
         parser.error("; ".join(list_validation_problems(error)))
 
 
-def list_validation_problems(error: ValidationError) -> list[str]:
-    """Each problem the contract found, as ``location: message`` (only the message for the
-    document as a whole), without the rejected input."""
-    problems: list[str] = []
-    for problem in error.errors():
-        location = ".".join(str(part) for part in problem["loc"])
-        if location:
-            problems.append(f"{location}: {problem['msg']}")
-        else:
-            problems.append(problem["msg"])
-    return problems
+def build_search_request(
+    parser: argparse.ArgumentParser, arguments: argparse.Namespace
+) -> SearchRequest:
+    filters = collect_filters(arguments, (*PRODUCT_OPTIONS, *RECORD_FILTER_OPTIONS))
+    if arguments.kev_only:
+        filters["kev_only"] = True
+    return build_contract(
+        parser,
+        SearchRequest,
+        query=arguments.query,
+        limit=arguments.limit,
+        filters=filters,
+        graph_expand=arguments.graph_expand,
+        semantic=arguments.semantic,
+    )
+
+
+def build_investigation_request(
+    parser: argparse.ArgumentParser, arguments: argparse.Namespace
+) -> InvestigationRequest:
+    return build_contract(
+        parser,
+        InvestigationRequest,
+        query=arguments.query,
+        scope=arguments.scope,
+        filters=collect_filters(arguments, PRODUCT_OPTIONS),
+        semantic=arguments.semantic,
+        budget=collect_budget(arguments),
+    )
 
 
 def print_response(response: SearchResponse | TopicContextResponse | KnowledgeEvidenceSet) -> int:
@@ -266,51 +385,65 @@ def read_evidence_set_file(parser: argparse.ArgumentParser, evidence_set_path: P
     return evidence_set_bytes
 
 
-def print_verification(
-    verdict: VerificationVerdict,
-    violations: Sequence[str],
-    differences: Sequence[ReplayDifference],
-) -> int:
-    """Print the verdict, at most ``MAX_REPORTED_VIOLATIONS`` violations and every replay
-    difference as JSON; 0 only for ``verified``."""
-    reported_differences: list[dict[str, object]] = []
-    for difference in differences:
-        reported_differences.append({"step_index": difference.step_index, "part": difference.part})
-    verification_report = {
-        "verdict": verdict.value,
-        "violations": list(violations[:MAX_REPORTED_VIOLATIONS]),
-        "differences": reported_differences,
-    }
-    print(json.dumps(verification_report, indent=2))
-    return 0 if verdict is VerificationVerdict.VERIFIED else 1
+def print_verification(report: VerificationReport) -> int:
+    """Print the report as JSON, its keys in the order the contract declares them; 0 only
+    for ``verified``."""
+    print(json.dumps(report.model_dump(mode="json"), indent=2))
+    return 0 if report.verdict is VerificationVerdict.VERIFIED else 1
 
 
-def run_verify(
-    evidence_set_bytes: bytes,
-    deployment: InvestigationDeployment,
-    accepted_planner_capabilities: Sequence[SourceCapability],
+def print_capabilities(capabilities: KnowledgeCapabilities) -> int:
+    print(capabilities.model_dump_json(indent=2))
+    return 0
+
+
+def print_resolution(resolution: ConceptResolution) -> int:
+    """Print the resolution; 0 only when the query resolves to at least one topic."""
+    print(resolution.model_dump_json(indent=2))
+    return 0 if resolution.resolution.matches else 1
+
+
+def run_affectedness(
+    parser: argparse.ArgumentParser, arguments: argparse.Namespace, bundle: FixtureBundle
 ) -> int:
-    """Parse the set, then verify it against ``deployment`` and the
-    ``accepted_planner_capabilities`` (``verify_evidence_set``)."""
+    """Check each CVE against ``--purl`` and print the answers as a JSON list; 0 only when
+    every answer establishes applicability, which no answer does while no verified
+    affectedness source exists (ADR 0003)."""
+    if len(arguments.cve_ids) > MAX_FILTER_VALUES:
+        parser.error(f"at most {MAX_FILTER_VALUES} CVE IDs per affectedness command")
+    affectedness_requests: list[AffectednessRequest] = []
+    for cve_id in arguments.cve_ids:
+        affectedness_requests.append(
+            build_contract(parser, AffectednessRequest, cve_id=cve_id, purl=arguments.purl)
+        )
+    trustify_port = build_investigation_deployment(bundle).trustify_port
+    timeout_seconds = ToolLimits().affectedness_timeout_seconds
+    answers: list[dict[str, object]] = []
+    all_established = True
+    for affectedness_request in affectedness_requests:
+        affectedness_check = check_affectedness(
+            trustify_port, affectedness_request, timeout_seconds
+        )
+        answers.append(affectedness_check.model_dump(mode="json"))
+        if affectedness_check.applicability is ApplicabilityStatus.UNKNOWN:
+            all_established = False
+    print(json.dumps(answers, indent=2, ensure_ascii=False))
+    return 0 if all_established else 1
+
+
+def run_evidence_lookup(evidence_id: str, deployment: InvestigationDeployment) -> int:
+    """Print the anchor ``deployment`` serves under ``evidence_id``; 1, with one line on
+    stderr, when its catalogue holds none or the one it holds fails the anchor rules."""
     try:
-        evidence_set = KnowledgeEvidenceSet.model_validate_json(evidence_set_bytes)
-    except ValidationError as error:
-        return print_verification(
-            VerificationVerdict.MALFORMED, list_validation_problems(error), ()
-        )
-    try:
-        replay_outcome = verify_evidence_set(
-            evidence_set, deployment, accepted_planner_capabilities
-        )
-    except EvidenceValidationError as error:
-        return print_verification(VerificationVerdict.INVALID, error.violations, ())
-    if isinstance(replay_outcome, ReplayTimedOut):
-        return print_verification(VerificationVerdict.REPLAY_TIMED_OUT, (), ())
-    if replay_outcome.differences:
-        return print_verification(
-            VerificationVerdict.REPLAY_DIFFERS, (), replay_outcome.differences
-        )
-    return print_verification(VerificationVerdict.VERIFIED, (), ())
+        evidence_lookup = find_served_evidence(deployment, evidence_id)
+    except EvidenceValidationError:
+        print(UNSERVED_EVIDENCE_MESSAGE.format(evidence_id=evidence_id), file=sys.stderr)
+        return 1
+    if evidence_lookup is None:
+        print(UNKNOWN_EVIDENCE_MESSAGE.format(evidence_id=evidence_id), file=sys.stderr)
+        return 1
+    print(evidence_lookup.model_dump_json(indent=2))
+    return 0
 
 
 def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable) -> int:
@@ -322,16 +455,16 @@ def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable) -> int:
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag mcp cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    runner(build_knowledge_toolbox(load_fixture_bundle(default_fixture_dir())))
+    runner(build_knowledge_toolbox(load_served_bundle()))
     return 0
 
 
 def choose_semantic_settings(
     settings: ServiceSettings, arguments: argparse.Namespace
 ) -> SemanticSettings | None:
-    """The semantic settings a ``search``, ``topic`` or ``investigate`` command loads: the
-    configured ones only when it was run with ``--semantic``, so no other run opens the
-    semantic store."""
+    """The semantic settings a ``search``, ``topic``, ``investigate`` or ``capabilities``
+    command loads: the configured ones only when it was run with ``--semantic``, so no
+    other run opens the semantic store."""
     if arguments.semantic:
         return settings.semantic
     return None
@@ -365,15 +498,17 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, "mcp")
         return run_mcp_server(discover_mcp_server_runner())
 
-    bundle = load_fixture_bundle(default_fixture_dir())
+    bundle = load_served_bundle()
     if arguments.command == "verify":
         evidence_set_bytes = read_evidence_set_file(parser, arguments.evidence_set_path)
         if settings.semantic is not None:
             logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, "verify")
-        return run_verify(
-            evidence_set_bytes,
-            build_investigation_deployment(bundle),
-            list_accepted_planner_capabilities(settings.model_planner),
+        return print_verification(
+            check_evidence_set(
+                evidence_set_bytes,
+                build_investigation_deployment(bundle),
+                list_accepted_planner_capabilities(settings.model_planner),
+            )
         )
     if arguments.command == "investigate":
         investigation_request = build_investigation_request(parser, arguments)
@@ -384,27 +519,49 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         )
         return print_response(investigation_service.investigate(investigation_request))
     if arguments.command == "topic":
-        topic_request = TopicContextRequest(
+        topic_request = build_contract(
+            parser,
+            TopicContextRequest,
             query=arguments.query,
-            scope=QueryScope(arguments.scope),
+            scope=arguments.scope,
             limit=arguments.limit,
+            max_results_per_search=arguments.max_results_per_search,
             semantic=arguments.semantic,
         )
         topic_context_service = build_topic_context_service(
             bundle, semantic_settings=choose_semantic_settings(settings, arguments)
         )
         return print_response(topic_context_service.explore(topic_request))
+    if arguments.command == "capabilities":
+        deployment = build_investigation_deployment(
+            bundle, semantic_settings=choose_semantic_settings(settings, arguments)
+        )
+        source_capabilities = describe_service_capabilities(
+            deployment, discover_planner_setup(settings.model_planner)
+        )
+        return print_capabilities(KnowledgeCapabilities(source_capabilities=source_capabilities))
+    if arguments.command == "resolve":
+        resolution_request = build_contract(parser, ConceptResolutionRequest, query=arguments.query)
+        return print_resolution(
+            ConceptResolution(resolution=build_topic_registry().resolve(resolution_request.query))
+        )
+    if arguments.command == "affectedness":
+        return run_affectedness(parser, arguments, bundle)
+    if arguments.command == "evidence":
+        evidence_request = build_contract(
+            parser, EvidenceLookupRequest, evidence_id=arguments.evidence_id
+        )
+        return run_evidence_lookup(
+            evidence_request.evidence_id, build_investigation_deployment(bundle)
+        )
     if arguments.command == "demo":
         return run_demo(build_search_service(bundle))
     if arguments.command == "lookup":
-        lookup_request = SearchRequest(query=arguments.cve_id, limit=1)
-        return print_response(build_search_service(bundle).search(lookup_request))
+        lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)
+        return print_response(lookup_cve(build_search_service(bundle), lookup_request.cve_id))
+    search_request = build_search_request(parser, arguments)
     service = build_search_service(bundle, choose_semantic_settings(settings, arguments))
-    return print_response(
-        service.search(
-            SearchRequest(query=arguments.query, limit=arguments.limit, semantic=arguments.semantic)
-        )
-    )
+    return print_response(service.search(search_request))
 
 
 if __name__ == "__main__":

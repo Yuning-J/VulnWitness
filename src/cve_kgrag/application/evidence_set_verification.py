@@ -10,11 +10,25 @@ that configuration serves (ADR 0002 §12, ADR 0003 §10, ADR 0004).
 
 from collections.abc import Sequence
 
+from pydantic import ValidationError
+
 from cve_kgrag.application.decision_path_audit import audit_decision_path
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
-from cve_kgrag.application.trajectory_replay import ReplayOutcome, replay_evidence_set
+from cve_kgrag.application.trajectory_replay import (
+    ReplayOutcome,
+    ReplayTimedOut,
+    replay_evidence_set,
+)
+from cve_kgrag.domain.contract_model import list_validation_problems
+from cve_kgrag.domain.evidence_set_verification_report import (
+    MAX_REPORTED_VIOLATIONS,
+    ReportedDifference,
+    VerificationReport,
+    VerificationVerdict,
+)
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet, SourceCapability
 from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
+from cve_kgrag.domain.validation import EvidenceValidationError
 
 
 def verify_evidence_set(
@@ -49,3 +63,44 @@ def verify_evidence_set(
     )
     audit_decision_path(evidence_set, deployment.topic_registry)
     return replay_evidence_set(evidence_set, deployment)
+
+
+def check_evidence_set(
+    evidence_set_bytes: bytes,
+    deployment: InvestigationDeployment,
+    accepted_planner_capabilities: Sequence[SourceCapability],
+) -> VerificationReport:
+    """Parse ``evidence_set_bytes`` as a knowledge evidence set and verify it
+    (``verify_evidence_set``), reporting every outcome as a verdict rather than raising:
+    ``malformed`` with the parser's problems, ``invalid`` with the violations the
+    validator, the audit or the replayed set's seal checks found (each list cut to
+    ``MAX_REPORTED_VIOLATIONS``), ``replay_timed_out``, ``replay_differs`` with each
+    difference, or ``verified``."""
+    try:
+        evidence_set = KnowledgeEvidenceSet.model_validate_json(evidence_set_bytes)
+    except ValidationError as error:
+        return VerificationReport(
+            verdict=VerificationVerdict.MALFORMED,
+            violations=tuple(list_validation_problems(error)[:MAX_REPORTED_VIOLATIONS]),
+        )
+    try:
+        replay_outcome = verify_evidence_set(
+            evidence_set, deployment, accepted_planner_capabilities
+        )
+    except EvidenceValidationError as error:
+        return VerificationReport(
+            verdict=VerificationVerdict.INVALID,
+            violations=error.violations[:MAX_REPORTED_VIOLATIONS],
+        )
+    if isinstance(replay_outcome, ReplayTimedOut):
+        return VerificationReport(verdict=VerificationVerdict.REPLAY_TIMED_OUT)
+    if not replay_outcome.differences:
+        return VerificationReport(verdict=VerificationVerdict.VERIFIED)
+    reported_differences: list[ReportedDifference] = []
+    for difference in replay_outcome.differences:
+        reported_differences.append(
+            ReportedDifference(step_index=difference.step_index, part=difference.part)
+        )
+    return VerificationReport(
+        verdict=VerificationVerdict.REPLAY_DIFFERS, differences=tuple(reported_differences)
+    )

@@ -16,7 +16,11 @@ from cve_kgrag.adapters.fight.snapshot_catalog import (
     load_fight_snapshot_catalog,
 )
 from cve_kgrag.adapters.fixture.fight_fixture import default_fight_fixture_dir, load_fight_fixture
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
+from cve_kgrag.adapters.fixture.synthetic_fixture import (
+    FixtureBundle,
+    default_fixture_dir,
+    load_fixture_bundle,
+)
 from cve_kgrag.adapters.graph.in_memory_graph import InMemoryRelationGraph
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
 from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
@@ -58,6 +62,13 @@ MISDESCRIBED_AFFECTEDNESS = (
     "the configured affectedness port does not give an AffectednessFailure as the reason "
     "affectedness is unavailable"
 )
+
+
+def load_served_bundle() -> FixtureBundle:
+    """The CVE records and evidence anchors every surface serves: the packaged synthetic
+    fixture, its checksums verified. The CLI and the MCP server build their services on
+    this one bundle, so no surface serves different records from another."""
+    return load_fixture_bundle(default_fixture_dir())
 
 
 def build_search_service(

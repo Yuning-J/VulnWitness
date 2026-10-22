@@ -1,0 +1,129 @@
+{
+  "$defs": {
+    "ReportedDifference": {
+      "additionalProperties": false,
+      "description": "A recorded part the replayed run gives differently: the field ``part`` of step\n``step_index`` (``step`` when the step exists in only one of the two runs), or, when\n``step_index`` is null, the set-level ``part``, a dotted path such as\n``coverage.source_outcomes``. It never carries a response's or reply's text.",
+      "properties": {
+        "part": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Part",
+          "type": "string"
+        },
+        "step_index": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Step Index"
+        }
+      },
+      "required": [
+        "step_index",
+        "part"
+      ],
+      "title": "ReportedDifference",
+      "type": "object"
+    },
+    "VerificationVerdict": {
+      "description": "What the verification found: the set parsed (``malformed`` when not); passed the\nvalidator and the decision-path audit, and its replay passed the checks the controller\nruns at seal (``invalid`` when not); and replayed to the recorded set\n(``replay_differs`` or ``replay_timed_out`` when not).",
+      "enum": [
+        "verified",
+        "malformed",
+        "invalid",
+        "replay_differs",
+        "replay_timed_out"
+      ],
+      "title": "VerificationVerdict",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "properties": {
+          "violations": {
+            "maxItems": 0
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "verdict": {
+            "enum": [
+              "malformed",
+              "invalid"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "violations": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "else": {
+        "properties": {
+          "differences": {
+            "maxItems": 0
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "replay_differs"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "differences": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "description": "The verdict, the violations behind a ``malformed`` or ``invalid`` verdict, and the\ndifferences behind ``replay_differs``; each other verdict carries neither.",
+  "properties": {
+    "differences": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ReportedDifference"
+      },
+      "title": "Differences",
+      "type": "array"
+    },
+    "verdict": {
+      "$ref": "#/$defs/VerificationVerdict"
+    },
+    "violations": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Violations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "verdict",
+    "violations",
+    "differences"
+  ],
+  "title": "VerificationReport",
+  "type": "object"
+}

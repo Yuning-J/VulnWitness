@@ -136,7 +136,7 @@ use synthetic `CVE-9999-*` data.
 
 - CSAF ingestion, the legacy-data importer, service-wide settings and
   operational migration commands are M6 work.
-- The CLI reaches the exact-ID and lexical channels, and the semantic channel with
-  `--semantic` (M6 WP2); filter and graph options arrive with the full CLI in M6.
+- The CLI reaches every channel and filter: the semantic channel with `--semantic`
+  (M6 WP2), the filters and the graph expansion through `search`'s options (M6 WP5).
 - CVE→CWE→CAPEC→ATT&CK derivation belongs to the reviewed M3 topic/threat-context
   layer and is not part of this graph.

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import cve_kgrag
+from tests.support.module_walk import IMPORT_EVERY_MODULE
 
 PACKAGE_DIR = Path(cve_kgrag.__file__).resolve().parent
 HEAVY_OR_OPTIONAL_MODULES = (
@@ -31,22 +32,6 @@ HEAVY_OR_OPTIONAL_MODULES = (
     "transformers",
     "uvicorn",
 )
-# Modules that import an optional extra, loaded only through an entry point: the semantic
-# adapter, and every module of the MCP server package (not the package itself, which stays
-# empty).
-OPTIONAL_MODULE_PREFIXES = (
-    "cve_kgrag.adapters.semantic.chroma_retriever",
-    "cve_kgrag.interfaces.mcp.",
-)
-IMPORT_EVERY_MODULE = f"""
-import importlib, json, pkgutil, sys
-import cve_kgrag
-for module_info in pkgutil.walk_packages(cve_kgrag.__path__, "cve_kgrag."):
-    if module_info.name.startswith({OPTIONAL_MODULE_PREFIXES!r}):
-        continue
-    importlib.import_module(module_info.name)
-print(json.dumps(sorted(sys.modules)))
-"""
 # Modules each layer may not import: an inner layer imports no outer one, and the
 # interfaces import neither the composition root, adapter discovery, adapters nor the CLI.
 FORBIDDEN_IMPORTS_BY_LAYER = {
@@ -120,8 +105,12 @@ def test_core_distribution_depends_only_on_pydantic_and_pyyaml() -> None:
 
 
 def test_importing_every_core_module_loads_no_heavy_or_optional_dependency() -> None:
+    import_script = (
+        IMPORT_EVERY_MODULE + "import json, sys\nprint(json.dumps(sorted(sys.modules)))\n"
+    )
+
     completed = subprocess.run(
-        [sys.executable, "-c", IMPORT_EVERY_MODULE], capture_output=True, text=True, check=True
+        [sys.executable, "-c", import_script], capture_output=True, text=True, check=True
     )
 
     loaded_top_level: set[str] = set()

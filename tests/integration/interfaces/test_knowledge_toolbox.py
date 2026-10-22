@@ -107,10 +107,10 @@ INVALID_ARGUMENTS_CASES = [
     ),
     InvalidArgumentsCase(
         KnowledgeToolName.SEARCH_FIGHT,
-        {"query": "5gaka", "limit": 21},
+        {"query": "5gaka", "limit": 9_731},
         ["limit"],
         0,
-        ["5gaka", "21"],
+        ["5gaka", "9731"],
     ),
     InvalidArgumentsCase(
         KnowledgeToolName.SEARCH_VULNERABILITIES,
@@ -253,7 +253,7 @@ def test_each_delegating_tool_answers_what_its_service_answers(
     INVALID_ARGUMENTS_CASES,
     ids=[
         "query_too_long",
-        "limit_21",
+        "limit_over_the_cap",
         "limit_string",
         "filters_21_values",
         "budget_raised",

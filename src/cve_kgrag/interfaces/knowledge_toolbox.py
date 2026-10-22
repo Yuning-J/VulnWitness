@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from cve_kgrag.application.affectedness import check_affectedness
 from cve_kgrag.application.investigate import InvestigationService
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
+from cve_kgrag.application.knowledge_lookup import find_served_evidence, lookup_cve
 from cve_kgrag.application.threaded_call_runner import (
     CallTimedOut,
     NoFreeWorker,
@@ -35,7 +36,7 @@ from cve_kgrag.domain.tool_contracts import (
     ToolFailureCode,
 )
 from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, TopicContextResponse
-from cve_kgrag.domain.validation import EvidenceValidationError, validate_served_anchor
+from cve_kgrag.domain.validation import EvidenceValidationError
 from cve_kgrag.interfaces.knowledge_tools import (
     KNOWLEDGE_TOOL_SPECS,
     KnowledgeToolName,
@@ -193,7 +194,7 @@ class KnowledgeToolbox:
         return ConceptResolution(resolution=self._deployment.topic_registry.resolve(request.query))
 
     def _lookup_cve(self, request: CveLookupRequest) -> SearchResponse:
-        return self._deployment.search_service.search(SearchRequest(query=request.cve_id, limit=1))
+        return lookup_cve(self._deployment.search_service, request.cve_id)
 
     def _search_vulnerabilities(self, request: SearchRequest) -> SearchResponse:
         return self._deployment.search_service.search(request)
@@ -212,12 +213,11 @@ class KnowledgeToolbox:
 
     def _get_evidence(self, request: EvidenceLookupRequest) -> EvidenceLookup:
         """The catalogued anchor, served only when it passes the anchor rules
-        (``validate_served_anchor``)."""
-        anchor = self._deployment.evidence_catalog.get_evidence(request.evidence_id)
-        if anchor is None:
+        (``find_served_evidence``)."""
+        evidence_lookup = find_served_evidence(self._deployment, request.evidence_id)
+        if evidence_lookup is None:
             raise UnknownEvidenceId(request.evidence_id)
-        validate_served_anchor(anchor, self._deployment.pinned_fight_snapshot)
-        return EvidenceLookup(evidence=anchor)
+        return evidence_lookup
 
     def _investigate(self, request: InvestigationRequest) -> KnowledgeEvidenceSet:
         return self._investigation_service.investigate(request)

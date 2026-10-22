@@ -20,6 +20,7 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
 from cve_kgrag.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
 from cve_kgrag.application.affectedness import check_affectedness
+from cve_kgrag.application.evidence_set_verification import check_evidence_set
 from cve_kgrag.composition import (
     build_search_service,
     build_topic_context_service,
@@ -50,10 +51,12 @@ from tests.support.affectedness import build_affectedness_request
 from tests.support.clocks import read_fixed_clock
 from tests.support.investigation import (
     FightChoice,
+    build_test_deployment,
     build_test_investigation_service,
     reseal_evidence_set,
 )
 from tests.support.investigation_runs import (
+    forge_set_whose_replay_differs,
     run_cve_under_protocol_scope,
     run_exact_id,
     run_five_g_aka_mixed,
@@ -68,6 +71,7 @@ from tests.support.investigation_runs import (
     run_with_invalid_evidence,
 )
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
+from tests.support.planners import DETERMINISTIC_VERIFIER
 
 CONTRACT_MODELS: dict[str, type[BaseModel]] = {**REQUEST_CONTRACTS, **RESPONSE_CONTRACTS}
 EARLIER_SCHEMA_VERSION = "2.0.0-dev.8"
@@ -176,6 +180,28 @@ def check_blocked_affectedness(fixture_bundle: FixtureBundle) -> BaseModel:
     )
 
 
+def verify_a_genuine_set(fixture_bundle: FixtureBundle) -> BaseModel:
+    return check_evidence_set(
+        run_exact_id(fixture_bundle).model_dump_json().encode(),
+        build_test_deployment(fixture_bundle),
+        DETERMINISTIC_VERIFIER,
+    )
+
+
+def verify_malformed_bytes(fixture_bundle: FixtureBundle) -> BaseModel:
+    return check_evidence_set(
+        b'{"unknown_field": 1}', build_test_deployment(fixture_bundle), DETERMINISTIC_VERIFIER
+    )
+
+
+def verify_a_set_whose_replay_differs(fixture_bundle: FixtureBundle) -> BaseModel:
+    return check_evidence_set(
+        forge_set_whose_replay_differs(fixture_bundle).model_dump_json().encode(),
+        build_test_deployment(fixture_bundle, fight="failing"),
+        DETERMINISTIC_VERIFIER,
+    )
+
+
 def fail_with_invalid_arguments(fixture_bundle: FixtureBundle) -> BaseModel:
     return ToolFailure(
         code=ToolFailureCode.INVALID_ARGUMENTS,
@@ -213,6 +239,9 @@ GENUINE_PAYLOADS: list[tuple[str, PayloadBuilder]] = [
     ("evidence_lookup", look_up_first_anchor),
     ("affectedness_check", check_blocked_affectedness),
     ("tool_failure", fail_with_invalid_arguments),
+    ("verification_report", verify_a_genuine_set),
+    ("verification_report", verify_malformed_bytes),
+    ("verification_report", verify_a_set_whose_replay_differs),
 ]
 GENUINE_PAYLOAD_IDS: list[str] = []
 for _, genuine_builder in GENUINE_PAYLOADS:
@@ -467,6 +496,18 @@ def list_an_answering_channel_as_failed(payload: JsonObject) -> None:
 
 def fail_a_channel_without_its_sentence(payload: JsonObject) -> None:
     payload["channel_outcomes"][0].update({"status": "unavailable", "detail": None})
+
+
+def give_a_verified_report_a_violation(payload: JsonObject) -> None:
+    payload["violations"] = ["schema_version: Field required"]
+
+
+def clear_a_malformed_report_s_violations(payload: JsonObject) -> None:
+    payload["violations"] = []
+
+
+def clear_a_replay_difference_report_s_differences(payload: JsonObject) -> None:
+    payload["differences"] = []
 
 
 MODEL_REJECTED_PAYLOADS: list[tuple[str, PayloadBuilder, PayloadForgery, str]] = [
@@ -785,6 +826,24 @@ MODEL_REJECTED_PAYLOADS: list[tuple[str, PayloadBuilder, PayloadForgery, str]] =
         describe_packaged_capabilities,
         reverse_the_capabilities,
         "once each, in that order",
+    ),
+    (
+        "verification_report",
+        verify_a_genuine_set,
+        give_a_verified_report_a_violation,
+        "a verified report has the wrong violations",
+    ),
+    (
+        "verification_report",
+        verify_malformed_bytes,
+        clear_a_malformed_report_s_violations,
+        "a malformed report has the wrong violations",
+    ),
+    (
+        "verification_report",
+        verify_a_set_whose_replay_differs,
+        clear_a_replay_difference_report_s_differences,
+        "a replay_differs report has the wrong differences",
     ),
 ]
 MODEL_REJECTED_PAYLOAD_IDS: list[str] = []

@@ -10,6 +10,7 @@ from pydantic_core import CoreSchema, core_schema
 from cve_kgrag.domain.affectedness import AffectednessCheck, AffectednessRequest
 from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
+from cve_kgrag.domain.evidence_set_verification_report import VerificationReport
 from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.planning import QueryPlan
@@ -60,6 +61,8 @@ RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
     "evidence_lookup": EvidenceLookup,
     "affectedness_check": AffectednessCheck,
     "tool_failure": ToolFailure,
+    # The verdict of a whole-set verification (`cve-kgrag verify`).
+    "verification_report": VerificationReport,
 }
 
 

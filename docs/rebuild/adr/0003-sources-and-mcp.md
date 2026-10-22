@@ -479,9 +479,12 @@ replay outcome otherwise.
 `cve-kgrag verify FILE` checks against the packaged fixture and the planners its
 settings configure (ADR 0004 §7); with no planner configured, a model-planned set is
 `invalid` there.
-It reads at most 4 MiB and prints one of these verdicts:
-`verified`, `malformed`, `invalid`, `replay_differs`, `replay_timed_out`. It exits 0
-only for `verified`.
+It reads at most 4 MiB and prints a `VerificationReport`
+(`domain/evidence_set_verification_report.py`, published as
+`verification_report.schema.json` from `2.0.0-dev.21`): one of the verdicts `verified`,
+`malformed`, `invalid`, `replay_differs`, `replay_timed_out`, with the violations or
+differences behind it. `check_evidence_set` builds that report for every surface. It exits
+0 only for `verified`.
 
 The MCP surface stays at the brief's eight tools. A whole-set check is not a lookup:
 its input is the size of the largest output, and it runs for up to the run's wall

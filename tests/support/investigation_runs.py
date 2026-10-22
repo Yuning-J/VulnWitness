@@ -14,6 +14,7 @@ from tests.support.investigation import (
     build_deadline_nearing_service,
     build_investigation_request,
     build_test_investigation_service,
+    rewrite_step,
 )
 from tests.support.planners import UNAVAILABLE_REPLY, ScriptedModelPort, build_plan_reply
 
@@ -204,3 +205,16 @@ def run_model_reply_after_deadline(fixture_bundle: FixtureBundle) -> KnowledgeEv
         fixture_bundle, model_port=model_port, monotonic_clock=clock.read
     )
     return service.investigate(build_investigation_request("5G-AKA", "implementation_only"))
+
+
+def forge_set_whose_replay_differs(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """The reviewer's forgery: a protocol-context set whose topic step keeps the real hash
+    of the response a failing FiGHT backend gives, while its summary and answer are the ones
+    a serving backend gives. The validator and the audit accept it; replayed on a deployment
+    whose FiGHT backend fails, its answer differs."""
+    protocol_request = build_investigation_request("5gaka", "protocol_context_only")
+    failed_set = build_test_investigation_service(fixture_bundle, fight="failing").investigate(
+        protocol_request
+    )
+    served_set = build_test_investigation_service(fixture_bundle).investigate(protocol_request)
+    return rewrite_step(served_set, 1, result_sha256=failed_set.trajectory.steps[0].result_sha256)

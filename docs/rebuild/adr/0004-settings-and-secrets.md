@@ -60,8 +60,9 @@ The semantic channel is a second section, read the same way (M6 WP2):
 
 The collection and model defaults are what CVE-KGRAG's pipeline builds; the directory has
 no default (ADR 0006). Only an operator's own run opens the
-semantic store: `search`, `topic` and `investigate` load the adapter when run with
-`--semantic`, and otherwise load no adapter; `lookup` and `demo` never do. Every command
+semantic store: `search`, `topic`, `investigate` and `capabilities` load the adapter when
+run with `--semantic`, and otherwise load no adapter; `lookup`, `demo`, `resolve`,
+`affectedness` and `evidence` never do. Every command
 still validates the semantic settings at startup, so an invalid one is a usage error. `mcp`
 and `verify` never load it, whatever the settings, and log one line saying so: Chroma has
 no read-only client (opening an existing store may write its journal or migrations), and
