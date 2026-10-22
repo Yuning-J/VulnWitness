@@ -1,7 +1,7 @@
 # telecom-cve-kgrag
 
 A telecom-focused, evidence-bound CVE and threat-context investigation system, with an
-extensible registry of reviewed topics. The first topic card is 5G-AKA. It is marked
+extensible, review-governed topic registry. The first topic card is 5G-AKA. It is marked
 `pending_review` while the design is experimental: it was checked against 3GPP TS 33.501
 V19.7.0 but has no named reviewer, so every answer that uses it says so.
 
@@ -94,9 +94,10 @@ package `cve_kgrag`, distribution and command `cve-kgrag`). It was split from
 package, command, MCP server name and `CVE_KGRAG_*` settings keep the original name; only
 the repository is named differently.
 
-CVE-KGRAG keeps the legacy RAG pipeline, the FastAPI `/api/v1` service, the Gradio UI,
-the Neo4j knowledge-graph tooling and their security fixes. This repository does not
-provide or emulate any of them and makes no compatibility promise with them.
+CVE-KGRAG keeps the legacy RAG pipeline, the FastAPI `/api/v1` service, the Gradio UI
+and the Neo4j knowledge-graph tooling; security fixes for that code are made there. This
+repository does not provide or emulate any of them and makes no compatibility promise
+with them.
 
 ## Licence
 
