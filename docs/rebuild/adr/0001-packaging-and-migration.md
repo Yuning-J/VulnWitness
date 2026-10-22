@@ -2,7 +2,7 @@
 
 Status: accepted (M0). Applies to the whole v2 rebuild. §6 is superseded and the
 Context, §1, §2, §5 and Consequences are amended by ADR 0006 (repository split); §2's
-`mcp`, `api` and `neo4j` rows are amended by ADR 0007 (HTTP surfaces).
+`dev`, `mcp`, `api` and `neo4j` rows are amended by ADR 0007 (HTTP surfaces).
 
 ## Context
 

@@ -1,7 +1,8 @@
 # ADR 0007 — HTTP surfaces
 
 Status: accepted (M6 WP3′). Applies to the HTTP guard and settings (M6 WP6), MCP over
-Streamable HTTP (WP6) and the v2 REST API (WP7). Amends ADR 0001 §2 and ADR 0003 §12.
+Streamable HTTP (WP6) and the v2 REST API (WP7). Amends ADR 0001 §2 and ADR 0003 §10
+and §12.
 No HTTP listener exists yet; this ADR fixes the decisions the packages implement.
 
 ## Context
@@ -18,7 +19,9 @@ can reach a loopback port.
    need them. Routes pass the raw JSON body to the toolbox, so `ToolLimits` and the
    sanitized `ToolFailure` apply unchanged; a framework that validates bodies itself
    would duplicate the `schemas/v2` contracts and answer with its own error detail,
-   which echoes input. FastAPI is in no dependency group.
+   which echoes input. FastAPI is in no dependency group. The dev group declares an HTTP
+   test client (`httpx2`) only once a test imports one directly; until then it arrives
+   through the `mcp` extra.
 2. **Two processes, two extras.** REST (`cve-kgrag api`) and MCP over HTTP
    (`cve-kgrag mcp --http`) run as separate processes. They share the guard, the host,
    the token and the limits, and each has its own port variable. The `mcp` extra owns
@@ -39,9 +42,13 @@ can reach a loopback port.
 6. **Stateless MCP sessions.** MCP over HTTP runs with `stateless_http=True` and
    `json_response=True`: every tool is one read-only call, a request deadline cannot cut
    a stream, and the server holds no session state.
-7. **A separate envelope for HTTP rejections.** Authentication, Host, Origin, size and
-   deadline rejections happen before any tool runs, so they answer with their own
-   `HttpRejection` contract, not a `ToolFailure`.
+7. **A separate envelope for HTTP rejections.** Authentication, Host, Origin and size
+   rejections happen before any tool runs, so they answer with their own `HttpRejection`
+   contract, not a `ToolFailure`. The HTTP request deadline is set longer than the
+   toolbox's per-call time limit, so a tool call that runs out of time normally answers
+   first, with 504 and the bare `ToolFailure` `timed_out` (decision 8). Only when the
+   request deadline itself expires, while the toolbox's own limit still bounds the tool
+   body on its thread, does the answer become 504 with `HttpRejection`.
 8. **`ToolFailureCode` to HTTP status.**
 
    | Code | Status |

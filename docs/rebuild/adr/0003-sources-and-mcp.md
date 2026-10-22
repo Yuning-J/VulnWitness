@@ -4,7 +4,7 @@ Status: accepted (M5). Applies to `ports/affectedness.py`, `adapters/trustify/`,
 `domain/affectedness.py`, `domain/tool_contracts.py`, the capability contract in
 `domain/investigation.py`, `application/affectedness.py`,
 `application/evidence_set_verification.py`, `interfaces/` and the `mcp` and
-`verify` CLI commands. §12 is amended by ADR 0007 (HTTP surfaces).
+`verify` CLI commands. §10 and §12 are amended by ADR 0007 (HTTP surfaces).
 
 ## Context
 
@@ -485,8 +485,9 @@ only for `verified`.
 
 The MCP surface stays at the brief's eight tools. A whole-set check is not a lookup:
 its input is the size of the largest output, and it runs for up to the run's wall
-time. M6 decides whether the v2 API exposes it. `get_evidence` serves the anchor the
-catalog holds under one evidence ID, the catalog every served anchor is checked
+time. The v2 API exposes it as `POST /api/v2/verify` (ADR 0007, decision 9).
+`get_evidence` serves the anchor the catalog holds under one evidence ID, the catalog
+every served anchor is checked
 against; a consumer compares it with the anchor it holds. It serves the anchor only
 when it passes `validate_served_anchor`, the anchor rules every response applies: the
 evidence ID derives from the anchor's fields, the scope fits the source (CVE evidence

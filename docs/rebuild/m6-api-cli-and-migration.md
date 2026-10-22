@@ -185,9 +185,10 @@ and WP7 build: Starlette and uvicorn; REST and MCP over HTTP as separate process
 with the `mcp` extra owning MCP over HTTP and a new `api` extra; loopback hosts only; a
 bearer token on both servers, with `/health` the only open route; the deterministic
 planner and no semantic channel on HTTP; stateless MCP sessions; an `HttpRejection`
-envelope for rejections before any tool runs; the `ToolFailureCode` to HTTP status
-table; the REST endpoints, verification included; ports 8765 and 8766 from settings
-only. ADR 0001 §2 and ADR 0003 §12 are amended to match.
+envelope for rejections before any tool runs and for the request deadline; the
+`ToolFailureCode` to HTTP status table; the REST endpoints, verification included;
+ports 8765 and 8766 from settings only. ADR 0001 §2 and ADR 0003 §10 and §12 are
+amended to match.
 
 ## WP4 — offline CI
 
