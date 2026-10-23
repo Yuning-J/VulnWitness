@@ -7,8 +7,9 @@ replay, and a replay that runs out of time says so."""
 import json
 import threading
 import time
-from collections.abc import Callable
-from dataclasses import replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+from typing import Any
 
 import pytest
 
@@ -47,12 +48,25 @@ from tests.support.investigation import (
 )
 from tests.support.investigation_runs import (
     forge_set_whose_replay_differs,
+    run_every_record,
+    run_every_record_under_filters,
+    run_excluded_term_with_a_product,
     run_five_g_aka,
     run_five_g_aka_mixed,
+    run_five_g_aka_mixed_fight_failing,
+    run_lexical_unavailable,
+    run_marked_free_text,
+    run_marked_topic_question,
     run_model_accepted,
+    run_model_refinement_unavailable,
+    run_model_rejected,
+    run_model_reply_after_deadline,
     run_planner_adapter_unusable,
     run_planner_without_a_key,
+    wire_fight_failing,
+    wire_lexical_unavailable,
 )
+from tests.support.marker_sweep import find_echoed_fields
 from tests.support.planners import (
     DETERMINISTIC_VERIFIER,
     SCRIPTED_ENTRY_POINT,
@@ -240,6 +254,64 @@ def test_check_reports_at_most_the_capped_number_of_violations(
 
     assert report.verdict is VerificationVerdict.MALFORMED
     assert len(report.violations) == MAX_REPORTED_VIOLATIONS
+
+
+@dataclass(frozen=True)
+class SweptRun:
+    """A genuine run, the wiring of the deployment it was sealed on, the planners the
+    verifier accepts and the verdict the genuine set gets."""
+
+    build_set: Callable[[FixtureBundle], KnowledgeEvidenceSet]
+    deployment_wiring: Mapping[str, Any]
+    accepted_planner_capabilities: tuple[SourceCapability, ...]
+    genuine_verdict: VerificationVerdict = VerificationVerdict.VERIFIED
+
+
+# Between them these runs hold every text field any genuine run in the suite carries, and
+# two carry the marker in their request, so text the audit derives from it is swept too.
+SWEPT_RUNS = [
+    SweptRun(
+        forge_set_whose_replay_differs,
+        {},
+        DETERMINISTIC_VERIFIER,
+        VerificationVerdict.REPLAY_DIFFERS,
+    ),
+    SweptRun(run_every_record, {}, DETERMINISTIC_VERIFIER),
+    SweptRun(run_every_record_under_filters, {}, DETERMINISTIC_VERIFIER),
+    SweptRun(run_excluded_term_with_a_product, {}, DETERMINISTIC_VERIFIER),
+    SweptRun(run_lexical_unavailable, wire_lexical_unavailable(), DETERMINISTIC_VERIFIER),
+    SweptRun(run_five_g_aka_mixed_fight_failing, wire_fight_failing(), DETERMINISTIC_VERIFIER),
+    SweptRun(run_marked_topic_question, {}, DETERMINISTIC_VERIFIER),
+    SweptRun(run_marked_free_text, {}, DETERMINISTIC_VERIFIER),
+    SweptRun(run_model_rejected, {}, SCRIPTED_MODEL_VERIFIER),
+    SweptRun(run_model_refinement_unavailable, {}, SCRIPTED_MODEL_VERIFIER),
+    SweptRun(run_model_reply_after_deadline, {}, SCRIPTED_MODEL_VERIFIER),
+]
+SWEPT_RUN_IDS: list[str] = []
+for swept_run in SWEPT_RUNS:
+    SWEPT_RUN_IDS.append(swept_run.build_set.__name__)
+
+
+@pytest.mark.parametrize("swept_run", SWEPT_RUNS, ids=SWEPT_RUN_IDS)
+def test_check_repeats_no_text_a_forger_plants_in_the_set(
+    fixture_bundle: FixtureBundle, swept_run: SweptRun
+) -> None:
+    evidence_set = swept_run.build_set(fixture_bundle)
+    deployment = build_test_deployment(fixture_bundle, **swept_run.deployment_wiring)
+    genuine_report = check_evidence_set(
+        evidence_set.model_dump_json().encode(),
+        deployment,
+        swept_run.accepted_planner_capabilities,
+    )
+
+    echoed_fields = find_echoed_fields(
+        evidence_set, deployment, swept_run.accepted_planner_capabilities
+    )
+
+    # The genuine set passing every check it should is what lets each forgery reach the
+    # last check it can.
+    assert genuine_report.verdict is swept_run.genuine_verdict
+    assert echoed_fields == []
 
 
 def test_check_reports_a_rejected_set_invalid_with_its_violations(

@@ -457,8 +457,7 @@ def find_issued_request_violations(
         call = step.call
         if isinstance(call, TopicContextCall) and topic_registry.get_topic(call.topic_id) is None:
             violations.append(
-                f"step {step.step_index} explores {call.topic_id}, which this registry does "
-                "not hold"
+                f"step {step.step_index} explores a topic this registry does not hold"
             )
             continue
         if step.backend_requests != list_backend_requests(call, request, topic_registry):
@@ -469,8 +468,36 @@ def find_issued_request_violations(
     return violations
 
 
-def describe_warnings(warnings: Sequence[InvestigationWarning]) -> str:
-    return "[" + ", ".join(f"{warning.code} ({warning.subject})" for warning in warnings) + "]"
+def list_warning_codes(warnings: Sequence[InvestigationWarning]) -> list[str]:
+    warning_codes: list[str] = []
+    for warning in warnings:
+        warning_codes.append(warning.code.value)
+    return warning_codes
+
+
+def find_warning_violations(
+    recorded_warnings: Sequence[InvestigationWarning],
+    derived_warnings: Sequence[InvestigationWarning],
+) -> list[str]:
+    """How the decision warnings the run records differ from those its interpretation and
+    decisions give: their codes when those differ, otherwise each warning, counted from 1,
+    whose subject differs. No subject is described: a recorded one is text the set's author
+    chose, and a derived one can repeat the request's query."""
+    recorded_codes = list_warning_codes(recorded_warnings)
+    derived_codes = list_warning_codes(derived_warnings)
+    if recorded_codes != derived_codes:
+        return [
+            f"the run records the warnings [{', '.join(recorded_codes)}], but its "
+            f"interpretation and decisions give other warnings: [{', '.join(derived_codes)}]"
+        ]
+    violations: list[str] = []
+    for warning_number, recorded_warning in enumerate(recorded_warnings, start=1):
+        if recorded_warning.subject != derived_warnings[warning_number - 1].subject:
+            violations.append(
+                f"the run's decision warning {warning_number} ({recorded_warning.code.value}) "
+                "has another subject than its interpretation and decisions give"
+            )
+    return violations
 
 
 def find_coverage_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
@@ -509,8 +536,8 @@ def find_configuration_violations(evidence_set: KnowledgeEvidenceSet) -> list[st
     deterministic_planner = describe_deterministic_planner()
     if isinstance(planner, DeterministicPlannerIdentity) and planner != deterministic_planner:
         violations.append(
-            f"the planner names policy {planner.policy_version}, but the audit "
-            f"re-derives the decisions of policy {deterministic_planner.policy_version}"
+            f"the planner names a policy other than {deterministic_planner.policy_version}, "
+            "the one whose decisions the audit re-derives"
         )
     return violations
 
@@ -560,11 +587,7 @@ def find_decision_path_violations(
     derived_warnings.extend(path.warnings)
     # The answer's own warnings follow from the responses, which only replay sees.
     recorded_warnings = list_decision_warnings(evidence_set.warnings)
-    if recorded_warnings != derived_warnings:
-        violations.append(
-            f"the run records the warnings {describe_warnings(recorded_warnings)}, but its "
-            f"interpretation and decisions give {describe_warnings(derived_warnings)}"
-        )
+    violations.extend(find_warning_violations(recorded_warnings, derived_warnings))
     return violations
 
 

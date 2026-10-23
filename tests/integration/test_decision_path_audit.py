@@ -559,6 +559,16 @@ def hide_the_unresolved_topic(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEv
     return drop_warning(evidence_set, InvestigationWarningCode.TOPIC_NOT_RESOLVED)
 
 
+def rename_the_excluded_term(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The excluded-term warning kept, its subject rewritten: the codes still agree."""
+    renamed_warnings: list[InvestigationWarning] = []
+    for warning in evidence_set.warnings:
+        if warning.code is InvestigationWarningCode.EXCLUDED_TERM:
+            warning = warning.model_copy(update={"subject": "a forged subject"})
+        renamed_warnings.append(warning)
+    return reseal_evidence_set(evidence_set, warnings=tuple(renamed_warnings))
+
+
 def hide_the_model_rejection(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
     return drop_warning(evidence_set, InvestigationWarningCode.MODEL_PLAN_REJECTED)
 
@@ -611,8 +621,8 @@ def name_another_policy_version(evidence_set: KnowledgeEvidenceSet) -> Knowledge
         (
             run_unknown_id_under_filters,
             report_a_filtered_known_id_unknown,
-            "step 1 warns CVE-9999-0003 is unknown, but it is not an ID the step looked up that "
-            "the catalog lacks",
+            "step 1 search_warnings[0]: warns of an unknown ID that is not one the step looked "
+            "up that the catalog lacks",
         ),
         (
             run_five_g_aka_mixed,
@@ -623,8 +633,8 @@ def name_another_policy_version(evidence_set: KnowledgeEvidenceSet) -> Knowledge
         (
             run_five_g_aka_mixed,
             hide_the_pending_review,
-            "the run records the warnings [], but its interpretation and decisions give "
-            "[topic_pending_review (3gpp:5g-aka)]",
+            "the run records the warnings [], but its interpretation and decisions give other "
+            "warnings: [topic_pending_review]",
         ),
         (
             run_search_of_the_cjk_query_tokens,
@@ -763,8 +773,8 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_exact_id,
             report_the_found_id_unknown,
-            "step 1 warns CVE-9999-0003 is unknown, but it is not an ID the step looked up that "
-            "the catalog lacks",
+            "step 1 search_warnings[0]: warns of an unknown ID that is not one the step looked "
+            "up that the catalog lacks",
         ),
         (
             run_five_g_aka_mixed,
@@ -775,26 +785,32 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_excluded_term_with_free_text,
             hide_the_excluded_term,
-            "the run records the warnings [topic_not_resolved (eps aka crash)], but its "
-            "interpretation and decisions give [excluded_term (EPS AKA), topic_not_resolved",
+            "the run records the warnings [topic_not_resolved], but its interpretation and "
+            "decisions give other warnings: [excluded_term, topic_not_resolved]",
         ),
         (
             run_excluded_term_with_free_text,
             hide_the_unresolved_topic,
-            "the run records the warnings [excluded_term (EPS AKA)], but its interpretation and "
-            "decisions give [excluded_term (EPS AKA), topic_not_resolved (eps aka crash)]",
+            "the run records the warnings [excluded_term], but its interpretation and "
+            "decisions give other warnings: [excluded_term, topic_not_resolved]",
+        ),
+        (
+            run_excluded_term_with_free_text,
+            rename_the_excluded_term,
+            "the run's decision warning 1 (excluded_term) has another subject than its "
+            "interpretation and decisions give",
         ),
         (
             run_model_rejected,
             hide_the_model_rejection,
-            "the run records the warnings [], but its interpretation and decisions give "
-            "[model_plan_rejected (round 1: invented_cve_id, missing_named_cve_id)]",
+            "the run records the warnings [], but its interpretation and decisions give other "
+            "warnings: [model_plan_rejected]",
         ),
         (
             run_over_the_byte_cap,
             hide_the_discarded_evidence,
-            "but its interpretation and decisions give [topic_pending_review (3gpp:5g-aka), "
-            "evidence_discarded (step 1: discarded_over_context_budget)]",
+            "but its interpretation and decisions give other warnings: [topic_pending_review, "
+            "evidence_discarded]",
         ),
         (
             run_refinement,
@@ -814,8 +830,8 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_five_g_aka,
             name_another_policy_version,
-            "the planner names policy forged-policy-v9, but the audit re-derives the decisions "
-            "of policy",
+            "the planner names a policy other than m4.1, the one whose decisions the audit "
+            "re-derives",
         ),
     ],
     ids=[
@@ -845,6 +861,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         "template_search_replaced",
         "excluded_term_warning_dropped",
         "topic_not_resolved_warning_dropped",
+        "excluded_term_warning_renamed",
         "model_plan_rejected_warning_dropped",
         "evidence_discarded_warning_dropped",
         "refinement_denied",

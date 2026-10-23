@@ -230,18 +230,48 @@ toolbox, whose limits exist for remote callers; ADR 0003 §10.
   `application/evidence_set_verification.check_evidence_set` parses the bytes and
   verifies them into a report, so the CLI, and later the API, share one path. It passes
   every violation list through `bound_violations`, which keeps the first 100 and cuts a
-  longer violation to 1024 characters ending in `...`.
+  longer violation to 1024 characters ending in `...`. `cve-kgrag verify` prints the keys
+  in declaration order (`verdict`, `violations`, `differences`) with non-ASCII text
+  escaped, and exits 0 only for `verified`; tests pin the exact text of a `verified` and a
+  `malformed` report and the escaping.
 - **Violations in the server's own words.** No violation repeats text the checked set
-  chose. `list_validation_problems` (`domain/contract_model.py`) reports unexpected fields
-  as a count at the location holding them (`claims.0: 2 unexpected fields`), never their
-  names, and rebuilds the message for an unknown union tag from the tags the contract
-  expects. The validator and the citation audit name a claim by its position
-  (`claims[3]`), not by its `claim_id`, `subject_id` or the record its evidence is about.
-  Every other value a violation interpolates is bounded and pattern-checked before it is
-  reported (CVE and evidence IDs, hashes, technique IDs, enum values, counts). The longest
-  violation a contract gives, one listing every allowed value, is 676 characters.  `cve-kgrag verify` prints the keys in declaration order (`verdict`, `violations`,
-  `differences`) with non-ASCII text escaped, and exits 0 only for `verified`; tests pin
-  the exact text of a `verified` and a `malformed` report and the escaping.
+  chose. A violation names a value from the set only when the value's pattern leaves no
+  room for words: CVE, CWE, evidence, investigation and technique IDs, hashes, enum values
+  and integers. Any other value, a free string (a warning subject, a policy version) or one
+  whose pattern fixes only its start or its alphabet (a topic ID, a package URL), is named
+  by its position or not at all.
+  - `list_validation_problems` (`domain/contract_model.py`) reports unexpected fields as a
+    count at the location holding them (`claims.0: 2 unexpected fields`), never their
+    names, and rebuilds the message for an unknown union tag from the tags the contract
+    expects.
+  - The validator and the citation audit name a claim by its position (`claims[3]`), not
+    by its `claim_id`, `subject_id` or the record its evidence is about; a step's answer
+    ID (`step 1 answer_ids[0]`), a step's search warning (`step 1 search_warnings[0]`)
+    and a product applicability (`product_applicability[0]`) likewise.
+  - The decision-path audit compares the run's warnings in full but describes them
+    without their subjects, since a recorded subject is the set's text and a derived one
+    can repeat the request's query: when the codes differ it lists both sides' codes, and
+    when only subjects differ it names each such warning by its number among the decision
+    warnings (`the run's decision warning 1 (excluded_term) has another subject than its
+    interpretation and decisions give`). It says that a step explores a topic the registry
+    lacks without naming the topic, and that the planner names a policy other than the
+    one the audit re-derives without naming the planner's.
+  - The longest violation a contract gives, one listing every allowed value, is 676
+    characters.
+  - `tests/support/marker_sweep.py` plants a marker in each text location of a genuine
+    set: alone, appended plainly and after a dash (so it survives a slug or prefix
+    pattern), inside each string of a text that is itself JSON (a model's plan), and once
+    renaming every copy of the text in the trajectory. It then recomputes the
+    investigation ID, the call keys and the reply hashes from the fields they hash,
+    reseals the set and checks it. `test_check_repeats_no_text_a_forger_plants_in_the_set`
+    runs it over eleven genuine runs, each of which first gets the verdict its run expects,
+    and expects no report to repeat the marker. Between them the runs hold every text
+    field any genuine run in the suite carries, and two seal the marker into the request,
+    so text the audit derives from the query or the product filters is swept too. Fields
+    no genuine run carries, such as graph paths, a version range's `start_excluding`,
+    contextual-alias terms, an anchor's `inference_method`, a candidate's `missing_fields`,
+    a reference's `source` and a model's reasoning effort, are covered by reading every
+    violation formatter instead.
 - **Served bundle.** `composition.load_served_bundle()` returns the CVE records and
   evidence anchors every surface serves, the packaged fixture until WP10; the CLI and `mcp`
   both use it. The topic registry and the pinned FiGHT snapshot are assembled separately.
@@ -292,7 +322,8 @@ toolbox, whose limits exist for remote callers; ADR 0003 §10.
 - `verification_report.schema.json`: each violation has `minLength` 1 and `maxLength`
   1024.
 - Every versioned schema moves to `2.0.0-dev.22`; no other contract changes.
-- Tests: an unexpected field's name, an unknown planner kind, and a claim's forged
-  `claim_id` and `subject_id` are not repeated in a report; a set whose only field name is
-  200,000 emoji gives a report under 4 KiB; an empty or overlong violation is rejected by
-  the model and by the published schema; more than 100 violations are cut to 100.
+- Tests: the marker sweep above; an unexpected field's name, an unknown planner kind, and
+  a claim's forged `claim_id` and `subject_id` are not repeated in a report; a set whose
+  only field name is 200,000 emoji gives a report under 4 KiB; an empty or overlong
+  violation is rejected by the model and by the published schema; more than 100
+  violations are cut to 100.

@@ -9,13 +9,19 @@ from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail, ModelReply
 from cve_kgrag.domain.search import RetrievalOutcome
 from cve_kgrag.domain.taxonomy import BackendStatus
 from tests.support.clocks import SteppingClock
-from tests.support.fakes import CannedRetriever, InventingRetriever, build_lexical_match
+from tests.support.fakes import (
+    CannedRetriever,
+    InventingRetriever,
+    build_failure,
+    build_lexical_match,
+)
 from tests.support.investigation import (
     build_deadline_nearing_service,
     build_investigation_request,
     build_test_investigation_service,
     rewrite_step,
 )
+from tests.support.marker_sweep import ECHO_MARKER
 from tests.support.planners import UNAVAILABLE_REPLY, ScriptedModelPort, build_plan_reply
 
 
@@ -218,3 +224,89 @@ def forge_set_whose_replay_differs(fixture_bundle: FixtureBundle) -> KnowledgeEv
     )
     served_set = build_test_investigation_service(fixture_bundle).investigate(protocol_request)
     return rewrite_step(served_set, 1, result_sha256=failed_set.trajectory.steps[0].result_sha256)
+
+
+# Every filter a request takes, naming fixture vendors, products, package URLs and CWEs.
+EVERY_FILTER = {
+    "vendors": ["democorp", "fictional5g"],
+    "products": ["f5gc"],
+    "purls": ["pkg:generic/fictional5g/f5gc"],
+    "cwe_ids": ["CWE-20", "CWE-125"],
+    "severities": ["HIGH", "CRITICAL", "MEDIUM", "LOW"],
+    "origins": ["implementation"],
+    "published_years": [2026],
+}
+
+
+def list_every_record_id_and_an_unknown_one(fixture_bundle: FixtureBundle) -> str:
+    """Every fixture record's ID, then ``CVE-9999-9999``, which no record holds."""
+    looked_up_ids: list[str] = []
+    for record in fixture_bundle.records:
+        looked_up_ids.append(record.cve_id)
+    looked_up_ids.append("CVE-9999-9999")
+    return " ".join(looked_up_ids)
+
+
+def run_every_record(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """Lookups of every fixture record and one unknown ID: the step warns
+    ``unknown_cve_id`` and returns every record."""
+    return investigate(
+        fixture_bundle,
+        list_every_record_id_and_an_unknown_one(fixture_bundle),
+        "implementation_only",
+    )
+
+
+def run_every_record_under_filters(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """The lookups of ``run_every_record`` under every filter: the step also warns
+    ``excluded_by_filters``, and the set assesses each named product."""
+    return investigate(
+        fixture_bundle,
+        list_every_record_id_and_an_unknown_one(fixture_bundle),
+        "implementation_only",
+        filters=EVERY_FILTER,
+    )
+
+
+def run_excluded_term_with_a_product(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """``EPS AKA weakness in f5gc`` resolves no topic and records ``EPS AKA`` as excluded."""
+    return investigate(fixture_bundle, "EPS AKA weakness in f5gc", "mixed")
+
+
+def wire_lexical_unavailable() -> dict[str, Any]:
+    """The wiring of a deployment whose lexical channel reports itself unavailable."""
+    return {"lexical_retriever": CannedRetriever(build_failure(BackendStatus.UNAVAILABLE))}
+
+
+def wire_fight_failing() -> dict[str, Any]:
+    """The wiring of a deployment whose FiGHT backend fails."""
+    return {"fight": "failing"}
+
+
+def run_lexical_unavailable(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """``5G-AKA`` on the deployment ``wire_lexical_unavailable`` describes."""
+    service = build_test_investigation_service(fixture_bundle, **wire_lexical_unavailable())
+    return service.investigate(build_investigation_request("5G-AKA", "implementation_only"))
+
+
+def run_five_g_aka_mixed_fight_failing(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """The mixed 5G-AKA run on the deployment ``wire_fight_failing`` describes."""
+    service = build_test_investigation_service(fixture_bundle, **wire_fight_failing())
+    return service.investigate(build_investigation_request("5G-AKA", "mixed"))
+
+
+def run_marked_topic_question(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """A mixed 5G-AKA question carrying ``ECHO_MARKER`` in its query and in every product
+    filter, so the product warnings the audit derives from the request repeat it."""
+    marked_filters = {
+        "vendors": [ECHO_MARKER],
+        "products": [ECHO_MARKER],
+        "purls": [f"pkg:generic/{ECHO_MARKER}"],
+    }
+    return investigate(fixture_bundle, f"5G-AKA {ECHO_MARKER}", "mixed", filters=marked_filters)
+
+
+def run_marked_free_text(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """A question carrying ``ECHO_MARKER`` that names no topic, so the audit derives a
+    ``topic_not_resolved`` warning about the query."""
+    return investigate(fixture_bundle, f"{ECHO_MARKER} crash", "mixed")

@@ -405,10 +405,11 @@ def find_step_evidence_violations(
                 )
             else:
                 anchored_record_ids.add(catalogued_anchor.authoritative_record_id)
-        for answer_id in step.answer_ids:
+        for answer_index, answer_id in enumerate(step.answer_ids):
             if answer_id not in anchored_record_ids:
                 violations.append(
-                    f"step {step.step_index} returns {answer_id} without a catalogued anchor for it"
+                    f"step {step.step_index} answer_ids[{answer_index}]: returned without a "
+                    "catalogued anchor for it"
                 )
         if step.admission is StepAdmission.ADMITTED:
             admitted_evidence_ids.update(step.evidence_ids)
@@ -446,14 +447,16 @@ def find_lookup_warning_violations(step: ToolStep, evidence_catalog: EvidenceCat
             unknown_ids.append(looked_up_id)
     violations: list[str] = []
     warned_unknown_ids: list[str] = []
-    for search_warning in step.search_warnings:
+    # A warning is named by its position: its subject is text the set's author chose.
+    for warning_index, search_warning in enumerate(step.search_warnings):
+        warning_label = f"step {step.step_index} search_warnings[{warning_index}]"
         subject = search_warning.subject
         if search_warning.code is SearchWarningCode.UNKNOWN_CVE_ID:
             warned_unknown_ids.append(subject)
             if subject not in unknown_ids:
                 violations.append(
-                    f"step {step.step_index} warns {subject} is unknown, but it is not an ID the "
-                    "step looked up that the catalog lacks"
+                    f"{warning_label}: warns of an unknown ID that is not one the step looked "
+                    "up that the catalog lacks"
                 )
         if search_warning.code is SearchWarningCode.EXCLUDED_BY_FILTERS:
             is_held_and_unreturned = (
@@ -463,9 +466,8 @@ def find_lookup_warning_violations(step: ToolStep, evidence_catalog: EvidenceCat
             )
             if not is_held_and_unreturned:
                 violations.append(
-                    f"step {step.step_index} warns {subject} is excluded by the filters, but it "
-                    "is not an ID the step looked up, the catalog holds and the step did not "
-                    "return"
+                    f"{warning_label}: warns of an ID excluded by the filters that is not one "
+                    "the step looked up, the catalog holds and the step did not return"
                 )
     ran_exact_id = RetrievalChannel.EXACT_ID in step.channels_executed
     if ran_exact_id and warned_unknown_ids != unknown_ids:
@@ -516,12 +518,12 @@ def find_applicability_violations(evidence_set: KnowledgeEvidenceSet) -> list[st
     if is_assessed:
         expected_products.extend(list_named_products(filters))
     assessed_products: list[tuple[str, str]] = []
-    for applicability in evidence_set.product_applicability:
+    for applicability_index, applicability in enumerate(evidence_set.product_applicability):
         assessed_products.append((applicability.product_kind, applicability.product))
         if applicability.status is not ApplicabilityStatus.UNKNOWN:
             violations.append(
-                f"{applicability.product}: applicability must be unknown without an "
-                "affectedness source"
+                f"product_applicability[{applicability_index}]: applicability must be unknown "
+                "without an affectedness source"
             )
     if assessed_products != expected_products:
         violations.append("product_applicability must list each named product once, in order")

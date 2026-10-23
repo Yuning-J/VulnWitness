@@ -791,7 +791,8 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
         pytest.param(
             F5GC,
             claim_the_product_is_affected,
-            "applicability must be unknown",
+            "product_applicability[0]: applicability must be unknown without an affectedness "
+            "source",
             # The forged status is outside the enum, so pydantic warns while hashing it.
             marks=pytest.mark.filterwarnings("ignore::UserWarning"),
         ),
@@ -920,7 +921,7 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
         (
             CANONICAL_MIXED,
             return_an_unanchored_answer_id_in_a_step,
-            "step 1 returns CVE-0000-0000 without a catalogued anchor for it",
+            "step 1 answer_ids[0]: returned without a catalogued anchor for it",
         ),
         (
             PROTOCOL_5GAKA,
@@ -1154,7 +1155,7 @@ def test_forged_anchor_source_with_a_recomputed_id_is_rejected(
         f"{cve_id}: differs from the record this service's sources hold",
         f"step 1 returns evidence {recomputed_evidence_id}, which this service's sources do "
         "not hold",
-        f"step 1 returns {cve_id} without a catalogued anchor for it",
+        "step 1 answer_ids[0]: returned without a catalogued anchor for it",
     )
 
 
