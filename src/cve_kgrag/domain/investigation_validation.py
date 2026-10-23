@@ -334,13 +334,16 @@ def find_citation_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     violations: list[str] = []
     expected_claims = list_expected_claims(evidence_set)
     claim_ids: list[str] = []
-    for claim in evidence_set.claims:
+    # A claim is named by its position: its ID is text the set's author chose.
+    for claim_index, claim in enumerate(evidence_set.claims):
         claim_ids.append(claim.claim_id)
         expected_claim = expected_claims.get(claim.claim_id)
         if expected_claim is None:
-            violations.append(f"{claim.claim_id}: no answer item for this claim")
+            violations.append(f"claims[{claim_index}]: no answer item for this claim")
         elif describe_claim_content(claim) != expected_claim:
-            violations.append(f"{claim.claim_id}: differs from the templated claim of its item")
+            violations.append(
+                f"claims[{claim_index}]: differs from the templated claim of its item"
+            )
     if claim_ids != sorted(expected_claims):
         violations.append("claims must be exactly one per answer item, ordered by claim_id")
 

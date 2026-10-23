@@ -9,7 +9,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.21` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.22` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 ## What it does

@@ -28,6 +28,7 @@ from cve_kgrag.composition import (
     load_packaged_fight_source,
 )
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
+from cve_kgrag.domain.evidence_set_verification_report import MAX_VIOLATION_CHARS
 from cve_kgrag.domain.investigation import FightUnavailableDetail, KnowledgeEvidenceSet
 from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
 from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail, ModelReplyFailureDetail
@@ -506,6 +507,14 @@ def clear_a_malformed_report_s_violations(payload: JsonObject) -> None:
     payload["violations"] = []
 
 
+def empty_a_malformed_report_s_violation(payload: JsonObject) -> None:
+    payload["violations"] = [""]
+
+
+def lengthen_a_malformed_report_s_violation(payload: JsonObject) -> None:
+    payload["violations"] = ["x" * (MAX_VIOLATION_CHARS + 1)]
+
+
 def clear_a_replay_difference_report_s_differences(payload: JsonObject) -> None:
     payload["differences"] = []
 
@@ -838,6 +847,18 @@ MODEL_REJECTED_PAYLOADS: list[tuple[str, PayloadBuilder, PayloadForgery, str]] =
         verify_malformed_bytes,
         clear_a_malformed_report_s_violations,
         "a malformed report has the wrong violations",
+    ),
+    (
+        "verification_report",
+        verify_malformed_bytes,
+        empty_a_malformed_report_s_violation,
+        "String should have at least 1 character",
+    ),
+    (
+        "verification_report",
+        verify_malformed_bytes,
+        lengthen_a_malformed_report_s_violation,
+        f"String should have at most {MAX_VIOLATION_CHARS} characters",
     ),
     (
         "verification_report",

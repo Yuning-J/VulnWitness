@@ -199,29 +199,31 @@ def find_served_violations(
 def find_claim_violations(
     claims: Iterable[Claim], anchors_by_id: Mapping[str, EvidenceAnchor]
 ) -> list[str]:
+    """Each claim's violations, the claim named by its position: a claim's own ID and
+    subject are text the set's author chose, so no violation repeats them."""
     violations: list[str] = []
-    for claim in claims:
+    for claim_index, claim in enumerate(claims):
+        claim_label = f"claims[{claim_index}]"
         if claim.scope is KnowledgeScope.FORMAL_PROTOCOL_FINDING:
-            violations.append(f"{claim.claim_id}: formal_protocol_finding is never originated here")
+            violations.append(f"{claim_label}: formal_protocol_finding is never originated here")
         for evidence_id in claim.evidence_ids:
             anchor = anchors_by_id.get(evidence_id)
             if anchor is None:
-                violations.append(f"{claim.claim_id}: cites unknown evidence {evidence_id}")
+                violations.append(f"{claim_label}: cites unknown evidence {evidence_id}")
                 continue
             if anchor.scope is not claim.scope:
                 violations.append(
-                    f"{claim.claim_id}: {claim.scope} claim cites {anchor.scope} evidence "
+                    f"{claim_label}: {claim.scope} claim cites {anchor.scope} evidence "
                     f"{evidence_id}"
                 )
             if anchor.authoritative_record_id != claim.subject_id:
                 violations.append(
-                    f"{claim.claim_id}: cites {evidence_id} about "
-                    f"{anchor.authoritative_record_id}, not {claim.subject_id}"
+                    f"{claim_label}: cites {evidence_id} about another record than its subject"
                 )
             is_asserted_claim = claim.assertion_kind is AssertionKind.ASSERTED
             if is_asserted_claim and anchor.assertion_kind is AssertionKind.INFERRED:
                 violations.append(
-                    f"{claim.claim_id}: asserted claim rests on inferred evidence {evidence_id}"
+                    f"{claim_label}: asserted claim rests on inferred evidence {evidence_id}"
                 )
     return violations
 

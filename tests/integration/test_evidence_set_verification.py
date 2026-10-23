@@ -232,12 +232,8 @@ def test_check_reports_bytes_that_are_not_a_set_malformed(fixture_bundle: Fixtur
 def test_check_reports_at_most_the_capped_number_of_violations(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    unknown_fields: dict[str, int] = {}
-    for field_number in range(MAX_REPORTED_VIOLATIONS + 50):
-        unknown_fields[f"unknown_field_{field_number}"] = field_number
-
     report = check_evidence_set(
-        json.dumps(unknown_fields).encode(),
+        json.dumps({"warnings": [0] * (MAX_REPORTED_VIOLATIONS + 50)}).encode(),
         build_test_deployment(fixture_bundle),
         DETERMINISTIC_VERIFIER,
     )

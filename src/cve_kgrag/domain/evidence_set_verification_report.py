@@ -1,6 +1,7 @@
 """The report of a whole-set verification: what checking a knowledge evidence set handed
 back found (ADR 0003 §10)."""
 
+from collections.abc import Iterable
 from enum import StrEnum
 from typing import Annotated, Self
 
@@ -10,9 +11,15 @@ from pydantic.config import JsonDict
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.search import require_json_number
 
-# A report carries at most this many violations; a set can break far more rules than a
-# reader needs listed.
+# A report carries at most this many violations, each of at most this many characters: a
+# set can break far more rules than a reader needs listed, and the longest sentence a
+# contract can give (one listing every allowed value) stays well under the length.
 MAX_REPORTED_VIOLATIONS = 100
+MAX_VIOLATION_CHARS = 1024
+TRUNCATION_MARK = "..."
+
+# A violation is the server's own sentence; none repeats text the checked set chose.
+ViolationText = Annotated[str, Field(min_length=1, max_length=MAX_VIOLATION_CHARS)]
 
 
 class VerificationVerdict(StrEnum):
@@ -55,6 +62,19 @@ def describe_verification_report_shape() -> JsonDict:
     }
 
 
+def bound_violations(violations: Iterable[str]) -> tuple[str, ...]:
+    """The first ``MAX_REPORTED_VIOLATIONS`` violations, each longer than
+    ``MAX_VIOLATION_CHARS`` cut to that length and ending in ``TRUNCATION_MARK``."""
+    bounded_violations: list[str] = []
+    for violation in violations:
+        if len(bounded_violations) == MAX_REPORTED_VIOLATIONS:
+            break
+        if len(violation) > MAX_VIOLATION_CHARS:
+            violation = violation[: MAX_VIOLATION_CHARS - len(TRUNCATION_MARK)] + TRUNCATION_MARK
+        bounded_violations.append(violation)
+    return tuple(bounded_violations)
+
+
 class ReportedDifference(ContractModel):
     """A recorded part the replayed run gives differently: the field ``part`` of step
     ``step_index`` (``step`` when the step exists in only one of the two runs), or, when
@@ -75,7 +95,7 @@ class VerificationReport(ContractModel):
 
     # Declared in the order `cve-kgrag verify` prints the keys.
     verdict: VerificationVerdict
-    violations: tuple[str, ...] = Field(default=(), max_length=MAX_REPORTED_VIOLATIONS)
+    violations: tuple[ViolationText, ...] = Field(default=(), max_length=MAX_REPORTED_VIOLATIONS)
     differences: tuple[ReportedDifference, ...] = ()
 
     @model_validator(mode="after")

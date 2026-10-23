@@ -775,7 +775,7 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
     [
         (PROTOCOL_5GAKA, move_excluded_cve_into_the_answer, "cannot contain CVE candidates"),
         (PROTOCOL_5GAKA, add_implementation_claim, "cannot make implementation claims"),
-        (MIXED_5GAKA, cite_another_records_anchor, "about CVE-9999-0004, not CVE-9999-0003"),
+        (MIXED_5GAKA, cite_another_records_anchor, "about another record than its subject"),
         (EXACT_ID, add_uncited_anchor, "evidence must be exactly the cited anchors"),
         (OPEN5GS, report_ok_for_an_unavailable_source, "cannot report stop reason"),
         (OPEN5GS, report_no_evidence_despite_a_failed_source, "no_evidence holds no answer"),
@@ -786,7 +786,7 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
         (EXACT_ID, admit_a_late_step, "admitted after the deadline"),
         (EXACT_ID, breach_without_stopping, "budget_exhausted is the stop reason exactly"),
         (PROTOCOL_5GAKA, move_fight_anchor_off_the_pin, "provenance differs from the pinned"),
-        (PROTOCOL_5GAKA, remove_the_fgt5040_anchor, "fight:FGT5040: cites unknown evidence"),
+        (PROTOCOL_5GAKA, remove_the_fgt5040_anchor, "claims[3]: cites unknown evidence"),
         (PROTOCOL_5GAKA, tamper_the_fgt5040_content_hash, "not derived from the anchor's"),
         pytest.param(
             F5GC,

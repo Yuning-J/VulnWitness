@@ -1,6 +1,6 @@
 # M6 — API, CLI and migration
 
-Schema version `2.0.0-dev.21`. M6 is built in work packages; this document records each
+Schema version `2.0.0-dev.22`. M6 is built in work packages; this document records each
 one as it lands.
 
 ## Work packages
@@ -222,18 +222,30 @@ Decisions: the CLI calls the application services directly rather than going thr
 toolbox, whose limits exist for remote callers; ADR 0003 §10.
 
 - **Verification report.** `VerificationReport` (`domain/evidence_set_verification_report.py`)
-  is the verdict, at most `MAX_REPORTED_VIOLATIONS` (100) violations and each replay
-  difference as `step_index` (null for a set-level part) and `part`; a validator ties the
+  is the verdict, at most `MAX_REPORTED_VIOLATIONS` (100) violations of 1 to
+  `MAX_VIOLATION_CHARS` (1024) characters each, and each replay difference as
+  `step_index` (null for a set-level part) and `part`; a validator ties the
   findings to the verdict (violations only for `malformed` and `invalid`, differences only
   for `replay_differs`), and the published schema states the same rule.
   `application/evidence_set_verification.check_evidence_set` parses the bytes and
-  verifies them into a report, so the CLI, and later the API, share one path.
-  `cve-kgrag verify` prints the keys in declaration order (`verdict`, `violations`,
+  verifies them into a report, so the CLI, and later the API, share one path. It passes
+  every violation list through `bound_violations`, which keeps the first 100 and cuts a
+  longer violation to 1024 characters ending in `...`.
+- **Violations in the server's own words.** No violation repeats text the checked set
+  chose. `list_validation_problems` (`domain/contract_model.py`) reports unexpected fields
+  as a count at the location holding them (`claims.0: 2 unexpected fields`), never their
+  names, and rebuilds the message for an unknown union tag from the tags the contract
+  expects. The validator and the citation audit name a claim by its position
+  (`claims[3]`), not by its `claim_id`, `subject_id` or the record its evidence is about.
+  Every other value a violation interpolates is bounded and pattern-checked before it is
+  reported (CVE and evidence IDs, hashes, technique IDs, enum values, counts). The longest
+  violation a contract gives, one listing every allowed value, is 676 characters.  `cve-kgrag verify` prints the keys in declaration order (`verdict`, `violations`,
   `differences`) with non-ASCII text escaped, and exits 0 only for `verified`; tests pin
   the exact text of a `verified` and a `malformed` report and the escaping.
-- **Served bundle.** `composition.load_served_bundle()` returns the records and evidence
-  every surface serves, the packaged fixture until WP10; the CLI and `mcp` both use it. It
-  takes no settings yet: none names a store before WP10.
+- **Served bundle.** `composition.load_served_bundle()` returns the CVE records and
+  evidence anchors every surface serves, the packaged fixture until WP10; the CLI and `mcp`
+  both use it. The topic registry and the pinned FiGHT snapshot are assembled separately.
+  It takes no settings yet: none names a store before WP10.
 - **Search options.** `search` takes `--vendor`, `--product`, `--purl`, `--cwe`,
   `--severity`, `--year`, `--origin` (each repeatable; `--cwe` and `--severity` are read
   case-insensitively), `--kev-only` and `--graph-expand`, mapped onto `SearchFilters` and
@@ -274,3 +286,13 @@ toolbox, whose limits exist for remote callers; ADR 0003 §10.
 - Every versioned schema moves to `2.0.0-dev.21`; no other contract changes.
 - `test_schema_snapshots.py` also checks that no snapshot states a bound under a pydantic
   name (`ge`, `le`, `gt`, `lt`), which a JSON Schema validator ignores.
+
+### Contracts at `2.0.0-dev.22`
+
+- `verification_report.schema.json`: each violation has `minLength` 1 and `maxLength`
+  1024.
+- Every versioned schema moves to `2.0.0-dev.22`; no other contract changes.
+- Tests: an unexpected field's name, an unknown planner kind, and a claim's forged
+  `claim_id` and `subject_id` are not repeated in a report; a set whose only field name is
+  200,000 emoji gives a report under 4 KiB; an empty or overlong violation is rejected by
+  the model and by the published schema; more than 100 violations are cut to 100.

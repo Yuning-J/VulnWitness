@@ -304,12 +304,8 @@ def test_verify_wrong_schema_version_reports_malformed(
 def test_verify_reports_at_most_one_hundred_violations(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    unknown_fields: dict[str, int] = {}
-    for field_number in range(150):
-        unknown_fields[f"unknown_field_{field_number}"] = field_number
-
     exit_code, verification_report = verify_file(
-        tmp_path, json.dumps(unknown_fields).encode(), capsys
+        tmp_path, json.dumps({"warnings": [0] * 150}).encode(), capsys
     )
 
     assert exit_code == 1
@@ -1030,15 +1026,64 @@ def test_verify_prints_the_malformed_report_text_exactly(
     )
 
 
-def test_verify_prints_non_ascii_violation_text_ascii_escaped(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_report_prints_non_ascii_violation_text_ascii_escaped(
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    evidence_set_path = write_evidence_set_file(tmp_path, '{"été": 1}'.encode())
-
-    run_cli(["verify", str(evidence_set_path)])
+    print_verification(VerificationReport(verdict=VerificationVerdict.INVALID, violations=("été",)))
 
     first_violation_line = capsys.readouterr().out.splitlines()[3]
-    assert first_violation_line == '    "\\u00e9t\\u00e9: Extra inputs are not permitted",'
+    assert first_violation_line == '    "\\u00e9t\\u00e9"'
+
+
+def test_verify_reports_unexpected_fields_as_a_count_without_their_names(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], sealed_set: KnowledgeEvidenceSet
+) -> None:
+    evidence_set_document = json.loads(sealed_set.model_dump_json())
+    evidence_set_document["été"] = 1
+    evidence_set_document["claims"][0]["forged_field"] = 1
+    evidence_set_document["claims"][0]["another_forged_field"] = 1
+
+    exit_code, verification_report = verify_file(
+        tmp_path, json.dumps(evidence_set_document).encode(), capsys
+    )
+
+    assert exit_code == 1
+    assert verification_report["violations"] == [
+        "1 unexpected field",
+        "claims.0: 2 unexpected fields",
+    ]
+
+
+def test_verify_reports_an_unknown_planner_kind_without_repeating_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], sealed_set: KnowledgeEvidenceSet
+) -> None:
+    forged_kind = "forged-planner-kind"
+    evidence_set_document = json.loads(sealed_set.model_dump_json())
+    evidence_set_document["trajectory"]["planner"]["kind"] = forged_kind
+
+    exit_code, verification_report = verify_file(
+        tmp_path, json.dumps(evidence_set_document).encode(), capsys
+    )
+
+    assert exit_code == 1
+    assert verification_report["verdict"] == "malformed"
+    assert verification_report["violations"][0].startswith("trajectory.planner: Input tag")
+    assert forged_kind not in json.dumps(verification_report)
+
+
+def test_verify_output_stays_small_for_a_set_with_a_huge_field_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    huge_field_name = "\U0001f600" * 200_000
+
+    exit_code, verification_report = verify_file(
+        tmp_path, json.dumps({huge_field_name: 1}).encode(), capsys
+    )
+
+    assert exit_code == 1
+    assert verification_report["verdict"] == "malformed"
+    assert "1 unexpected field" in verification_report["violations"]
+    assert len(json.dumps(verification_report)) < 4096
 
 
 @pytest.mark.parametrize(

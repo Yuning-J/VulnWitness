@@ -103,8 +103,22 @@ def test_cve_evidence_relabeled_as_protocol_context_cannot_support_a_protocol_cl
 def test_claim_citing_evidence_about_another_record_is_rejected() -> None:
     claim = build_claim(subject_id="CVE-9999-0002")
 
-    with pytest.raises(EvidenceValidationError, match="about CVE-9999-0001, not CVE-9999-0002"):
+    with pytest.raises(EvidenceValidationError, match="about another record than its subject"):
         validate_claims([claim], [build_anchor()])
+
+
+def test_rejected_claim_is_named_by_position_without_repeating_its_ids() -> None:
+    forged_claim_id = "forged-claim-id"
+    forged_subject_id = "forged-subject-id"
+    claim = build_claim(claim_id=forged_claim_id, subject_id=forged_subject_id)
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        validate_claims([claim], [build_anchor()])
+
+    violations_text = " ".join(raised.value.violations)
+    assert "claims[0]" in violations_text
+    assert forged_claim_id not in violations_text
+    assert forged_subject_id not in violations_text
 
 
 @pytest.mark.parametrize(

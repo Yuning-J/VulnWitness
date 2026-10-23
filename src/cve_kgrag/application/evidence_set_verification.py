@@ -21,10 +21,10 @@ from cve_kgrag.application.trajectory_replay import (
 )
 from cve_kgrag.domain.contract_model import list_validation_problems
 from cve_kgrag.domain.evidence_set_verification_report import (
-    MAX_REPORTED_VIOLATIONS,
     ReportedDifference,
     VerificationReport,
     VerificationVerdict,
+    bound_violations,
 )
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet, SourceCapability
 from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
@@ -73,15 +73,16 @@ def check_evidence_set(
     """Parse ``evidence_set_bytes`` as a knowledge evidence set and verify it
     (``verify_evidence_set``), reporting every outcome as a verdict rather than raising:
     ``malformed`` with the parser's problems, ``invalid`` with the violations the
-    validator, the audit or the replayed set's seal checks found (each list cut to
-    ``MAX_REPORTED_VIOLATIONS``), ``replay_timed_out``, ``replay_differs`` with each
-    difference, or ``verified``."""
+    validator, the audit or the replayed set's seal checks found (each list bounded by
+    ``bound_violations``), ``replay_timed_out``, ``replay_differs`` with each difference,
+    or ``verified``. No violation repeats text the set chose: problems are reported in the
+    server's own words (``list_validation_problems``)."""
     try:
         evidence_set = KnowledgeEvidenceSet.model_validate_json(evidence_set_bytes)
     except ValidationError as error:
         return VerificationReport(
             verdict=VerificationVerdict.MALFORMED,
-            violations=tuple(list_validation_problems(error)[:MAX_REPORTED_VIOLATIONS]),
+            violations=bound_violations(list_validation_problems(error)),
         )
     try:
         replay_outcome = verify_evidence_set(
@@ -89,8 +90,7 @@ def check_evidence_set(
         )
     except EvidenceValidationError as error:
         return VerificationReport(
-            verdict=VerificationVerdict.INVALID,
-            violations=error.violations[:MAX_REPORTED_VIOLATIONS],
+            verdict=VerificationVerdict.INVALID, violations=bound_violations(error.violations)
         )
     if isinstance(replay_outcome, ReplayTimedOut):
         return VerificationReport(verdict=VerificationVerdict.REPLAY_TIMED_OUT)
