@@ -46,10 +46,14 @@ can reach a loopback port.
    rejections happen before any tool runs, so they answer with their own `HttpRejection`
    contract, not a `ToolFailure`. The HTTP request deadline is set longer than the
    toolbox's per-call time limit, so a tool call that runs out of time normally answers
-   first, with 504 and the bare `ToolFailure` `timed_out` (decision 8). Only when the
-   request deadline itself expires, while the toolbox's own limit still bounds the tool
-   body on its thread, does the answer become 504 with `HttpRejection`.
-8. **`ToolFailureCode` to HTTP status.**
+   first with the `ToolFailure` `timed_out`: over REST as 504 (decision 8), over MCP as
+   the tool's error result. Only when the request deadline itself expires, while the
+   toolbox's own limit still bounds the tool body on its thread, does the answer become
+   504 with `HttpRejection`, on either surface.
+8. **`ToolFailureCode` to HTTP status, for the REST API.** MCP over HTTP answers a tool
+   failure as stdio does: HTTP 200 with a JSON-RPC result whose `isError` is true and
+   whose one text block holds the `ToolFailure` (ADR 0003 §7), because the call itself
+   succeeded at the protocol level. The REST API (WP7) answers it with a status:
 
    | Code | Status |
    |---|---|
@@ -60,8 +64,9 @@ can reach a loopback port.
    | `timed_out` | 504 |
    | `response_too_large`, `integrity_check_failed`, `internal_error` | 500 |
 
-   The body is the bare `ToolFailure` with its fixed sentence, so the mapping needs no
-   new envelope and no contract change. A test iterates every `ToolFailureCode` member.
+   The REST body is the bare `ToolFailure` with its fixed sentence, so the mapping needs
+   no new envelope and no contract change. A WP7 test iterates every `ToolFailureCode`
+   member.
 9. **REST endpoints, verification included.** `POST /api/v2/search`,
    `POST /api/v2/investigate`, `GET /api/v2/evidence/{evidence_id}`,
    `GET /api/v2/capabilities` and `POST /api/v2/verify`, plus `/health` and `/ready`.

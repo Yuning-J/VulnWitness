@@ -19,11 +19,13 @@ import pytest
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.exceptions import MCPError
+from mcp.types import TextContent
 from starlette.types import Receive, Scope, Send
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.domain.http_rejection import HttpRejection, HttpRejectionCode, build_http_rejection
-from cve_kgrag.interfaces.http.guard import HttpGuard
+from cve_kgrag.domain.tool_contracts import ToolFailure, ToolFailureCode
+from cve_kgrag.interfaces.http.guard import DEFAULT_BODY_CAP_BYTES, HttpGuard
 from cve_kgrag.interfaces.http.serving import find_graceful_shutdown_seconds
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
 from cve_kgrag.interfaces.mcp.http_runner import build_mcp_http_app, find_request_deadline_seconds
@@ -37,10 +39,12 @@ from tests.support.asgi import (
     running_lifespan,
     send_request,
 )
+from tests.support.clocks import SteppingClock
 from tests.support.fakes import BlockingRetriever
 from tests.support.toolbox import (
     BLOCKED_AFFECTEDNESS_CAPABILITY,
     TOOL_ARGUMENTS,
+    UNKNOWN_EVIDENCE_ID,
     build_test_toolbox,
     list_affectedness_capabilities,
 )
@@ -124,6 +128,114 @@ async def test_unknown_tool_over_http_is_the_fixed_json_rpc_error(
 
     assert raised.value.error.message == "unknown tool"
     assert raised.value.error.data is None
+
+
+def build_tool_call(tool_name: KnowledgeToolName, arguments: dict[str, object]) -> bytes:
+    """A ``tools/call`` request on the handshake-era path, which needs no envelope."""
+    return json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {"name": tool_name.value, "arguments": arguments},
+        }
+    ).encode()
+
+
+def read_tool_failure(answer: httpx2.Response) -> ToolFailure:
+    """The ``ToolFailure`` a failed tool's JSON-RPC result carries: an error result with
+    one text block holding it and no structured content."""
+    tool_result = answer.json()["result"]
+    assert tool_result["isError"] is True
+    assert "structuredContent" not in tool_result
+    assert len(tool_result["content"]) == 1
+    return ToolFailure.model_validate_json(tool_result["content"][0]["text"])
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "arguments", "expected_code"),
+    [
+        (
+            KnowledgeToolName.LOOKUP_CVE,
+            {"cve_id": ECHO_MARKER},
+            ToolFailureCode.INVALID_ARGUMENTS,
+        ),
+        (
+            KnowledgeToolName.GET_EVIDENCE,
+            {"evidence_id": UNKNOWN_EVIDENCE_ID},
+            ToolFailureCode.UNKNOWN_EVIDENCE_ID,
+        ),
+        (
+            KnowledgeToolName.SEARCH_VULNERABILITIES,
+            {"query": "x" * (DEFAULT_BODY_CAP_BYTES // 2)},
+            ToolFailureCode.ARGUMENTS_TOO_LARGE,
+        ),
+    ],
+    ids=["invalid_arguments", "unknown_evidence_id", "arguments_too_large"],
+)
+async def test_tool_failure_over_http_is_a_200_error_result_holding_the_tool_failure(
+    http_client: httpx2.AsyncClient,
+    tool_name: KnowledgeToolName,
+    arguments: dict[str, object],
+    expected_code: ToolFailureCode,
+) -> None:
+    """MCP answers a tool failure as stdio does, never with ADR 0007's REST statuses."""
+    answer = await http_client.post(
+        "/mcp", content=build_tool_call(tool_name, arguments), headers=JSON_RPC_HEADERS
+    )
+
+    assert answer.status_code == 200
+    assert read_tool_failure(answer).code is expected_code
+    assert ECHO_MARKER not in answer.text
+
+
+async def test_tool_call_that_runs_out_of_time_over_http_is_a_200_timed_out_result(
+    fixture_bundle: FixtureBundle, blocked_call_release: threading.Event
+) -> None:
+    toolbox = build_test_toolbox(
+        fixture_bundle,
+        tool_clock=SteppingClock(seconds_per_read=0.03).read,
+        limits=ToolLimits(time_limit_seconds=0.05, affectedness_timeout_seconds=0.04),
+        lexical_retriever=BlockingRetriever(blocked_call_release),
+    )
+    app = build_mcp_http_app(toolbox, host=HTTP_HOST, port=HTTP_PORT, token=HTTP_SECRET_TOKEN)
+    tool_call = build_tool_call(KnowledgeToolName.SEARCH_VULNERABILITIES, {"query": "ausf"})
+
+    async with (
+        running_lifespan(app),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app), base_url=SERVER_URL
+        ) as http_client,
+    ):
+        answer = await http_client.post("/mcp", content=tool_call, headers=JSON_RPC_HEADERS)
+
+    assert answer.status_code == 200
+    assert read_tool_failure(answer).code is ToolFailureCode.TIMED_OUT
+
+
+async def test_client_in_either_mode_reads_a_tool_failure_as_an_error_result(
+    mcp_http_app: HttpGuard, client_mode: str
+) -> None:
+    async with (
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=mcp_http_app), headers=AUTHORIZATION
+        ) as authorized_client,
+        Client(
+            streamable_http_client(f"{SERVER_URL}/mcp", http_client=authorized_client),
+            mode=client_mode,
+        ) as client,
+    ):
+        failed_call = await client.call_tool(
+            KnowledgeToolName.LOOKUP_CVE.value, {"cve_id": ECHO_MARKER}
+        )
+
+    assert failed_call.is_error is True
+    assert failed_call.structured_content is None
+    failure_block = failed_call.content[0]
+    assert isinstance(failure_block, TextContent)
+    assert ToolFailure.model_validate_json(failure_block.text).code is (
+        ToolFailureCode.INVALID_ARGUMENTS
+    )
 
 
 async def test_mcp_endpoint_refuses_get_instead_of_holding_a_stream_open(

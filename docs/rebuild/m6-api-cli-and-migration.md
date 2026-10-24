@@ -185,7 +185,7 @@ with the `mcp` extra owning MCP over HTTP and a new `api` extra; loopback hosts 
 bearer token on both servers, with `/health` the only open route; the deterministic
 planner and no semantic channel on HTTP; stateless MCP sessions; an `HttpRejection`
 envelope for rejections before any tool runs and for the request deadline; the
-`ToolFailureCode` to HTTP status table; the REST endpoints, verification included;
+REST API's `ToolFailureCode` to HTTP status table; the REST endpoints, verification included;
 ports 8765 and 8766 from settings only; body caps counted on the wire before any
 parsing (4 MiB for verification, 256 KiB for every other route). ADR 0001 §2 and ADR 0003 §10 and §12 are
 amended to match.
@@ -374,10 +374,12 @@ Decisions: ADR 0007.
   stateless with JSON answers, its own DNS-rebinding check off (the guard's applies) and
   its body cap at 256 KiB. `GET /health` answers 204 without the token; `GET /ready`
   answers 204 while the toolbox has a free worker (`KnowledgeToolbox.has_free_worker`)
-  and 503 `not_ready` otherwise. The request deadline is the toolbox's longest call
-  (`ToolLimits.find_longest_call_seconds`: 30 s of investigation wall time plus the 10 s
-  seal margin) plus 10 s, 50 s in all, so a tool call that runs out of time answers its
-  own `timed_out` first.
+  and 503 `not_ready` otherwise. A tool that fails answers as on stdio: HTTP 200 with a
+  JSON-RPC result whose `isError` is true and whose text block holds the `ToolFailure`;
+  ADR 0007's status table is the REST API's (WP7). The request deadline is the
+  toolbox's longest call (`ToolLimits.find_longest_call_seconds`: 30 s of investigation
+  wall time plus the 10 s seal margin) plus 10 s, 50 s in all, so a tool call that runs
+  out of time answers its own `timed_out` first.
 - **The SDK's answers in the server's words.** `interfaces/mcp/sdk_answers.py` restates
   every answer the SDK's transport makes itself: a JSON-RPC error keeps its status, code
   and `id`, loses `data`, and keeps its message only when it is a fixed sentence
@@ -394,10 +396,10 @@ Decisions: ADR 0007.
   past the request deadline (51 s), so each ends with its route's answer or the guard's
   504 rather than being cut off; a second interrupt stops at once. A request arriving
   while 32 connections (its own included) or 32 requests are open gets uvicorn's own
-  503. uvicorn logs through the command's handlers at error level only: its warnings
-  come one per request (an upgrade it does not serve, a request it cannot parse, the
-  503), so any local caller could fill the log with them, while a port it cannot bind
-  and an app that raised are errors.
+  503. uvicorn logs through the command's handlers at error level only, so its
+  per-request warnings (an upgrade it does not serve, a request it cannot parse, the
+  503) are not logged and no caller can fill the log with them; a port it cannot bind
+  and an app that raised are errors, and are logged.
 - **Packaging.** The `mcp` extra declares Starlette and uvicorn, and `MCP_EXTRA_MODULES`
   names them, so a core install missing either reports the missing extra. The dev group
   declares `httpx2`, which the HTTP tests import. `interfaces/http/` imports the ASGI
@@ -413,7 +415,10 @@ Decisions: ADR 0007.
     answers only in part; each code's status against the published table; and no
     rejection repeating a marker sent in the target, a header or the body.
   - `tests/integration/interfaces/mcp/test_mcp_http.py` runs the SDK client in both
-    modes over the guarded app, checks the unknown-tool error, the 405 on `GET /mcp`,
+    modes over the guarded app, checks the unknown-tool error, that a tool failure
+    (`invalid_arguments`, `unknown_evidence_id`, `arguments_too_large`, `timed_out`) is
+    HTTP 200 with an `isError` result holding the `ToolFailure` and no structured
+    content, in both client modes as well, the 405 on `GET /mcp`,
     `/ready` answering 503 while the toolbox's only worker holds a call, the 50 s
     deadline and the stop waiting past it, and the exact status and body of eight
     requests the SDK answers itself, none repeating the marker it carries (a plain-text
