@@ -4,6 +4,8 @@ handlers registered, so it advertises tools and nothing else (ADR 0003 §6).
 Each tool's listed input and output schema is the committed contract snapshot. A call is
 handed to ``KnowledgeToolbox.call`` on a worker thread, so the event loop never blocks;
 every failure is answered as a ``ToolFailure`` with a fixed message, never exception text.
+A JSON-RPC error raised while handling a request keeps its code and fixed message and
+carries no ``data``, where the SDK would repeat the method name a client sent.
 """
 
 import importlib.metadata
@@ -14,6 +16,7 @@ from typing import Any
 
 import anyio.to_thread
 from mcp.server import Server, ServerRequestContext
+from mcp.server.context import CallNext, HandlerResult
 from mcp.shared.exceptions import MCPError
 from mcp.types import (
     INVALID_PARAMS,
@@ -25,6 +28,7 @@ from mcp.types import (
     Tool,
     ToolAnnotations,
 )
+from pydantic import ValidationError
 
 from cve_kgrag.domain.tool_contracts import ToolFailure, ToolFailureCode
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
@@ -40,6 +44,8 @@ from cve_kgrag.schema_snapshots import render_schema
 SERVER_NAME = "cve-kgrag"
 DISTRIBUTION_NAME = "cve-kgrag"
 UNKNOWN_TOOL_MESSAGE = "unknown tool"
+# The SDK's sentence for parameters that fail its request model.
+INVALID_PARAMETERS_MESSAGE = "Invalid request parameters"
 # Every tool only reads the deployment's packaged sources: it changes nothing, answers an
 # equal request equally, and reaches no system outside the deployment.
 READ_ONLY_ANNOTATIONS = ToolAnnotations(
@@ -95,6 +101,22 @@ class KnowledgeToolHandlers:
         )
 
 
+async def withhold_error_data(
+    ctx: ServerRequestContext[LifespanState], call_next: CallNext
+) -> HandlerResult:
+    """Server middleware: an error raised while handling a request reaches the client
+    with its code and message only. The SDK's own messages are fixed sentences, and so is
+    every one this server raises, but its ``data`` can be the client's text, such as the
+    name of a method the server does not serve. Parameters that fail the SDK's request
+    model are the SDK's fixed invalid-params error."""
+    try:
+        return await call_next(ctx)
+    except MCPError as error:
+        raise MCPError(error.error.code, error.error.message) from None
+    except ValidationError:
+        raise MCPError(INVALID_PARAMS, INVALID_PARAMETERS_MESSAGE) from None
+
+
 def build_mcp_tools(tool_specs: Sequence[ToolSpec]) -> tuple[Tool, ...]:
     """Each tool as listed: its description, the committed snapshot of its request contract
     as the input schema and of its response contract as the output schema, and the
@@ -117,10 +139,12 @@ def build_knowledge_mcp_server(toolbox: KnowledgeToolbox) -> Server[LifespanStat
     """A server answering ``tools/list`` and ``tools/call`` over ``toolbox``; the listing is
     built once, here."""
     handlers = KnowledgeToolHandlers(toolbox, build_mcp_tools(KNOWLEDGE_TOOL_SPECS))
-    return Server(
+    server: Server[LifespanState] = Server(
         SERVER_NAME,
         version=importlib.metadata.version(DISTRIBUTION_NAME),
         instructions=SERVER_INSTRUCTIONS,
         on_list_tools=handlers.list_tools,
         on_call_tool=handlers.call_tool,
     )
+    server.middleware.append(withhold_error_data)
+    return server

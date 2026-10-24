@@ -13,6 +13,7 @@ from cve_kgrag.adapter_discovery import (
     MCP_EXTRA_MISSING_DETAIL,
     GuardedModelPort,
     InterfaceUnavailable,
+    discover_mcp_http_server_runner,
     discover_mcp_server_runner,
     discover_planner_setup,
     discover_semantic_retriever,
@@ -208,13 +209,48 @@ def test_mcp_server_load_without_the_sdk_reports_the_missing_extra_and_logs_noth
     assert caplog.records == []
 
 
+def test_installed_mcp_http_server_runner_is_loaded_from_its_own_entry_point() -> None:
+    registry = FakeAdapterRegistry(
+        [FakeEntryPoint("mcp_server"), FakeEntryPoint("mcp_http_server", load_stub_runner)]
+    )
+
+    runner = discover_mcp_http_server_runner(registry.list_adapters)
+
+    assert runner is serve_nothing
+
+
+@pytest.mark.parametrize("missing_module", ["mcp", "anyio", "starlette", "uvicorn"], ids=str)
+def test_mcp_http_server_load_without_a_module_of_the_extra_reports_the_missing_extra(
+    caplog: pytest.LogCaptureFixture, missing_module: str
+) -> None:
+    registry = FakeAdapterRegistry(
+        [FakeEntryPoint("mcp_http_server", ImportFailure(missing_module).load)]
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+        runner = discover_mcp_http_server_runner(registry.list_adapters)
+
+    assert runner == InterfaceUnavailable(MCP_EXTRA_MISSING_DETAIL)
+    assert caplog.records == []
+
+
+class ImportFailure:
+    """A load failing on the import of ``module_name``, as a core install's does."""
+
+    def __init__(self, module_name: str) -> None:
+        self._module_name = module_name
+
+    def load(self) -> object:
+        raise ModuleNotFoundError(f"No module named '{self._module_name}'", name=self._module_name)
+
+
 @pytest.mark.parametrize(
     ("load_runner", "expected_detail"),
     [
-        (load_with_a_renamed_sdk_import, "mcp server runner could not load: ImportError"),
+        (load_with_a_renamed_sdk_import, "mcp_server adapter could not load: ImportError"),
         (
             load_with_a_removed_sdk_submodule,
-            "mcp server runner could not load: ModuleNotFoundError",
+            "mcp_server adapter could not load: ModuleNotFoundError",
         ),
     ],
     ids=["renamed_import", "removed_submodule"],
@@ -236,7 +272,7 @@ def test_mcp_server_load_failing_with_the_sdk_installed_logs_the_traceback(
             (log_record.levelno, log_record.getMessage(), log_record.exc_info is not None)
         )
     assert runner == InterfaceUnavailable(expected_detail)
-    assert logged_warnings == [(logging.WARNING, "mcp server runner failed to load", True)]
+    assert logged_warnings == [(logging.WARNING, "mcp_server adapter failed to load", True)]
 
 
 PLANNER_SETTINGS = ModelPlannerSettings(

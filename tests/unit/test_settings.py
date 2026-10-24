@@ -6,6 +6,7 @@ import traceback
 import pytest
 
 from cve_kgrag.settings import (
+    HttpSettings,
     ModelPlannerSettings,
     SemanticSettings,
     ServiceSettings,
@@ -22,6 +23,7 @@ ENABLED_PLANNER = {
     "CVE_KGRAG_PLANNER_MODEL_NAME": "example-chat",
     "CVE_KGRAG_PLANNER_API_KEY": PLANNER_KEY,
 }
+HTTP_TOKEN = "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE-_.~+/R"
 CREDENTIAL_URL = "https://planner-user:hunter2-password@api.example.test/v1"
 
 
@@ -437,3 +439,85 @@ def test_invalid_semantic_switch_is_an_error_naming_it() -> None:
     assert (
         str(raised.value) == "invalid settings: CVE_KGRAG_SEMANTIC_ENABLED: must be true or false"
     )
+
+
+def test_http_settings_default_to_loopback_port_8765_and_no_token() -> None:
+    settings = load_settings({})
+
+    assert settings.http == HttpSettings(host="127.0.0.1", token=None, mcp_port=8765)
+
+
+def test_http_settings_read_their_host_port_and_token() -> None:
+    environment = {
+        "CVE_KGRAG_HTTP_HOST": "::1",
+        "CVE_KGRAG_MCP_HTTP_PORT": "9001",
+        "CVE_KGRAG_HTTP_TOKEN": HTTP_TOKEN,
+    }
+
+    http_settings = load_settings(environment).http
+
+    assert http_settings.host == "::1"
+    assert http_settings.mcp_port == 9001
+    assert http_settings.token is not None
+    assert http_settings.token.get_secret_value() == HTTP_TOKEN
+
+
+@pytest.mark.parametrize(
+    ("variable_name", "value"),
+    [
+        ("CVE_KGRAG_HTTP_HOST", "0.0.0.0"),
+        ("CVE_KGRAG_HTTP_HOST", "0:0:0:0:0:0:0:0"),
+        ("CVE_KGRAG_HTTP_HOST", "localhost"),
+        ("CVE_KGRAG_HTTP_HOST", "127.0.0.2"),
+        ("CVE_KGRAG_HTTP_HOST", "::ffff:127.0.0.1"),
+        ("CVE_KGRAG_HTTP_HOST", "192.0.2.10"),
+        ("CVE_KGRAG_MCP_HTTP_PORT", "00000"),
+        ("CVE_KGRAG_MCP_HTTP_PORT", "65536"),
+        ("CVE_KGRAG_MCP_HTTP_PORT", "port-eighty"),
+        ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0a"),
+        ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE secret"),
+        ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aEé"),
+        ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE=x"),
+        ("CVE_KGRAG_HTTP_TOKEN", "K" * 513),
+    ],
+    ids=[
+        "every_ipv4_address",
+        "every_ipv6_address",
+        "name_to_resolve",
+        "other_loopback_address",
+        "mapped_loopback_address",
+        "other_address",
+        "port_zero",
+        "port_out_of_range",
+        "port_not_a_number",
+        "token_too_short",
+        "token_with_a_space",
+        "token_not_ascii",
+        "token_with_padding_inside",
+        "token_too_long",
+    ],
+)
+def test_invalid_http_setting_names_the_variable_not_the_value(
+    variable_name: str, value: str
+) -> None:
+    with pytest.raises(SettingsError) as raised:
+        load_settings({variable_name: value})
+
+    assert str(raised.value).startswith(f"invalid settings: {variable_name}: ")
+    assert_secret_absent(describe_raised(raised.value), value, "the settings error")
+    assert raised.value.__context__ is None
+
+
+def test_http_token_is_masked_in_every_rendering_of_the_settings() -> None:
+    settings = load_settings({"CVE_KGRAG_HTTP_TOKEN": HTTP_TOKEN})
+
+    renderings = [
+        repr(settings),
+        str(settings),
+        settings.model_dump_json(),
+        str(settings.model_dump()),
+        str(settings.model_dump(mode="json")),
+    ]
+
+    for rendering in renderings:
+        assert_secret_absent(rendering, HTTP_TOKEN, "a rendering of the settings")

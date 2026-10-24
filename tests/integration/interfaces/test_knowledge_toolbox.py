@@ -13,6 +13,7 @@ import pytest
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.composition import build_knowledge_toolbox
 from cve_kgrag.domain.affectedness import AffectednessDetail, AffectednessFailure
+from cve_kgrag.domain.budget import MAX_WALL_TIME_SECONDS
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.evidence import EvidenceAnchor, seal_evidence_anchor
 from cve_kgrag.domain.investigation import InvestigationRequest
@@ -461,6 +462,40 @@ def test_calls_over_the_in_flight_limit_return_server_busy(
         require_answer(blocked_call.result(timeout=ONE_SECOND_RUN_REAL_SECONDS))
     assert tool_failure.code is ToolFailureCode.SERVER_BUSY
     assert busy_elapsed_seconds < SERVER_BUSY_REAL_SECONDS
+
+
+def test_toolbox_has_no_free_worker_while_every_worker_holds_a_call(
+    fixture_bundle: FixtureBundle, blocked_call_release: threading.Event
+) -> None:
+    blocking_retriever = BlockingRetriever(blocked_call_release)
+    toolbox = build_test_toolbox(
+        fixture_bundle,
+        limits=ToolLimits(max_calls_in_flight=1),
+        lexical_retriever=blocking_retriever,
+    )
+    had_free_worker_before = toolbox.has_free_worker()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        blocked_call = executor.submit(
+            toolbox.call, KnowledgeToolName.SEARCH_VULNERABILITIES, {"query": "ausf"}
+        )
+        assert blocking_retriever.entered.wait(timeout=ONE_SECOND_RUN_REAL_SECONDS)
+
+        had_free_worker_while_blocked = toolbox.has_free_worker()
+
+        blocked_call_release.set()
+        require_answer(blocked_call.result(timeout=ONE_SECOND_RUN_REAL_SECONDS))
+    assert had_free_worker_before is True
+    assert had_free_worker_while_blocked is False
+    assert toolbox.has_free_worker() is True
+
+
+def test_longest_call_is_an_investigation_at_the_largest_budget_plus_the_seal_margin() -> None:
+    limits = ToolLimits()
+
+    longest_call_seconds = limits.find_longest_call_seconds()
+
+    assert MAX_WALL_TIME_SECONDS == 30
+    assert longest_call_seconds == 40.0
 
 
 def test_investigation_runs_for_its_wall_time_budget_plus_the_seal_margin(

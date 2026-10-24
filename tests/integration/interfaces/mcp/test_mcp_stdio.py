@@ -123,6 +123,68 @@ def test_undecodable_frames_get_no_reply_and_later_requests_are_answered() -> No
     assert server_process.stderr == b""
 
 
+def test_json_rpc_errors_carry_no_data_and_repeat_nothing_sent() -> None:
+    """A JSON-RPC error carries its code and fixed message, never ``data``, where the SDK
+    would put the method name the client sent, or an empty string for parameters that
+    fail its request model."""
+    marked_method = "zzechomarkerzz/list"
+    frames = [
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": LATEST_PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {"name": "raw-stdio-test", "version": "1"},
+                },
+            }
+        ),
+        json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json.dumps({"jsonrpc": "2.0", "id": 2, "method": marked_method}),
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": 5, "arguments": marked_method},
+            }
+        ),
+    ]
+
+    server_process = subprocess.Popen(
+        [str(CVE_KGRAG_SCRIPT), "mcp"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=build_server_environment(),
+    )
+    assert server_process.stdin is not None and server_process.stdout is not None
+    server_process.stdin.write(("\n".join(frames) + "\n").encode())
+    server_process.stdin.flush()
+    # Read the answers before closing stdin: the server stops at end of input, and a
+    # reply still in flight then is not written.
+    initialize_answer = server_process.stdout.readline()
+    unknown_method_answer = server_process.stdout.readline()
+    invalid_params_answer = server_process.stdout.readline()
+    server_process.stdin.close()
+    server_process.wait(timeout=60)
+
+    assert json.loads(initialize_answer)["id"] == 1
+    assert json.loads(unknown_method_answer) == {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "error": {"code": -32601, "message": "Method not found"},
+    }
+    assert json.loads(invalid_params_answer) == {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "error": {"code": -32602, "message": "Invalid request parameters"},
+    }
+    assert marked_method.encode() not in unknown_method_answer + invalid_params_answer
+
+
 async def test_cve_kgrag_mcp_never_serves_the_semantic_channel_whatever_the_settings(
     tmp_path: Path,
 ) -> None:

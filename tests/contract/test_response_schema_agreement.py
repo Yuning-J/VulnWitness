@@ -29,6 +29,11 @@ from cve_kgrag.composition import (
 )
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.evidence_set_verification_report import MAX_VIOLATION_CHARS
+from cve_kgrag.domain.http_rejection import (
+    HTTP_REJECTION_MESSAGES,
+    HttpRejectionCode,
+    build_http_rejection,
+)
 from cve_kgrag.domain.investigation import FightUnavailableDetail, KnowledgeEvidenceSet
 from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
 from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail, ModelReplyFailureDetail
@@ -212,6 +217,10 @@ def fail_with_invalid_arguments(fixture_bundle: FixtureBundle) -> BaseModel:
     )
 
 
+def reject_a_request_without_the_token(fixture_bundle: FixtureBundle) -> BaseModel:
+    return build_http_rejection(HttpRejectionCode.UNAUTHORIZED)
+
+
 GENUINE_PAYLOADS: list[tuple[str, PayloadBuilder]] = [
     ("knowledge_evidence_set", run_exact_id),
     ("knowledge_evidence_set", run_five_g_aka_mixed),
@@ -240,6 +249,7 @@ GENUINE_PAYLOADS: list[tuple[str, PayloadBuilder]] = [
     ("evidence_lookup", look_up_first_anchor),
     ("affectedness_check", check_blocked_affectedness),
     ("tool_failure", fail_with_invalid_arguments),
+    ("http_rejection", reject_a_request_without_the_token),
     ("verification_report", verify_a_genuine_set),
     ("verification_report", verify_malformed_bytes),
     ("verification_report", verify_a_set_whose_replay_differs),
@@ -422,6 +432,18 @@ def quote_the_input_in_the_message(payload: JsonObject) -> None:
 
 def give_the_failure_another_code_s_message(payload: JsonObject) -> None:
     payload["message"] = TOOL_FAILURE_MESSAGES[ToolFailureCode.INTERNAL_ERROR]
+
+
+def quote_the_request_in_the_rejection(payload: JsonObject) -> None:
+    payload["message"] = "No route for /mcp?token=Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE"
+
+
+def give_the_rejection_another_code_s_message(payload: JsonObject) -> None:
+    payload["message"] = HTTP_REJECTION_MESSAGES[HttpRejectionCode.NOT_FOUND]
+
+
+def add_the_status_to_the_rejection(payload: JsonObject) -> None:
+    payload["status"] = 401
 
 
 def put_a_verdict_in_the_check_detail(payload: JsonObject) -> None:
@@ -777,6 +799,24 @@ MODEL_REJECTED_PAYLOADS: list[tuple[str, PayloadBuilder, PayloadForgery, str]] =
         "message must be the fixed sentence of the failure's code",
     ),
     (
+        "http_rejection",
+        reject_a_request_without_the_token,
+        quote_the_request_in_the_rejection,
+        "message must be the fixed sentence of the rejection's code",
+    ),
+    (
+        "http_rejection",
+        reject_a_request_without_the_token,
+        give_the_rejection_another_code_s_message,
+        "message must be the fixed sentence of the rejection's code",
+    ),
+    (
+        "http_rejection",
+        reject_a_request_without_the_token,
+        add_the_status_to_the_rejection,
+        "Extra inputs are not permitted",
+    ),
+    (
         "affectedness_check",
         check_blocked_affectedness,
         put_a_verdict_in_the_check_detail,
@@ -906,6 +946,17 @@ def test_failure_carrying_its_code_s_message_is_valid_under_its_published_schema
     )
 
     schema_errors = list_schema_errors("tool_failure", tool_failure.model_dump(mode="json"))
+
+    assert schema_errors == []
+
+
+@pytest.mark.parametrize("code", list(HttpRejectionCode), ids=str)
+def test_rejection_carrying_its_code_s_message_is_valid_under_its_published_schema(
+    code: HttpRejectionCode,
+) -> None:
+    http_rejection = build_http_rejection(code)
+
+    schema_errors = list_schema_errors("http_rejection", http_rejection.model_dump(mode="json"))
 
     assert schema_errors == []
 

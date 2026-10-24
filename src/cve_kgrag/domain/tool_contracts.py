@@ -5,10 +5,9 @@ failure every tool answers with when it cannot answer."""
 from enum import StrEnum
 from typing import Self
 
-from pydantic import ConfigDict, Field, JsonValue, model_validator
-from pydantic.config import JsonDict
+from pydantic import ConfigDict, Field, model_validator
 
-from cve_kgrag.domain.contract_model import ContractModel
+from cve_kgrag.domain.contract_model import ContractModel, describe_fixed_messages
 from cve_kgrag.domain.cve import CveId
 from cve_kgrag.domain.evidence import EvidenceAnchor, EvidenceId
 from cve_kgrag.domain.investigation import (
@@ -115,24 +114,11 @@ class InvalidField(ContractModel):
     error_type: str = Field(pattern=r"^[a-z_]+$", max_length=64)
 
 
-def describe_failure_messages() -> JsonDict:
-    """``ToolFailure.check_message`` as JSON Schema: each code's fixed message."""
-    code_rules: list[JsonValue] = []
-    for code, message in TOOL_FAILURE_MESSAGES.items():
-        code_rules.append(
-            {
-                "if": {"properties": {"code": {"const": code.value}}},
-                "then": {"properties": {"message": {"const": message}}},
-            }
-        )
-    return {"allOf": code_rules}
-
-
 class ToolFailure(ContractModel):
     """Why a tool call gave no answer. Keys the request contract does not declare are
     counted, never named."""
 
-    model_config = ConfigDict(json_schema_extra=describe_failure_messages())
+    model_config = ConfigDict(json_schema_extra=describe_fixed_messages(TOOL_FAILURE_MESSAGES))
 
     schema_version: SchemaVersion = SCHEMA_VERSION
     code: ToolFailureCode

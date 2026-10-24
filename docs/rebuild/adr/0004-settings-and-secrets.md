@@ -81,6 +81,15 @@ both states and requires each search's reason to match the capability.
 Discovery logs a load failure by type alone, and a failed search too: a Chroma or model
 error may name a local path.
 
+The HTTP servers read a third section, which has no switch: every command reads and
+validates it, and only a command that serves over HTTP uses it (M6 WP6, ADR 0007).
+
+| Variable | Setting | Default |
+|---|---|---|
+| `CVE_KGRAG_HTTP_HOST` | the address the HTTP servers listen on: `127.0.0.1` or `::1`, nothing else | `127.0.0.1` |
+| `CVE_KGRAG_MCP_HTTP_PORT` | the port of MCP over Streamable HTTP, 1 to 65535 | 8765 |
+| `CVE_KGRAG_HTTP_TOKEN` | the bearer token every route but `/health` requires: 32 to 512 characters of RFC 6750's `b64token` alphabet, a `SecretStr` | none; `mcp --http` refuses to start without it |
+
 ### 2. The endpoint is one a key may be sent to
 
 `check_endpoint_url` accepts an ASCII URL, `https`, or `http` only to `localhost` or a

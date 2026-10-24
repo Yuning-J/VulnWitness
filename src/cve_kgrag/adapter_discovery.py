@@ -27,6 +27,7 @@ from cve_kgrag.settings import ModelPlannerSettings, SemanticSettings, fingerpri
 ADAPTER_ENTRY_POINT_GROUP = "cve_kgrag.adapters"
 SEMANTIC_ADAPTER_NAME = "semantic"
 MCP_SERVER_ADAPTER_NAME = "mcp_server"
+MCP_HTTP_SERVER_ADAPTER_NAME = "mcp_http_server"
 MODEL_PLANNER_ADAPTER_NAME = "model_planner"
 # The failed reply recorded for an adapter that raised or answered with something other
 # than a valid reply; its exception text is never read, since an adapter's error may quote
@@ -35,7 +36,7 @@ FAILED_ADAPTER_REPLY = ModelReply(
     status=BackendStatus.ERROR, detail=ModelReplyFailureDetail.ADAPTER_FAILED
 )
 # The top-level modules the ``mcp`` extra installs.
-MCP_EXTRA_MODULES = frozenset({"mcp", "anyio"})
+MCP_EXTRA_MODULES = frozenset({"mcp", "anyio", "starlette", "uvicorn"})
 MCP_EXTRA_MISSING_DETAIL = "the 'mcp' extra is not installed: pip install 'cve-kgrag[mcp]'"
 
 
@@ -116,9 +117,19 @@ def discover_semantic_retriever(
 
 
 class McpServerRunner(Protocol):
-    """Serves a toolbox's tools over MCP until the client disconnects."""
+    """Serves a toolbox's tools over MCP on stdio until the client disconnects."""
 
     def __call__(self, toolbox: KnowledgeToolbox) -> None: ...
+
+
+class McpHttpServerRunner(Protocol):
+    """Serves a toolbox's tools over MCP Streamable HTTP on ``host`` and ``port``, every
+    route but ``/health`` behind ``token``, until the process is interrupted; ``False``
+    when it could not start serving, having logged why."""
+
+    def __call__(
+        self, toolbox: KnowledgeToolbox, *, host: str, port: int, token: SecretStr
+    ) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -139,28 +150,54 @@ def is_missing_mcp_extra(error: Exception) -> bool:
     return isinstance(error, ModuleNotFoundError) and error.name in MCP_EXTRA_MODULES
 
 
-def discover_mcp_server_runner(
-    list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
-) -> McpServerRunner | InterfaceUnavailable:
-    """The installed MCP server runner, or why there is none: no entry point, more than one,
-    the ``mcp`` extra missing, or a load that raised for another reason.
+def load_mcp_interface(
+    adapter_name: str, list_adapters: Callable[[], Iterable[AdapterEntryPoint]]
+) -> object | InterfaceUnavailable:
+    """The object the one installed ``adapter_name`` entry point names, or why there is
+    none: no entry point, more than one, the ``mcp`` extra missing, or a load that raised
+    for another reason.
 
     A core install registers the entry point without the ``mcp`` extra, so a load that
     fails on a module the extra installs is expected there and logs nothing. Any other
     failed load, such as an SDK release that renamed an import, logs its traceback at
     warning, because there the traceback is the diagnosis.
     """
-    runner_entry_point = find_single_entry_point(MCP_SERVER_ADAPTER_NAME, list_adapters)
+    runner_entry_point = find_single_entry_point(adapter_name, list_adapters)
     if isinstance(runner_entry_point, str):
         return InterfaceUnavailable(runner_entry_point)
     try:
-        runner = runner_entry_point.load()
+        runner: object = runner_entry_point.load()
     except Exception as error:  # an optional interface's import raises anything
         if is_missing_mcp_extra(error):
             return InterfaceUnavailable(MCP_EXTRA_MISSING_DETAIL)
-        logging.getLogger(__name__).warning("mcp server runner failed to load", exc_info=True)
-        return InterfaceUnavailable(f"mcp server runner could not load: {type(error).__name__}")
+        logging.getLogger(__name__).warning(
+            "%s adapter failed to load", adapter_name, exc_info=True
+        )
+        return InterfaceUnavailable(
+            f"{adapter_name} adapter could not load: {type(error).__name__}"
+        )
+    return runner
+
+
+def discover_mcp_server_runner(
+    list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
+) -> McpServerRunner | InterfaceUnavailable:
+    """The installed stdio MCP server runner, or why there is none (``load_mcp_interface``)."""
+    runner = load_mcp_interface(MCP_SERVER_ADAPTER_NAME, list_adapters)
+    if isinstance(runner, InterfaceUnavailable):
+        return runner
     return cast(McpServerRunner, runner)
+
+
+def discover_mcp_http_server_runner(
+    list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
+) -> McpHttpServerRunner | InterfaceUnavailable:
+    """The installed MCP Streamable HTTP server runner, or why there is none
+    (``load_mcp_interface``)."""
+    runner = load_mcp_interface(MCP_HTTP_SERVER_ADAPTER_NAME, list_adapters)
+    if isinstance(runner, InterfaceUnavailable):
+        return runner
+    return cast(McpHttpServerRunner, runner)
 
 
 class ModelPortFactory(Protocol):

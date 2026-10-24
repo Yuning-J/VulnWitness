@@ -13,6 +13,7 @@ from enum import StrEnum
 from pydantic import JsonValue, ValidationError
 
 from cve_kgrag.domain.affectedness import AffectednessCheck, AffectednessRequest
+from cve_kgrag.domain.budget import MAX_WALL_TIME_SECONDS
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
@@ -218,6 +219,15 @@ class ToolLimits:
     def __post_init__(self) -> None:
         if self.affectedness_timeout_seconds >= self.time_limit_seconds:
             raise ValueError("affectedness_timeout_seconds must be below time_limit_seconds")
+
+    def find_longest_call_seconds(self) -> float:
+        """The longest any call may run: an investigation asking for the largest wall-time
+        budget a request may carry, plus its sealing margin, or the common limit when that
+        is longer."""
+        return max(
+            self.time_limit_seconds,
+            MAX_WALL_TIME_SECONDS + self.investigation_seal_margin_seconds,
+        )
 
 
 @dataclass(frozen=True)

@@ -506,8 +506,9 @@ a re-derived ID.
 
 **Packaging.**
 
-- The `mcp` extra holds `mcp>=2.3,<3` and `anyio>=4.9,<5`. The server imports `anyio`
-  directly.
+- The `mcp` extra holds `mcp>=2.3,<3`, `anyio>=4.9,<5`, `starlette>=0.48,<2` and
+  `uvicorn>=0.31.1,<1`. The servers import `anyio` directly, and MCP over Streamable HTTP
+  imports Starlette and uvicorn (ADR 0007).
 - The `dev` group includes `cve-kgrag[mcp]`, so the default lane, strict mypy and the
   MCP tests run with the SDK.
 - There is no `trustify` extra, because no code needs it (ADR 0001 §2).
@@ -517,9 +518,10 @@ a re-derived ID.
 - `interfaces/knowledge_tools.py` (tool table and limits) and
   `interfaces/knowledge_toolbox.py` (dispatch, parsing, bounds) import no SDK, so the
   core lane tests them.
-- `interfaces/mcp/` is the only package that imports `mcp` or `anyio`. Its
-  `__init__.py` stays empty, because importing every core module walks into the
-  package.
+- `interfaces/mcp/` is the only package that imports `mcp`; it and `interfaces/http/`
+  (the HTTP guard and uvicorn) are the only ones that import `anyio`, Starlette or
+  uvicorn. Their `__init__.py` files stay empty, because importing every core module
+  walks into the packages.
 - Domain, ports, topics and application never import `interfaces`.
 - `interfaces` never imports adapters, discovery, the composition root or the CLI.
 
@@ -548,7 +550,7 @@ a re-derived ID.
 
 | Item | Deferred to | Recorded in |
 |---|---|---|
-| Streamable HTTP: opt-in, 127.0.0.1, bearer auth, separate health and readiness; DNS-rebinding settings for other hosts stay a later decision | M6 WP6, owned by the `mcp` extra | ADR 0007 |
+| Streamable HTTP: opt-in, loopback, bearer auth, separate health and readiness; DNS-rebinding settings for other hosts stay a later decision | M6 WP6 (done), owned by the `mcp` extra | ADR 0007, m6 doc WP6 |
 | Typed settings boundary: no M5 path has an endpoint, a credential or an optional adapter to enable | M6 (planner settings: ADR 0004) | PLAN.md M6 row |
 | `semantic_channel` reporting a failed adapter load | M6 WP2: `unavailable` with a server sentence (ADR 0004 §1) | m6 doc |
 | Real Trustify adapter, verdicts and Trustify anchors, drift detection against the pinned snapshot, retries, product-to-purl mapping, investigation wiring, `live` marker | Verified-adapter task | PLAN.md "Follow-up: verified Trustify adapter" |

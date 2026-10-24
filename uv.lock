@@ -878,6 +878,8 @@ dependencies = [
 mcp = [
     { name = "anyio" },
     { name = "mcp" },
+    { name = "starlette" },
+    { name = "uvicorn" },
 ]
 semantic = [
     { name = "chromadb" },
@@ -887,6 +889,7 @@ semantic = [
 [package.dev-dependencies]
 dev = [
     { name = "cve-kgrag", extra = ["mcp"] },
+    { name = "httpx2" },
     { name = "jsonschema" },
     { name = "mypy" },
     { name = "pytest" },
@@ -902,12 +905,15 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.9,<3" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
     { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=3.3,<6" },
+    { name = "starlette", marker = "extra == 'mcp'", specifier = ">=0.48,<2" },
+    { name = "uvicorn", marker = "extra == 'mcp'", specifier = ">=0.31.1,<1" },
 ]
 provides-extras = ["semantic", "mcp"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "cve-kgrag", extras = ["mcp"] },
+    { name = "httpx2", specifier = ">=2.10,<3" },
     { name = "jsonschema", specifier = ">=4.23" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "pytest", specifier = ">=8.3" },

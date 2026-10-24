@@ -3,11 +3,12 @@
 Status: accepted (M6 WP3′). Applies to the HTTP guard and settings (M6 WP6), MCP over
 Streamable HTTP (WP6) and the v2 REST API (WP7). Amends ADR 0001 §2 and ADR 0003 §10
 and §12.
-No HTTP listener exists yet; this ADR fixes the decisions the packages implement.
+WP6 implements the guard, the settings and MCP over HTTP (`m6-api-cli-and-migration.md`,
+WP6); the REST API is WP7's.
 
 ## Context
 
-The server answers over stdio only (ADR 0003). M6 adds two HTTP surfaces: MCP over
+Without HTTP the server answers over stdio (ADR 0003). M6 adds two HTTP surfaces: MCP over
 Streamable HTTP and a v2 REST API. Both reach the same `KnowledgeToolbox`, whose
 `ToolLimits` and sanitized `ToolFailure` already bound what a remote caller can do,
 and both run on a developer machine where other local processes and any browser page
@@ -19,9 +20,8 @@ can reach a loopback port.
    need them. Routes pass the raw JSON body to the toolbox, so `ToolLimits` and the
    sanitized `ToolFailure` apply unchanged; a framework that validates bodies itself
    would duplicate the `schemas/v2` contracts and answer with its own error detail,
-   which echoes input. FastAPI is in no dependency group. The dev group declares an HTTP
-   test client (`httpx2`) only once a test imports one directly; until then it arrives
-   through the `mcp` extra.
+   which echoes input. FastAPI is in no dependency group. The dev group declares the HTTP
+   test client (`httpx2`) the HTTP tests import.
 2. **Two processes, two extras.** REST (`cve-kgrag api`) and MCP over HTTP
    (`cve-kgrag mcp --http`) run as separate processes. They share the guard, the host,
    the token and the limits, and each has its own port variable. The `mcp` extra owns
@@ -93,8 +93,8 @@ can reach a loopback port.
 
 ## Consequences
 
-- WP6 adds `HttpSettings`, the guard and `mcp --http`; WP7 adds the `api` extra and its
-  routes. Each states its contract change when it lands; this ADR changes none.
+- WP6 adds `HttpSettings`, the guard, `mcp --http` and the `HttpRejection` contract
+  (`2.0.0-dev.23`); WP7 adds the `api` extra and its routes.
 - Nothing listens on a network address other than loopback, and nothing answers an
   unauthenticated caller beyond `/health`.
 - The REST surface covers less than the CLI (for example, topic context has no route).

@@ -12,6 +12,7 @@ from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.evidence_set_verification_report import VerificationReport
 from cve_kgrag.domain.hashing import sha256_hex
+from cve_kgrag.domain.http_rejection import HttpRejection
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.planning import QueryPlan
 from cve_kgrag.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
@@ -63,6 +64,8 @@ RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
     "tool_failure": ToolFailure,
     # The verdict of a whole-set verification (`cve-kgrag verify`).
     "verification_report": VerificationReport,
+    # What an HTTP server answers in place of a route: a refusal, the deadline, a failure.
+    "http_rejection": HttpRejection,
 }
 
 

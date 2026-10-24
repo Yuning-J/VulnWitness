@@ -110,6 +110,15 @@ class KnowledgeToolbox:
             KnowledgeToolName.INVESTIGATE_TELECOM_TOPIC: self._investigate,
         }
 
+    @property
+    def limits(self) -> ToolLimits:
+        return self._limits
+
+    def has_free_worker(self) -> bool:
+        """Whether a tool body could start now: fewer than ``max_calls_in_flight`` bodies
+        have not returned, abandoned ones included."""
+        return self._call_runner.count_live_calls() < self._limits.max_calls_in_flight
+
     def call(
         self, tool_name: KnowledgeToolName, arguments: Mapping[str, object] | None
     ) -> ToolAnswer | ToolFailure:

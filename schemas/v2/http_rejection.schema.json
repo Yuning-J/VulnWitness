@@ -1,0 +1,209 @@
+{
+  "$defs": {
+    "HttpRejectionCode": {
+      "enum": [
+        "invalid_request",
+        "unauthorized",
+        "origin_not_allowed",
+        "not_found",
+        "method_not_allowed",
+        "body_too_large",
+        "host_not_allowed",
+        "internal_error",
+        "not_ready",
+        "deadline_exceeded"
+      ],
+      "title": "HttpRejectionCode",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "invalid_request"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request is not one this server accepts."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "unauthorized"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request lacks the server's bearer token."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "origin_not_allowed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request comes from an origin this server refuses."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "not_found"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "This server has no such route."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "method_not_allowed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The route does not accept this method."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "body_too_large"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request body exceeds the route's size limit."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "host_not_allowed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request names a host this server does not serve."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "internal_error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request failed with an internal error."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "not_ready"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "Every worker holds a call; retry later."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "deadline_exceeded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request did not finish within its deadline."
+          }
+        }
+      }
+    }
+  ],
+  "description": "Why an HTTP server answered in place of a route: a refusal before the route ran,\nthe request deadline passing while it ran, or the route failing. It carries its code\nand that code's fixed sentence, never text the request carried; the HTTP status\ntells the code apart as well.",
+  "properties": {
+    "code": {
+      "$ref": "#/$defs/HttpRejectionCode"
+    },
+    "message": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.23",
+      "default": "2.0.0-dev.23",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "code",
+    "message"
+  ],
+  "title": "HttpRejection",
+  "type": "object"
+}

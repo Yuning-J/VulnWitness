@@ -25,6 +25,18 @@ if [ "$mcp_status" -ne 1 ] || ! grep -qF "the 'mcp' extra is not installed" <<< 
   exit 1
 fi
 
+# The same refusal for MCP over HTTP, given the token it needs before anything else.
+mcp_http_status=0
+mcp_http_stderr="$(CVE_KGRAG_HTTP_TOKEN="core-only-lane-token-0123456789abcdefgh" \
+  "$work_dir/core-venv/bin/cve-kgrag" mcp --http < /dev/null 2>&1 > /dev/null)" \
+  || mcp_http_status=$?
+if [ "$mcp_http_status" -ne 1 ] \
+  || ! grep -qF "the 'mcp' extra is not installed" <<< "$mcp_http_stderr"; then
+  echo "cve-kgrag mcp --http without the mcp extra: expected exit 1 and the missing-extra" \
+    "refusal, got exit $mcp_http_status: $mcp_http_stderr" >&2
+  exit 1
+fi
+
 uv pip install -p "$core_python" pytest jsonschema
 "$core_python" -m pytest -q tests/unit tests/contract tests/integration \
-  --ignore=tests/integration/interfaces/mcp
+  --ignore=tests/integration/interfaces/mcp --ignore=tests/integration/interfaces/http

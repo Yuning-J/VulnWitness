@@ -14,7 +14,7 @@ import hashlib
 import ipaddress
 import re
 from collections.abc import Mapping
-from typing import TypeVar
+from typing import Literal, TypeVar
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
@@ -36,6 +36,22 @@ SEMANTIC_VARIABLES = {
     "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": "persist_directory",
     "CVE_KGRAG_SEMANTIC_MODEL_NAME": "model_name",
 }
+# The variables the HTTP servers read, and the field each sets; the section has no switch,
+# since a server is started by its own command (ADR 0007).
+HTTP_VARIABLES = {
+    "CVE_KGRAG_HTTP_HOST": "host",
+    "CVE_KGRAG_HTTP_TOKEN": "token",
+    "CVE_KGRAG_MCP_HTTP_PORT": "mcp_port",
+}
+# A bearer token as RFC 6750 writes one (``b64token``), long enough to be a generated
+# secret, for example ``python -c "import secrets; print(secrets.token_urlsafe(32))"``.
+HTTP_TOKEN_PATTERN = r"^[A-Za-z0-9._~+/-]+=*$"
+MIN_HTTP_TOKEN_CHARS = 32
+MAX_HTTP_TOKEN_CHARS = 512
+INVALID_HTTP_TOKEN = (
+    f"must be {MIN_HTTP_TOKEN_CHARS} to {MAX_HTTP_TOKEN_CHARS} characters of letters, digits "
+    "and -._~+/, optionally ending in ="
+)
 # Chroma's collection name rule; a sentence-transformers model is a hub name or a path.
 COLLECTION_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{1,61}[A-Za-z0-9]$"
 EMBEDDING_MODEL_PATTERN = r"^[A-Za-z0-9._/-]{1,256}$"
@@ -167,13 +183,39 @@ class SemanticSettings(BaseModel):
         return persist_directory
 
 
+class HttpSettings(BaseModel):
+    """What the HTTP servers listen on and the bearer token every route but ``/health``
+    requires. Only loopback is accepted; a server without a token refuses to start, so
+    the token is optional here and required by the command that serves."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    # Loopback written as the one literal each address family has, so the hosts a
+    # request may name are a closed list (no other 127/8 address, no name to resolve).
+    host: Literal["127.0.0.1", "::1"] = "127.0.0.1"
+    token: SecretStr | None = None
+    mcp_port: int = Field(default=8765, ge=1, le=65535)
+
+    @field_validator("token")
+    @classmethod
+    def check_token(cls, token: SecretStr | None) -> SecretStr | None:
+        if token is None:
+            return None
+        token_text = token.get_secret_value()
+        is_token_length = MIN_HTTP_TOKEN_CHARS <= len(token_text) <= MAX_HTTP_TOKEN_CHARS
+        if not is_token_length or not re.fullmatch(HTTP_TOKEN_PATTERN, token_text):
+            raise ValueError(INVALID_HTTP_TOKEN)
+        return token
+
+
 class ServiceSettings(BaseModel):
-    """Every setting a service reads; a section is ``None`` unless it is enabled."""
+    """Every setting a service reads; a switched section is ``None`` unless it is enabled."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
     model_planner: ModelPlannerSettings | None = None
     semantic: SemanticSettings | None = None
+    http: HttpSettings = HttpSettings()
 
 
 def find_section_variable(section_variables: Mapping[str, str], field_name: str) -> str:
@@ -240,8 +282,12 @@ def load_section(
 
 def load_settings(environment: Mapping[str, str]) -> ServiceSettings:
     """The settings ``environment`` holds. Raises ``SettingsError``, naming the variables
-    and never their values, when any is invalid. A section's variables are read only when
-    its switch (``CVE_KGRAG_PLANNER_ENABLED``, ``CVE_KGRAG_SEMANTIC_ENABLED``) is on."""
+    and never their values, when any is invalid. A switched section's variables are read
+    only when its switch (``CVE_KGRAG_PLANNER_ENABLED``, ``CVE_KGRAG_SEMANTIC_ENABLED``) is
+    on; the HTTP variables are always read."""
+    http_settings = parse_section(environment, HTTP_VARIABLES, HttpSettings)
+    if isinstance(http_settings, SettingsError):
+        raise http_settings
     return ServiceSettings(
         model_planner=load_section(
             environment, PLANNER_ENABLED_VARIABLE, PLANNER_VARIABLES, ModelPlannerSettings
@@ -249,4 +295,5 @@ def load_settings(environment: Mapping[str, str]) -> ServiceSettings:
         semantic=load_section(
             environment, SEMANTIC_ENABLED_VARIABLE, SEMANTIC_VARIABLES, SemanticSettings
         ),
+        http=http_settings,
     )

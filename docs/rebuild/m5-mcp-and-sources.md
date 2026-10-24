@@ -355,7 +355,7 @@ answer with the investigation service's.
 
 | Item | Deferred to | Recorded in |
 |---|---|---|
-| Streamable HTTP: opt-in, 127.0.0.1, bearer auth, DNS-rebinding settings for other hosts, separate health and readiness | M6, with the API extra | PLAN.md M6 row |
+| Streamable HTTP: opt-in, loopback, bearer auth, separate health and readiness; DNS-rebinding settings for other hosts stay a later decision | M6 WP6, owned by the `mcp` extra | ADR 0007 |
 | Typed settings boundary: no M5 path has an endpoint, a credential or an optional adapter to enable | M6 | PLAN.md M6 row |
 | `semantic_channel` reporting a failed adapter load | M6 WP2: `unavailable` with a server sentence | m6 doc, ADR 0004 §1 |
 | Real Trustify adapter, verdicts and Trustify anchors, drift detection against the pinned snapshot, retries, product-to-purl mapping, investigation wiring, `live` marker | Verified-adapter task | PLAN.md "Follow-up: verified Trustify adapter" |

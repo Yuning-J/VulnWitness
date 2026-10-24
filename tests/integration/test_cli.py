@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 from jsonschema import Draft202012Validator
-from pydantic import TypeAdapter
+from pydantic import SecretStr, TypeAdapter
 
 from cve_kgrag.adapter_discovery import MCP_EXTRA_MISSING_DETAIL, InterfaceUnavailable
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
@@ -19,6 +19,7 @@ from cve_kgrag.cli import (
     main,
     print_verification,
     run_evidence_lookup,
+    run_mcp_http_server,
     run_mcp_server,
 )
 from cve_kgrag.composition import (
@@ -95,6 +96,10 @@ PLANNER_WITHOUT_A_KEY = {
 }
 
 
+HTTP_TOKEN = "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE-tR8uI2oP5a"
+HTTP_LISTENER: dict[str, Any] = {"host": "::1", "port": 9001, "token": SecretStr(HTTP_TOKEN)}
+
+
 def run_cli(arguments: list[str], environment: Mapping[str, str] = NO_SETTINGS) -> int:
     """``cve-kgrag`` with ``arguments`` and the settings ``environment`` holds, never the
     environment the tests run in."""
@@ -110,6 +115,24 @@ class RecordingMcpServerRunner:
 
     def __call__(self, toolbox: KnowledgeToolbox) -> None:
         self.served_toolboxes.append(toolbox)
+
+
+class RecordingMcpHttpServerRunner:
+    """An MCP HTTP server runner that records what it is handed and returns at once, as
+    the HTTP runner does when the process is interrupted, or when its server could not
+    start unless ``has_served``."""
+
+    def __init__(self, has_served: bool = True) -> None:
+        self._has_served = has_served
+        self.served_toolboxes: list[KnowledgeToolbox] = []
+        self.listeners: list[tuple[str, int, str]] = []
+
+    def __call__(
+        self, toolbox: KnowledgeToolbox, *, host: str, port: int, token: SecretStr
+    ) -> bool:
+        self.served_toolboxes.append(toolbox)
+        self.listeners.append((host, port, token.get_secret_value()))
+        return self._has_served
 
 
 def test_demo_runs_offline_and_reports_each_query(capsys: pytest.CaptureFixture[str]) -> None:
@@ -362,7 +385,7 @@ def test_report_other_than_verified_prints_and_exits_one(
         MCP_EXTRA_MISSING_DETAIL,
         "mcp_server adapter entry point is not installed",
         "more than one mcp_server adapter is installed",
-        "mcp server runner could not load: ImportError",
+        "mcp_server adapter could not load: ImportError",
     ],
     ids=["extra_missing", "no_entry_point", "duplicate_runners", "failed_load"],
 )
@@ -391,6 +414,51 @@ def test_mcp_serves_the_packaged_fixture_toolbox_and_exits_zero_when_the_runner_
         runner.served_toolboxes[0].call(KnowledgeToolName.LOOKUP_CVE, {"cve_id": "CVE-9999-0003"})
     )
     assert lookup_answer.structured_content["status"] == "ok"
+
+
+def test_mcp_http_without_a_token_is_a_usage_error_naming_the_variable(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as raised:
+        run_cli(["mcp", "--http"])
+
+    captured = capsys.readouterr()
+    assert raised.value.code == 2
+    assert captured.out == ""
+    assert "invalid settings: CVE_KGRAG_HTTP_TOKEN: required by mcp --http" in captured.err
+
+
+def test_mcp_http_with_an_unusable_runner_exits_one_naming_the_reason(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_mcp_http_server(InterfaceUnavailable(MCP_EXTRA_MISSING_DETAIL), **HTTP_LISTENER)
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == f"cve-kgrag mcp --http cannot start: {MCP_EXTRA_MISSING_DETAIL}\n"
+
+
+def test_mcp_http_serves_the_packaged_fixture_on_the_listener_it_is_given(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    runner = RecordingMcpHttpServerRunner()
+
+    exit_code = run_mcp_http_server(runner, **HTTP_LISTENER)
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == ""
+    assert runner.listeners == [("::1", 9001, HTTP_TOKEN)]
+    lookup_answer = require_answer(
+        runner.served_toolboxes[0].call(KnowledgeToolName.LOOKUP_CVE, {"cve_id": "CVE-9999-0003"})
+    )
+    assert lookup_answer.structured_content["status"] == "ok"
+
+
+def test_mcp_http_whose_server_could_not_start_exits_one() -> None:
+    exit_code = run_mcp_http_server(RecordingMcpHttpServerRunner(has_served=False), **HTTP_LISTENER)
+
+    assert exit_code == 1
 
 
 def test_invalid_settings_are_a_usage_error_naming_the_variable_not_its_value(

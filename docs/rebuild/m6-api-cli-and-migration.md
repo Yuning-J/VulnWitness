@@ -1,6 +1,6 @@
 # M6 — API, CLI and migration
 
-Schema version `2.0.0-dev.22`. M6 is built in work packages; this document records each
+Schema version `2.0.0-dev.23`. M6 is built in work packages; this document records each
 one as it lands.
 
 ## Work packages
@@ -14,7 +14,7 @@ one as it lands.
 | WP3′ | ADR 0007, HTTP surfaces (documentation only) | done |
 | WP4 | Offline CI: lane scripts, GitHub workflow, test-time network guard | done |
 | WP5 | Full CLI, verification report contract, served-bundle seam | done |
-| WP6 | HTTP guard, HTTP settings, health and readiness, opt-in Streamable HTTP for MCP | not started |
+| WP6 | HTTP guard, HTTP settings, health and readiness, opt-in Streamable HTTP for MCP | done |
 | WP7 | v2 REST API, set verification over HTTP, `api` extra | not started |
 | WP9 | Read-only legacy-data importer (ADR 0008) | not started |
 | WP10 | Store activation and serving, operator FiGHT snapshot, M6 exit audit | not started |
@@ -174,9 +174,8 @@ Decisions: ADR 0006.
   without it is a usage error naming the variable.
 - The legacy fine-tuned model's registry entry and `LocalStoragePolicy.COMMITTED_ARTIFACT`
   are not carried; no schema changes, and the contracts stay at `2.0.0-dev.20`.
-- The dev group does not list FastAPI or httpx2 (httpx2 still arrives through the `mcp`
-  extra), and `testpaths` lists
-  `tests/unit`, `tests/contract` and `tests/integration`.
+- The dev group lists no FastAPI, and `testpaths` lists `tests/unit`, `tests/contract` and
+  `tests/integration`.
 
 ## WP3′ — HTTP surfaces (ADR 0007)
 
@@ -327,3 +326,139 @@ toolbox, whose limits exist for remote callers; ADR 0003 §10.
   only field name is 200,000 emoji gives a report under 4 KiB; an empty or overlong
   violation is rejected by the model and by the published schema; more than 100
   violations are cut to 100.
+
+## WP6 — HTTP guard, HTTP settings, MCP over Streamable HTTP
+
+Decisions: ADR 0007.
+
+- **Settings.** `HttpSettings` (`settings.py`) reads `CVE_KGRAG_HTTP_HOST` (`127.0.0.1`,
+  the default, or `::1`; any other value, `localhost`, other 127/8 addresses and mapped
+  forms included, is invalid), `CVE_KGRAG_MCP_HTTP_PORT` (1 to 65535, default 8765) and
+  `CVE_KGRAG_HTTP_TOKEN`: 32 to 512 characters of RFC 6750's `b64token` alphabet, held as
+  a `SecretStr`. The section has no switch: every command reads and validates it, and
+  only `mcp --http` serves. The API's port variable arrives with WP7.
+- **Command.** `cve-kgrag mcp --http` serves the packaged fixture's toolbox, with the
+  deterministic planner and no semantic channel, until it is interrupted (SIGINT), then
+  exits 0 with nothing on stdout or stderr; on SIGTERM it shuts down the same way and
+  ends by that signal, as uvicorn re-raises it. Without a token it is a usage error naming
+  `CVE_KGRAG_HTTP_TOKEN` (exit 2), checked before the runner is looked up. The runner
+  loads through the `mcp_http_server` entry point (`interfaces/mcp/http_runner.py`);
+  without the `mcp` extra the command exits 1 with the missing-extra line, which the
+  core-only lane checks. A port that cannot be bound exits 1 after uvicorn logs why.
+- **Guard.** `interfaces/http/guard.py` is the ASGI app uvicorn runs, ready for WP7's
+  routes as well. In order, it refuses with an `HttpRejection`:
+  - a missing, repeated or unserved `Host` (421): only `127.0.0.1:PORT` or
+    `localhost:PORT` for `127.0.0.1`, `[::1]:PORT` or `localhost:PORT` for `::1`, in any
+    case, without the port only on port 80;
+  - a repeated `Origin`, or one other than `http://` and a served host (403); a request
+    without `Origin` passes;
+  - a request without exactly one `Authorization: Bearer TOKEN` header, the scheme in any
+    case and the token compared as bytes in constant time (401, `WWW-Authenticate:
+    Bearer`), on every route but `/health`, unknown routes included;
+  - a target that is not a route byte for byte with an empty query (404): no
+    normalization, so `/mcp/`, `//mcp`, `/mc%70`, dot segments, absolute-form and `*`
+    name no route;
+  - a method the route does not take (405, `Allow`);
+  - a `Content-Length` other than one decimal number (400), or over the route's cap
+    (413) before any body is read.
+  It then reads the body under the request deadline, counting it and refusing 413 as soon
+  as the count passes the cap (256 KiB), and hands the route the body in one message.
+  The route's answer is recorded and sent once complete, so when the deadline passes the
+  guard answers 504 `deadline_exceeded` first and only then cancels the route, whatever
+  the route waits on. A route that raises or answers nothing is answered 500
+  `internal_error`; a client that disconnects during the body gets nothing. Every answer
+  carries `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`, and no
+  rejection carries `Connection: close`, so a client still sending a refused body reads
+  the answer instead of a reset.
+- **Routes.** `POST /mcp` is the MCP endpoint: the SDK's `StreamableHTTPSessionManager`,
+  stateless with JSON answers, its own DNS-rebinding check off (the guard's applies) and
+  its body cap at 256 KiB. `GET /health` answers 204 without the token; `GET /ready`
+  answers 204 while the toolbox has a free worker (`KnowledgeToolbox.has_free_worker`)
+  and 503 `not_ready` otherwise. The request deadline is the toolbox's longest call
+  (`ToolLimits.find_longest_call_seconds`: 30 s of investigation wall time plus the 10 s
+  seal margin) plus 10 s, 50 s in all, so a tool call that runs out of time answers its
+  own `timed_out` first.
+- **The SDK's answers in the server's words.** `interfaces/mcp/sdk_answers.py` restates
+  every answer the SDK's transport makes itself: a JSON-RPC error keeps its status, code
+  and `id`, loses `data`, and keeps its message only when it is a fixed sentence
+  (`unknown tool`, `Method not found`, `Invalid request parameters`), any other becoming
+  its code's fixed sentence; any other answer with status 400 or above becomes
+  `invalid_request` (4xx) or `internal_error` (5xx). The SDK otherwise repeats a value
+  sent in a validation error, and the method name in `data`. On stdio as well, the
+  server's middleware (`withhold_error_data`) drops `data` from every JSON-RPC error
+  raised while handling a request, and answers parameters that fail the SDK's request
+  model with its fixed `Invalid request parameters` and no `data`.
+- **uvicorn** (`interfaces/http/serving.py`) runs h11 without WebSocket support, with
+  proxy headers ignored, no `Server` header, no access log (it would record request
+  targets) and a 5 s keep-alive. A stop waits for the requests in flight up to one second
+  past the request deadline (51 s), so each ends with its route's answer or the guard's
+  504 rather than being cut off; a second interrupt stops at once. A request arriving
+  while 32 connections (its own included) or 32 requests are open gets uvicorn's own
+  503. uvicorn logs through the command's handlers at error level only: its warnings
+  come one per request (an upgrade it does not serve, a request it cannot parse, the
+  503), so any local caller could fill the log with them, while a port it cannot bind
+  and an app that raised are errors.
+- **Packaging.** The `mcp` extra declares Starlette and uvicorn, and `MCP_EXTRA_MODULES`
+  names them, so a core install missing either reports the missing extra. The dev group
+  declares `httpx2`, which the HTTP tests import. `interfaces/http/` imports the ASGI
+  stack and stays out of the core module walk, as `interfaces/mcp/` does; the core-only
+  lane leaves out `tests/integration/interfaces/http` as well.
+- **Tests.**
+  - `tests/integration/interfaces/http/test_http_guard.py` drives the guard in-process
+    with any target bytes and header list (`tests/support/asgi.py`): tables of hosts,
+    origins, authorizations, targets and methods, each checking the route was not
+    reached; length declarations; caps counted across messages; the deadline over a
+    stalled body, a route that never returns and a route blocked on a worker thread
+    (answered while the thread still blocks); a route that raises, answers nothing or
+    answers only in part; each code's status against the published table; and no
+    rejection repeating a marker sent in the target, a header or the body.
+  - `tests/integration/interfaces/mcp/test_mcp_http.py` runs the SDK client in both
+    modes over the guarded app, checks the unknown-tool error, the 405 on `GET /mcp`,
+    `/ready` answering 503 while the toolbox's only worker holds a call, the 50 s
+    deadline and the stop waiting past it, and the exact status and body of eight
+    requests the SDK answers itself, none repeating the marker it carries (a plain-text
+    server error becomes `internal_error`); and starts `cve-kgrag mcp --http` on a free
+    port of `127.0.0.1` and of `::1`: the client lists the tools, `/ready` without the
+    token is 401 without a `Server` header, a 1 MiB body is 413 over a real socket, an
+    upgrade request and an unparsable one log nothing, and an interrupt exits 0 with
+    empty stdout and stderr; on a port in use it exits 1 and says why.
+  - `test_mcp_stdio.py` checks that an unknown method's error and an invalid-params error
+    carry no `data` and repeat nothing sent.
+
+### Known limits
+
+- uvicorn refuses no connection and reads request headers with no timeout of its own: a
+  local process can open any number of connections and leave their headers unfinished,
+  each holding up to h11's partial-header limit (16 KiB) until the client closes it, and
+  while 32 are open every other request gets uvicorn's 503. Anything on the machine can
+  already exhaust a loopback service this way.
+- uvicorn's own refusals (a malformed request line or headers: 400; the 503 above) are
+  its plain-text sentences, not `HttpRejection`: they happen before the guard runs. They
+  repeat nothing the request sent.
+- JSON-RPC requires a reply to repeat the request's `id`, so a JSON-RPC error carries the
+  `id` the client chose.
+- On stdio, the server stops at the end of its input, and a reply still being worked out
+  then is not written; a client reads its replies before closing stdin.
+
+### Contracts at `2.0.0-dev.23`
+
+- New snapshot `http_rejection.schema.json` (`HttpRejection`): `schema_version`, `code`
+  and `message`, the code's fixed sentence, stated as `if`/`then` per code.
+
+  | Code | Status |
+  |---|---|
+  | `invalid_request` | 400 |
+  | `unauthorized` | 401 |
+  | `origin_not_allowed` | 403 |
+  | `not_found` | 404 |
+  | `method_not_allowed` | 405 |
+  | `body_too_large` | 413 |
+  | `host_not_allowed` | 421 |
+  | `internal_error` | 500 |
+  | `not_ready` | 503 |
+  | `deadline_exceeded` | 504 |
+
+- Every versioned schema moves to `2.0.0-dev.23`; no other contract changes.
+- Tests: a genuine rejection and every code's fixed sentence validate under the published
+  schema; a rejection quoting the request, carrying another code's sentence or a
+  `status` field is rejected by the model and by the schema.

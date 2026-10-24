@@ -1,13 +1,16 @@
 """Command-line interface over the offline search, topic-context and investigation
 services, the knowledge lookups (capabilities, topic resolution, affectedness, evidence),
-the verification of an evidence set handed back, and the MCP server over stdio.
+the verification of an evidence set handed back, and the MCP server over stdio or, with
+``--http``, over Streamable HTTP on a loopback address.
 
 Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
 a query that resolves to a topic, an evidence ID the catalogue serves, every affectedness
-answer established, capabilities always, and for ``mcp`` the client closing stdin. 1 for
-any other status, verdict or answer, for schema drift and for ``mcp`` without a usable
-server runner. 2 for invalid usage: an argument a contract rejects, invalid settings, and
-a ``verify`` file that cannot be read or is larger than ``MAX_EVIDENCE_SET_FILE_BYTES``.
+answer established, capabilities always, and for ``mcp`` the client closing stdin or, for
+``mcp --http``, an interrupt (SIGINT; on SIGTERM the process ends by that signal). 1 for
+any other status, verdict or answer, for schema drift, for ``mcp`` without a usable
+server runner and for ``mcp --http`` on a port it cannot bind. 2 for invalid usage: an
+argument a contract rejects, invalid settings, ``mcp --http`` without a token, and a
+``verify`` file that cannot be read or is larger than ``MAX_EVIDENCE_SET_FILE_BYTES``.
 """
 
 import argparse
@@ -20,11 +23,13 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, TypeVar
 
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from cve_kgrag.adapter_discovery import (
     InterfaceUnavailable,
+    McpHttpServerRunner,
     McpServerRunner,
+    discover_mcp_http_server_runner,
     discover_mcp_server_runner,
     discover_planner_setup,
 )
@@ -71,7 +76,15 @@ from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, Topi
 from cve_kgrag.domain.validation import EvidenceValidationError
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
-from cve_kgrag.settings import SemanticSettings, ServiceSettings, SettingsError, load_settings
+from cve_kgrag.settings import (
+    HTTP_VARIABLES,
+    HttpSettings,
+    SemanticSettings,
+    ServiceSettings,
+    SettingsError,
+    find_section_variable,
+    load_settings,
+)
 
 DEMO_QUERIES = (
     "CVE-9999-0003",
@@ -116,6 +129,7 @@ MAX_EVIDENCE_SET_FILE_BYTES = 4 * 1024 * 1024
 OVERSIZED_EVIDENCE_SET_MESSAGE = (
     f"the evidence set file is larger than {MAX_EVIDENCE_SET_FILE_BYTES // (1024 * 1024)} MiB"
 )
+HTTP_TOKEN_VARIABLE = find_section_variable(HTTP_VARIABLES, "token")
 UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
 UNSERVED_EVIDENCE_MESSAGE = (
     "the anchor catalogued under {evidence_id} fails the anchor rules, so it is not served"
@@ -221,11 +235,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_parser.add_argument("evidence_set_path", metavar="FILE", type=Path)
 
-    commands.add_parser(
+    mcp_parser = commands.add_parser(
         "mcp",
         help=(
             "serve the knowledge tools over MCP on stdio, over the packaged fixture and the "
             "deterministic planner; needs the 'mcp' extra"
+        ),
+    )
+    mcp_parser.add_argument(
+        "--http",
+        action="store_true",
+        help=(
+            "serve over Streamable HTTP instead, on the loopback host and port the "
+            "CVE_KGRAG_HTTP_HOST and CVE_KGRAG_MCP_HTTP_PORT settings name, every route but "
+            "/health behind the CVE_KGRAG_HTTP_TOKEN bearer token; runs until interrupted"
         ),
     )
 
@@ -459,6 +482,29 @@ def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable) -> int:
     return 0
 
 
+def require_http_token(parser: argparse.ArgumentParser, http_settings: HttpSettings) -> SecretStr:
+    """The configured token, or a usage error (exit 2) naming its variable."""
+    if http_settings.token is None:
+        parser.error(f"invalid settings: {HTTP_TOKEN_VARIABLE}: required by mcp --http")
+    return http_settings.token
+
+
+def run_mcp_http_server(
+    runner: McpHttpServerRunner | InterfaceUnavailable, *, host: str, port: int, token: SecretStr
+) -> int:
+    """Serve the packaged fixture's knowledge tools over Streamable HTTP with ``runner``
+    on ``host`` and ``port`` behind ``token`` until interrupted; 1 when there is no usable
+    runner, with one line on stderr naming why, or when the server could not start, which
+    the server has logged."""
+    if isinstance(runner, InterfaceUnavailable):
+        print(f"cve-kgrag mcp --http cannot start: {runner.detail}", file=sys.stderr)
+        return 1
+    has_served = runner(
+        build_knowledge_toolbox(load_served_bundle()), host=host, port=port, token=token
+    )
+    return 0 if has_served else 1
+
+
 def choose_semantic_settings(
     settings: ServiceSettings, arguments: argparse.Namespace
 ) -> SemanticSettings | None:
@@ -493,9 +539,17 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     if arguments.command == "schema":
         return run_schema_command(arguments.action, arguments.dir)
     if arguments.command == "mcp":
+        http_token = require_http_token(parser, settings.http) if arguments.http else None
         logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
         if settings.semantic is not None:
             logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, "mcp")
+        if http_token is not None:
+            return run_mcp_http_server(
+                discover_mcp_http_server_runner(),
+                host=settings.http.host,
+                port=settings.http.mcp_port,
+                token=http_token,
+            )
         return run_mcp_server(discover_mcp_server_runner())
 
     bundle = load_served_bundle()

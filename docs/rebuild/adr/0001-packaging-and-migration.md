@@ -32,7 +32,7 @@ optional adapters (semantic, Neo4j, Trustify, API, MCP) remain available.
 | Profile | Mechanism | Contents | Introduced |
 |---|---|---|---|
 | core | `[project].dependencies` | `pydantic`; `PyYAML` from M3 (a `SafeLoader` subclass only, for reviewed topic cards and FiGHT snapshots, which protocol-context retrieval needs in a core-only install) | M1 / M3 |
-| dev | `[dependency-groups].dev` | pytest, ruff, mypy, types-PyYAML, jsonschema (schema/model agreement tests), and the `mcp` extra from M5, so the default lane runs the MCP server's tests; an HTTP test client (`httpx2`) once a test imports one | M0 |
+| dev | `[dependency-groups].dev` | pytest, ruff, mypy, types-PyYAML, jsonschema (schema/model agreement tests), and the `mcp` extra from M5, so the default lane runs the MCP server's tests; the HTTP test client (`httpx2`) the HTTP tests import | M0 |
 | semantic | extra | Chroma / sentence-transformers adapter | M2 |
 | trustify | extra | MCP client for the official Trustify MCP server | introduced with the verified Trustify adapter (ADR 0003); not in M5 |
 | mcp | extra | official MCP SDK for the CVE-KGRAG server; Starlette and uvicorn, declared explicitly, for MCP over Streamable HTTP (ADR 0007) | M5; HTTP in M6 WP6 |

@@ -1,6 +1,11 @@
 """Base class for every domain and contract model, and how a rejected input is reported."""
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from collections.abc import Mapping
+from enum import StrEnum
+from typing import TypeVar
+
+from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
+from pydantic.config import JsonDict
 from pydantic_core import ErrorDetails
 
 
@@ -14,6 +19,23 @@ class ContractModel(BaseModel):
     model_config = ConfigDict(
         frozen=True, extra="forbid", json_schema_serialization_defaults_required=True
     )
+
+
+CodeT = TypeVar("CodeT", bound=StrEnum)
+
+
+def describe_fixed_messages(code_messages: Mapping[CodeT, str]) -> JsonDict:
+    """A contract's rule that each ``code`` comes with exactly its fixed ``message``, as
+    JSON Schema: one ``if``/``then`` per code."""
+    code_rules: list[JsonValue] = []
+    for code, message in code_messages.items():
+        code_rules.append(
+            {
+                "if": {"properties": {"code": {"const": code.value}}},
+                "then": {"properties": {"message": {"const": message}}},
+            }
+        )
+    return {"allOf": code_rules}
 
 
 def describe_problem(problem: ErrorDetails) -> str:
