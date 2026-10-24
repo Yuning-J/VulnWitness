@@ -1,7 +1,9 @@
 """CLI behavior: exit codes and output shape."""
 
+import hashlib
 import json
 import logging
+import subprocess
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -16,6 +18,7 @@ from cve_kgrag.application.evidence_set_verification import MAX_EVIDENCE_SET_BYT
 from cve_kgrag.application.investigation_policy import describe_deterministic_planner
 from cve_kgrag.cli import (
     OVERSIZED_EVIDENCE_SET_MESSAGE,
+    PACKAGE_DIR,
     main,
     print_verification,
     run_api_server,
@@ -48,6 +51,7 @@ from cve_kgrag.domain.planning import (
     ModelReplyFailureDetail,
 )
 from cve_kgrag.domain.search import (
+    SCHEMA_VERSION,
     ChannelOutcome,
     SearchFilters,
     SearchRequest,
@@ -62,9 +66,12 @@ from cve_kgrag.domain.taxonomy import (
 )
 from cve_kgrag.domain.tool_contracts import ConceptResolution, EvidenceLookup, KnowledgeCapabilities
 from cve_kgrag.domain.topic_context import TopicContextRequest, TopicContextResponse
+from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport
+from cve_kgrag.evaluation.planner_runner import REPORT_FILE_NAME
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName
 from cve_kgrag.settings import load_settings
+from tests.support.evaluation import SMALL_GOLD_ROWS, build_gold_row, write_gold_file
 from tests.support.fake_chat_server import (
     FakeChatServer,
     FakeChatServers,
@@ -80,7 +87,7 @@ from tests.support.investigation import (
     rewrite_step,
 )
 from tests.support.investigation_runs import run_model_accepted
-from tests.support.paths import REPOSITORY_SCHEMA_DIR
+from tests.support.paths import REPOSITORY_ROOT, REPOSITORY_SCHEMA_DIR
 from tests.support.secrets import assert_secret_absent
 from tests.support.toolbox import FIXTURE_EVIDENCE_ID, UNKNOWN_EVIDENCE_ID, require_answer
 
@@ -98,6 +105,9 @@ PLANNER_WITHOUT_A_KEY = {
 }
 
 
+EVAL_RESULTS = "eval-results"
+EVAL_MARKER = "eval-marker-4d8a"
+EVAL_QUERY_MARKER = "evalquerymarker"
 HTTP_TOKEN = "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE-tR8uI2oP5a"
 HTTP_LISTENER: dict[str, Any] = {"host": "::1", "port": 9001, "token": SecretStr(HTTP_TOKEN)}
 
@@ -1258,3 +1268,247 @@ def test_verify_output_is_valid_under_the_verification_report_schema(
 
     report = json.loads(capsys.readouterr().out)
     assert list(Draft202012Validator(schema).iter_errors(report)) == []
+
+
+def run_planner_evaluation_cli(
+    tmp_path: Path,
+    environment: Mapping[str, str] = NO_SETTINGS,
+    *extra_arguments: str,
+    gold_rows: list[dict[str, Any]] = SMALL_GOLD_ROWS,
+) -> int:
+    """``cve-kgrag eval planner`` over a gold file of ``gold_rows``, writing under
+    ``tmp_path / "eval-results"``."""
+    gold_path = write_gold_file(tmp_path, gold_rows)
+    return run_cli(
+        [
+            "eval",
+            "planner",
+            "--gold",
+            str(gold_path),
+            "--out",
+            str(tmp_path / EVAL_RESULTS),
+            *extra_arguments,
+        ],
+        environment,
+    )
+
+
+def list_written_sets(tmp_path: Path, run_kind: str) -> list[Path]:
+    """The evidence set files the one evaluation run under ``tmp_path`` wrote for
+    ``run_kind`` (``deterministic`` or ``model``)."""
+    (result_dir,) = (tmp_path / EVAL_RESULTS).iterdir()
+    return sorted((result_dir / run_kind).iterdir())
+
+
+def verify_written_sets(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> dict[str, str]:
+    """The ``cve-kgrag verify`` verdict on each deterministic set the evaluation run under
+    ``tmp_path`` wrote, by the set's query."""
+    verdicts: dict[str, str] = {}
+    for set_path in list_written_sets(tmp_path, "deterministic"):
+        evidence_set = KnowledgeEvidenceSet.model_validate_json(set_path.read_bytes())
+        _, verification_report = verify_file(tmp_path, set_path.read_bytes(), capsys)
+        verdicts[evidence_set.request.query] = verification_report["verdict"]
+    return verdicts
+
+
+def test_eval_planner_baseline_prints_its_report_and_writes_sets_that_verify(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = run_planner_evaluation_cli(tmp_path)
+    evaluation_output = capsys.readouterr()
+    verdicts = verify_written_sets(tmp_path, capsys)
+
+    report = PlannerEvaluationReport.model_validate_json(evaluation_output.out)
+    assert exit_code == 0
+    assert report.model is None
+    assert report.deterministic.runs == 2
+    assert (
+        report.identity.gold_sha256
+        == hashlib.sha256((tmp_path / "gold.yaml").read_bytes()).hexdigest()
+    )
+    assert report.identity.evidence_set_schema_version == SCHEMA_VERSION
+    assert f"{REPORT_FILE_NAME} to {tmp_path / EVAL_RESULTS}" in evaluation_output.err
+    # The packaged deployment verifies the case run on it; the other served no FiGHT.
+    assert verdicts == {"5G-AKA": "verified", "CVE-9999-0003": "invalid"}
+
+
+def test_eval_planner_baseline_calls_no_endpoint_even_with_a_planner_enabled(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], fake_chat_servers: FakeChatServers
+) -> None:
+    server = fake_chat_servers.start(ScriptedAnswer(body=build_completion_body("{}")))
+
+    exit_code = run_planner_evaluation_cli(tmp_path, build_planner_environment(server))
+
+    report = PlannerEvaluationReport.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert server.received_requests == []
+    assert report.model is None
+    assert report.identity.model_planner_sha256 is None
+
+
+def test_eval_planner_model_runs_without_an_enabled_planner_are_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as raised:
+        run_planner_evaluation_cli(tmp_path, NO_SETTINGS, "--model-runs", "2")
+
+    assert raised.value.code == 2
+    assert "CVE_KGRAG_PLANNER_ENABLED" in capsys.readouterr().err
+    assert not (tmp_path / EVAL_RESULTS).exists()
+
+
+def test_eval_planner_model_runs_with_a_planner_that_cannot_plan_exit_one_saying_why(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = run_planner_evaluation_cli(tmp_path, PLANNER_WITHOUT_A_KEY, "--model-runs", "2")
+
+    evaluation_output = capsys.readouterr()
+    assert exit_code == 1
+    assert evaluation_output.out == ""
+    assert ModelPlannerUnavailableDetail.MISSING_API_KEY.value in evaluation_output.err
+    assert not (tmp_path / EVAL_RESULTS).exists()
+
+
+@pytest.mark.parametrize("model_runs", ["-1", "21"], ids=["negative", "over_the_cap"])
+def test_eval_planner_model_runs_outside_their_range_are_a_usage_error_before_any_call(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    fake_chat_servers: FakeChatServers,
+    model_runs: str,
+) -> None:
+    server = fake_chat_servers.start(ScriptedAnswer(body=build_completion_body("{}")))
+
+    with pytest.raises(SystemExit) as raised:
+        run_planner_evaluation_cli(
+            tmp_path, build_planner_environment(server), "--model-runs", model_runs
+        )
+
+    assert raised.value.code == 2
+    assert "--model-runs: invalid choice" in capsys.readouterr().err
+    assert server.received_requests == []
+
+
+def test_eval_planner_names_the_source_it_evaluated(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The offline lanes run this checkout's package, so the report names its commit; the
+    core-only lane installs it as a wheel, which no checkout holds."""
+    expected_revisions = {"unavailable"}
+    if PACKAGE_DIR == REPOSITORY_ROOT / "src" / "cve_kgrag":
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPOSITORY_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        expected_revisions = {head, f"{head}+dirty"}
+
+    run_planner_evaluation_cli(tmp_path)
+
+    report = PlannerEvaluationReport.model_validate_json(capsys.readouterr().out)
+    assert report.identity.source_revision in expected_revisions
+
+
+def test_eval_planner_model_runs_plan_through_the_installed_adapter_and_report_no_text(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], fake_chat_servers: FakeChatServers
+) -> None:
+    """The plan carries a field the plan shape rejects, so every round falls back; its text
+    and the queries stay in the sets the run wrote and never reach the report, nor do the
+    endpoint, the model's name or the key."""
+    plan_text = json.dumps({"steps": [SEARCH_5G_AKA], "note": EVAL_MARKER})
+    server = fake_chat_servers.start(ScriptedAnswer(body=build_completion_body(plan_text)))
+    environment = build_planner_environment(server)
+    gold_rows = [
+        build_gold_row(f"5G-AKA {EVAL_QUERY_MARKER}"),
+        build_gold_row("CVE-9999-0003", "unavailable"),
+    ]
+
+    exit_code = run_planner_evaluation_cli(
+        tmp_path, environment, "--model-runs", "2", gold_rows=gold_rows
+    )
+    evaluation_output = capsys.readouterr()
+
+    report = PlannerEvaluationReport.model_validate_json(evaluation_output.out)
+    model_set_paths = list_written_sets(tmp_path, "model")
+    assert exit_code == 0
+    assert report.model is not None
+    assert report.model.runs == 4
+    assert report.model.round_one.outcomes[PlannerOutcome.MODEL_REJECTED] == 4
+    assert len(server.received_requests) == 4
+    assert len(model_set_paths) == 4
+    model_set_texts = ""
+    for model_set_path in model_set_paths:
+        model_set_texts += model_set_path.read_text(encoding="utf-8")
+    assert EVAL_MARKER in model_set_texts
+    assert EVAL_QUERY_MARKER in model_set_texts
+    for absent_text in (
+        EVAL_MARKER,
+        EVAL_QUERY_MARKER,
+        server.base_url,
+        environment["CVE_KGRAG_PLANNER_MODEL_NAME"],
+    ):
+        assert absent_text not in evaluation_output.out
+    assert_secret_absent(evaluation_output.out, CLI_PLANNER_KEY, "stdout")
+    assert_secret_absent(evaluation_output.err, CLI_PLANNER_KEY, "stderr")
+
+
+def test_eval_planner_model_runs_against_a_failing_endpoint_report_none_of_its_text(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], fake_chat_servers: FakeChatServers
+) -> None:
+    server = fake_chat_servers.start(
+        ScriptedAnswer(status=500, body=f"Internal error: {EVAL_MARKER}".encode())
+    )
+
+    exit_code = run_planner_evaluation_cli(
+        tmp_path, build_planner_environment(server), "--model-runs", "1"
+    )
+
+    evaluation_output = capsys.readouterr()
+    report = PlannerEvaluationReport.model_validate_json(evaluation_output.out)
+    assert exit_code == 0
+    assert report.model is not None
+    assert report.model.round_one.unavailable_details["endpoint_error"] == 2
+    assert EVAL_MARKER not in evaluation_output.out
+    assert EVAL_MARKER not in evaluation_output.err
+    assert server.base_url not in evaluation_output.out
+
+
+def test_eval_planner_with_an_invalid_gold_file_is_a_usage_error_that_never_quotes_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    gold_rows = [build_gold_row("5G-AKA", scope=EVAL_MARKER)]
+
+    with pytest.raises(SystemExit) as raised:
+        run_planner_evaluation_cli(tmp_path, NO_SETTINGS, gold_rows=gold_rows)
+
+    error_output = capsys.readouterr().err
+    assert raised.value.code == 2
+    assert "invalid gold file: case 1: request: scope:" in error_output
+    assert EVAL_MARKER not in error_output
+    assert not (tmp_path / EVAL_RESULTS).exists()
+
+
+def test_eval_planner_with_an_unreadable_gold_file_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as raised:
+        run_cli(
+            ["eval", "planner", "--gold", str(tmp_path / "missing.yaml"), "--out", str(tmp_path)]
+        )
+
+    assert raised.value.code == 2
+    assert "cannot read" in capsys.readouterr().err
+
+
+def test_eval_planner_that_cannot_write_its_results_exits_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / EVAL_RESULTS).write_text("a file where the directory should be", encoding="utf-8")
+
+    exit_code = run_planner_evaluation_cli(tmp_path)
+
+    evaluation_output = capsys.readouterr()
+    assert exit_code == 1
+    assert evaluation_output.out == ""
+    assert "cve-kgrag eval planner cannot write its results" in evaluation_output.err

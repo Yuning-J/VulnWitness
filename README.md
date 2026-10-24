@@ -1,6 +1,9 @@
 # telecom-cve-kgrag
 
-A telecom-focused, evidence-bound CVE and threat-context investigation system, with an
+A telecom-focused, evidence-bound CVE and threat-context investigation system: a bounded,
+auditable investigation agent whose evidence authority stays deterministic. A model planner
+may propose the next tool calls; whether the evidence answers a question, when to stop and
+what an answer may claim are decided by deterministic code. Topics come from an
 extensible, review-governed topic registry. The first topic card is 5G-AKA. It is marked
 `pending_review` while the design is experimental: it was checked against 3GPP TS 33.501
 V19.7.0 but has no named reviewer, so every answer that uses it says so.
@@ -62,6 +65,7 @@ uv run cve-kgrag mcp                                    # MCP server on stdio (m
 uv run cve-kgrag mcp --http                             # MCP over HTTP on 127.0.0.1:8765
 uv run cve-kgrag api                                    # REST API on 127.0.0.1:8766 (api extra)
 uv run cve-kgrag schema check                           # compare schemas with the snapshots
+uv run cve-kgrag eval planner --gold eval/gold/m4_trajectories.yaml --out eval-results
 ```
 
 Every command but `mcp`, `api` and `schema` prints JSON. `--scope` is one of
@@ -71,6 +75,14 @@ repeatable) and `--kev-only`; `investigate` takes the product options and the bu
 options `--max-rounds`, `--max-tool-calls`, `--max-sources`, `--max-results-per-call`,
 `--max-wall-time-seconds` and `--max-context-bytes`. `cve-kgrag <command> --help` lists
 each command's options.
+
+`eval planner` is a local reviewer and operator tool, served by no API: it runs each gold
+case with the deterministic policy and, with `--model-runs N` (0 to 20, default 0), N times
+with the model planner the settings enable, then prints a report of counts, codes and
+hashes ([`m7a-planner-baseline.md`](docs/rebuild/m7a-planner-baseline.md)). Without
+`--model-runs` it calls no endpoint. It writes every evidence set to a new owner-only
+directory under `--out`; those sets hold the queries and the model's plan text, so keep
+them out of version control (`eval-results/` is ignored).
 
 ## Configuration
 

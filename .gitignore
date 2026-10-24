@@ -26,3 +26,6 @@ env/
 # Build outputs
 dist/
 build/
+
+# Planner evaluation results: the evidence sets hold queries and model plan text
+eval-results/

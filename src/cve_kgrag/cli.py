@@ -1,18 +1,21 @@
 """Command-line interface over the offline search, topic-context and investigation
 services, the knowledge lookups (capabilities, topic resolution, affectedness, evidence),
 the verification of an evidence set handed back, the MCP server over stdio or, with
-``--http``, over Streamable HTTP, and the v2 REST API, both HTTP servers on a loopback
-address.
+``--http``, over Streamable HTTP, the v2 REST API, both HTTP servers on a loopback
+address, and the local planner evaluation (``eval planner``).
 
 Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
 a query that resolves to a topic, an evidence ID the catalogue serves, every affectedness
-answer established, capabilities always, and for ``mcp`` the client closing stdin or, for
-``mcp --http`` and ``api``, an interrupt (SIGINT; on SIGTERM the process ends by that
-signal). 1 for any other status, verdict or answer, for schema drift, for ``mcp`` or
-``api`` without a usable server runner and for an HTTP server on a port it cannot bind.
-2 for invalid usage: an argument a contract rejects, invalid settings, an HTTP server
-without a token, and a ``verify`` file that cannot be read or is larger than
-``MAX_EVIDENCE_SET_BYTES``.
+answer established, capabilities always, an ``eval planner`` run that wrote its results,
+and for ``mcp`` the client closing stdin or, for ``mcp --http`` and ``api``, an interrupt
+(SIGINT; on SIGTERM the process ends by that signal). 1 for any other status, verdict or
+answer, for schema drift, for ``mcp`` or ``api`` without a usable server runner, for an
+HTTP server on a port it cannot bind, for model runs whose enabled planner cannot plan and
+for evaluation results that cannot be written. 2 for invalid usage: an argument a contract
+rejects, invalid settings, an HTTP server without a token, model runs without an enabled
+planner, a ``verify`` file that cannot be read or is larger than
+``MAX_EVIDENCE_SET_BYTES``, and a gold file that cannot be read or is no investigation
+gold file.
 """
 
 import argparse
@@ -47,6 +50,7 @@ from cve_kgrag.application.evidence_set_verification import (
 from cve_kgrag.application.investigate import describe_service_capabilities
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
 from cve_kgrag.application.knowledge_lookup import find_served_evidence, lookup_cve
+from cve_kgrag.application.planner_setup import ModelPlanning
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.composition import (
     build_investigation_deployment,
@@ -65,6 +69,7 @@ from cve_kgrag.domain.evidence_set_verification_report import (
     VerificationReport,
     VerificationVerdict,
 )
+from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.search import (
     MAX_FILTER_VALUES,
@@ -82,10 +87,23 @@ from cve_kgrag.domain.tool_contracts import (
 )
 from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, TopicContextResponse
 from cve_kgrag.domain.validation import EvidenceValidationError
+from cve_kgrag.evaluation.planner_report import format_report
+from cve_kgrag.evaluation.planner_runner import (
+    MAX_GOLD_FILE_BYTES,
+    MAX_MODEL_RUNS,
+    REPORT_FILE_NAME,
+    GoldFileError,
+    ModelRuns,
+    ResultDirectory,
+    load_gold_cases,
+    read_source_revision,
+    run_planner_evaluation,
+)
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
 from cve_kgrag.settings import (
     HTTP_VARIABLES,
+    PLANNER_ENABLED_VARIABLE,
     HttpSettings,
     ModelPlannerSettings,
     SemanticSettings,
@@ -137,6 +155,11 @@ OVERSIZED_EVIDENCE_SET_MESSAGE = (
     f"the evidence set file is larger than {MAX_EVIDENCE_SET_BYTES // (1024 * 1024)} MiB"
 )
 HTTP_TOKEN_VARIABLE = find_section_variable(HTTP_VARIABLES, "token")
+# The installed package directory, whose git checkout (if any) names the evaluated source.
+PACKAGE_DIR = Path(__file__).resolve().parent
+MODEL_RUNS_WITHOUT_A_PLANNER = (
+    f"invalid settings: --model-runs needs the model planner enabled ({PLANNER_ENABLED_VARIABLE})"
+)
 UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
 UNSERVED_EVIDENCE_MESSAGE = (
     "the anchor catalogued under {evidence_id} fails the anchor rules, so it is not served"
@@ -266,6 +289,46 @@ def build_parser() -> argparse.ArgumentParser:
             "CVE_KGRAG_API_PORT settings name, every route but /health behind the "
             "CVE_KGRAG_HTTP_TOKEN bearer token, over the packaged fixture and the "
             "deterministic planner; runs until interrupted; needs the 'api' extra"
+        ),
+    )
+
+    eval_parser = commands.add_parser(
+        "eval", help="local evaluation tools for reviewers and operators, served by no API"
+    )
+    eval_commands = eval_parser.add_subparsers(dest="eval_command", required=True)
+    planner_eval_parser = eval_commands.add_parser(
+        "planner",
+        help=(
+            "run each gold investigation case with the deterministic policy and, with "
+            "--model-runs, the model planner the settings enable; writes every evidence set "
+            "and a report of counts, codes and hashes to a new directory and prints the report"
+        ),
+    )
+    planner_eval_parser.add_argument(
+        "--gold",
+        required=True,
+        type=Path,
+        help="an investigation gold file, such as eval/gold/m4_trajectories.yaml",
+    )
+    planner_eval_parser.add_argument(
+        "--out",
+        required=True,
+        type=Path,
+        help=(
+            "the directory, such as eval-results, to create a new owner-only planner-* "
+            "result directory in; its evidence sets hold the queries and the model's plan "
+            "text, so never commit them"
+        ),
+    )
+    planner_eval_parser.add_argument(
+        "--model-runs",
+        type=int,
+        default=0,
+        choices=range(MAX_MODEL_RUNS + 1),
+        metavar=f"0..{MAX_MODEL_RUNS}",
+        help=(
+            "runs per case with the model planner, which calls its endpoint; 0, the "
+            "default, runs the deterministic baseline alone and calls no endpoint"
         ),
     )
 
@@ -412,14 +475,20 @@ def run_demo(service: SearchService) -> int:
     return 0
 
 
+def read_input_file(parser: argparse.ArgumentParser, input_path: Path, max_bytes: int) -> bytes:
+    """At most ``max_bytes`` + 1 bytes of the file, so a caller can tell it is over the cap
+    without reading it all, or a usage error (exit 2) when it cannot be read."""
+    try:
+        with input_path.open("rb") as input_file:
+            return input_file.read(max_bytes + 1)
+    except OSError as error:
+        parser.error(f"cannot read {input_path}: {error.strerror}")
+
+
 def read_evidence_set_file(parser: argparse.ArgumentParser, evidence_set_path: Path) -> bytes:
     """The file's bytes, or a usage error (exit 2) when it cannot be read or holds more than
-    ``MAX_EVIDENCE_SET_BYTES``; never more than one byte past the cap is read."""
-    try:
-        with evidence_set_path.open("rb") as evidence_set_file:
-            evidence_set_bytes = evidence_set_file.read(MAX_EVIDENCE_SET_BYTES + 1)
-    except OSError as error:
-        parser.error(f"cannot read {evidence_set_path}: {error.strerror}")
+    ``MAX_EVIDENCE_SET_BYTES``."""
+    evidence_set_bytes = read_input_file(parser, evidence_set_path, MAX_EVIDENCE_SET_BYTES)
     if len(evidence_set_bytes) > MAX_EVIDENCE_SET_BYTES:
         parser.error(OVERSIZED_EVIDENCE_SET_MESSAGE)
     return evidence_set_bytes
@@ -584,6 +653,55 @@ def choose_semantic_settings(
     return None
 
 
+def run_planner_evaluation_command(
+    parser: argparse.ArgumentParser,
+    arguments: argparse.Namespace,
+    planner_settings: ModelPlannerSettings | None,
+    bundle: FixtureBundle,
+) -> int:
+    """Run the gold cases (``run_planner_evaluation``), print the report and name the
+    result directory on stderr. A gold file that is no investigation gold file is a usage
+    error, reported without quoting it; model runs need an enabled planner that can plan,
+    so a run never reports a model evaluation it did not make."""
+    gold_bytes = read_input_file(parser, arguments.gold, MAX_GOLD_FILE_BYTES)
+    try:
+        cases = load_gold_cases(gold_bytes)
+    except GoldFileError as error:
+        parser.error(f"invalid gold file: {error}")
+    model_runs: ModelRuns | None = None
+    if arguments.model_runs > 0:
+        if planner_settings is None:
+            parser.error(MODEL_RUNS_WITHOUT_A_PLANNER)
+        planner_setup = discover_planner_setup(planner_settings)
+        if not isinstance(planner_setup, ModelPlanning):
+            print(
+                "cve-kgrag eval planner cannot make model runs: "
+                f"{planner_setup.unavailable_detail}",
+                file=sys.stderr,
+            )
+            return 1
+        model_runs = ModelRuns(planner_setup, arguments.model_runs)
+    try:
+        result_directory = ResultDirectory.create(arguments.out)
+        report = run_planner_evaluation(
+            cases,
+            gold_sha256=sha256_hex(gold_bytes),
+            bundle=bundle,
+            model_runs=model_runs,
+            source_revision=read_source_revision(PACKAGE_DIR),
+            result_directory=result_directory,
+        )
+    except OSError as error:
+        print(f"cve-kgrag eval planner cannot write its results: {error.strerror}", file=sys.stderr)
+        return 1
+    sys.stdout.write(format_report(report).decode())
+    print(
+        f"wrote the evidence sets and {REPORT_FILE_NAME} to {result_directory.path}",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def run_schema_command(action: str, schema_dir: Path) -> int:
     if action == "export":
         write_contract_schemas(schema_dir)
@@ -631,6 +749,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         )
 
     bundle = load_served_bundle()
+    if arguments.command == "eval":
+        return run_planner_evaluation_command(parser, arguments, settings.model_planner, bundle)
     if arguments.command == "verify":
         evidence_set_bytes = read_evidence_set_file(parser, arguments.evidence_set_path)
         if settings.semantic is not None:

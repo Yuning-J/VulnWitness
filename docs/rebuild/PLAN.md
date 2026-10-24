@@ -13,7 +13,8 @@ milestone once its exit criterion is met and the offline lane is green.
 | M4 | Bounded investigation state machine, deterministic policy m4.1, model-planner port with plan gate and deterministic fallback, budgets, replayable trajectory, gold trajectories, hard wall time via abandoning call runner, per-request result cap, catalog re-check of served content, trajectory cross-validation (network LLM adapter follows separately) | done |
 | M5 | Trustify port + disabled adapter (real adapter BLOCKED_UNVERIFIED, ADR 0003), read-only stdio MCP server with eight bounded tools, evidence-set verification (`cve-kgrag verify`), server-owned text at the MCP boundary (typed affectedness and backend failures, vouched match explanations), search-tool boundary below; contracts `2.0.0-dev.16` | done |
 | M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, loopback, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; WP4 offline CI; WP5 full CLI and the verification report contract, with bounded violations in the server's own words; WP6 HTTP guard, HTTP settings and MCP over Streamable HTTP; WP7 v2 REST API with set verification over HTTP; contracts `2.0.0-dev.24`) | in progress |
-| M7 | Evaluation, review packet | not started |
+| M7a | Planner behaviour baseline before WP9: `cve-kgrag eval planner`, a pure analyzer over the evidence sets' trajectories (outcomes, fallbacks, divergence from the policy's plans, run stability), the deterministic baseline on the M4 gold file; no agent, vocabulary, round or contract change; [`m7a-planner-baseline.md`](m7a-planner-baseline.md) | done offline; live model runs are the owner's |
+| M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | not started |
 
 ## M5 acceptance: the search-tool boundary
 
@@ -53,6 +54,17 @@ CVE_KGRAG_LIVE_TESTS=1 CVE_KGRAG_PLANNER_ENABLED=true \
 CVE_KGRAG_PLANNER_BASE_URL=https://api.deepseek.com CVE_KGRAG_PLANNER_MODEL_NAME=deepseek-flash \
 CVE_KGRAG_PLANNER_REASONING_EFFORT=none CVE_KGRAG_PLANNER_API_KEY="$DEEPSEEK_API_KEY" \
 uv run pytest tests/live -m live
+```
+
+The planner evaluation's model runs use the same variables, and only the report is meant
+to be shared ([`m7a-planner-baseline.md`](m7a-planner-baseline.md#live-runs)):
+
+```bash
+CVE_KGRAG_PLANNER_ENABLED=true \
+CVE_KGRAG_PLANNER_BASE_URL=https://api.deepseek.com CVE_KGRAG_PLANNER_MODEL_NAME=deepseek-flash \
+CVE_KGRAG_PLANNER_REASONING_EFFORT=none CVE_KGRAG_PLANNER_API_KEY="$DEEPSEEK_API_KEY" \
+uv run cve-kgrag eval planner --gold eval/gold/m4_trajectories.yaml --out eval-results \
+  --model-runs 5
 ```
 
 ## Follow-up: verified Trustify adapter

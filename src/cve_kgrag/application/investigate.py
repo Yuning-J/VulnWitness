@@ -86,6 +86,7 @@ from cve_kgrag.domain.investigation import (
     StepAdmission,
     StepTiming,
     StopReason,
+    ToolStep,
     Trajectory,
     derive_investigation_id,
     find_affectedness_detail,
@@ -141,6 +142,23 @@ def list_required_tools(
     return tuple(required_tools)
 
 
+def observe_step(step: ToolStep) -> StepObservation:
+    """What a planner is shown of an executed step: its tool, status, answer count and
+    warning codes, never source text."""
+    warning_codes: list[str] = []
+    for search_warning in step.search_warnings:
+        warning_codes.append(search_warning.code.value)
+    for topic_warning in step.topic_warnings:
+        warning_codes.append(topic_warning.code.value)
+    return StepObservation(
+        step_index=step.step_index,
+        tool=step.call.tool,
+        status=step.status,
+        answer_count=len(step.answer_ids),
+        warning_codes=tuple(warning_codes),
+    )
+
+
 def build_planning_input(
     run: InvestigationRun,
     round_number: RoundNumber,
@@ -183,20 +201,7 @@ def build_planning_input(
     observations: list[StepObservation] = []
     for step in run.steps:
         issued_calls.append(step.call)
-        warning_codes: list[str] = []
-        for search_warning in step.search_warnings:
-            warning_codes.append(search_warning.code.value)
-        for topic_warning in step.topic_warnings:
-            warning_codes.append(topic_warning.code.value)
-        observations.append(
-            StepObservation(
-                step_index=step.step_index,
-                tool=step.call.tool,
-                status=step.status,
-                answer_count=len(step.answer_ids),
-                warning_codes=tuple(warning_codes),
-            )
-        )
+        observations.append(observe_step(step))
     # A required tool the budget leaves no room for is not asked for: no plan could hold it.
     affordable_required_tools: list[ToolName] = []
     for required_tool in required_tools:
