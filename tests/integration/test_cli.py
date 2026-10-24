@@ -10,14 +10,15 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import SecretStr, TypeAdapter
 
-from cve_kgrag.adapter_discovery import MCP_EXTRA_MISSING_DETAIL, InterfaceUnavailable
+from cve_kgrag.adapter_discovery import API_EXTRA, MCP_EXTRA, InterfaceUnavailable
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
+from cve_kgrag.application.evidence_set_verification import MAX_EVIDENCE_SET_BYTES
 from cve_kgrag.application.investigation_policy import describe_deterministic_planner
 from cve_kgrag.cli import (
-    MAX_EVIDENCE_SET_FILE_BYTES,
     OVERSIZED_EVIDENCE_SET_MESSAGE,
     main,
     print_verification,
+    run_api_server,
     run_evidence_lookup,
     run_mcp_http_server,
     run_mcp_server,
@@ -63,6 +64,7 @@ from cve_kgrag.domain.tool_contracts import ConceptResolution, EvidenceLookup, K
 from cve_kgrag.domain.topic_context import TopicContextRequest, TopicContextResponse
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName
+from cve_kgrag.settings import load_settings
 from tests.support.fake_chat_server import (
     FakeChatServer,
     FakeChatServers,
@@ -133,6 +135,30 @@ class RecordingMcpHttpServerRunner:
         self.served_toolboxes.append(toolbox)
         self.listeners.append((host, port, token.get_secret_value()))
         return self._has_served
+
+
+class RecordingApiServerRunner:
+    """An API server runner that records what it is handed and returns at once, as the
+    API runner does when the process is interrupted."""
+
+    def __init__(self) -> None:
+        self.served_toolboxes: list[KnowledgeToolbox] = []
+        self.evidence_set_checks: list[Callable[[bytes], VerificationReport]] = []
+        self.listeners: list[tuple[str, int, str]] = []
+
+    def __call__(
+        self,
+        toolbox: KnowledgeToolbox,
+        check_evidence_set: Callable[[bytes], VerificationReport],
+        *,
+        host: str,
+        port: int,
+        token: SecretStr,
+    ) -> bool:
+        self.served_toolboxes.append(toolbox)
+        self.evidence_set_checks.append(check_evidence_set)
+        self.listeners.append((host, port, token.get_secret_value()))
+        return True
 
 
 def test_demo_runs_offline_and_reports_each_query(capsys: pytest.CaptureFixture[str]) -> None:
@@ -339,9 +365,7 @@ def test_verify_reports_at_most_one_hundred_violations(
 def test_verify_file_at_the_size_cap_is_read_and_parsed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    exit_code, verification_report = verify_file(
-        tmp_path, b" " * MAX_EVIDENCE_SET_FILE_BYTES, capsys
-    )
+    exit_code, verification_report = verify_file(tmp_path, b" " * MAX_EVIDENCE_SET_BYTES, capsys)
 
     assert exit_code == 1
     assert verification_report["verdict"] == "malformed"
@@ -350,7 +374,7 @@ def test_verify_file_at_the_size_cap_is_read_and_parsed(
 def test_verify_oversized_file_exits_two(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    oversized_path = write_evidence_set_file(tmp_path, b" " * (MAX_EVIDENCE_SET_FILE_BYTES + 1))
+    oversized_path = write_evidence_set_file(tmp_path, b" " * (MAX_EVIDENCE_SET_BYTES + 1))
 
     with pytest.raises(SystemExit) as raised:
         run_cli(["verify", str(oversized_path)])
@@ -382,7 +406,7 @@ def test_report_other_than_verified_prints_and_exits_one(
 @pytest.mark.parametrize(
     "detail",
     [
-        MCP_EXTRA_MISSING_DETAIL,
+        MCP_EXTRA.missing_detail,
         "mcp_server adapter entry point is not installed",
         "more than one mcp_server adapter is installed",
         "mcp_server adapter could not load: ImportError",
@@ -431,12 +455,12 @@ def test_mcp_http_without_a_token_is_a_usage_error_naming_the_variable(
 def test_mcp_http_with_an_unusable_runner_exits_one_naming_the_reason(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    exit_code = run_mcp_http_server(InterfaceUnavailable(MCP_EXTRA_MISSING_DETAIL), **HTTP_LISTENER)
+    exit_code = run_mcp_http_server(InterfaceUnavailable(MCP_EXTRA.missing_detail), **HTTP_LISTENER)
 
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.out == ""
-    assert captured.err == f"cve-kgrag mcp --http cannot start: {MCP_EXTRA_MISSING_DETAIL}\n"
+    assert captured.err == f"cve-kgrag mcp --http cannot start: {MCP_EXTRA.missing_detail}\n"
 
 
 def test_mcp_http_serves_the_packaged_fixture_on_the_listener_it_is_given(
@@ -453,6 +477,71 @@ def test_mcp_http_serves_the_packaged_fixture_on_the_listener_it_is_given(
         runner.served_toolboxes[0].call(KnowledgeToolName.LOOKUP_CVE, {"cve_id": "CVE-9999-0003"})
     )
     assert lookup_answer.structured_content["status"] == "ok"
+
+
+def test_api_without_a_token_is_a_usage_error_naming_the_variable(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as raised:
+        run_cli(["api"])
+
+    captured = capsys.readouterr()
+    assert raised.value.code == 2
+    assert "invalid settings: CVE_KGRAG_HTTP_TOKEN: required by api" in captured.err
+
+
+def test_api_with_an_unusable_runner_exits_one_naming_the_reason(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_api_server(
+        InterfaceUnavailable(API_EXTRA.missing_detail), None, **HTTP_LISTENER
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == f"cve-kgrag api cannot start: {API_EXTRA.missing_detail}\n"
+
+
+def test_api_serves_the_packaged_fixture_and_verifies_as_the_verify_command_does(
+    sealed_set: KnowledgeEvidenceSet,
+) -> None:
+    runner = RecordingApiServerRunner()
+    genuine_set = sealed_set.model_dump_json().encode()
+
+    exit_code = run_api_server(runner, None, **HTTP_LISTENER)
+
+    assert exit_code == 0
+    assert runner.listeners == [("::1", 9001, HTTP_TOKEN)]
+    lookup_answer = require_answer(
+        runner.served_toolboxes[0].call(KnowledgeToolName.LOOKUP_CVE, {"cve_id": "CVE-9999-0003"})
+    )
+    assert lookup_answer.structured_content["status"] == "ok"
+    assert runner.evidence_set_checks[0](genuine_set).verdict is VerificationVerdict.VERIFIED
+
+
+@pytest.mark.parametrize(
+    ("planner_environment", "expected_verdict"),
+    [
+        (PLANNER_WITHOUT_A_KEY, VerificationVerdict.VERIFIED),
+        (NO_SETTINGS, VerificationVerdict.INVALID),
+    ],
+    ids=["same_settings", "planner_not_configured"],
+)
+def test_api_verifies_against_the_planners_the_settings_configure(
+    capsys: pytest.CaptureFixture[str],
+    planner_environment: Mapping[str, str],
+    expected_verdict: VerificationVerdict,
+) -> None:
+    """As ``verify`` does: a set sealed while the configured planner had no key holds only
+    under settings that configure that planner."""
+    run_cli(["investigate", "5gaka", "--scope", "protocol_context_only"], PLANNER_WITHOUT_A_KEY)
+    sealed_bytes = capsys.readouterr().out.encode()
+    runner = RecordingApiServerRunner()
+
+    run_api_server(runner, load_settings(planner_environment).model_planner, **HTTP_LISTENER)
+
+    assert runner.evidence_set_checks[0](sealed_bytes).verdict is expected_verdict
 
 
 def test_mcp_http_whose_server_could_not_start_exits_one() -> None:

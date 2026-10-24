@@ -8,6 +8,7 @@ import math
 import uvicorn
 
 from cve_kgrag.interfaces.http.guard import HttpGuard
+from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 
 # uvicorn answers its own 503 to a request arriving while this many connections (its own
 # included) or requests are open. It refuses no connection: an open connection with
@@ -18,6 +19,16 @@ MAX_CONNECTIONS = 32
 # errors, a port it cannot bind or an app that raised, stay.
 UVICORN_LOGGER = "uvicorn.error"
 KEEP_ALIVE_SECONDS = 5
+# The request deadline runs this long past the toolbox's longest call, so a call that runs
+# out of time answers its own `timed_out` before the deadline answers 504 (ADR 0007,
+# decision 7).
+REQUEST_DEADLINE_MARGIN_SECONDS = 10.0
+
+
+def find_request_deadline_seconds(limits: ToolLimits) -> float:
+    """The toolbox's longest call plus ``REQUEST_DEADLINE_MARGIN_SECONDS``: the deadline of
+    every request to a server over a toolbox."""
+    return limits.find_longest_call_seconds() + REQUEST_DEADLINE_MARGIN_SECONDS
 
 
 def find_graceful_shutdown_seconds(guard: HttpGuard) -> int:

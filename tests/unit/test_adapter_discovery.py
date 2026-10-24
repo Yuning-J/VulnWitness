@@ -10,9 +10,11 @@ import pytest
 from pydantic import SecretStr
 
 from cve_kgrag.adapter_discovery import (
-    MCP_EXTRA_MISSING_DETAIL,
+    API_EXTRA,
+    MCP_EXTRA,
     GuardedModelPort,
     InterfaceUnavailable,
+    discover_api_server_runner,
     discover_mcp_http_server_runner,
     discover_mcp_server_runner,
     discover_planner_setup,
@@ -205,7 +207,7 @@ def test_mcp_server_load_without_the_sdk_reports_the_missing_extra_and_logs_noth
     with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
         runner = discover_mcp_server_runner(registry.list_adapters)
 
-    assert runner == InterfaceUnavailable(MCP_EXTRA_MISSING_DETAIL)
+    assert runner == InterfaceUnavailable(MCP_EXTRA.missing_detail)
     assert caplog.records == []
 
 
@@ -230,8 +232,46 @@ def test_mcp_http_server_load_without_a_module_of_the_extra_reports_the_missing_
     with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
         runner = discover_mcp_http_server_runner(registry.list_adapters)
 
-    assert runner == InterfaceUnavailable(MCP_EXTRA_MISSING_DETAIL)
+    assert runner == InterfaceUnavailable(MCP_EXTRA.missing_detail)
     assert caplog.records == []
+
+
+def test_installed_api_server_runner_is_loaded_from_its_own_entry_point() -> None:
+    registry = FakeAdapterRegistry(
+        [FakeEntryPoint("mcp_http_server"), FakeEntryPoint("api_server", load_stub_runner)]
+    )
+
+    runner = discover_api_server_runner(registry.list_adapters)
+
+    assert runner is serve_nothing
+
+
+@pytest.mark.parametrize("missing_module", ["anyio", "starlette", "uvicorn"], ids=str)
+def test_api_server_load_without_a_module_of_the_api_extra_reports_the_missing_extra(
+    caplog: pytest.LogCaptureFixture, missing_module: str
+) -> None:
+    registry = FakeAdapterRegistry(
+        [FakeEntryPoint("api_server", ImportFailure(missing_module).load)]
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+        runner = discover_api_server_runner(registry.list_adapters)
+
+    assert runner == InterfaceUnavailable(API_EXTRA.missing_detail)
+    assert caplog.records == []
+
+
+def test_api_server_load_failing_on_the_mcp_sdk_is_not_a_missing_api_extra(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The REST API needs no MCP SDK, so a runner importing it is broken, not uninstalled."""
+    registry = FakeAdapterRegistry([FakeEntryPoint("api_server", ImportFailure("mcp").load)])
+
+    with caplog.at_level(logging.WARNING, logger="cve_kgrag.adapter_discovery"):
+        runner = discover_api_server_runner(registry.list_adapters)
+
+    assert runner == InterfaceUnavailable("api_server adapter could not load: ModuleNotFoundError")
+    assert len(caplog.records) == 1
 
 
 class ImportFailure:

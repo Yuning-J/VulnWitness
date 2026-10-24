@@ -31,11 +31,18 @@ mcp = [
     "starlette>=0.48,<2",
     "uvicorn>=0.31.1,<1",
 ]
+# The v2 REST API server: the HTTP guard's ASGI stack, without the MCP SDK (ADR 0007).
+api = [
+    "anyio>=4.9,<5",
+    "starlette>=0.48,<2",
+    "uvicorn>=0.31.1,<1",
+]
 
 [project.entry-points."cve_kgrag.adapters"]
 semantic = "cve_kgrag.adapters.semantic.chroma_retriever:build_semantic_retriever"
 mcp_server = "cve_kgrag.interfaces.mcp.stdio_runner:serve_stdio"
 mcp_http_server = "cve_kgrag.interfaces.mcp.http_runner:serve_http"
+api_server = "cve_kgrag.interfaces.rest.api_runner:serve_api"
 model_planner = "cve_kgrag.adapters.planner.openai_compatible:build_model_port"
 
 [project.scripts]

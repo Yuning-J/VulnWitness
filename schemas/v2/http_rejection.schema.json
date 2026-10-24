@@ -11,6 +11,7 @@
         "host_not_allowed",
         "internal_error",
         "not_ready",
+        "route_busy",
         "deadline_exceeded"
       ],
       "title": "HttpRejectionCode",
@@ -168,6 +169,22 @@
       "if": {
         "properties": {
           "code": {
+            "const": "route_busy"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The route is serving as many requests as it takes; retry later."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
             "const": "deadline_exceeded"
           }
         }
@@ -193,8 +210,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.23",
-      "default": "2.0.0-dev.23",
+      "const": "2.0.0-dev.24",
+      "default": "2.0.0-dev.24",
       "title": "Schema Version",
       "type": "string"
     }

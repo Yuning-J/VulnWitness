@@ -20,19 +20,18 @@ from pydantic import SecretStr
 from starlette.applications import Starlette
 
 from cve_kgrag.interfaces.http.guard import DEFAULT_BODY_CAP_BYTES, GuardedRoute, HttpGuard
-from cve_kgrag.interfaces.http.serving import serve
-from cve_kgrag.interfaces.http.status_routes import ReadinessRoute, answer_health
+from cve_kgrag.interfaces.http.serving import find_request_deadline_seconds, serve
+from cve_kgrag.interfaces.http.status_routes import (
+    HEALTH_PATH,
+    READY_PATH,
+    ReadinessRoute,
+    answer_health,
+)
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
-from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.interfaces.mcp.sdk_answers import SdkAnswersRestated
 from cve_kgrag.interfaces.mcp.server import build_knowledge_mcp_server
 
 MCP_PATH = "/mcp"
-HEALTH_PATH = "/health"
-READY_PATH = "/ready"
-# The request deadline runs this long past the longest call, so a call that runs out of
-# time answers its own `timed_out` before the deadline answers 504 (ADR 0007, decision 7).
-REQUEST_DEADLINE_MARGIN_SECONDS = 10.0
 
 
 class SessionManagerLifespan:
@@ -43,11 +42,6 @@ class SessionManagerLifespan:
 
     def __call__(self, app: Starlette) -> AbstractAsyncContextManager[None]:
         return self._session_manager.run()
-
-
-def find_request_deadline_seconds(limits: ToolLimits) -> float:
-    """The toolbox's longest call plus ``REQUEST_DEADLINE_MARGIN_SECONDS``."""
-    return limits.find_longest_call_seconds() + REQUEST_DEADLINE_MARGIN_SECONDS
 
 
 def build_mcp_http_app(

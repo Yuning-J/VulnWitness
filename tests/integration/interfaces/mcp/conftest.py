@@ -13,11 +13,6 @@ from cve_kgrag.interfaces.mcp.server import build_knowledge_mcp_server
 from tests.support.toolbox import build_test_toolbox
 
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
-
-
 @pytest.fixture(params=["auto", "legacy"])
 def client_mode(request: pytest.FixtureRequest) -> str:
     """How the client connects: the 2026 discover path, or the initialize handshake."""

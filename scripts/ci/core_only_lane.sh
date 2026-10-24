@@ -37,6 +37,17 @@ if [ "$mcp_http_status" -ne 1 ] \
   exit 1
 fi
 
+# The REST API refuses the same way without the api extra.
+api_status=0
+api_stderr="$(CVE_KGRAG_HTTP_TOKEN="core-only-lane-token-0123456789abcdefgh" \
+  "$work_dir/core-venv/bin/cve-kgrag" api < /dev/null 2>&1 > /dev/null)" || api_status=$?
+if [ "$api_status" -ne 1 ] || ! grep -qF "the 'api' extra is not installed" <<< "$api_stderr"; then
+  echo "cve-kgrag api without the api extra: expected exit 1 and the missing-extra refusal," \
+    "got exit $api_status: $api_stderr" >&2
+  exit 1
+fi
+
 uv pip install -p "$core_python" pytest jsonschema
 "$core_python" -m pytest -q tests/unit tests/contract tests/integration \
-  --ignore=tests/integration/interfaces/mcp --ignore=tests/integration/interfaces/http
+  --ignore=tests/integration/interfaces/mcp --ignore=tests/integration/interfaces/http \
+  --ignore=tests/integration/interfaces/rest

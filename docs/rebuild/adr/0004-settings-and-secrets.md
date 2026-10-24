@@ -88,7 +88,8 @@ validates it, and only a command that serves over HTTP uses it (M6 WP6, ADR 0007
 |---|---|---|
 | `CVE_KGRAG_HTTP_HOST` | the address the HTTP servers listen on: `127.0.0.1` or `::1`, nothing else | `127.0.0.1` |
 | `CVE_KGRAG_MCP_HTTP_PORT` | the port of MCP over Streamable HTTP, 1 to 65535 | 8765 |
-| `CVE_KGRAG_HTTP_TOKEN` | the bearer token every route but `/health` requires: 32 to 512 characters of RFC 6750's `b64token` alphabet, a `SecretStr` | none; `mcp --http` refuses to start without it |
+| `CVE_KGRAG_API_PORT` | the port of the v2 REST API, 1 to 65535 | 8766 |
+| `CVE_KGRAG_HTTP_TOKEN` | the bearer token every route but `/health` requires: 32 to 512 characters of RFC 6750's `b64token` alphabet, a `SecretStr` | none; `mcp --http` and `api` refuse to start without it |
 
 ### 2. The endpoint is one a key may be sent to
 

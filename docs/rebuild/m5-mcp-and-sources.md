@@ -325,7 +325,7 @@ its fields, its scope fits its source, it is never `formal_protocol_finding`, an
 evidence carries the pinned snapshot's provenance. Otherwise the call fails
 `integrity_check_failed`, so no catalogued CVE anchor is served as a formal or
 protocol finding, even resealed under a re-derived ID. Whole-set verification is not an MCP
-tool; M6 decides whether the v2 API exposes it.
+tool; the v2 API exposes it as `POST /api/v2/verify` (ADR 0007, decision 9).
 
 ## Gold queries
 
@@ -359,7 +359,7 @@ answer with the investigation service's.
 | Typed settings boundary: no M5 path has an endpoint, a credential or an optional adapter to enable | M6 | PLAN.md M6 row |
 | `semantic_channel` reporting a failed adapter load | M6 WP2: `unavailable` with a server sentence | m6 doc, ADR 0004 §1 |
 | Real Trustify adapter, verdicts and Trustify anchors, drift detection against the pinned snapshot, retries, product-to-purl mapping, investigation wiring, `live` marker | Verified-adapter task | PLAN.md "Follow-up: verified Trustify adapter" |
-| Whole-set verification over HTTP | M6 | PLAN.md M6 row |
+| Whole-set verification over HTTP | M6 WP7 (done): `POST /api/v2/verify` | ADR 0007, m6 doc WP7 |
 
 ## Known limits
 

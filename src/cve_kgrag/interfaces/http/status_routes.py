@@ -8,6 +8,9 @@ from starlette.types import Receive, Scope, Send
 from cve_kgrag.domain.http_rejection import HttpRejectionCode
 from cve_kgrag.interfaces.http.guard import send_rejection
 
+HEALTH_PATH = "/health"
+READY_PATH = "/ready"
+
 
 async def send_no_content(send: Send) -> None:
     await send({"type": "http.response.start", "status": 204, "headers": []})

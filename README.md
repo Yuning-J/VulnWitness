@@ -9,7 +9,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.23` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.24` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 ## What it does
@@ -24,6 +24,8 @@ without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/re
 - **Evidence sets** that can be verified and replayed offline (`cve-kgrag verify`).
 - **A read-only MCP server** with eight bounded tools, over stdio or over Streamable
   HTTP on a loopback address behind a bearer token.
+- **A v2 REST API** on a loopback address behind the same token: search, investigate,
+  evidence, capabilities and evidence-set verification.
 
 The package runs offline on a bundled synthetic fixture (`CVE-9999-*` records). It
 commits no NVD, CVE Program, CISA KEV, CWE or CAPEC data; see
@@ -38,8 +40,8 @@ uv sync --locked
 uv run cve-kgrag demo
 ```
 
-Optional extras: `mcp` (the MCP server, on stdio and over Streamable HTTP) and `semantic`
-(Chroma and sentence-transformers).
+Optional extras: `mcp` (the MCP server, on stdio and over Streamable HTTP), `api` (the
+REST API) and `semantic` (Chroma and sentence-transformers).
 
 ## Commands
 
@@ -58,10 +60,11 @@ uv run cve-kgrag evidence ev:d8097ae9c31b754d26a1ef92   # one served evidence an
 uv run cve-kgrag verify evidence-set.json               # validate, audit and replay a set
 uv run cve-kgrag mcp                                    # MCP server on stdio (mcp extra)
 uv run cve-kgrag mcp --http                             # MCP over HTTP on 127.0.0.1:8765
+uv run cve-kgrag api                                    # REST API on 127.0.0.1:8766 (api extra)
 uv run cve-kgrag schema check                           # compare schemas with the snapshots
 ```
 
-Every command but `mcp` and `schema` prints JSON. `--scope` is one of
+Every command but `mcp`, `api` and `schema` prints JSON. `--scope` is one of
 `protocol_context_only`, `implementation_only` or `mixed`. `search` filters by
 `--vendor`, `--product`, `--purl`, `--cwe`, `--severity`, `--year`, `--origin` (each
 repeatable) and `--kev-only`; `investigate` takes the product options and the budget
@@ -82,12 +85,16 @@ optional capabilities are off by default:
   CVE-KGRAG's pipeline writes, from a directory the operator names; this repository does
   not build that store ([ADR 0006](docs/rebuild/adr/0006-repository-split.md)).
 
-`cve-kgrag mcp --http` reads `CVE_KGRAG_HTTP_HOST` (`127.0.0.1`, the default, or `::1`),
-`CVE_KGRAG_MCP_HTTP_PORT` (default 8765) and `CVE_KGRAG_HTTP_TOKEN`, the bearer token
-every route but `/health` requires, without which it refuses to start
+`cve-kgrag mcp --http` and `cve-kgrag api` read `CVE_KGRAG_HTTP_HOST` (`127.0.0.1`, the
+default, or `::1`), their ports `CVE_KGRAG_MCP_HTTP_PORT` (default 8765) and
+`CVE_KGRAG_API_PORT` (default 8766), and `CVE_KGRAG_HTTP_TOKEN`, the bearer token every
+route but `/health` requires, without which they refuse to start
 ([ADR 0007](docs/rebuild/adr/0007-http-surfaces.md)). Generate the token, for example
 with `python -c "import secrets; print(secrets.token_urlsafe(32))"`. The MCP endpoint is
-`POST /mcp`; `/health` and `/ready` answer 204.
+`POST /mcp`. The REST API serves `POST /api/v2/search`, `POST /api/v2/investigate`,
+`GET /api/v2/evidence/{evidence_id}`, `GET /api/v2/capabilities` and
+`POST /api/v2/verify`. On both, `/health` answers 204, and `/ready` answers 204 while a
+toolbox worker is free and 503 otherwise.
 
 Keep keys and tokens in the environment, never on a command line or in a committed file.
 

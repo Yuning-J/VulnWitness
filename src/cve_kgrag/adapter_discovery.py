@@ -9,6 +9,7 @@ from typing import Any, Protocol, cast
 from pydantic import SecretStr
 
 from cve_kgrag.application.planner_setup import DeterministicPlanning, ModelPlanning, PlannerSetup
+from cve_kgrag.domain.evidence_set_verification_report import VerificationReport
 from cve_kgrag.domain.planning import (
     ModelPlannerIdentity,
     ModelPlannerUnavailableDetail,
@@ -35,9 +36,26 @@ MODEL_PLANNER_ADAPTER_NAME = "model_planner"
 FAILED_ADAPTER_REPLY = ModelReply(
     status=BackendStatus.ERROR, detail=ModelReplyFailureDetail.ADAPTER_FAILED
 )
-# The top-level modules the ``mcp`` extra installs.
-MCP_EXTRA_MODULES = frozenset({"mcp", "anyio", "starlette", "uvicorn"})
-MCP_EXTRA_MISSING_DETAIL = "the 'mcp' extra is not installed: pip install 'cve-kgrag[mcp]'"
+API_SERVER_ADAPTER_NAME = "api_server"
+
+
+@dataclass(frozen=True)
+class OptionalExtra:
+    """An extra an optional interface needs: the top-level modules it installs, and the
+    line a user reads when one is missing."""
+
+    modules: frozenset[str]
+    missing_detail: str
+
+
+MCP_EXTRA = OptionalExtra(
+    modules=frozenset({"mcp", "anyio", "starlette", "uvicorn"}),
+    missing_detail="the 'mcp' extra is not installed: pip install 'cve-kgrag[mcp]'",
+)
+API_EXTRA = OptionalExtra(
+    modules=frozenset({"anyio", "starlette", "uvicorn"}),
+    missing_detail="the 'api' extra is not installed: pip install 'cve-kgrag[api]'",
+)
 
 
 class AdapterDistribution(Protocol):
@@ -132,6 +150,22 @@ class McpHttpServerRunner(Protocol):
     ) -> bool: ...
 
 
+class ApiServerRunner(Protocol):
+    """Serves the REST API over a toolbox and an evidence-set check on ``host`` and
+    ``port``, every route but ``/health`` behind ``token``, until the process is
+    interrupted; ``False`` when it could not start serving, having logged why."""
+
+    def __call__(
+        self,
+        toolbox: KnowledgeToolbox,
+        check_evidence_set: Callable[[bytes], VerificationReport],
+        *,
+        host: str,
+        port: int,
+        token: SecretStr,
+    ) -> bool: ...
+
+
 @dataclass(frozen=True)
 class InterfaceUnavailable:
     """An optional interface that cannot be used, and why, as one line a user reads and
@@ -140,27 +174,29 @@ class InterfaceUnavailable:
     detail: str
 
 
-def is_missing_mcp_extra(error: Exception) -> bool:
-    """Whether ``error`` is the import of a top-level module the ``mcp`` extra installs.
+def is_missing_extra(error: Exception, extra: OptionalExtra) -> bool:
+    """Whether ``error`` is the import of a top-level module ``extra`` installs.
 
     Python names the missing top-level module when a dotted import fails for want of its
     package, so a submodule an installed SDK no longer ships (``mcp.server.x``) is not
     mistaken for a missing extra.
     """
-    return isinstance(error, ModuleNotFoundError) and error.name in MCP_EXTRA_MODULES
+    return isinstance(error, ModuleNotFoundError) and error.name in extra.modules
 
 
-def load_mcp_interface(
-    adapter_name: str, list_adapters: Callable[[], Iterable[AdapterEntryPoint]]
+def load_interface(
+    adapter_name: str,
+    extra: OptionalExtra,
+    list_adapters: Callable[[], Iterable[AdapterEntryPoint]],
 ) -> object | InterfaceUnavailable:
     """The object the one installed ``adapter_name`` entry point names, or why there is
-    none: no entry point, more than one, the ``mcp`` extra missing, or a load that raised
-    for another reason.
+    none: no entry point, more than one, ``extra`` missing, or a load that raised for
+    another reason.
 
-    A core install registers the entry point without the ``mcp`` extra, so a load that
-    fails on a module the extra installs is expected there and logs nothing. Any other
-    failed load, such as an SDK release that renamed an import, logs its traceback at
-    warning, because there the traceback is the diagnosis.
+    A core install registers the entry point without the extra, so a load that fails on a
+    module the extra installs is expected there and logs nothing. Any other failed load,
+    such as an SDK release that renamed an import, logs its traceback at warning, because
+    there the traceback is the diagnosis.
     """
     runner_entry_point = find_single_entry_point(adapter_name, list_adapters)
     if isinstance(runner_entry_point, str):
@@ -168,8 +204,8 @@ def load_mcp_interface(
     try:
         runner: object = runner_entry_point.load()
     except Exception as error:  # an optional interface's import raises anything
-        if is_missing_mcp_extra(error):
-            return InterfaceUnavailable(MCP_EXTRA_MISSING_DETAIL)
+        if is_missing_extra(error, extra):
+            return InterfaceUnavailable(extra.missing_detail)
         logging.getLogger(__name__).warning(
             "%s adapter failed to load", adapter_name, exc_info=True
         )
@@ -182,8 +218,8 @@ def load_mcp_interface(
 def discover_mcp_server_runner(
     list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
 ) -> McpServerRunner | InterfaceUnavailable:
-    """The installed stdio MCP server runner, or why there is none (``load_mcp_interface``)."""
-    runner = load_mcp_interface(MCP_SERVER_ADAPTER_NAME, list_adapters)
+    """The installed stdio MCP server runner, or why there is none (``load_interface``)."""
+    runner = load_interface(MCP_SERVER_ADAPTER_NAME, MCP_EXTRA, list_adapters)
     if isinstance(runner, InterfaceUnavailable):
         return runner
     return cast(McpServerRunner, runner)
@@ -193,11 +229,21 @@ def discover_mcp_http_server_runner(
     list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
 ) -> McpHttpServerRunner | InterfaceUnavailable:
     """The installed MCP Streamable HTTP server runner, or why there is none
-    (``load_mcp_interface``)."""
-    runner = load_mcp_interface(MCP_HTTP_SERVER_ADAPTER_NAME, list_adapters)
+    (``load_interface``)."""
+    runner = load_interface(MCP_HTTP_SERVER_ADAPTER_NAME, MCP_EXTRA, list_adapters)
     if isinstance(runner, InterfaceUnavailable):
         return runner
     return cast(McpHttpServerRunner, runner)
+
+
+def discover_api_server_runner(
+    list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
+) -> ApiServerRunner | InterfaceUnavailable:
+    """The installed REST API server runner, or why there is none (``load_interface``)."""
+    runner = load_interface(API_SERVER_ADAPTER_NAME, API_EXTRA, list_adapters)
+    if isinstance(runner, InterfaceUnavailable):
+        return runner
+    return cast(ApiServerRunner, runner)
 
 
 class ModelPortFactory(Protocol):

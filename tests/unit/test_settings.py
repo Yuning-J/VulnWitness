@@ -444,13 +444,14 @@ def test_invalid_semantic_switch_is_an_error_naming_it() -> None:
 def test_http_settings_default_to_loopback_port_8765_and_no_token() -> None:
     settings = load_settings({})
 
-    assert settings.http == HttpSettings(host="127.0.0.1", token=None, mcp_port=8765)
+    assert settings.http == HttpSettings(host="127.0.0.1", token=None, mcp_port=8765, api_port=8766)
 
 
 def test_http_settings_read_their_host_port_and_token() -> None:
     environment = {
         "CVE_KGRAG_HTTP_HOST": "::1",
         "CVE_KGRAG_MCP_HTTP_PORT": "9001",
+        "CVE_KGRAG_API_PORT": "9002",
         "CVE_KGRAG_HTTP_TOKEN": HTTP_TOKEN,
     }
 
@@ -458,6 +459,7 @@ def test_http_settings_read_their_host_port_and_token() -> None:
 
     assert http_settings.host == "::1"
     assert http_settings.mcp_port == 9001
+    assert http_settings.api_port == 9002
     assert http_settings.token is not None
     assert http_settings.token.get_secret_value() == HTTP_TOKEN
 
@@ -474,6 +476,7 @@ def test_http_settings_read_their_host_port_and_token() -> None:
         ("CVE_KGRAG_MCP_HTTP_PORT", "00000"),
         ("CVE_KGRAG_MCP_HTTP_PORT", "65536"),
         ("CVE_KGRAG_MCP_HTTP_PORT", "port-eighty"),
+        ("CVE_KGRAG_API_PORT", "70000"),
         ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0a"),
         ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE secret"),
         ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aEé"),
@@ -490,6 +493,7 @@ def test_http_settings_read_their_host_port_and_token() -> None:
         "port_zero",
         "port_out_of_range",
         "port_not_a_number",
+        "api_port_out_of_range",
         "token_too_short",
         "token_with_a_space",
         "token_not_ascii",

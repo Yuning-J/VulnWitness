@@ -2,17 +2,11 @@
 JSON answers, and every answer the SDK makes itself restated in the server's words."""
 
 import json
-import os
 import signal
 import socket
-import subprocess
-import sys
 import threading
-import time
 from collections.abc import AsyncIterator, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
-from pathlib import Path
 
 import httpx2
 import pytest
@@ -26,21 +20,33 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.domain.http_rejection import HttpRejection, HttpRejectionCode, build_http_rejection
 from cve_kgrag.domain.tool_contracts import ToolFailure, ToolFailureCode
 from cve_kgrag.interfaces.http.guard import DEFAULT_BODY_CAP_BYTES, HttpGuard
-from cve_kgrag.interfaces.http.serving import find_graceful_shutdown_seconds
+from cve_kgrag.interfaces.http.serving import (
+    find_graceful_shutdown_seconds,
+    find_request_deadline_seconds,
+)
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
-from cve_kgrag.interfaces.mcp.http_runner import build_mcp_http_app, find_request_deadline_seconds
+from cve_kgrag.interfaces.mcp.http_runner import build_mcp_http_app
 from cve_kgrag.interfaces.mcp.sdk_answers import SdkAnswersRestated
 from tests.support.asgi import (
+    AUTHORIZATION,
     HTTP_HOST,
     HTTP_PORT,
     HTTP_SECRET_TOKEN,
     HTTP_TOKEN,
+    SERVER_URL,
     AsgiRequest,
     running_lifespan,
     send_request,
 )
 from tests.support.clocks import SteppingClock
 from tests.support.fakes import BlockingRetriever
+from tests.support.marker_sweep import ECHO_MARKER
+from tests.support.process_servers import (
+    SERVER_START_SECONDS,
+    ServedHttp,
+    run_on_a_port_in_use,
+    start_served_http,
+)
 from tests.support.toolbox import (
     BLOCKED_AFFECTEDNESS_CAPABILITY,
     TOOL_ARGUMENTS,
@@ -51,17 +57,11 @@ from tests.support.toolbox import (
 
 pytestmark = pytest.mark.anyio
 
-SERVER_URL = f"http://{HTTP_HOST}:{HTTP_PORT}"
-AUTHORIZATION = {"authorization": f"Bearer {HTTP_TOKEN}"}
 JSON_RPC_HEADERS = {
     **AUTHORIZATION,
     "accept": "application/json, text/event-stream",
     "content-type": "application/json",
 }
-ECHO_MARKER = "zzechomarkerzz"
-CVE_KGRAG_SCRIPT = Path(sys.executable).parent / "cve-kgrag"
-SETTINGS_PREFIX = "CVE_KGRAG_"
-SERVER_START_SECONDS = 30.0
 
 
 @pytest.fixture
@@ -424,20 +424,6 @@ UPGRADE_REQUEST = (
 MALFORMED_REQUEST = b"GARBAGE\r\n\r\n"
 
 
-@dataclass(frozen=True)
-class ServedMcpHttp:
-    """A running ``cve-kgrag mcp --http``: the address it listens on and its process."""
-
-    host: str
-    port: int
-    process: subprocess.Popen[bytes]
-
-    @property
-    def url(self) -> str:
-        url_host = f"[{self.host}]" if ":" in self.host else self.host
-        return f"http://{url_host}:{self.port}"
-
-
 def send_raw_requests(host: str, port: int, raw_requests: list[bytes]) -> None:
     """Send each request on its own connection and read until the server closes it."""
     for raw_request in raw_requests:
@@ -447,75 +433,14 @@ def send_raw_requests(host: str, port: int, raw_requests: list[bytes]) -> None:
                 pass
 
 
-def find_free_loopback_port(host: str) -> int:
-    """A port free on ``host``; ``pytest.skip`` when the machine has no such address."""
-    address_family = socket.AF_INET6 if ":" in host else socket.AF_INET
-    with socket.socket(address_family, socket.SOCK_STREAM) as probe_socket:
-        try:
-            probe_socket.bind((host, 0))
-        except OSError:
-            pytest.skip(f"no {host} loopback address on this machine")
-        free_port: int = probe_socket.getsockname()[1]
-        return free_port
-
-
-def build_server_environment(host: str, port: int) -> dict[str, str]:
-    """The test process's environment without its cve-kgrag settings, plus the token,
-    ``host`` and ``port``."""
-    server_environment: dict[str, str] = {}
-    for variable_name, value in os.environ.items():
-        if not variable_name.startswith(SETTINGS_PREFIX):
-            server_environment[variable_name] = value
-    server_environment["CVE_KGRAG_HTTP_TOKEN"] = HTTP_TOKEN
-    server_environment["CVE_KGRAG_HTTP_HOST"] = host
-    server_environment["CVE_KGRAG_MCP_HTTP_PORT"] = str(port)
-    return server_environment
-
-
-def wait_until_healthy(server_url: str, server_process: subprocess.Popen[bytes]) -> None:
-    started_at = time.monotonic()
-    while time.monotonic() - started_at < SERVER_START_SECONDS:
-        if server_process.poll() is not None:
-            raise RuntimeError("cve-kgrag mcp --http exited before serving")
-        try:
-            health_status = httpx2.get(f"{server_url}/health").status_code
-        except httpx2.TransportError:
-            time.sleep(0.05)
-            continue
-        if health_status != 204:
-            raise RuntimeError(f"/health answered {health_status}")
-        return
-    raise RuntimeError("cve-kgrag mcp --http did not start serving")
-
-
 @pytest.fixture(params=["127.0.0.1", "::1"])
-def served_mcp_http(request: pytest.FixtureRequest) -> Iterator[ServedMcpHttp]:
-    """``cve-kgrag mcp --http`` on each loopback host the settings accept, on a free port;
-    killed at teardown if a test left it running."""
-    host: str = request.param
-    port = find_free_loopback_port(host)
-    served = ServedMcpHttp(
-        host=host,
-        port=port,
-        process=subprocess.Popen(
-            [str(CVE_KGRAG_SCRIPT), "mcp", "--http"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=build_server_environment(host, port),
-        ),
-    )
-    try:
-        wait_until_healthy(served.url, served.process)
-        yield served
-    finally:
-        if served.process.poll() is None:
-            served.process.kill()
-        served.process.communicate(timeout=SERVER_START_SECONDS)
+def served_mcp_http(request: pytest.FixtureRequest) -> Iterator[ServedHttp]:
+    """``cve-kgrag mcp --http`` on each loopback host the settings accept."""
+    yield from start_served_http(["mcp", "--http"], "CVE_KGRAG_MCP_HTTP_PORT", request.param)
 
 
 async def test_cve_kgrag_mcp_http_serves_the_tools_logs_nothing_and_stops_on_interrupt(
-    served_mcp_http: ServedMcpHttp,
+    served_mcp_http: ServedHttp,
 ) -> None:
     async with (
         httpx2.AsyncClient(headers=AUTHORIZATION) as authorized_client,
@@ -544,19 +469,7 @@ async def test_cve_kgrag_mcp_http_serves_the_tools_logs_nothing_and_stops_on_int
 
 
 def test_cve_kgrag_mcp_http_on_a_port_in_use_exits_one_saying_why() -> None:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listening_socket:
-        listening_socket.bind((HTTP_HOST, 0))
-        listening_socket.listen()
-        taken_port: int = listening_socket.getsockname()[1]
-
-        server_process = subprocess.run(
-            [str(CVE_KGRAG_SCRIPT), "mcp", "--http"],
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            timeout=SERVER_START_SECONDS,
-            check=False,
-            env=build_server_environment(HTTP_HOST, taken_port),
-        )
+    server_process = run_on_a_port_in_use(["mcp", "--http"], "CVE_KGRAG_MCP_HTTP_PORT")
 
     assert server_process.returncode == 1
     assert server_process.stdout == b""

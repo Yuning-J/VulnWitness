@@ -30,6 +30,10 @@ from cve_kgrag.domain.investigation import KnowledgeEvidenceSet, SourceCapabilit
 from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
 from cve_kgrag.domain.validation import EvidenceValidationError
 
+# The largest evidence set a surface hands to ``check_evidence_set``: the file
+# ``cve-kgrag verify`` reads and the body ``POST /api/v2/verify`` takes.
+MAX_EVIDENCE_SET_BYTES = 4 * 1024 * 1024
+
 
 def verify_evidence_set(
     evidence_set: KnowledgeEvidenceSet,

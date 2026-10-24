@@ -36,7 +36,7 @@ optional adapters (semantic, Neo4j, Trustify, API, MCP) remain available.
 | semantic | extra | Chroma / sentence-transformers adapter | M2 |
 | trustify | extra | MCP client for the official Trustify MCP server | introduced with the verified Trustify adapter (ADR 0003); not in M5 |
 | mcp | extra | official MCP SDK for the CVE-KGRAG server; Starlette and uvicorn, declared explicitly, for MCP over Streamable HTTP (ADR 0007) | M5; HTTP in M6 WP6 |
-| api | extra | Starlette + uvicorn for the v2 REST API (ADR 0007) | M6 WP7 |
+| api | extra | anyio, Starlette and uvicorn for the v2 REST API, without the MCP SDK (ADR 0007) | M6 WP7 |
 | neo4j | — | none: no v2 Neo4j adapter exists (ADR 0007) | — |
 
 An extra is added in the milestone that adds the adapter which needs it; no

@@ -554,7 +554,7 @@ a re-derived ID.
 | Typed settings boundary: no M5 path has an endpoint, a credential or an optional adapter to enable | M6 (planner settings: ADR 0004) | PLAN.md M6 row |
 | `semantic_channel` reporting a failed adapter load | M6 WP2: `unavailable` with a server sentence (ADR 0004 §1) | m6 doc |
 | Real Trustify adapter, verdicts and Trustify anchors, drift detection against the pinned snapshot, retries, product-to-purl mapping, investigation wiring, `live` marker | Verified-adapter task | PLAN.md "Follow-up: verified Trustify adapter" |
-| Whole-set verification over HTTP | M6 WP7: `POST /api/v2/verify` | ADR 0007 |
+| Whole-set verification over HTTP | M6 WP7 (done): `POST /api/v2/verify` | ADR 0007, m6 doc WP7 |
 
 ## Consequences
 

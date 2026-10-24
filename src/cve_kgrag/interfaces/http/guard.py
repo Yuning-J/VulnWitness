@@ -1,5 +1,6 @@
 """The guard in front of every HTTP route (ADR 0007): it checks the Host and Origin
-headers and the bearer token, routes on the exact path, counts the body on the wire
+headers and the bearer token, routes on the exact path (or, for a route that takes one,
+on its path and one last segment), counts the body on the wire
 against the route's cap before anything parses it, and holds each request to a deadline.
 Every refusal is an ``HttpRejection`` carrying its code's fixed sentence, so no answer
 repeats a header, a path or a body the request sent.
@@ -11,7 +12,8 @@ reading the body as well as running the route.
 
 The route's answer is recorded in full before any of it is sent, so the guard can still
 answer 504 when the deadline passes, whatever the route is doing; the routes answer
-bounded JSON (``ToolLimits``), so recording it costs at most that much memory.
+bounded JSON (a tool's answer by ``ToolLimits``, a verification report by its
+contract), so recording it costs at most that much memory.
 """
 
 import hmac
@@ -37,6 +39,7 @@ REJECTION_STATUSES: dict[HttpRejectionCode, int] = {
     HttpRejectionCode.HOST_NOT_ALLOWED: 421,
     HttpRejectionCode.INTERNAL_ERROR: 500,
     HttpRejectionCode.NOT_READY: 503,
+    HttpRejectionCode.ROUTE_BUSY: 503,
     HttpRejectionCode.DEADLINE_EXCEEDED: 504,
 }
 # Sent with every answer: nothing a route answers is cached, and no answer is sniffed as
@@ -53,13 +56,15 @@ JSON_CONTENT_TYPE = (b"content-type", b"application/json")
 @dataclass(frozen=True)
 class GuardedRoute:
     """One route: the methods it accepts, the ASGI app answering it, the most body bytes a
-    request to it may carry, and whether it is served without the token (``/health``
-    alone is)."""
+    request to it may carry, whether it is served without the token (``/health`` alone
+    is), and whether its path ends in ``/`` followed by one path segment the app reads
+    (``takes_path_segment``)."""
 
     methods: frozenset[str]
     app: ASGIApp
     body_cap_bytes: int = DEFAULT_BODY_CAP_BYTES
     is_open: bool = False
+    takes_path_segment: bool = False
 
 
 @dataclass(frozen=True)
@@ -156,6 +161,13 @@ def read_declared_length(scope: Scope) -> int | HttpRejectionCode | None:
     return int(declared_lengths[0])
 
 
+def read_path_segment(scope: Scope) -> bytes:
+    """The last segment of the request's path as the request line wrote it: what a route
+    that takes a path segment reads (``GuardedRoute.takes_path_segment``)."""
+    raw_path: bytes = scope["raw_path"]
+    return raw_path.rpartition(b"/")[2]
+
+
 def carries_token(scope: Scope, token: bytes) -> bool:
     """Whether the request carries exactly one ``Authorization`` header holding ``Bearer``
     (any case) and the token, compared in constant time as bytes, so a header holding
@@ -184,6 +196,31 @@ async def read_body(receive: Receive, body_cap_bytes: int) -> bytes | HttpReject
             return bytes(body)
 
 
+async def read_route_body(receive: Receive) -> bytes:
+    """The body the guard read, which it hands a route in one message."""
+    message = await receive()
+    body: bytes = message.get("body", b"")
+    return body
+
+
+async def send_json(
+    send: Send, status: int, body: bytes, headers: Sequence[tuple[bytes, bytes]] = ()
+) -> None:
+    """Answer ``body``, JSON already serialized, with ``status`` and ``headers``."""
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                JSON_CONTENT_TYPE,
+                (b"content-length", str(len(body)).encode()),
+                *headers,
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
 async def send_rejection(
     send: Send, code: HttpRejectionCode, headers: Sequence[tuple[bytes, bytes]] = ()
 ) -> None:
@@ -191,19 +228,7 @@ async def send_rejection(
     ``connection: close``: a client still sending a body it was refused then reads the
     answer instead of a reset connection, and the server discards the rest of the body."""
     body = build_http_rejection(code).model_dump_json().encode()
-    await send(
-        {
-            "type": "http.response.start",
-            "status": REJECTION_STATUSES[code],
-            "headers": [
-                JSON_CONTENT_TYPE,
-                (b"content-length", str(len(body)).encode()),
-                *headers,
-                *SECURITY_HEADERS,
-            ],
-        }
-    )
-    await send({"type": "http.response.body", "body": body})
+    await send_json(send, REJECTION_STATUSES[code], body, [*headers, *SECURITY_HEADERS])
 
 
 async def send_recorded_response(send: Send, recorded_response: RecordedResponse) -> None:
@@ -220,9 +245,9 @@ async def send_recorded_response(send: Send, recorded_response: RecordedResponse
 
 class HttpGuard:
     """The ASGI app a server runs: lifespan events go to ``lifespan_app``; an HTTP request
-    is checked, then answered by the route its exact path names (``routes``, keyed by
-    path; a request with a query string names no route) within
-    ``request_deadline_seconds``. Any other scope is not served."""
+    is checked, then answered by the route its path names (``routes``, keyed by path;
+    ``_find_route``) within ``request_deadline_seconds``. Any other scope is not
+    served."""
 
     def __init__(
         self,
@@ -286,11 +311,21 @@ class HttpGuard:
         return route
 
     def _find_route(self, scope: Scope) -> GuardedRoute | None:
-        """The route the request target names byte for byte, never normalized; a target
-        with a query string names none."""
+        """The route the request target names byte for byte, never normalized: its whole
+        path, or for a route that takes a path segment, its path up to and including the
+        last ``/`` followed by a segment that is not empty. A target with a query string
+        names none."""
         if scope["query_string"]:
             return None
-        return self._routes.get(scope["raw_path"])
+        raw_path: bytes = scope["raw_path"]
+        exact_route = self._routes.get(raw_path)
+        if exact_route is not None and not exact_route.takes_path_segment:
+            return exact_route
+        route_path, separator, path_segment = raw_path.rpartition(b"/")
+        segment_route = self._routes.get(route_path + separator)
+        if segment_route is None or not segment_route.takes_path_segment or not path_segment:
+            return None
+        return segment_route
 
     async def _answer(
         self, route: GuardedRoute, scope: Scope, receive: Receive, send: Send

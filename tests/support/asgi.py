@@ -3,12 +3,13 @@ any target bytes, headers and body messages; the lifespan; and small fake routes
 
 import json
 import threading
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from urllib.parse import unquote
 
 import anyio
+import httpx2
 from pydantic import SecretStr
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -19,6 +20,11 @@ HTTP_HOST = "127.0.0.1"
 HTTP_PORT = 8765
 SERVED_HOST_HEADER = (b"host", f"{HTTP_HOST}:{HTTP_PORT}".encode())
 TOKEN_HEADER = (b"authorization", f"Bearer {HTTP_TOKEN}".encode())
+SERVER_URL = f"http://{HTTP_HOST}:{HTTP_PORT}"
+AUTHORIZATION = {"authorization": f"Bearer {HTTP_TOKEN}"}
+# How long a test waits for something that happens at once; far longer than any deadline
+# a test sets.
+GENEROUS_WAIT_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -140,6 +146,23 @@ async def running_lifespan(app: ASGIApp) -> AsyncIterator[None]:
         yield
         await to_app_send.send({"type": "lifespan.shutdown"})
         await from_app_receive.receive()
+
+
+@asynccontextmanager
+async def open_app_client(
+    app: ASGIApp, headers: Mapping[str, str] | None = None
+) -> AsyncIterator[httpx2.AsyncClient]:
+    """An in-process HTTP client of ``app`` at ``SERVER_URL``, its lifespan running,
+    sending ``headers`` (the token by default) with every request."""
+    async with (
+        running_lifespan(app),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app),
+            base_url=SERVER_URL,
+            headers=AUTHORIZATION if headers is None else headers,
+        ) as http_client,
+    ):
+        yield http_client
 
 
 class AnsweringRoute:

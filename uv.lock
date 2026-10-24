@@ -875,6 +875,11 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+api = [
+    { name = "anyio" },
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
 mcp = [
     { name = "anyio" },
     { name = "mcp" },
@@ -899,16 +904,19 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", marker = "extra == 'api'", specifier = ">=4.9,<5" },
     { name = "anyio", marker = "extra == 'mcp'", specifier = ">=4.9,<5" },
     { name = "chromadb", marker = "extra == 'semantic'", specifier = ">=1.0,<2" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.3,<3" },
     { name = "pydantic", specifier = ">=2.9,<3" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
     { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=3.3,<6" },
+    { name = "starlette", marker = "extra == 'api'", specifier = ">=0.48,<2" },
     { name = "starlette", marker = "extra == 'mcp'", specifier = ">=0.48,<2" },
+    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.31.1,<1" },
     { name = "uvicorn", marker = "extra == 'mcp'", specifier = ">=0.31.1,<1" },
 ]
-provides-extras = ["semantic", "mcp"]
+provides-extras = ["semantic", "mcp", "api"]
 
 [package.metadata.requires-dev]
 dev = [

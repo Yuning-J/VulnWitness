@@ -1,12 +1,13 @@
 """Scripts that import every core module of ``cve_kgrag`` in a fresh interpreter."""
 
 # Modules that import an optional extra, loaded only through an entry point: the semantic
-# adapter, and every module of the MCP server and HTTP packages (not the packages
+# adapter, and every module of the MCP server, HTTP and REST packages (not the packages
 # themselves, which stay empty).
 OPTIONAL_MODULE_PREFIXES = (
     "cve_kgrag.adapters.semantic.chroma_retriever",
     "cve_kgrag.interfaces.mcp.",
     "cve_kgrag.interfaces.http.",
+    "cve_kgrag.interfaces.rest.",
 )
 # Imports each core module; a package that fails to import fails the script instead of
 # being skipped, which is what walk_packages does without an onerror.

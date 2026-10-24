@@ -19,9 +19,11 @@ from cve_kgrag.interfaces.http.guard import (
     SECURITY_HEADERS,
     GuardedRoute,
     HttpGuard,
+    read_path_segment,
 )
 from cve_kgrag.interfaces.http.status_routes import ReadinessRoute, answer_health
 from tests.support.asgi import (
+    GENEROUS_WAIT_SECONDS,
     HTTP_HOST,
     HTTP_PORT,
     HTTP_SECRET_TOKEN,
@@ -55,12 +57,11 @@ EXPECTED_STATUSES = {
     HttpRejectionCode.HOST_NOT_ALLOWED: 421,
     HttpRejectionCode.INTERNAL_ERROR: 500,
     HttpRejectionCode.NOT_READY: 503,
+    HttpRejectionCode.ROUTE_BUSY: 503,
     HttpRejectionCode.DEADLINE_EXCEEDED: 504,
 }
 BODY_CAP_BYTES = 1024
 DEADLINE_SECONDS = 0.2
-# How long a test waits for something that happens at once; far longer than any deadline.
-GENEROUS_WAIT_SECONDS = 10.0
 JSON_HEADERS = (SERVED_HOST_HEADER, TOKEN_HEADER, (b"content-type", b"application/json"))
 
 
@@ -546,3 +547,56 @@ async def test_no_answer_repeats_what_the_request_sent() -> None:
         assert marker not in answer.body
         for _, header_value in answer.headers:
             assert marker not in header_value
+
+
+class PathSegmentRecorder:
+    """A route that records the path segment the guard let through and answers 204."""
+
+    def __init__(self) -> None:
+        self.path_segments: list[bytes] = []
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        self.path_segments.append(read_path_segment(scope))
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+
+def build_segment_guard(route: PathSegmentRecorder) -> HttpGuard:
+    """A guard with one route, ``GET /items/{segment}``."""
+    return HttpGuard(
+        routes={
+            "/items/": GuardedRoute(methods=frozenset({"GET"}), app=route, takes_path_segment=True)
+        },
+        lifespan_app=answer_nothing,
+        host=HTTP_HOST,
+        port=HTTP_PORT,
+        token=HTTP_SECRET_TOKEN,
+        request_deadline_seconds=GENEROUS_WAIT_SECONDS,
+    )
+
+
+async def test_route_taking_a_path_segment_gets_it_as_the_request_line_wrote_it() -> None:
+    route = PathSegmentRecorder()
+
+    answer = await send_request(
+        build_segment_guard(route), AsgiRequest(target=b"/items/ev:abc%3A1")
+    )
+
+    assert answer.status == 204
+    assert route.path_segments == [b"ev:abc%3A1"]
+
+
+@pytest.mark.parametrize(
+    "target",
+    [b"/items/", b"/items", b"/items/a/b", b"/items//", b"/items/a?b", b"//items/a"],
+    ids=["no_segment", "no_slash", "two_segments", "empty_segments", "query", "double_slash"],
+)
+async def test_target_without_exactly_one_segment_after_the_route_names_no_route(
+    target: bytes,
+) -> None:
+    route = PathSegmentRecorder()
+
+    answer = await send_request(build_segment_guard(route), AsgiRequest(target=target))
+
+    assert_rejected(answer, HttpRejectionCode.NOT_FOUND)
+    assert route.path_segments == []

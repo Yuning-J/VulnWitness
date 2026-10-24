@@ -42,6 +42,7 @@ HTTP_VARIABLES = {
     "CVE_KGRAG_HTTP_HOST": "host",
     "CVE_KGRAG_HTTP_TOKEN": "token",
     "CVE_KGRAG_MCP_HTTP_PORT": "mcp_port",
+    "CVE_KGRAG_API_PORT": "api_port",
 }
 # A bearer token as RFC 6750 writes one (``b64token``), long enough to be a generated
 # secret, for example ``python -c "import secrets; print(secrets.token_urlsafe(32))"``.
@@ -195,6 +196,7 @@ class HttpSettings(BaseModel):
     host: Literal["127.0.0.1", "::1"] = "127.0.0.1"
     token: SecretStr | None = None
     mcp_port: int = Field(default=8765, ge=1, le=65535)
+    api_port: int = Field(default=8766, ge=1, le=65535)
 
     @field_validator("token")
     @classmethod

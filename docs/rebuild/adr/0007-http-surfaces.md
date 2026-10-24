@@ -3,8 +3,8 @@
 Status: accepted (M6 WP3′). Applies to the HTTP guard and settings (M6 WP6), MCP over
 Streamable HTTP (WP6) and the v2 REST API (WP7). Amends ADR 0001 §2 and ADR 0003 §10
 and §12.
-WP6 implements the guard, the settings and MCP over HTTP (`m6-api-cli-and-migration.md`,
-WP6); the REST API is WP7's.
+WP6 implements the guard, the settings and MCP over HTTP, and WP7 the REST API
+(`m6-api-cli-and-migration.md`, WP6 and WP7).
 
 ## Context
 
@@ -71,7 +71,7 @@ can reach a loopback port.
    `POST /api/v2/investigate`, `GET /api/v2/evidence/{evidence_id}`,
    `GET /api/v2/capabilities` and `POST /api/v2/verify`, plus `/health` and `/ready`.
    Verification over HTTP settles ADR 0003 §10: its route has a 4 MiB body cap (the
-   CLI's `MAX_EVIDENCE_SET_FILE_BYTES`), runs one request at a time and has a deadline of
+   `MAX_EVIDENCE_SET_BYTES` the CLI's `verify` reads), runs one request at a time and has a deadline of
    the investigation wall time plus a margin. It answers 200 with the verdict for every
    verdict; 413, 503 and 504 stay for the bounds, because a verification answer is not a
    request failure. MCP keeps its eight tools.
@@ -99,7 +99,9 @@ can reach a loopback port.
 ## Consequences
 
 - WP6 adds `HttpSettings`, the guard, `mcp --http` and the `HttpRejection` contract
-  (`2.0.0-dev.23`); WP7 adds the `api` extra and its routes.
+  (`2.0.0-dev.23`); WP7 adds the `api` extra, `cve-kgrag api`, its routes and the
+  `route_busy` rejection for the verification route's one-at-a-time bound
+  (`2.0.0-dev.24`).
 - Nothing listens on a network address other than loopback, and nothing answers an
   unauthenticated caller beyond `/health`.
 - The REST surface covers less than the CLI (for example, topic context has no route).

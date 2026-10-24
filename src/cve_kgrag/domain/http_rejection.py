@@ -21,6 +21,7 @@ class HttpRejectionCode(StrEnum):
     HOST_NOT_ALLOWED = "host_not_allowed"
     INTERNAL_ERROR = "internal_error"
     NOT_READY = "not_ready"
+    ROUTE_BUSY = "route_busy"
     DEADLINE_EXCEEDED = "deadline_exceeded"
 
 
@@ -35,6 +36,7 @@ HTTP_REJECTION_MESSAGES: dict[HttpRejectionCode, str] = {
     HttpRejectionCode.HOST_NOT_ALLOWED: "The request names a host this server does not serve.",
     HttpRejectionCode.INTERNAL_ERROR: "The request failed with an internal error.",
     HttpRejectionCode.NOT_READY: "Every worker holds a call; retry later.",
+    HttpRejectionCode.ROUTE_BUSY: "The route is serving as many requests as it takes; retry later.",
     HttpRejectionCode.DEADLINE_EXCEEDED: "The request did not finish within its deadline.",
 }
 

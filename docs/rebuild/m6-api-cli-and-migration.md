@@ -1,6 +1,6 @@
 # M6 — API, CLI and migration
 
-Schema version `2.0.0-dev.23`. M6 is built in work packages; this document records each
+Schema version `2.0.0-dev.24`. M6 is built in work packages; this document records each
 one as it lands.
 
 ## Work packages
@@ -15,7 +15,7 @@ one as it lands.
 | WP4 | Offline CI: lane scripts, GitHub workflow, test-time network guard | done |
 | WP5 | Full CLI, verification report contract, served-bundle seam | done |
 | WP6 | HTTP guard, HTTP settings, health and readiness, opt-in Streamable HTTP for MCP | done |
-| WP7 | v2 REST API, set verification over HTTP, `api` extra | not started |
+| WP7 | v2 REST API, set verification over HTTP, `api` extra | done |
 | WP9 | Read-only legacy-data importer (ADR 0008) | not started |
 | WP10 | Store activation and serving, operator FiGHT snapshot, M6 exit audit | not started |
 
@@ -336,7 +336,7 @@ Decisions: ADR 0007.
   forms included, is invalid), `CVE_KGRAG_MCP_HTTP_PORT` (1 to 65535, default 8765) and
   `CVE_KGRAG_HTTP_TOKEN`: 32 to 512 characters of RFC 6750's `b64token` alphabet, held as
   a `SecretStr`. The section has no switch: every command reads and validates it, and
-  only `mcp --http` serves. The API's port variable arrives with WP7.
+  only `mcp --http` and `api` (WP7, on `CVE_KGRAG_API_PORT`) serve.
 - **Command.** `cve-kgrag mcp --http` serves the packaged fixture's toolbox, with the
   deterministic planner and no semantic channel, until it is interrupted (SIGINT), then
   exits 0 with nothing on stdout or stderr; on SIGTERM it shuts down the same way and
@@ -400,8 +400,8 @@ Decisions: ADR 0007.
   per-request warnings (an upgrade it does not serve, a request it cannot parse, the
   503) are not logged and no caller can fill the log with them; a port it cannot bind
   and an app that raised are errors, and are logged.
-- **Packaging.** The `mcp` extra declares Starlette and uvicorn, and `MCP_EXTRA_MODULES`
-  names them, so a core install missing either reports the missing extra. The dev group
+- **Packaging.** The `mcp` extra declares Starlette and uvicorn, and `MCP_EXTRA`
+  (`adapter_discovery.OptionalExtra`) names them, so a core install missing either reports the missing extra. The dev group
   declares `httpx2`, which the HTTP tests import. `interfaces/http/` imports the ASGI
   stack and stays out of the core module walk, as `interfaces/mcp/` does; the core-only
   lane leaves out `tests/integration/interfaces/http` as well.
@@ -467,3 +467,79 @@ Decisions: ADR 0007.
 - Tests: a genuine rejection and every code's fixed sentence validate under the published
   schema; a rejection quoting the request, carrying another code's sentence or a
   `status` field is rejected by the model and by the schema.
+
+## WP7 — v2 REST API
+
+Decisions: ADR 0007, decisions 8 and 9.
+
+- **Command.** `cve-kgrag api` serves the packaged fixture's toolbox, with the
+  deterministic planner and no semantic channel, on `CVE_KGRAG_HTTP_HOST` and
+  `CVE_KGRAG_API_PORT` (default 8766) behind `CVE_KGRAG_HTTP_TOKEN`, until it is
+  interrupted, as `mcp --http` does: exit 0 on SIGINT with nothing on stdout or stderr,
+  exit 1 on a port it cannot bind, exit 2 without a token. The runner loads through the
+  `api_server` entry point (`interfaces/rest/api_runner.py`); without the `api` extra
+  the command exits 1 with `the 'api' extra is not installed: pip install
+  'cve-kgrag[api]'`, which the core-only lane checks.
+- **Routes**, all behind the WP6 guard and its 50 s request deadline:
+
+  | Route | Tool or check | Arguments |
+  |---|---|---|
+  | `POST /api/v2/search` | `search_vulnerabilities` | the JSON body |
+  | `POST /api/v2/investigate` | `investigate_telecom_topic` | the JSON body |
+  | `GET /api/v2/evidence/{evidence_id}` | `get_evidence` | the path's last segment, exactly as written |
+  | `GET /api/v2/capabilities` | `get_knowledge_capabilities` | none |
+  | `POST /api/v2/verify` | `check_evidence_set` | the body, up to 4 MiB |
+  | `GET /health`, `GET /ready` | as in WP6 | none |
+
+  A tool route hands its arguments to `KnowledgeToolbox.call` on a worker thread and
+  answers the tool's JSON with 200, or the bare `ToolFailure` with its status
+  (`TOOL_FAILURE_STATUSES`: 422, 413, 404, 503, 504, or 500 for `response_too_large`,
+  `integrity_check_failed` and `internal_error`). A body that is not a JSON object, and
+  an evidence ID segment that is not ASCII, are the tool's `invalid_arguments`; the
+  toolbox parses everything else with the tool's request contract, so no answer repeats
+  what the request sent. A percent-encoded evidence ID is not decoded, so
+  `ev%3A...` is not an evidence ID. The guard routes a path ending in one segment after
+  `/api/v2/evidence/` and nothing else there (`GuardedRoute.takes_path_segment`).
+- **Verification.** `POST /api/v2/verify` checks the body as `cve-kgrag verify` checks
+  a file: against the packaged fixture and the planners the settings configure
+  (`list_accepted_planner_capabilities`), and answers the `VerificationReport` with 200
+  for every verdict. It checks one set at a time: a request arriving while a check runs,
+  one abandoned at its deadline included, is answered 503 `route_busy` without waiting.
+  The check takes the route on its worker thread, so a request cancelled before its
+  check starts holds nothing. Its body cap is `MAX_EVIDENCE_SET_BYTES` (4 MiB), the size
+  `cve-kgrag verify` reads, defined once in `application/evidence_set_verification.py`;
+  every other route keeps 256 KiB. `cve-kgrag verify` and the route build their check
+  the same way (`build_evidence_set_check`).
+- **Packaging.** The `api` extra declares anyio, Starlette and uvicorn and no MCP SDK;
+  discovery reports it missing when one of those three modules is (`API_EXTRA`), while a
+  REST runner failing on the MCP SDK is a broken runner, logged with its traceback.
+  `interfaces/rest/` stays out of the core module walk, and the core-only lane leaves
+  out `tests/integration/interfaces/rest`.
+- **Tests.**
+  - `tests/integration/interfaces/rest/test_rest_api.py`: each route's contract; a set
+    investigated over the API verifying over the API; the REST status of every
+    `ToolFailureCode` against the published table, and real failures over HTTP (bodies
+    of the wrong type, with an unexpected field, not JSON, not an object, an array of
+    pairs, `null`, nested 100,000 deep, or too large; an unknown, invalid,
+    percent-encoded or non-ASCII evidence ID; a raising backend; a call out of time;
+    every worker busy), none repeating the marker sent; the `malformed` and
+    `replay_differs` verdicts answered 200; the 50 s deadline; the 4 MiB cap on
+    verification and 256 KiB on the search and investigate routes; a second
+    verification answered `route_busy` and a later one 200; a check abandoned at its
+    deadline answered 504 and keeping the route until it returns; a verification
+    cancelled before its check starts leaving the route free; 405 for each route's other
+    method; 401 on every route but `/health`; and `cve-kgrag api` as a process:
+    investigate, verify, an interrupt with empty output, and a port in use exiting 1
+    without the token in its output.
+  - `test_cli.py` checks that the API's verification accepts the planners the settings
+    configure, as `verify` does.
+  - `test_http_guard.py` checks a route taking a path segment gets it as written, and
+    that no segment, two segments, an empty one or a query names no route.
+  - `tests/support/process_servers.py` starts either HTTP command as a process.
+
+### Contracts at `2.0.0-dev.24`
+
+- `http_rejection.schema.json`: a new code `route_busy` (503), "The route is serving as
+  many requests as it takes; retry later.", for the verification route's one-at-a-time
+  bound.
+- Every versioned schema moves to `2.0.0-dev.24`; no other contract changes.

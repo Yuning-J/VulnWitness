@@ -1,16 +1,18 @@
 """Command-line interface over the offline search, topic-context and investigation
 services, the knowledge lookups (capabilities, topic resolution, affectedness, evidence),
-the verification of an evidence set handed back, and the MCP server over stdio or, with
-``--http``, over Streamable HTTP on a loopback address.
+the verification of an evidence set handed back, the MCP server over stdio or, with
+``--http``, over Streamable HTTP, and the v2 REST API, both HTTP servers on a loopback
+address.
 
 Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
 a query that resolves to a topic, an evidence ID the catalogue serves, every affectedness
 answer established, capabilities always, and for ``mcp`` the client closing stdin or, for
-``mcp --http``, an interrupt (SIGINT; on SIGTERM the process ends by that signal). 1 for
-any other status, verdict or answer, for schema drift, for ``mcp`` without a usable
-server runner and for ``mcp --http`` on a port it cannot bind. 2 for invalid usage: an
-argument a contract rejects, invalid settings, ``mcp --http`` without a token, and a
-``verify`` file that cannot be read or is larger than ``MAX_EVIDENCE_SET_FILE_BYTES``.
+``mcp --http`` and ``api``, an interrupt (SIGINT; on SIGTERM the process ends by that
+signal). 1 for any other status, verdict or answer, for schema drift, for ``mcp`` or
+``api`` without a usable server runner and for an HTTP server on a port it cannot bind.
+2 for invalid usage: an argument a contract rejects, invalid settings, an HTTP server
+without a token, and a ``verify`` file that cannot be read or is larger than
+``MAX_EVIDENCE_SET_BYTES``.
 """
 
 import argparse
@@ -19,23 +21,29 @@ import logging
 import os
 import re
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 from pathlib import Path
 from typing import Any, TypeVar
 
 from pydantic import SecretStr, ValidationError
 
 from cve_kgrag.adapter_discovery import (
+    ApiServerRunner,
     InterfaceUnavailable,
     McpHttpServerRunner,
     McpServerRunner,
+    discover_api_server_runner,
     discover_mcp_http_server_runner,
     discover_mcp_server_runner,
     discover_planner_setup,
 )
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.affectedness import check_affectedness
-from cve_kgrag.application.evidence_set_verification import check_evidence_set
+from cve_kgrag.application.evidence_set_verification import (
+    MAX_EVIDENCE_SET_BYTES,
+    check_evidence_set,
+)
 from cve_kgrag.application.investigate import describe_service_capabilities
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
 from cve_kgrag.application.knowledge_lookup import find_served_evidence, lookup_cve
@@ -79,6 +87,7 @@ from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
 from cve_kgrag.settings import (
     HTTP_VARIABLES,
     HttpSettings,
+    ModelPlannerSettings,
     SemanticSettings,
     ServiceSettings,
     SettingsError,
@@ -98,8 +107,8 @@ SEMANTIC_HELP = (
     "also run the semantic channel, which CVE_KGRAG_SEMANTIC_ENABLED enables; only with "
     "this flag is its adapter loaded"
 )
-# Logged when `mcp` or `verify` runs with the semantic channel enabled: neither serves it,
-# since its store cannot be opened read-only (ADR 0004 §1).
+# Logged when `mcp`, `api` or `verify` runs with the semantic channel enabled: none serves
+# it, since its store cannot be opened read-only (ADR 0004 §1).
 SEMANTIC_NOT_SERVED = "the semantic channel is not served by cve-kgrag %s"
 # Filter options, each repeatable, with the `SearchFilters` field it fills and how its text
 # is read. The product ones are also `investigate`'s product context.
@@ -124,10 +133,8 @@ BUDGET_OPTIONS = (
     ("--max-wall-time-seconds", "max_wall_time_seconds"),
     ("--max-context-bytes", "max_context_bytes"),
 )
-# `verify` reads at most this many bytes of the file it is handed, and refuses a larger one.
-MAX_EVIDENCE_SET_FILE_BYTES = 4 * 1024 * 1024
 OVERSIZED_EVIDENCE_SET_MESSAGE = (
-    f"the evidence set file is larger than {MAX_EVIDENCE_SET_FILE_BYTES // (1024 * 1024)} MiB"
+    f"the evidence set file is larger than {MAX_EVIDENCE_SET_BYTES // (1024 * 1024)} MiB"
 )
 HTTP_TOKEN_VARIABLE = find_section_variable(HTTP_VARIABLES, "token")
 UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
@@ -249,6 +256,16 @@ def build_parser() -> argparse.ArgumentParser:
             "serve over Streamable HTTP instead, on the loopback host and port the "
             "CVE_KGRAG_HTTP_HOST and CVE_KGRAG_MCP_HTTP_PORT settings name, every route but "
             "/health behind the CVE_KGRAG_HTTP_TOKEN bearer token; runs until interrupted"
+        ),
+    )
+
+    commands.add_parser(
+        "api",
+        help=(
+            "serve the v2 REST API on the loopback host and port the CVE_KGRAG_HTTP_HOST and "
+            "CVE_KGRAG_API_PORT settings name, every route but /health behind the "
+            "CVE_KGRAG_HTTP_TOKEN bearer token, over the packaged fixture and the "
+            "deterministic planner; runs until interrupted; needs the 'api' extra"
         ),
     )
 
@@ -397,13 +414,13 @@ def run_demo(service: SearchService) -> int:
 
 def read_evidence_set_file(parser: argparse.ArgumentParser, evidence_set_path: Path) -> bytes:
     """The file's bytes, or a usage error (exit 2) when it cannot be read or holds more than
-    ``MAX_EVIDENCE_SET_FILE_BYTES``; never more than one byte past the cap is read."""
+    ``MAX_EVIDENCE_SET_BYTES``; never more than one byte past the cap is read."""
     try:
         with evidence_set_path.open("rb") as evidence_set_file:
-            evidence_set_bytes = evidence_set_file.read(MAX_EVIDENCE_SET_FILE_BYTES + 1)
+            evidence_set_bytes = evidence_set_file.read(MAX_EVIDENCE_SET_BYTES + 1)
     except OSError as error:
         parser.error(f"cannot read {evidence_set_path}: {error.strerror}")
-    if len(evidence_set_bytes) > MAX_EVIDENCE_SET_FILE_BYTES:
+    if len(evidence_set_bytes) > MAX_EVIDENCE_SET_BYTES:
         parser.error(OVERSIZED_EVIDENCE_SET_MESSAGE)
     return evidence_set_bytes
 
@@ -482,10 +499,13 @@ def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable) -> int:
     return 0
 
 
-def require_http_token(parser: argparse.ArgumentParser, http_settings: HttpSettings) -> SecretStr:
-    """The configured token, or a usage error (exit 2) naming its variable."""
+def require_http_token(
+    parser: argparse.ArgumentParser, http_settings: HttpSettings, command: str
+) -> SecretStr:
+    """The configured token, or a usage error (exit 2) naming its variable and the
+    ``command`` that needs it."""
     if http_settings.token is None:
-        parser.error(f"invalid settings: {HTTP_TOKEN_VARIABLE}: required by mcp --http")
+        parser.error(f"invalid settings: {HTTP_TOKEN_VARIABLE}: required by {command}")
     return http_settings.token
 
 
@@ -503,6 +523,54 @@ def run_mcp_http_server(
         build_knowledge_toolbox(load_served_bundle()), host=host, port=port, token=token
     )
     return 0 if has_served else 1
+
+
+def run_api_server(
+    runner: ApiServerRunner | InterfaceUnavailable,
+    planner_settings: ModelPlannerSettings | None,
+    *,
+    host: str,
+    port: int,
+    token: SecretStr,
+) -> int:
+    """Serve the packaged fixture's REST API with ``runner`` on ``host`` and ``port``
+    behind ``token`` until interrupted. Its verification route checks a set as ``verify``
+    does, against the planners ``planner_settings`` configure. 1 when there is no usable
+    runner, with one line on stderr naming why, or when the server could not start, which
+    the server has logged."""
+    if isinstance(runner, InterfaceUnavailable):
+        print(f"cve-kgrag api cannot start: {runner.detail}", file=sys.stderr)
+        return 1
+    bundle = load_served_bundle()
+    has_served = runner(
+        build_knowledge_toolbox(bundle),
+        build_evidence_set_check(bundle, planner_settings),
+        host=host,
+        port=port,
+        token=token,
+    )
+    return 0 if has_served else 1
+
+
+def build_evidence_set_check(
+    bundle: FixtureBundle, planner_settings: ModelPlannerSettings | None
+) -> Callable[[bytes], VerificationReport]:
+    """``check_evidence_set`` against ``bundle``'s deployment and the planners
+    ``planner_settings`` configure: how ``verify`` and the API's verification route check
+    a set."""
+    return partial(
+        check_evidence_set,
+        deployment=build_investigation_deployment(bundle),
+        accepted_planner_capabilities=list_accepted_planner_capabilities(planner_settings),
+    )
+
+
+def start_service_logging(settings: ServiceSettings, command: str) -> None:
+    """Log warnings to stderr, the stream that carries no protocol, and say once that
+    ``command`` serves no semantic channel when the settings enable one."""
+    logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
+    if settings.semantic is not None:
+        logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, command)
 
 
 def choose_semantic_settings(
@@ -539,10 +607,10 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     if arguments.command == "schema":
         return run_schema_command(arguments.action, arguments.dir)
     if arguments.command == "mcp":
-        http_token = require_http_token(parser, settings.http) if arguments.http else None
-        logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
-        if settings.semantic is not None:
-            logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, "mcp")
+        http_token = (
+            require_http_token(parser, settings.http, "mcp --http") if arguments.http else None
+        )
+        start_service_logging(settings, "mcp")
         if http_token is not None:
             return run_mcp_http_server(
                 discover_mcp_http_server_runner(),
@@ -551,19 +619,24 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
                 token=http_token,
             )
         return run_mcp_server(discover_mcp_server_runner())
+    if arguments.command == "api":
+        api_token = require_http_token(parser, settings.http, "api")
+        start_service_logging(settings, "api")
+        return run_api_server(
+            discover_api_server_runner(),
+            settings.model_planner,
+            host=settings.http.host,
+            port=settings.http.api_port,
+            token=api_token,
+        )
 
     bundle = load_served_bundle()
     if arguments.command == "verify":
         evidence_set_bytes = read_evidence_set_file(parser, arguments.evidence_set_path)
         if settings.semantic is not None:
             logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, "verify")
-        return print_verification(
-            check_evidence_set(
-                evidence_set_bytes,
-                build_investigation_deployment(bundle),
-                list_accepted_planner_capabilities(settings.model_planner),
-            )
-        )
+        check_set = build_evidence_set_check(bundle, settings.model_planner)
+        return print_verification(check_set(evidence_set_bytes))
     if arguments.command == "investigate":
         investigation_request = build_investigation_request(parser, arguments)
         investigation_service = build_investigation_service(
