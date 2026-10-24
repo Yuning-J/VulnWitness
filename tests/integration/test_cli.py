@@ -66,6 +66,7 @@ from cve_kgrag.domain.taxonomy import (
 )
 from cve_kgrag.domain.tool_contracts import ConceptResolution, EvidenceLookup, KnowledgeCapabilities
 from cve_kgrag.domain.topic_context import TopicContextRequest, TopicContextResponse
+from cve_kgrag.evaluation.package_digest import fingerprint_package
 from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport
 from cve_kgrag.evaluation.planner_runner import REPORT_FILE_NAME
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
@@ -1327,6 +1328,7 @@ def test_eval_planner_baseline_prints_its_report_and_writes_sets_that_verify(
         == hashlib.sha256((tmp_path / "gold.yaml").read_bytes()).hexdigest()
     )
     assert report.identity.evidence_set_schema_version == SCHEMA_VERSION
+    assert report.identity.package_sha256 == fingerprint_package(PACKAGE_DIR)
     assert f"{REPORT_FILE_NAME} to {tmp_path / EVAL_RESULTS}" in evaluation_output.err
     # The packaged deployment verifies the case run on it; the other served no FiGHT.
     assert verdicts == {"5G-AKA": "verified", "CVE-9999-0003": "invalid"}
@@ -1474,6 +1476,25 @@ def test_eval_planner_model_runs_against_a_failing_endpoint_report_none_of_its_t
     assert server.base_url not in evaluation_output.out
 
 
+def test_eval_planner_against_a_silent_endpoint_completes_since_the_adapter_times_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], fake_chat_servers: FakeChatServers
+) -> None:
+    """The installed adapter honours the timeout it is given, so no call outlives its run
+    and every run starts; each round falls back on a timed-out planner."""
+    server = fake_chat_servers.start(ScriptedAnswer(waits_for_release=True))
+    gold_rows = [build_gold_row("5G-AKA", budget={"max_wall_time_seconds": 1})]
+
+    exit_code = run_planner_evaluation_cli(
+        tmp_path, build_planner_environment(server), "--model-runs", "2", gold_rows=gold_rows
+    )
+
+    report = PlannerEvaluationReport.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report.model is not None
+    assert report.model.runs == 2
+    assert report.model.round_one.timed_out_fallback.count == 2
+
+
 def test_eval_planner_with_an_invalid_gold_file_is_a_usage_error_that_never_quotes_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1487,6 +1508,21 @@ def test_eval_planner_with_an_invalid_gold_file_is_a_usage_error_that_never_quot
     assert "invalid gold file: case 1: request: scope:" in error_output
     assert EVAL_MARKER not in error_output
     assert not (tmp_path / EVAL_RESULTS).exists()
+
+
+def test_eval_planner_writing_inside_the_package_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The sets a run wrote there would change the package the report names."""
+    gold_path = write_gold_file(tmp_path, SMALL_GOLD_ROWS)
+    out_dir = PACKAGE_DIR / "knowledge" / ".." / EVAL_RESULTS
+
+    with pytest.raises(SystemExit) as raised:
+        run_cli(["eval", "planner", "--gold", str(gold_path), "--out", str(out_dir)])
+
+    assert raised.value.code == 2
+    assert "--out must not lie inside the installed cve_kgrag package" in capsys.readouterr().err
+    assert not (PACKAGE_DIR / EVAL_RESULTS).exists()
 
 
 def test_eval_planner_with_an_unreadable_gold_file_is_a_usage_error(

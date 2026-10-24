@@ -2,6 +2,7 @@
 back once the remaining time reads zero, whether or not the call has returned."""
 
 import threading
+import time
 from dataclasses import dataclass, field
 
 import pytest
@@ -12,6 +13,9 @@ from cve_kgrag.application.threaded_call_runner import (
     NoFreeWorker,
     ThreadedCallRunner,
 )
+
+# Ample time for a released call's thread to finish, so a slow machine never fails a test.
+GENEROUS_WAIT_SECONDS = 10.0
 
 
 @dataclass
@@ -158,3 +162,28 @@ def test_call_raising_a_non_exception_base_exception_is_raised_as_call_aborted()
 
     assert isinstance(raised.value.__cause__, SystemExit)
     assert runner.count_live_calls() == 0
+
+
+def test_runner_without_live_calls_is_idle_at_once() -> None:
+    runner = ThreadedCallRunner()
+    runner.run(RecordingCall().run, ScriptedRemaining([30.0]).read)
+
+    assert runner.wait_until_idle(0.0) is True
+
+
+def test_runner_is_idle_only_once_its_abandoned_call_returns(
+    blocked_call_release: threading.Event,
+) -> None:
+    runner = ThreadedCallRunner()
+    runner.run(RecordingCall(release=blocked_call_release).run, ScriptedRemaining([0.05, 0.0]).read)
+
+    is_idle_while_blocked = runner.wait_until_idle(0.05)
+    blocked_call_release.set()
+    released_at = time.monotonic()
+    is_idle_once_released = runner.wait_until_idle(GENEROUS_WAIT_SECONDS)
+    idle_wait_seconds = time.monotonic() - released_at
+
+    assert is_idle_while_blocked is False
+    assert is_idle_once_released is True
+    # The returning call wakes the waiter; it never waits out its whole timeout.
+    assert idle_wait_seconds < GENEROUS_WAIT_SECONDS

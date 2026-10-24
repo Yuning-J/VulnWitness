@@ -47,7 +47,15 @@ class EvaluationIdentity(ContractModel):
 
     evaluation_format_version: Literal[1] = EVALUATION_FORMAT_VERSION
     evidence_set_schema_version: str
-    source_revision: str = Field(pattern=SOURCE_REVISION_PATTERN)
+    source_revision: str = Field(
+        pattern=SOURCE_REVISION_PATTERN,
+        description="Where the package came from, for a reader; package_sha256 says what ran.",
+    )
+    package_sha256: str = Field(
+        pattern=SHA256_HEX_PATTERN,
+        description="Digest of every file of the installed package, code and packaged data, "
+        "but compiled bytecode; the same before the first run and after the last.",
+    )
     gold_sha256: str = Field(
         pattern=SHA256_HEX_PATTERN, description="SHA-256 of the gold file's bytes."
     )

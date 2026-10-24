@@ -118,11 +118,14 @@ class ScriptedModelPort:
 
 @dataclass
 class BlockingModelPort:
-    """A planner whose every call blocks until ``release`` is set, ignoring its timeout."""
+    """A planner whose every call blocks until ``release`` is set, ignoring its timeout;
+    ``started_calls`` counts the calls it was given."""
 
     release: threading.Event
+    started_calls: int = 0
 
     def propose_plan(self, planning_input: PlanningInput, timeout_seconds: float) -> ModelReply:
+        self.started_calls += 1
         self.release.wait()
         return ModelReply(
             status=BackendStatus.UNAVAILABLE, detail=ModelReplyFailureDetail.TIMED_OUT

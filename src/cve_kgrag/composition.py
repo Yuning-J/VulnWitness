@@ -237,6 +237,7 @@ def build_investigation_deployment(
     trustify_port: TrustifyPort | None = None,
     wall_clock: Callable[[], datetime] = utc_now,
     monotonic_clock: Callable[[], float] = time.monotonic,
+    call_runner: ThreadedCallRunner | None = None,
 ) -> InvestigationDeployment:
     """One search service shared by the topic-context service and the tool executor, and
     one topic-context service, the tool executor's.
@@ -250,8 +251,9 @@ def build_investigation_deployment(
     Without ``trustify_port``, affectedness is the disabled adapter's
     (``DisabledTrustifyAdapter``). The port is described once, here
     (``describe_affectedness``); a port that gives no ``AffectednessFailure`` raises
-    ``AffectednessConfigurationError``. Each deployment gets its own call runner, which
-    bounds every planner and tool call by the time the run has left.
+    ``AffectednessConfigurationError``. Without ``call_runner`` the deployment gets its own
+    call runner, which bounds every planner and tool call by the time the run has left; a
+    caller passing one shares it, and with it the count of live calls, across deployments.
     """
     if search_service is None:
         search_service = build_search_service(bundle, semantic_settings)
@@ -259,6 +261,8 @@ def build_investigation_deployment(
         fight_source, pinned_fight_snapshot = load_packaged_fight_source(wall_clock)
     if trustify_port is None:
         trustify_port = DisabledTrustifyAdapter()
+    if call_runner is None:
+        call_runner = ThreadedCallRunner()
     affectedness_capability = describe_affectedness(trustify_port)
     topic_registry = build_topic_registry()
     evidence_catalog = build_evidence_catalog(bundle, fight_source)
@@ -280,7 +284,7 @@ def build_investigation_deployment(
         ),
         pinned_fight_snapshot=pinned_fight_snapshot,
         evidence_catalog=evidence_catalog,
-        call_runner=ThreadedCallRunner(),
+        call_runner=call_runner,
         wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,
     )
@@ -297,6 +301,7 @@ def build_investigation_service(
     trustify_port: TrustifyPort | None = None,
     wall_clock: Callable[[], datetime] = utc_now,
     monotonic_clock: Callable[[], float] = time.monotonic,
+    call_runner: ThreadedCallRunner | None = None,
 ) -> InvestigationService:
     """The investigation service running ``planner_setup`` over the deployment
     ``build_investigation_deployment`` wires from the same arguments, on its measured clock.
@@ -315,6 +320,7 @@ def build_investigation_service(
         trustify_port=trustify_port,
         wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,
+        call_runner=call_runner,
     )
     return InvestigationService(deployment, planner_setup, ignore_checkpoint)
 

@@ -42,8 +42,15 @@ tool, served by neither the REST API nor MCP.
   read. At most 100 cases and 1 MiB; a row repeating an earlier one is refused. A problem
   is reported in the server's words, never by quoting the file, with a request's problems
   bounded as a verification report bounds its violations (exit 2).
-- Each case runs on the packaged fixture with the FiGHT source its row names, the
-  production clocks and the default call runner, sequentially.
+- Each case runs on the packaged fixture with the FiGHT source its row names and the
+  production clocks. The runs go one after another on one call runner, and a run starts
+  only once every call an earlier run abandoned has returned. It waits up to 60 seconds,
+  which gives an adapter that honours its timeout time to finish trying each address of
+  its endpoint. A call still running after that stops the command (exit 1). Since no run
+  starts while a call is live, the process never holds more abandoned calls than one
+  investigation may leave, three ([ADR 0005 §2](adr/0005-model-planner-adapter.md)).
+- `--out` must not lie inside the installed package, since the files a run writes there
+  would change the package the report names (exit 2).
 
 ## Output and its sensitivity
 
@@ -53,7 +60,9 @@ Every run creates a new directory, `DIR/planner-*`, readable by its owner only (
 - `model/<case_sha256>-NN.json`, one per model run;
 - `report.json`, which is also printed.
 
-No file is ever overwritten. The evidence sets hold each query, the model's plan text, the
+No file is ever overwritten. A stopped evaluation keeps the sets it wrote and writes no
+report.
+The evidence sets hold each query, the model's plan text, the
 trajectory and the filters, so the directory is sensitive and untrusted: never commit it.
 `eval-results/` is ignored by git for that reason.
 
@@ -68,13 +77,25 @@ The report is the evaluation's own format (`evaluation_format_version: 1`), not 
 the v2 knowledge contract, so it is not under `schemas/v2`. It is JSON with sorted keys,
 and the analysis is a pure function of the sets: equal sets give byte-equal reports.
 
-`identity` says what was measured: the evidence-set schema version, the source revision
-(the git commit, SHA-1 or SHA-256, with `+dirty` for uncommitted changes to tracked files,
-or `unavailable` outside a checkout or inside another repository), the gold file's
-SHA-256, the hashes of the deterministic and model planner identities, and the model runs
-per case. The identity is built before any case runs. Reading the revision takes no
-optional git lock, so it never rewrites the checkout's index. Two reports compare only
-when their identities say they measured the same thing.
+`identity` says what was measured: the evidence-set schema version, the package digest,
+the source revision, the gold file's SHA-256, the hashes of the deterministic and model
+planner identities, and the model runs per case. The identity is built before any case
+runs. Two reports compare only when their identities are equal.
+
+- `package_sha256` names what ran: the digest of every file of the installed package
+  except compiled bytecode, meaning each file's relative path and content hash, in path
+  order. Code, topic cards, fixtures and FiGHT snapshots are all packaged files. A source
+  checkout and an installed wheel are both covered, and so is a change to a file no
+  repository tracks. Hidden and editor files count too, since the loaders' globs match
+  hidden files; a symlinked directory is not followed, and the package holds none.
+  The digest is read again before every run and after the last. A change, or a file
+  that cannot be read, stops the command before the report (exit 1). Third-party
+  dependencies are not in it.
+- `source_revision` says where the package came from, for a reader: the git commit, SHA-1
+  or SHA-256, with `+dirty` for uncommitted changes to tracked files, or `unavailable`
+  outside a checkout or inside another repository. Two different dirty states share a
+  revision, so the revision never decides whether two reports compare. Reading it takes
+  no optional git lock, so it never rewrites the checkout's index.
 
 `deterministic` lists each case's run: per round, the planner outcome, the plan
 fingerprint and the steps executed; then status, stop reason, tool calls and the hash of
@@ -136,9 +157,9 @@ or discount that case's round 2. The fix, consulting no model in such a round, i
 planned. An accepted plan that the deadline stopped before its first step does not count.
 `tool_calls_against_deterministic` counts the model runs that charged fewer, as many or
 more tool calls than the deterministic run of the same case. `planner_durations` gives
-the count, minimum, lower median and maximum planner call time in milliseconds. These are measured times, so they vary between runs; they are
-excluded from the sets' hashes, but the report states them. Each entry of `cases`
-reports, over that case's model runs:
+the count, minimum, lower median and maximum planner call time in milliseconds. These
+are measured times, so they vary between runs; they are excluded from the sets' hashes,
+but the report states them. Each entry of `cases` reports, over that case's model runs:
 
 - `distinct_run_plans`: distinct fingerprints of the runs' plans, round by round, and
   `run_plans`: how many runs gave each fingerprint;
@@ -185,9 +206,16 @@ chat server; the network guard refuses any other connection.
   hashes, the source revision (commit, `+dirty`, untracked files ignored, the index never
   rewritten, unavailable outside a checkout or inside another repository), planner
   hashes, owner-only directories and files that are never overwritten, an identity
-  checked before any case runs, and the sets and report it writes.
+  checked before any case runs, the sets and report it writes, and no report when the
+  last run changed the package.
+- The package digest: two edits of one file, an untracked data file, bytecode ignored,
+  the same content wherever it lies.
+- The case runner: a run after one whose planner ignores its timeout never starts, under
+  either FiGHT source, with one planner call made; a run after the package changed never
+  starts; a package file that cannot be read stops the evaluation.
 - The CLI: exit codes for every refusal, `--model-runs` outside 0 to 20 refused before
   any call, no endpoint call without `--model-runs`, the gold hash, schema version and
-  checkout in the identity, and model runs through the installed adapter, accepted or
+  checkout in the identity, model runs through the installed adapter, accepted or
   failing, whose report holds no query, plan text, endpoint text, endpoint, model name
-  or key.
+  or key, a silent endpoint whose runs all complete, since the adapter times out, the
+  package digest in the identity, and an `--out` inside the package refused.

@@ -1,40 +1,35 @@
-"""The planner evaluation runner reads only investigation gold files, never quoting a bad
-one, names the evaluated source, and writes each set and the report once, owner-only."""
+"""The planner evaluation runner names the evaluated source and package, runs every case,
+and writes each set and the report once; it writes no report when a run saw another
+package."""
 
 import os
-import stat
 import subprocess
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.planner_setup import ModelPlanning
-from cve_kgrag.domain.evidence_set_verification_report import (
-    MAX_REPORTED_VIOLATIONS,
-    MAX_VIOLATION_CHARS,
-)
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
 from cve_kgrag.domain.search import SCHEMA_VERSION
+from cve_kgrag.evaluation.case_runner import PACKAGE_CHANGED, EvaluationStopped, ModelRuns
+from cve_kgrag.evaluation.gold_cases import load_gold_cases
 from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport, format_report
 from cve_kgrag.evaluation.planner_runner import (
-    MAX_GOLD_CASES,
-    MAX_GOLD_FILE_BYTES,
     REPORT_FILE_NAME,
-    GoldCase,
-    GoldFileError,
-    ModelRuns,
-    ResultDirectory,
-    load_gold_cases,
     read_source_revision,
     run_planner_evaluation,
 )
-from tests.support.evaluation import SMALL_GOLD_ROWS, build_gold_row, encode_gold
-from tests.support.investigation import GOLD_FILE
+from cve_kgrag.evaluation.result_directory import ResultDirectory
+from tests.support.evaluation import (
+    EVAL_RESULTS,
+    SMALL_GOLD_ROWS,
+    PackageEditingModelPort,
+    build_package_dir,
+    encode_gold,
+    list_entry_names,
+)
 from tests.support.planners import (
     SCRIPTED_PLANNER,
     UNAVAILABLE_REPLY,
@@ -42,34 +37,204 @@ from tests.support.planners import (
     plan_with,
 )
 
-GOLD_MARKER = "gold-marker-91c2"
-OWNER_ONLY_DIRECTORY = 0o700
-OWNER_ONLY_FILE = 0o600
+
+def read_written_set(result_directory: ResultDirectory, relative_path: str) -> KnowledgeEvidenceSet:
+    return KnowledgeEvidenceSet.model_validate_json(
+        (result_directory.path / relative_path).read_bytes()
+    )
 
 
-def build_distinct_rows(row_count: int) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for index in range(row_count):
-        rows.append(build_gold_row(f"query {index}"))
-    return rows
+def test_deterministic_evaluation_writes_each_case_s_set_and_the_report_it_returns(
+    tmp_path: Path, fixture_bundle: FixtureBundle
+) -> None:
+    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
+    result_directory = ResultDirectory.create(tmp_path)
+
+    report = run_planner_evaluation(
+        cases,
+        gold_sha256="d" * 64,
+        bundle=fixture_bundle,
+        model_runs=None,
+        source_revision="unavailable",
+        package_dir=build_package_dir(tmp_path),
+        result_directory=result_directory,
+    )
+
+    written_report = (result_directory.path / REPORT_FILE_NAME).read_bytes()
+    assert written_report == format_report(report)
+    assert PlannerEvaluationReport.model_validate_json(written_report) == report
+    assert report.model is None
+    assert (report.identity.gold_sha256, report.identity.model_runs_per_case) == ("d" * 64, 0)
+    assert report.identity.model_planner_sha256 is None
+    for case, deterministic_case in zip(cases, report.deterministic.cases, strict=True):
+        evidence_set = read_written_set(result_directory, f"deterministic/{case.case_sha256}.json")
+        assert evidence_set.request == case.request
+        assert deterministic_case.case_sha256 == case.case_sha256
+    assert sorted(list_entry_names(result_directory.path)) == ["deterministic", REPORT_FILE_NAME]
 
 
-def list_case_hashes(cases: Sequence[GoldCase]) -> list[str]:
-    case_hashes: list[str] = []
+def test_case_with_fight_unavailable_runs_on_a_deployment_serving_no_snapshot(
+    tmp_path: Path, fixture_bundle: FixtureBundle
+) -> None:
+    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
+    result_directory = ResultDirectory.create(tmp_path)
+
+    run_planner_evaluation(
+        cases,
+        gold_sha256="d" * 64,
+        bundle=fixture_bundle,
+        model_runs=None,
+        source_revision="unavailable",
+        package_dir=build_package_dir(tmp_path),
+        result_directory=result_directory,
+    )
+
+    fight_states: list[str] = []
     for case in cases:
-        case_hashes.append(case.case_sha256)
-    return case_hashes
+        evidence_set = read_written_set(result_directory, f"deterministic/{case.case_sha256}.json")
+        for capability in evidence_set.source_capabilities:
+            if capability.source == "mitre_fight":
+                fight_states.append(capability.state.value)
+    assert fight_states == ["available", "unavailable"]
 
 
-def list_entry_names(directory: Path) -> list[str]:
-    entry_names: list[str] = []
-    for entry in directory.iterdir():
-        entry_names.append(entry.name)
-    return entry_names
+def test_model_evaluation_runs_each_case_the_given_number_of_times(
+    tmp_path: Path, fixture_bundle: FixtureBundle
+) -> None:
+    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
+    result_directory = ResultDirectory.create(tmp_path)
+    model_port = ScriptedModelPort([UNAVAILABLE_REPLY] * 6)
+
+    report = run_planner_evaluation(
+        cases,
+        gold_sha256="d" * 64,
+        bundle=fixture_bundle,
+        model_runs=ModelRuns(plan_with(model_port), 3),
+        source_revision="unavailable",
+        package_dir=build_package_dir(tmp_path),
+        result_directory=result_directory,
+    )
+
+    assert len(model_port.planning_inputs) == 6
+    assert report.model is not None
+    assert report.model.runs == 6
+    assert report.identity.model_runs_per_case == 3
+    for case in cases:
+        for run_number in (1, 2, 3):
+            evidence_set = read_written_set(
+                result_directory, f"model/{case.case_sha256}-{run_number:02d}.json"
+            )
+            assert evidence_set.trajectory.planner == SCRIPTED_PLANNER
 
 
-def read_mode(path: Path) -> int:
-    return stat.S_IMODE(path.stat().st_mode)
+def evaluate_one_model_run(
+    tmp_path: Path, fixture_bundle: FixtureBundle, model_planning: ModelPlanning
+) -> PlannerEvaluationReport:
+    """The report of one model run of the small gold file's first case."""
+    (case,) = load_gold_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
+    return run_planner_evaluation(
+        (case,),
+        gold_sha256="d" * 64,
+        bundle=fixture_bundle,
+        model_runs=ModelRuns(model_planning, 1),
+        source_revision="unavailable",
+        package_dir=build_package_dir(tmp_path),
+        result_directory=ResultDirectory.create(tmp_path),
+    )
+
+
+def test_report_identity_names_each_planner_by_its_own_hash(
+    tmp_path: Path, fixture_bundle: FixtureBundle
+) -> None:
+    other_planner = SCRIPTED_PLANNER.model_copy(update={"model_name": "another-model"})
+
+    scripted_identity = evaluate_one_model_run(
+        tmp_path, fixture_bundle, plan_with(ScriptedModelPort([UNAVAILABLE_REPLY]))
+    ).identity
+    repeated_identity = evaluate_one_model_run(
+        tmp_path, fixture_bundle, plan_with(ScriptedModelPort([UNAVAILABLE_REPLY]))
+    ).identity
+    other_identity = evaluate_one_model_run(
+        tmp_path,
+        fixture_bundle,
+        ModelPlanning(other_planner, ScriptedModelPort([UNAVAILABLE_REPLY])),
+    ).identity
+
+    assert scripted_identity == repeated_identity
+    assert scripted_identity.model_planner_sha256 != other_identity.model_planner_sha256
+    assert (
+        scripted_identity.deterministic_planner_sha256
+        == other_identity.deterministic_planner_sha256
+    )
+    assert scripted_identity.model_planner_sha256 != scripted_identity.deterministic_planner_sha256
+    assert scripted_identity.evidence_set_schema_version == SCHEMA_VERSION
+
+
+@pytest.mark.parametrize(
+    "source_revision",
+    ["a" * 40, "b" * 64 + "+dirty", "unavailable"],
+    ids=["sha1", "sha256_dirty", "unavailable"],
+)
+def test_every_revision_the_runner_reads_is_one_the_report_accepts(
+    tmp_path: Path, fixture_bundle: FixtureBundle, source_revision: str
+) -> None:
+    (case,) = load_gold_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
+
+    report = run_planner_evaluation(
+        (case,),
+        gold_sha256="d" * 64,
+        bundle=fixture_bundle,
+        model_runs=None,
+        source_revision=source_revision,
+        package_dir=build_package_dir(tmp_path),
+        result_directory=ResultDirectory.create(tmp_path),
+    )
+
+    assert report.identity.source_revision == source_revision
+
+
+def test_revision_the_report_rejects_stops_the_run_before_any_case_runs(
+    tmp_path: Path, fixture_bundle: FixtureBundle
+) -> None:
+    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
+    result_directory = ResultDirectory.create(tmp_path)
+
+    with pytest.raises(ValidationError):
+        run_planner_evaluation(
+            cases,
+            gold_sha256="d" * 64,
+            bundle=fixture_bundle,
+            model_runs=None,
+            source_revision="not-a-revision",
+            package_dir=build_package_dir(tmp_path),
+            result_directory=result_directory,
+        )
+
+    assert list_entry_names(result_directory.path) == []
+
+
+def test_package_changed_by_the_last_run_stops_the_evaluation_before_its_report(
+    tmp_path: Path, fixture_bundle: FixtureBundle
+) -> None:
+    package_dir = build_package_dir(tmp_path)
+    # One case: the edit lands in the last run, so only the check after it can see it.
+    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
+    result_directory = ResultDirectory.create(tmp_path / EVAL_RESULTS)
+    model_port = PackageEditingModelPort(package_dir / "knowledge" / "card.yaml")
+
+    with pytest.raises(EvaluationStopped) as raised:
+        run_planner_evaluation(
+            cases,
+            gold_sha256="d" * 64,
+            bundle=fixture_bundle,
+            model_runs=ModelRuns(plan_with(model_port), 1),
+            source_revision="unavailable",
+            package_dir=package_dir,
+            result_directory=result_directory,
+        )
+
+    assert str(raised.value) == PACKAGE_CHANGED
+    assert not (result_directory.path / REPORT_FILE_NAME).exists()
 
 
 def run_git(directory: Path, *arguments: str) -> str:
@@ -104,135 +269,6 @@ def build_checkout(root: Path) -> Path:
     run_git(root, "add", ".")
     run_git(root, "commit", "--quiet", "--no-verify", "-m", "package")
     return package_dir
-
-
-def test_investigation_gold_file_loads_every_case_with_its_fight_source() -> None:
-    gold_rows = yaml.safe_load(GOLD_FILE.read_text(encoding="utf-8"))["trajectories"]
-
-    cases = load_gold_cases(GOLD_FILE.read_bytes())
-
-    assert len(cases) == len(gold_rows)
-    for case, row in zip(cases, gold_rows, strict=True):
-        assert case.request.query == row["request"]["query"]
-        assert case.fight == row["sources"]["mitre_fight"]
-    assert len(set(list_case_hashes(cases))) == len(cases)
-
-
-def test_case_hash_names_the_request_and_fight_source_not_the_row_id() -> None:
-    renamed_row = {"id": "another-name", **build_gold_row("5G-AKA")}
-
-    (case,) = load_gold_cases(encode_gold([build_gold_row("5G-AKA")]))
-    (renamed_case,) = load_gold_cases(encode_gold([renamed_row]))
-    (unavailable_case,) = load_gold_cases(encode_gold([build_gold_row("5G-AKA", "unavailable")]))
-
-    assert case.case_sha256 == renamed_case.case_sha256
-    assert case.case_sha256 != unavailable_case.case_sha256
-
-
-@pytest.mark.parametrize(
-    ("gold_bytes", "expected_message"),
-    [
-        (b"\xff" + GOLD_MARKER.encode(), "the gold file is not UTF-8 YAML a strict loader accepts"),
-        (
-            f"trajectories: [{GOLD_MARKER}".encode(),
-            "the gold file is not UTF-8 YAML a strict loader accepts",
-        ),
-        (
-            f"trajectories: []\ntrajectories: [{GOLD_MARKER}]\n".encode(),
-            "the gold file is not UTF-8 YAML a strict loader accepts",
-        ),
-        (
-            yaml.safe_dump({"queries": [GOLD_MARKER]}).encode(),
-            "the gold file holds no trajectories list",
-        ),
-        (encode_gold([]), "the gold file holds no trajectories list"),
-        (encode_gold([GOLD_MARKER]), "case 1 is not a mapping"),
-        (
-            encode_gold([build_gold_row("5G-AKA", GOLD_MARKER)]),
-            "case 1: sources.mitre_fight is not packaged or unavailable",
-        ),
-        (
-            encode_gold([build_gold_row("5G-AKA"), build_gold_row("5G-AKA", scope=GOLD_MARKER)]),
-            "case 2: request: scope: Input should be 'protocol_context_only', "
-            "'implementation_only' or 'mixed'",
-        ),
-        (
-            encode_gold([build_gold_row("5G-AKA", **{GOLD_MARKER: True})]),
-            "case 1: request: 1 unexpected field",
-        ),
-        (
-            encode_gold(
-                [
-                    build_gold_row("5G-AKA"),
-                    build_gold_row("CVE-9999-0003"),
-                    build_gold_row("5G-AKA"),
-                ]
-            ),
-            "case 3 repeats an earlier case",
-        ),
-        (
-            encode_gold(build_distinct_rows(MAX_GOLD_CASES + 1)),
-            f"the gold file holds more than {MAX_GOLD_CASES} cases",
-        ),
-        (
-            b"#" * MAX_GOLD_FILE_BYTES + GOLD_MARKER.encode(),
-            f"the gold file is larger than {MAX_GOLD_FILE_BYTES} bytes",
-        ),
-        (
-            encode_gold([{"request": {}, "sources": {"mitre_fight": [GOLD_MARKER]}}]),
-            "case 1: sources.mitre_fight is not packaged or unavailable",
-        ),
-        (
-            encode_gold([{"request": {}, "sources": {"mitre_fight": {GOLD_MARKER: 1}}}]),
-            "case 1: sources.mitre_fight is not packaged or unavailable",
-        ),
-        (
-            f"trajectories: []\n{GOLD_MARKER}: 2024-02-30\n".encode(),
-            "the gold file is not UTF-8 YAML a strict loader accepts",
-        ),
-        (
-            f"trajectories: []\n{GOLD_MARKER}: {'9' * 5000}\n".encode(),
-            "the gold file is not UTF-8 YAML a strict loader accepts",
-        ),
-    ],
-    ids=[
-        "not_utf8",
-        "not_yaml",
-        "duplicate_key",
-        "no_trajectories",
-        "empty_trajectories",
-        "row_not_a_mapping",
-        "unknown_fight_source",
-        "invalid_request",
-        "unexpected_request_field",
-        "repeated_case",
-        "too_many_cases",
-        "too_large",
-        "list_fight_source",
-        "mapping_fight_source",
-        "impossible_date",
-        "integer_too_long",
-    ],
-)
-def test_file_that_is_no_investigation_gold_file_is_refused_without_quoting_it(
-    gold_bytes: bytes, expected_message: str
-) -> None:
-    with pytest.raises(GoldFileError) as raised:
-        load_gold_cases(gold_bytes)
-
-    assert str(raised.value) == expected_message
-    assert GOLD_MARKER not in str(raised.value)
-    assert raised.value.__cause__ is None
-
-
-def test_request_with_many_problems_is_refused_with_a_bounded_message() -> None:
-    gold_row = build_gold_row("5G-AKA", filters={"vendors": [1] * 50_000})
-
-    with pytest.raises(GoldFileError) as raised:
-        load_gold_cases(encode_gold([gold_row]))
-
-    assert str(raised.value).startswith("case 1: request: filters.vendors")
-    assert len(str(raised.value)) <= MAX_REPORTED_VIOLATIONS * (MAX_VIOLATION_CHARS + 2) + 64
 
 
 def test_source_revision_is_the_checkout_s_commit(tmp_path: Path) -> None:
@@ -297,208 +333,3 @@ def test_source_revision_is_unavailable_for_a_package_inside_another_repository(
     installed_package_dir.mkdir(parents=True)
 
     assert read_source_revision(installed_package_dir) == "unavailable"
-
-
-def test_result_directory_and_its_files_are_owner_only(tmp_path: Path) -> None:
-    output_dir = tmp_path / "eval-results"
-
-    result_directory = ResultDirectory.create(output_dir)
-    result_directory.write("deterministic/case.json", b"{}")
-
-    assert result_directory.path.parent == output_dir
-    assert result_directory.path.name.startswith("planner-")
-    assert read_mode(output_dir) == OWNER_ONLY_DIRECTORY
-    assert read_mode(result_directory.path) == OWNER_ONLY_DIRECTORY
-    assert read_mode(result_directory.path / "deterministic") == OWNER_ONLY_DIRECTORY
-    assert read_mode(result_directory.path / "deterministic" / "case.json") == OWNER_ONLY_FILE
-
-
-def test_each_run_gets_a_new_result_directory(tmp_path: Path) -> None:
-    first_directory = ResultDirectory.create(tmp_path)
-    second_directory = ResultDirectory.create(tmp_path)
-
-    assert first_directory.path != second_directory.path
-
-
-def test_result_file_is_never_overwritten(tmp_path: Path) -> None:
-    result_directory = ResultDirectory.create(tmp_path)
-    result_directory.write(REPORT_FILE_NAME, b"first")
-
-    with pytest.raises(FileExistsError):
-        result_directory.write(REPORT_FILE_NAME, b"second")
-
-    assert (result_directory.path / REPORT_FILE_NAME).read_bytes() == b"first"
-
-
-def test_output_directory_is_made_but_never_its_parents(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
-        ResultDirectory.create(tmp_path / "missing" / "eval-results")
-
-
-def read_written_set(result_directory: ResultDirectory, relative_path: str) -> KnowledgeEvidenceSet:
-    return KnowledgeEvidenceSet.model_validate_json(
-        (result_directory.path / relative_path).read_bytes()
-    )
-
-
-def test_deterministic_evaluation_writes_each_case_s_set_and_the_report_it_returns(
-    tmp_path: Path, fixture_bundle: FixtureBundle
-) -> None:
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
-    result_directory = ResultDirectory.create(tmp_path)
-
-    report = run_planner_evaluation(
-        cases,
-        gold_sha256="d" * 64,
-        bundle=fixture_bundle,
-        model_runs=None,
-        source_revision="unavailable",
-        result_directory=result_directory,
-    )
-
-    written_report = (result_directory.path / REPORT_FILE_NAME).read_bytes()
-    assert written_report == format_report(report)
-    assert PlannerEvaluationReport.model_validate_json(written_report) == report
-    assert report.model is None
-    assert (report.identity.gold_sha256, report.identity.model_runs_per_case) == ("d" * 64, 0)
-    assert report.identity.model_planner_sha256 is None
-    for case, deterministic_case in zip(cases, report.deterministic.cases, strict=True):
-        evidence_set = read_written_set(result_directory, f"deterministic/{case.case_sha256}.json")
-        assert evidence_set.request == case.request
-        assert deterministic_case.case_sha256 == case.case_sha256
-    assert sorted(list_entry_names(result_directory.path)) == ["deterministic", REPORT_FILE_NAME]
-
-
-def test_case_with_fight_unavailable_runs_on_a_deployment_serving_no_snapshot(
-    tmp_path: Path, fixture_bundle: FixtureBundle
-) -> None:
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
-    result_directory = ResultDirectory.create(tmp_path)
-
-    run_planner_evaluation(
-        cases,
-        gold_sha256="d" * 64,
-        bundle=fixture_bundle,
-        model_runs=None,
-        source_revision="unavailable",
-        result_directory=result_directory,
-    )
-
-    fight_states: list[str] = []
-    for case in cases:
-        evidence_set = read_written_set(result_directory, f"deterministic/{case.case_sha256}.json")
-        for capability in evidence_set.source_capabilities:
-            if capability.source == "mitre_fight":
-                fight_states.append(capability.state.value)
-    assert fight_states == ["available", "unavailable"]
-
-
-def test_model_evaluation_runs_each_case_the_given_number_of_times(
-    tmp_path: Path, fixture_bundle: FixtureBundle
-) -> None:
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
-    result_directory = ResultDirectory.create(tmp_path)
-    model_port = ScriptedModelPort([UNAVAILABLE_REPLY] * 6)
-
-    report = run_planner_evaluation(
-        cases,
-        gold_sha256="d" * 64,
-        bundle=fixture_bundle,
-        model_runs=ModelRuns(plan_with(model_port), 3),
-        source_revision="unavailable",
-        result_directory=result_directory,
-    )
-
-    assert len(model_port.planning_inputs) == 6
-    assert report.model is not None
-    assert report.model.runs == 6
-    assert report.identity.model_runs_per_case == 3
-    for case in cases:
-        for run_number in (1, 2, 3):
-            evidence_set = read_written_set(
-                result_directory, f"model/{case.case_sha256}-{run_number:02d}.json"
-            )
-            assert evidence_set.trajectory.planner == SCRIPTED_PLANNER
-
-
-def evaluate_one_model_run(
-    tmp_path: Path, fixture_bundle: FixtureBundle, model_planning: ModelPlanning
-) -> PlannerEvaluationReport:
-    """The report of one model run of the small gold file's first case."""
-    (case,) = load_gold_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
-    return run_planner_evaluation(
-        (case,),
-        gold_sha256="d" * 64,
-        bundle=fixture_bundle,
-        model_runs=ModelRuns(model_planning, 1),
-        source_revision="unavailable",
-        result_directory=ResultDirectory.create(tmp_path),
-    )
-
-
-def test_report_identity_names_each_planner_by_its_own_hash(
-    tmp_path: Path, fixture_bundle: FixtureBundle
-) -> None:
-    other_planner = SCRIPTED_PLANNER.model_copy(update={"model_name": "another-model"})
-
-    scripted_identity = evaluate_one_model_run(
-        tmp_path, fixture_bundle, plan_with(ScriptedModelPort([UNAVAILABLE_REPLY]))
-    ).identity
-    repeated_identity = evaluate_one_model_run(
-        tmp_path, fixture_bundle, plan_with(ScriptedModelPort([UNAVAILABLE_REPLY]))
-    ).identity
-    other_identity = evaluate_one_model_run(
-        tmp_path,
-        fixture_bundle,
-        ModelPlanning(other_planner, ScriptedModelPort([UNAVAILABLE_REPLY])),
-    ).identity
-
-    assert scripted_identity == repeated_identity
-    assert scripted_identity.model_planner_sha256 != other_identity.model_planner_sha256
-    assert (
-        scripted_identity.deterministic_planner_sha256
-        == other_identity.deterministic_planner_sha256
-    )
-    assert scripted_identity.model_planner_sha256 != scripted_identity.deterministic_planner_sha256
-    assert scripted_identity.evidence_set_schema_version == SCHEMA_VERSION
-
-
-@pytest.mark.parametrize(
-    "source_revision",
-    ["a" * 40, "b" * 64 + "+dirty", "unavailable"],
-    ids=["sha1", "sha256_dirty", "unavailable"],
-)
-def test_every_revision_the_runner_reads_is_one_the_report_accepts(
-    tmp_path: Path, fixture_bundle: FixtureBundle, source_revision: str
-) -> None:
-    (case,) = load_gold_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
-
-    report = run_planner_evaluation(
-        (case,),
-        gold_sha256="d" * 64,
-        bundle=fixture_bundle,
-        model_runs=None,
-        source_revision=source_revision,
-        result_directory=ResultDirectory.create(tmp_path),
-    )
-
-    assert report.identity.source_revision == source_revision
-
-
-def test_revision_the_report_rejects_stops_the_run_before_any_case_runs(
-    tmp_path: Path, fixture_bundle: FixtureBundle
-) -> None:
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
-    result_directory = ResultDirectory.create(tmp_path)
-
-    with pytest.raises(ValidationError):
-        run_planner_evaluation(
-            cases,
-            gold_sha256="d" * 64,
-            bundle=fixture_bundle,
-            model_runs=None,
-            source_revision="not-a-revision",
-            result_directory=result_directory,
-        )
-
-    assert list_entry_names(result_directory.path) == []

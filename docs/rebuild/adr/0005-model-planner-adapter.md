@@ -66,8 +66,10 @@ record, so it takes the same path without timing. Only a call still running at t
 deadline is `model_timed_out`. An investigation with a model planner may therefore leave
 up to three abandoned calls behind: each round's planner call at the end of its share,
 and one call at the run's deadline. Only `cve-kgrag investigate` plans with a model, one
-process per investigation; the MCP tools plan with the policy, so ADR 0003 §8's bound on
-their abandoned calls stands.
+process per investigation, and `cve-kgrag eval planner`, whose runs go one after another
+on one call runner and start only once every call an earlier run abandoned has returned,
+so its process holds no more than one investigation's. The MCP tools plan with the
+policy, so ADR 0003 §8's bound on their abandoned calls stands.
 
 ### 3. The request
 

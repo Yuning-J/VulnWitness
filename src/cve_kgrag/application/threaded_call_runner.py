@@ -11,7 +11,9 @@ keeps a thread and a connection until the remote side gives up.
 
 A runner counts its live calls: those that have not returned, whether their caller is
 still waiting or abandoned them. A runner built with ``max_live_calls`` starts no call
-beyond it, so abandoned calls keep counting against the cap until they return.
+beyond it, so abandoned calls keep counting against the cap until they return. A caller
+running investigations one after another can wait for the runner to be idle, so the calls
+one run abandoned never add to the next run's.
 """
 
 import queue
@@ -62,12 +64,21 @@ class ThreadedCallRunner:
     def __init__(self, max_live_calls: int | None = None) -> None:
         self._max_live_calls = max_live_calls
         self._live_call_count = 0
-        self._count_lock = threading.Lock()
+        self._count_lock = threading.Condition()
 
     def count_live_calls(self) -> int:
         """The calls started that have not returned, abandoned or not."""
         with self._count_lock:
             return self._live_call_count
+
+    def wait_until_idle(self, timeout_seconds: float) -> bool:
+        """Whether every call has returned, waiting up to ``timeout_seconds`` for the
+        live ones to."""
+        with self._count_lock:
+            return self._count_lock.wait_for(self._has_no_live_call, timeout=timeout_seconds)
+
+    def _has_no_live_call(self) -> bool:
+        return self._live_call_count == 0
 
     def run(
         self,
@@ -152,3 +163,5 @@ class ThreadedCallRunner:
     def _finish_call(self) -> None:
         with self._count_lock:
             self._live_call_count -= 1
+            if self._live_call_count == 0:
+                self._count_lock.notify_all()

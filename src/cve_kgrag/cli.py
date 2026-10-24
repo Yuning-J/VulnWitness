@@ -10,10 +10,11 @@ answer established, capabilities always, an ``eval planner`` run that wrote its 
 and for ``mcp`` the client closing stdin or, for ``mcp --http`` and ``api``, an interrupt
 (SIGINT; on SIGTERM the process ends by that signal). 1 for any other status, verdict or
 answer, for schema drift, for ``mcp`` or ``api`` without a usable server runner, for an
-HTTP server on a port it cannot bind, for model runs whose enabled planner cannot plan and
-for evaluation results that cannot be written. 2 for invalid usage: an argument a contract
-rejects, invalid settings, an HTTP server without a token, model runs without an enabled
-planner, a ``verify`` file that cannot be read or is larger than
+HTTP server on a port it cannot bind, for model runs whose enabled planner cannot plan,
+for evaluation results that cannot be written and for an evaluation stopped before its
+report. 2 for invalid usage: an argument a contract rejects, invalid settings, an HTTP
+server without a token, model runs without an enabled planner, an evaluation ``--out``
+inside the package, a ``verify`` file that cannot be read or is larger than
 ``MAX_EVIDENCE_SET_BYTES``, and a gold file that cannot be read or is no investigation
 gold file.
 """
@@ -87,18 +88,16 @@ from cve_kgrag.domain.tool_contracts import (
 )
 from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, TopicContextResponse
 from cve_kgrag.domain.validation import EvidenceValidationError
+from cve_kgrag.evaluation.case_runner import EvaluationStopped, ModelRuns
+from cve_kgrag.evaluation.gold_cases import MAX_GOLD_FILE_BYTES, GoldFileError, load_gold_cases
 from cve_kgrag.evaluation.planner_report import format_report
 from cve_kgrag.evaluation.planner_runner import (
-    MAX_GOLD_FILE_BYTES,
     MAX_MODEL_RUNS,
     REPORT_FILE_NAME,
-    GoldFileError,
-    ModelRuns,
-    ResultDirectory,
-    load_gold_cases,
     read_source_revision,
     run_planner_evaluation,
 )
+from cve_kgrag.evaluation.result_directory import ResultDirectory
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
 from cve_kgrag.settings import (
@@ -160,6 +159,7 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 MODEL_RUNS_WITHOUT_A_PLANNER = (
     f"invalid settings: --model-runs needs the model planner enabled ({PLANNER_ENABLED_VARIABLE})"
 )
+OUT_INSIDE_THE_PACKAGE = "--out must not lie inside the installed cve_kgrag package"
 UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
 UNSERVED_EVIDENCE_MESSAGE = (
     "the anchor catalogued under {evidence_id} fails the anchor rules, so it is not served"
@@ -662,7 +662,11 @@ def run_planner_evaluation_command(
     """Run the gold cases (``run_planner_evaluation``), print the report and name the
     result directory on stderr. A gold file that is no investigation gold file is a usage
     error, reported without quoting it; model runs need an enabled planner that can plan,
-    so a run never reports a model evaluation it did not make."""
+    so a run never reports a model evaluation it did not make. An ``--out`` inside the
+    package is a usage error: the files a run writes there would change the package the
+    report names."""
+    if arguments.out.resolve().is_relative_to(PACKAGE_DIR):
+        parser.error(OUT_INSIDE_THE_PACKAGE)
     gold_bytes = read_input_file(parser, arguments.gold, MAX_GOLD_FILE_BYTES)
     try:
         cases = load_gold_cases(gold_bytes)
@@ -689,10 +693,14 @@ def run_planner_evaluation_command(
             bundle=bundle,
             model_runs=model_runs,
             source_revision=read_source_revision(PACKAGE_DIR),
+            package_dir=PACKAGE_DIR,
             result_directory=result_directory,
         )
     except OSError as error:
         print(f"cve-kgrag eval planner cannot write its results: {error.strerror}", file=sys.stderr)
+        return 1
+    except EvaluationStopped as error:
+        print(f"cve-kgrag eval planner stopped without a report: {error}", file=sys.stderr)
         return 1
     sys.stdout.write(format_report(report).decode())
     print(
