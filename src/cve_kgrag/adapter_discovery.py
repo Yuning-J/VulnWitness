@@ -8,6 +8,7 @@ from typing import Any, Protocol, cast
 
 from pydantic import SecretStr
 
+from cve_kgrag.adapters.migration.parser_types import MigrationParsers
 from cve_kgrag.application.planner_setup import DeterministicPlanning, ModelPlanning, PlannerSetup
 from cve_kgrag.domain.evidence_set_verification_report import VerificationReport
 from cve_kgrag.domain.planning import (
@@ -37,6 +38,7 @@ FAILED_ADAPTER_REPLY = ModelReply(
     status=BackendStatus.ERROR, detail=ModelReplyFailureDetail.ADAPTER_FAILED
 )
 API_SERVER_ADAPTER_NAME = "api_server"
+MIGRATION_PARSERS_ADAPTER_NAME = "migration_parsers"
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,10 @@ MCP_EXTRA = OptionalExtra(
 API_EXTRA = OptionalExtra(
     modules=frozenset({"anyio", "starlette", "uvicorn"}),
     missing_detail="the 'api' extra is not installed: pip install 'cve-kgrag[api]'",
+)
+MIGRATION_EXTRA = OptionalExtra(
+    modules=frozenset({"ijson"}),
+    missing_detail="the 'migration' extra is not installed: pip install 'cve-kgrag[migration]'",
 )
 
 
@@ -244,6 +250,17 @@ def discover_api_server_runner(
     if isinstance(runner, InterfaceUnavailable):
         return runner
     return cast(ApiServerRunner, runner)
+
+
+def discover_migration_parsers(
+    list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
+) -> MigrationParsers | InterfaceUnavailable:
+    """The parsers the installed ``migration`` extra provides, or why there are none
+    (``load_interface``)."""
+    build_parsers = load_interface(MIGRATION_PARSERS_ADAPTER_NAME, MIGRATION_EXTRA, list_adapters)
+    if isinstance(build_parsers, InterfaceUnavailable):
+        return build_parsers
+    return cast(Callable[[], MigrationParsers], build_parsers)()
 
 
 class ModelPortFactory(Protocol):

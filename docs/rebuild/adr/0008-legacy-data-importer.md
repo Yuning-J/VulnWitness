@@ -40,20 +40,28 @@ its safeguard.
 - **Derived and refused files.** A manifest input whose content is a legacy derived file
   (`enhanced_documents_*`, the three `rag_exports/cve_documents_for_rag.json` variants,
   CPE parsing results, graph exports, mapping files, analytics and summaries, classified
-  by a bounded structural fingerprint) fails the run as `derived_file_declared_as_source`.
+  by a bounded structural fingerprint) fails the run as `derived_file_declared_as_source`,
+  whichever source it is declared as: every input's first decompressed bytes are
+  fingerprinted before it is read. A graph export is told by its top-level `nodes` key
+  alone, since its node list can run past the fingerprinted prefix.
   With `--legacy-root DIR`, the importer also walks that tree read-only and reports, by
   kind, the derived files it recognises and the files it refuses to deserialize
   (pickles, `.npy` files, model archives, by extension and magic bytes), without
   importing any. The report cites their formats from CVE-KGRAG by commit (`b64eef3`).
-  The walk is bounded like every other input (§8): it follows no symbolic link, descends
-  at most 32 levels, examines at most 100,000 directory entries, reads at most an 8 KiB
-  prefix of a file to check magic bytes, and reads at most 1 MiB of a file and 256 MiB
-  in total to fingerprint structure. A permission error, an entry that changes or
-  disappears during the walk, and an exceeded bound each have a fixed reason code, and an
-  exceeded bound fails the run, dry run included: no partial report is returned.
+  The walk is bounded like every other input (§8): it follows no symbolic link it lists,
+  descends at most 32 levels, examines at most 100,000 directory entries (counted as each
+  directory is listed), reads at most an 8 KiB prefix of a file to check magic bytes, and
+  reads at most 1 MiB of a file and 256 MiB in total to fingerprint structure. A missing
+  root, a permission error, an entry that changes or disappears during the walk, and an
+  exceeded bound each have a fixed reason code, and each fails the run, dry run included:
+  no partial report is returned. Directories are listed by path, so the walk assumes the
+  operator's tree holds still: a directory replaced by a symbolic link between being
+  listed and being entered is not detected.
 - **Out of scope:** CSAF and the legacy collect, process and export commands (PLAN.md
   follow-ups); NVD API 2.0 response pages; the Chroma store, which the semantic channel
-  reads in place (ADR 0006 §5); CWE, CAPEC and ATT&CK sources; Neo4j.
+  reads in place (ADR 0006 §5); CWE, CAPEC and ATT&CK sources; Neo4j. An API 2.0 page has
+  the 2.0 feed's shape, so content cannot tell the two apart: the artifact the operator
+  names or declares is trusted, as it is for which year a feed covers.
 
 ### 2. The input manifest
 
@@ -86,14 +94,18 @@ inputs:
 - `retrieved_at` is required on every input, when the operator actually obtained the
   file. The manifest loader reads timestamps as strings, so the value is validated as a
   contract `Timestamp`: RFC 3339 with an offset and at most six fractional digits. A
-  naive time, a space separator or more digits are refused. It must not precede the
-  feed's own generation time (§3) nor lie in the future of the injected clock.
-- Paths resolve relative to the manifest's directory. Only regular files are accepted:
-  symlinks, directories, devices and FIFOs are refused. Two entries naming the same
+  naive time, a space separator or more digits are refused, and so is an instant UTC
+  cannot express (year 1 with an eastern offset, year 9999 with a western one). It must
+  not precede the feed's own generation time (§3) nor lie in the future of the injected
+  clock.
+- Paths resolve relative to the manifest's directory; a path holding a NUL is invalid.
+  Only regular files are accepted: symlinks, directories, devices and FIFOs are refused,
+  the manifest itself included. Two entries naming the same
   resolved file, or two files with the same SHA-256, are refused.
-- The manifest is read with the strict YAML loader with aliases forbidden
-  (`forbid_aliases=True`, checked as the document is composed); every other caller of
-  the loader keeps its behaviour until WP10 checks a full upstream FiGHT snapshot. The
+- The manifest is read with the strict YAML loader's declaration variant
+  (`load_declaration_yaml`), which refuses every alias as the document is composed and
+  keeps timestamps as text; every other caller of the loader keeps its behaviour until
+  WP10 checks a full upstream FiGHT snapshot. The
   manifest's size (1 MiB), entry count (128) and path length (1,024 characters) are
   capped.
 - A manifest that is not valid is a usage error (exit 2), reported in the server's words.
@@ -115,13 +127,15 @@ Every anchor's provenance fields feed its evidence ID, so they are fixed as foll
   has no container, `sha256:<input_file_sha256>`.
 - `retrieved_at`: the operator's declared time. Never the file's modification time, the
   import time or the feed's generation time.
-- The terms URL and the URL templates come from the source registry
-  (`knowledge/sources.yaml`), injected into the normalizer by composition; the
-  normalizer keeps no constant of its own. WP9 adds the templates to the registry and
+- The terms URLs and the URL templates come from the source registry
+  (`knowledge/sources.yaml`). Composition injects the terms URLs into the normalizer,
+  which keeps no constant of its own; the templates build `source_uri` when the inputs
+  are resolved. WP9 adds the templates to the registry and
   replaces its `version_strategy` text with the `sha256:` rule.
 - The feed's own generation time (2.0 `timestamp`, 1.1 `CVE_data_timestamp`) is kept as
   `source_generated_at` in the store manifest's input list, read as UTC when it carries
-  no offset and truncated to microseconds; the KEV CSV has none (null).
+  no offset and truncated to microseconds; it is null for the KEV CSV, which has none,
+  and for a feed that states none.
 - NVD 2.0 entries keep the source type `nvd_api_2`, which names the 2.0 schema the feeds
   share with the API.
 
@@ -216,48 +230,73 @@ KEV enrichment runs after §5, on the final NVD records only.
   CVE in the catalog.
 - For `kev_without_nvd_record` the report suggests adding the year feed that covers the
   CVE; a recent or modified feed covers it only while the CVE is inside that feed's
-  window.
+  window (`kev_advice`, a fixed sentence set exactly when that count is above zero).
 
 ### 7. Failure policy
 
 - An NVD entry that cannot be normalized, outside §5's fail-closed cases, is skipped and
   counted by a reason code with a locator (the input's position in the sorted input list
-  and the entry's index), never its content. The normalizer raises its errors with a
-  typed reason code, and only the code reaches the report: its message text, which can
-  quote input, never does.
-- A file-level fault fails the whole migration: an unreadable file, bad compression, an
-  unrecognised format, a derived file declared as a source, a cap exceeded, or an invalid
-  KEV input.
+  and the entry's index), never its content. A run failure names its input by its index
+  in the manifest when it fails while the inputs are resolved, and by its position in the
+  sorted list afterwards (`manifest_index`, `input_position`). The normalizer raises its
+  errors with a typed reason code, and only the code reaches the report: its message
+  text, which can quote input, never does.
+- A file-level fault fails the whole migration: an unreadable file, a file that changed
+  while the import read it, bad compression, an unrecognised format, a derived file
+  declared as a source, a cap exceeded, or an invalid KEV input. So does a target that
+  cannot be resolved or whose parent is not a writable directory (`target_unusable`),
+  and a staging database or store file that cannot be written (`staging_failed`,
+  `store_write_failed`), a full disk included: every failure the run can state is
+  reported, never a traceback.
 - A run with zero importable records exits 1.
 - Exit codes: 0 imported or already imported; 1 refused or failed; 2 usage error,
   including an invalid manifest. `--dry-run` reports everything a real run would and
-  exits the same way, creating no target.
+  exits the same way, creating no target: it checks the target's parent as a real run
+  does, though it stages elsewhere.
 
 ### 8. Resource bounds
 
 - NVD feeds are parsed as a stream (`ijson`, in a new `migration` extra; without it the
   command refuses with the missing-extra sentence and exit 1, as `mcp` and `api` do).
-  Numbers are parsed as `json.loads` parses them (`use_float=True`), and non-finite
-  numbers (`NaN`, `Infinity`) are refused on every path, so an entry hashes the same
-  however it was read; a contract test pins that. Top-level fields are collected from
-  the event stream wherever they appear.
+  The backend is named (`yajl2_c`), never chosen by ijson. Numbers are parsed as
+  `json.loads` parses them (`use_float=True`), so an entry hashes the same however it
+  was read; a test pins that. What the backend cannot read as `json.loads` would is
+  refused as `invalid_json`, never altered: `NaN` and `Infinity`, a number past the float
+  range, an integer of magnitude 2^63 or more (the backend's limit, so the smallest signed
+  64-bit integer too), invalid UTF-8, a lone surrogate
+  escape (a high one without its low escape is caught before the parser, which would
+  turn it into `?`). Top-level fields are collected from the event stream wherever they
+  appear, each key and value counted against the entry cap; a feed has at most 32
+  top-level members, each key at most 256 characters, or it is not a feed.
 - A single entry is capped at 16 MiB of decompressed bytes. The parser reads through a
   counting stream that knows where the current entry began and raises from its own
-  `read` once the entry has consumed more than the cap, so neither a long entry nor one
-  huge string token is ever held whole: memory stays within the cap plus one read
-  buffer. Entries are assembled from the parser's events, not with `ijson.items`, which
-  builds an entry before it can be measured. An entry over the cap fails the file.
-- Candidates are staged on disk in a `sqlite3` database: CVE ID, modification time,
-  format, state, semantic hash and the normalized payload. §5 and §6 are resolved by
-  queries, and the store is written in CVE ID order (lexical). Neither the manifest
+  `read` once the entry has consumed more than the cap and one parser buffer (64 KiB), so
+  neither a long entry nor one huge string token is ever held whole: the bytes read for
+  one entry stay within the cap plus three buffers, since the parser marks an entry's
+  start up to one buffer late and reads one more before the stream refuses. Entries are
+  assembled from the parser's events, not with `ijson.items`, which builds an entry
+  before it can be measured; the assembler also counts each entry's keys and values,
+  never more than their encoded bytes, so an entry within the cap is always accepted,
+  and refuses a repeated key and nesting past 64 levels. An entry's memory is a bounded
+  multiple of its encoded bytes, largest (about 25 times) for an entry of many empty
+  containers. An entry over a cap fails the file.
+- Candidates are staged on disk in a `sqlite3` database without a journal: CVE ID,
+  modification time, format, state, semantic hash, provenance for the tie-break, the
+  content hash and the raw entry, from which the winner is normalized again with its
+  final provenance and KEV entry. Candidates are read back grouped by CVE ID through an
+  index; §5 is applied per group and §6 against the KEV catalog held in memory (at most
+  16 MiB), and the store is written in CVE ID order (lexical). Neither the manifest
   order nor the number of files changes the records and anchors.
 - Caps, as code constants with fixed reason codes, never echoing a path or input
-  content: 128 inputs; per file 512 MiB decompressed and 256 MiB compressed; 8 GiB
+  content: 128 inputs; per file 512 MiB decompressed and 256 MiB for a gzip or zip file
+  (a plain JSON file is its own payload, so the 512 MiB cap bounds it); 8 GiB
   decompressed in total; 1,000,000 NVD candidates; the KEV caps of §6; the
-  `--legacy-root` bounds of §1; and 16 GiB for the whole staging directory, the SQLite
-  database, its journal or WAL and its temporary sort files together. Whether 512 MiB
-  fits a current 2.0 year feed is checked on the first real run; the cap is a constant,
-  changed by a later decision if a measured feed exceeds it.
+  `--legacy-root` bounds of §1; and 16 GiB for the whole staging directory, checked
+  every 1,024 rows or 64 MiB staged and once all inputs are read. A zip's end record must
+  declare one member and a central directory no larger than one member needs before
+  `zipfile` reads it. Whether 512 MiB fits a current 2.0 year feed is checked on the
+  first real run; the cap is a constant, changed by a later decision if a measured feed
+  exceeds it.
 - An operator lane (not CI) builds 250,000 synthetic records and records the migration's
   peak RSS, temporary disk and run time.
 
@@ -270,19 +309,38 @@ KEV enrichment runs after §5, on the final NVD records only.
   each input in sorted order (source, artifact, container, `source_uri`,
   `source_version`, `retrieved_at`, `source_generated_at`, bytes) and the counts.
 - `--target` is required and has no default. Paths are resolved, `..` and symlinks
-  included. The target must not equal, contain or lie inside the manifest, any input, or
-  the `--legacy-root`, and its parent directory must hold no input, so nothing is ever
-  created next to an input.
+  included, and compared by file identity (device and inode), so two spellings of one
+  directory, such as two cases of a name on a case-insensitive file system, match. The
+  target must not equal, contain or lie inside the manifest, any input, or the
+  `--legacy-root`, and its parent directory must hold no input, so nothing is ever
+  created next to an input. A symbolic link at the target that resolves nowhere,
+  dangling or looping, is an existing entry and is refused, never followed.
 - Two sibling directories on the target's file system hold a run's work: the store
   takes shape in `.<name>.partial-<random>`, and the staging database lives in
   `.<name>.staging-<random>`. Once the store files are written and fsynced, the staging
   directory is deleted, the partial directory is read back and verified with
-  `load_corpus_store`, and it is renamed into place. On failure only this run's two
-  directories are removed. A dry run stages
-  in a temporary directory under the system temporary directory, removed afterwards.
-- `load_corpus_store` verifies every checksum, refuses any file the manifest does not
-  pin, re-derives every evidence ID, applies the record-to-anchor rules, refuses
-  `synthetic: true` and confines every file path to the store directory.
+  `verify_corpus_store`, given mode 0755 (its files are 0644), and renamed into place;
+  the target's parent is opened before the rename so the rename can be synced. Any entry
+  at the target just before the rename is refused (`target_exists`); one that appears
+  after that check and before the rename fails the rename if it is a file or a
+  non-empty directory (`store_write_failed`); an empty directory there is replaced, as
+  `rename(2)` does, and this window is not closed. On failure only this run's two
+  directories are removed. A dry run stages in a temporary directory under the system
+  temporary directory, removed afterwards.
+- `verify_corpus_store` and `load_corpus_store` run the same checks; the first keeps only
+  an index of anchor IDs in memory, the second keeps every record and anchor for
+  serving. They read the store as untrusted input: the manifest within 4 MiB, each line
+  within 64 MiB, and a file's size checked against its pin before its lines are read.
+  They verify every checksum and size, refuse a manifest pinning a file twice, any file
+  it does not pin and any store file that is not a regular file, re-derive every
+  evidence ID, apply the record-to-anchor rules, refuse `synthetic: true` and confine
+  every file path to the store directory.
+- Every file the importer or the reader opens is opened without following a symbolic link
+  and without blocking, and refused unless it is a regular file, so a FIFO declared as
+  an input or the manifest, or found in a store, fails at once instead of waiting for a
+  writer. An input is hashed when it is resolved and again each time it is opened to be
+  read, and a mismatch fails the run as `input_changed`, so the store manifest's hashes
+  describe the bytes actually imported.
 - **Rollback.** A migration writes nothing but its new target: no input and no existing
   store changes, which the tests prove by content and modification time. (Creating and
   renaming the target changes its parent directory's own metadata; nothing else there
@@ -299,8 +357,9 @@ KEV enrichment runs after §5, on the final NVD records only.
 
 `2.0.0-dev.25` publishes `corpus_store_manifest.schema.json` and
 `migration_report.schema.json`. The report holds counts by reason code, bounded
-locators, the derived and refused files found by kind, the rollback instruction, and
-no input text.
+locators, the derived and refused files found by kind with the commit their formats are
+cited from, the KEV advice, the rollback kind, scope and instruction, and no input
+text.
 
 ### 11. Handed to WP10
 

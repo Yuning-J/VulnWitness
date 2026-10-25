@@ -2,21 +2,24 @@
 services, the knowledge lookups (capabilities, topic resolution, affectedness, evidence),
 the verification of an evidence set handed back, the MCP server over stdio or, with
 ``--http``, over Streamable HTTP, the v2 REST API, both HTTP servers on a loopback
-address, and the local planner evaluation (``eval planner``).
+address, the local planner evaluation (``eval planner``) and the legacy-data importer
+(``migrate legacy``).
 
 Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
 a query that resolves to a topic, an evidence ID the catalogue serves, every affectedness
 answer established, capabilities always, an ``eval planner`` run that wrote its results,
+a ``migrate legacy`` run that imported, found its import done or completed a dry run,
 and for ``mcp`` the client closing stdin or, for ``mcp --http`` and ``api``, an interrupt
 (SIGINT; on SIGTERM the process ends by that signal). 1 for any other status, verdict or
 answer, for schema drift, for ``mcp`` or ``api`` without a usable server runner, for an
 HTTP server on a port it cannot bind, for model runs whose enabled planner cannot plan,
-for evaluation results that cannot be written and for an evaluation stopped before its
-report. 2 for invalid usage: an argument a contract rejects, invalid settings, an HTTP
-server without a token, model runs without an enabled planner, an evaluation ``--out``
-inside the package, a ``verify`` file that cannot be read or is larger than
-``MAX_EVIDENCE_SET_BYTES``, and a gold file that cannot be read or is no investigation
-gold file.
+for evaluation results that cannot be written, for an evaluation stopped before its
+report, for a failed import and for ``migrate legacy`` without the ``migration`` extra.
+2 for invalid usage: an argument a contract rejects, invalid settings, an HTTP server
+without a token, model runs without an enabled planner, an evaluation ``--out`` inside
+the package, an input manifest that is not valid, a ``verify`` file that cannot be read
+or is larger than ``MAX_EVIDENCE_SET_BYTES``, and a gold file that cannot be read or is
+no investigation gold file.
 """
 
 import argparse
@@ -40,9 +43,19 @@ from cve_kgrag.adapter_discovery import (
     discover_api_server_runner,
     discover_mcp_http_server_runner,
     discover_mcp_server_runner,
+    discover_migration_parsers,
     discover_planner_setup,
 )
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
+from cve_kgrag.adapters.migration.inputs_manifest import InputsManifestError, load_inputs_manifest
+from cve_kgrag.adapters.migration.legacy_migration import (
+    MigrationDependencies,
+    MigrationRequest,
+    run_migration,
+)
+from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
+from cve_kgrag.adapters.migration.parser_types import MigrationParsers
+from cve_kgrag.adapters.regular_files import NotARegularFileError, open_regular_file
 from cve_kgrag.application.affectedness import check_affectedness
 from cve_kgrag.application.evidence_set_verification import (
     MAX_EVIDENCE_SET_BYTES,
@@ -57,12 +70,16 @@ from cve_kgrag.composition import (
     build_investigation_deployment,
     build_investigation_service,
     build_knowledge_toolbox,
+    build_nvd_normalizer,
     build_search_service,
     build_topic_context_service,
     build_topic_registry,
     list_accepted_planner_capabilities,
+    load_packaged_source_registry,
     load_served_bundle,
+    utc_now,
 )
+from cve_kgrag.distribution import read_installed_version
 from cve_kgrag.domain.affectedness import AffectednessRequest, ApplicabilityStatus
 from cve_kgrag.domain.contract_model import ContractModel, list_validation_problems
 from cve_kgrag.domain.cve import CVE_ID_PATTERN
@@ -72,6 +89,8 @@ from cve_kgrag.domain.evidence_set_verification_report import (
 )
 from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from cve_kgrag.domain.migration_inputs import MAX_MANIFEST_BYTES
+from cve_kgrag.domain.migration_report import MigrationOutcome
 from cve_kgrag.domain.search import (
     MAX_FILTER_VALUES,
     MAX_RESULTS_PER_CALL,
@@ -332,6 +351,44 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    migrate_parser = commands.add_parser(
+        "migrate", help="import legacy data into a new corpus store (ADR 0008)"
+    )
+    migrate_commands = migrate_parser.add_subparsers(dest="migrate_command", required=True)
+    legacy_parser = migrate_commands.add_parser(
+        "legacy",
+        help=(
+            "import the raw NVD feeds and the CISA KEV catalog an input manifest declares "
+            "into a new, verified corpus store; prints the migration report as JSON; needs "
+            "the 'migration' extra"
+        ),
+    )
+    legacy_parser.add_argument(
+        "--inputs",
+        required=True,
+        type=Path,
+        help="the input manifest: each input's source, path and retrieval time",
+    )
+    legacy_parser.add_argument(
+        "--target",
+        required=True,
+        type=Path,
+        help="the store directory to create; an existing one is never overwritten",
+    )
+    legacy_parser.add_argument(
+        "--legacy-root",
+        type=Path,
+        help=(
+            "a legacy data tree to walk read-only, reporting the derived files and the "
+            "files never deserialized that it holds; the target must lie outside it"
+        ),
+    )
+    legacy_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="read and check everything a real run would, then write no store",
+    )
+
     schema_parser = commands.add_parser("schema", help="export or check v2 JSON Schema snapshots")
     schema_parser.add_argument("action", choices=("export", "check"))
     schema_parser.add_argument("--dir", type=Path, default=DEFAULT_SCHEMA_DIR)
@@ -483,6 +540,20 @@ def read_input_file(parser: argparse.ArgumentParser, input_path: Path, max_bytes
             return input_file.read(max_bytes + 1)
     except OSError as error:
         parser.error(f"cannot read {input_path}: {error.strerror}")
+
+
+def read_inputs_manifest_file(parser: argparse.ArgumentParser, manifest_path: Path) -> bytes:
+    """At most ``MAX_MANIFEST_BYTES`` + 1 bytes of the input manifest, opened like every
+    file the importer reads: refused unless it is a regular file, never following a
+    symbolic link and never waiting on a FIFO (``open_regular_file``). A manifest that
+    cannot be read so is a usage error (exit 2)."""
+    try:
+        with open_regular_file(manifest_path) as manifest_stream:
+            return manifest_stream.read(MAX_MANIFEST_BYTES + 1)
+    except NotARegularFileError:
+        parser.error(f"cannot read {manifest_path}: not a regular file")
+    except OSError as error:
+        parser.error(f"cannot read {manifest_path}: {error.strerror}")
 
 
 def read_evidence_set_file(parser: argparse.ArgumentParser, evidence_set_path: Path) -> bytes:
@@ -710,6 +781,46 @@ def run_planner_evaluation_command(
     return 0
 
 
+def run_legacy_migration_command(
+    parser: argparse.ArgumentParser,
+    arguments: argparse.Namespace,
+    parsers: MigrationParsers | InterfaceUnavailable,
+) -> int:
+    """Run the import the arguments ask for (``run_migration``) and print its report.
+    0 when the run imported, found the import already done, or completed a dry run; 1
+    when it failed, which the report says, or the ``migration`` extra is missing, which
+    stderr says; an input manifest that is not valid is a usage error."""
+    if isinstance(parsers, InterfaceUnavailable):
+        print(f"cve-kgrag migrate legacy cannot start: {parsers.detail}", file=sys.stderr)
+        return 1
+    manifest_bytes = read_inputs_manifest_file(parser, arguments.inputs)
+    try:
+        manifest = load_inputs_manifest(manifest_bytes)
+    except InputsManifestError as error:
+        parser.error(f"invalid input manifest: {error}")
+    source_registry = load_packaged_source_registry()
+    report = run_migration(
+        MigrationRequest(
+            manifest=manifest,
+            manifest_bytes=manifest_bytes,
+            manifest_path=arguments.inputs,
+            target=arguments.target,
+            legacy_root=arguments.legacy_root,
+            is_dry_run=arguments.dry_run,
+        ),
+        MigrationDependencies(
+            parsers=parsers,
+            normalizer=build_nvd_normalizer(source_registry),
+            source_registry=source_registry,
+            clock=utc_now,
+            importer_version=read_installed_version(),
+            limits=MigrationLimits(),
+        ),
+    )
+    print(report.model_dump_json(indent=2))
+    return 1 if report.outcome is MigrationOutcome.FAILED else 0
+
+
 def run_schema_command(action: str, schema_dir: Path) -> int:
     if action == "export":
         write_contract_schemas(schema_dir)
@@ -755,6 +866,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             port=settings.http.api_port,
             token=api_token,
         )
+    if arguments.command == "migrate":
+        return run_legacy_migration_command(parser, arguments, discover_migration_parsers())
 
     bundle = load_served_bundle()
     if arguments.command == "eval":

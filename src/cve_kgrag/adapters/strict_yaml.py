@@ -6,14 +6,20 @@ YAML file this package reads goes through ``load_strict_yaml``, and every way a
 document can be malformed (bad syntax, an unhashable or repeated key, a merge key,
 nesting deeper than the parser can follow, a tagged or plain value the safe constructor
 cannot build) raises ``yaml.YAMLError``.
+
+An operator's declaration file (``load_declaration_yaml``) is read stricter still: it may
+use no alias, and timestamps stay text, so a time is validated as written rather than
+after YAML has dropped its offset or digits.
 """
 
 from typing import Any
 
 import yaml
-from yaml.nodes import MappingNode
+from yaml.events import AliasEvent
+from yaml.nodes import MappingNode, Node
 
 MERGE_TAG = "tag:yaml.org,2002:merge"
+TIMESTAMP_TAG = "tag:yaml.org,2002:timestamp"
 
 
 class StrictYamlError(yaml.YAMLError):
@@ -44,10 +50,50 @@ class StrictSafeLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
+class DeclarationLoader(StrictSafeLoader):
+    """The strict loader, refusing every alias and reading timestamps as text."""
+
+    def compose_node(self, parent: Node | None, index: int) -> Node | None:
+        # Aliases are resolved while the document is composed, before any constructor
+        # runs, so they are refused here.
+        if self.check_event(AliasEvent):
+            line = self.peek_event().start_mark.line + 1  # type: ignore[no-untyped-call]
+            raise StrictYamlError(f"alias at line {line} is not accepted")
+        return super().compose_node(parent, index)
+
+
+def list_resolvers_without_timestamps(
+    implicit_resolvers: dict[Any, list[tuple[str, Any]]],
+) -> dict[Any, list[tuple[str, Any]]]:
+    """``implicit_resolvers`` without the timestamp resolver, as a new mapping."""
+    resolvers_without_timestamps: dict[Any, list[tuple[str, Any]]] = {}
+    for first_character, resolvers in implicit_resolvers.items():
+        kept_resolvers: list[tuple[str, Any]] = []
+        for resolver in resolvers:
+            if resolver[0] != TIMESTAMP_TAG:
+                kept_resolvers.append(resolver)
+        resolvers_without_timestamps[first_character] = kept_resolvers
+    return resolvers_without_timestamps
+
+
+DeclarationLoader.yaml_implicit_resolvers = list_resolvers_without_timestamps(
+    StrictSafeLoader.yaml_implicit_resolvers
+)
+
+
 def load_strict_yaml(text: str) -> Any:
+    return load_with(text, StrictSafeLoader)
+
+
+def load_declaration_yaml(text: str) -> Any:
+    """An operator's declaration file: strict, with no alias and timestamps as text."""
+    return load_with(text, DeclarationLoader)
+
+
+def load_with(text: str, loader: type[StrictSafeLoader]) -> Any:
     try:
-        # StrictSafeLoader subclasses SafeLoader, so no arbitrary objects are constructed.
-        return yaml.load(text, Loader=StrictSafeLoader)
+        # Both loaders subclass SafeLoader, so no arbitrary objects are constructed.
+        return yaml.load(text, Loader=loader)
     except RecursionError as error:
         raise StrictYamlError("nesting is deeper than the parser can follow") from error
     except (ValueError, KeyError, AttributeError) as error:

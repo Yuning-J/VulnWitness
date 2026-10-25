@@ -8,7 +8,6 @@ A JSON-RPC error raised while handling a request keeps its code and fixed messag
 carries no ``data``, where the SDK would repeat the method name a client sent.
 """
 
-import importlib.metadata
 import json
 import logging
 from collections.abc import Sequence
@@ -30,6 +29,7 @@ from mcp.types import (
 )
 from pydantic import ValidationError
 
+from cve_kgrag.distribution import read_installed_version
 from cve_kgrag.domain.tool_contracts import ToolFailure, ToolFailureCode
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import (
@@ -42,7 +42,6 @@ from cve_kgrag.interfaces.knowledge_tools import (
 from cve_kgrag.schema_snapshots import render_schema
 
 SERVER_NAME = "cve-kgrag"
-DISTRIBUTION_NAME = "cve-kgrag"
 UNKNOWN_TOOL_MESSAGE = "unknown tool"
 # The SDK's sentence for parameters that fail its request model.
 INVALID_PARAMETERS_MESSAGE = "Invalid request parameters"
@@ -141,7 +140,7 @@ def build_knowledge_mcp_server(toolbox: KnowledgeToolbox) -> Server[LifespanStat
     handlers = KnowledgeToolHandlers(toolbox, build_mcp_tools(KNOWLEDGE_TOOL_SPECS))
     server: Server[LifespanState] = Server(
         SERVER_NAME,
-        version=importlib.metadata.version(DISTRIBUTION_NAME),
+        version=read_installed_version(),
         instructions=SERVER_INSTRUCTIONS,
         on_list_tools=handlers.list_tools,
         on_call_tool=handlers.call_tool,

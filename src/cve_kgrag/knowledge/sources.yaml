@@ -6,12 +6,13 @@ sources:
   - name: nvd
     official_url: "https://nvd.nist.gov"
     terms_or_license_url: "https://nvd.nist.gov/developers/terms-of-use"
-    version_strategy: "Per record: NVD lastModified. Per fetch: response ETag or retrieval time, passed as the anchor's source_version."
+    version_strategy: "Per record: NVD lastModified. Per imported feed: sha256 of the decompressed JSON payload, the anchor's source_version (ADR 0008)."
     attribution: "This product uses data from the NVD API but is not endorsed or certified by the NVD."
     redistribution_allowed: allowed_with_conditions
     redistribution_conditions: "NIST publications are public domain (17 USC). Services are asked to show the notice above, must not imply NVD endorsement, and must not attribute modified content to NVD. CVE text inside NVD records is also covered by the CVE terms; how the two interact is unverified."
     local_storage_policy: operator_supplied
     terms_verified_on: 2026-10-14
+    artifact_uri_template: "https://nvd.nist.gov/feeds/json/cve/{format}/nvdcve-{format}-{name}.json.gz"
   - name: cve-program
     official_url: "https://www.cve.org"
     terms_or_license_url: "https://www.cve.org/Legal/TermsOfUse"
@@ -24,12 +25,13 @@ sources:
   - name: cisa-kev
     official_url: "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
     terms_or_license_url: "https://www.cisa.gov/sites/default/files/licenses/kev/license.txt"
-    version_strategy: "Catalog catalogVersion plus retrieval time, passed as the KEV anchor's source_version."
+    version_strategy: "Per imported catalog: sha256 of the CSV file, the KEV anchor's source_version (ADR 0008); the CSV carries no catalogVersion."
     attribution: null
     redistribution_allowed: allowed
     redistribution_conditions: "CC0 1.0. Do not use the CISA logo or DHS seal or imply CISA/DHS endorsement; third-party links in entries keep their own terms."
     local_storage_policy: operator_supplied
     terms_verified_on: 2026-10-14
+    artifact_uri_template: "https://www.cisa.gov/sites/default/files/csv/known_exploited_vulnerabilities.csv"
   - name: mitre-fight
     official_url: "https://fight.mitre.org"
     terms_or_license_url: "https://fight.mitre.org/resources/terms/"

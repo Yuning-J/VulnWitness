@@ -1,10 +1,14 @@
 """CLI behavior: exit codes and output shape."""
 
+import errno
+import functools
 import hashlib
 import json
 import logging
+import os
 import subprocess
-from collections.abc import Callable, Mapping
+import threading
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -12,17 +16,26 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import SecretStr, TypeAdapter
 
-from cve_kgrag.adapter_discovery import API_EXTRA, MCP_EXTRA, InterfaceUnavailable
+from cve_kgrag.adapter_discovery import (
+    API_EXTRA,
+    MCP_EXTRA,
+    MIGRATION_EXTRA,
+    InterfaceUnavailable,
+)
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
+from cve_kgrag.adapters.migration.input_files import PayloadStream
+from cve_kgrag.adapters.migration.parser_types import EntryHandler, FeedHeader, MigrationParsers
 from cve_kgrag.application.evidence_set_verification import MAX_EVIDENCE_SET_BYTES
 from cve_kgrag.application.investigation_policy import describe_deterministic_planner
 from cve_kgrag.cli import (
     OVERSIZED_EVIDENCE_SET_MESSAGE,
     PACKAGE_DIR,
+    build_parser,
     main,
     print_verification,
     run_api_server,
     run_evidence_lookup,
+    run_legacy_migration_command,
     run_mcp_http_server,
     run_mcp_server,
 )
@@ -44,6 +57,12 @@ from cve_kgrag.domain.investigation import (
     SourceCapability,
     SourceCapabilityState,
     describe_planner_capability,
+)
+from cve_kgrag.domain.migration_report import (
+    LegacyFileKind,
+    MigrationFailureCode,
+    MigrationOutcome,
+    MigrationReport,
 )
 from cve_kgrag.domain.planning import (
     ModelPlannerIdentity,
@@ -88,6 +107,7 @@ from tests.support.investigation import (
     rewrite_step,
 )
 from tests.support.investigation_runs import run_model_accepted
+from tests.support.legacy_inputs import build_declaration, write_inputs_manifest
 from tests.support.paths import REPOSITORY_ROOT, REPOSITORY_SCHEMA_DIR
 from tests.support.secrets import assert_secret_absent
 from tests.support.toolbox import FIXTURE_EVIDENCE_ID, UNKNOWN_EVIDENCE_ID, require_answer
@@ -1548,3 +1568,180 @@ def test_eval_planner_that_cannot_write_its_results_exits_one(
     assert exit_code == 1
     assert evaluation_output.out == ""
     assert "cve-kgrag eval planner cannot write its results" in evaluation_output.err
+
+
+# migrate legacy (ADR 0008). Only what holds without the migration extra lives here, so
+# the core-only lane runs it; the imports themselves are driven through ``main`` in
+# tests/integration/adapters/migration/test_legacy_migration.py.
+
+
+def test_migrate_legacy_without_a_target_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as raised:
+        run_cli(["migrate", "legacy", "--inputs", str(tmp_path / "inputs.yaml")])
+
+    assert raised.value.code == 2
+    assert "--target" in capsys.readouterr().err
+
+
+def test_migrate_legacy_without_the_migration_extra_exits_one_naming_it_before_reading_anything(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The manifest does not exist: the refusal comes before it is read."""
+    target = tmp_path / "store"
+    parser = build_parser()
+    arguments = parser.parse_args(
+        ["migrate", "legacy", "--inputs", str(tmp_path / "inputs.yaml"), "--target", str(target)]
+    )
+
+    exit_code = run_legacy_migration_command(
+        parser, arguments, InterfaceUnavailable(MIGRATION_EXTRA.missing_detail)
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == (
+        f"cve-kgrag migrate legacy cannot start: {MIGRATION_EXTRA.missing_detail}\n"
+    )
+    assert not target.exists()
+
+
+# Long enough for a command that blocks on a FIFO to be told from one that returns at once.
+BLOCKING_READ_TIMEOUT_SECONDS = 5
+
+
+def refuse_to_read_feed(payload_stream: PayloadStream, handle_entry: EntryHandler) -> FeedHeader:
+    raise AssertionError("the run reads no feed")
+
+
+def refuse_to_classify_json(prefix: bytes) -> LegacyFileKind | None:
+    raise AssertionError("the run walks no legacy root")
+
+
+@pytest.fixture
+def unreached_parsers() -> MigrationParsers:
+    """Parsers a run must never reach, standing in for the migration extra, so these tests
+    hold in the core-only lane."""
+    return MigrationParsers(
+        read_nvd_feed=refuse_to_read_feed, classify_json_prefix=refuse_to_classify_json
+    )
+
+
+class RecordedCommand:
+    """A command run on another thread, recording what it returned or the exit it raised,
+    and whether it finished at all."""
+
+    def __init__(self, command: Callable[[], int]) -> None:
+        self._command = command
+        self.exit_code: int | str | None = None
+        self.has_finished = False
+
+    def __call__(self) -> None:
+        try:
+            self.exit_code = self._command()
+        except SystemExit as raised:
+            self.exit_code = raised.code
+        self.has_finished = True
+
+
+def run_on_daemon_thread(command: Callable[[], int]) -> RecordedCommand:
+    """``command`` run on a daemon thread, waited on for at most the blocking-read
+    timeout, so a command blocked on a FIFO fails the test instead of hanging the run."""
+    recorded_command = RecordedCommand(command)
+    command_thread = threading.Thread(target=recorded_command, daemon=True)
+    command_thread.start()
+    command_thread.join(timeout=BLOCKING_READ_TIMEOUT_SECONDS)
+    return recorded_command
+
+
+def build_migrate_legacy_command(
+    manifest_path: Path, target: Path, parsers: MigrationParsers
+) -> Callable[[], int]:
+    """``cve-kgrag migrate legacy`` on ``manifest_path``, ready to run with ``parsers``."""
+    parser = build_parser()
+    arguments = parser.parse_args(
+        ["migrate", "legacy", "--inputs", str(manifest_path), "--target", str(target)]
+    )
+    return functools.partial(run_legacy_migration_command, parser, arguments, parsers)
+
+
+def release_fifo_reader(fifo_path: Path) -> None:
+    """Open the FIFO for writing and close it, which releases a reader blocked opening it;
+    with no reader waiting there is nothing to release."""
+    try:
+        writer_descriptor = os.open(fifo_path, os.O_WRONLY | os.O_NONBLOCK)
+    except OSError as error:
+        if error.errno != errno.ENXIO:
+            raise
+        return
+    os.close(writer_descriptor)
+
+
+@pytest.fixture
+def manifest_fifo(tmp_path: Path) -> Iterator[Path]:
+    """A FIFO named like an input manifest; a reader left blocked on it is released
+    afterwards."""
+    fifo_path = tmp_path / "inputs.yaml"
+    os.mkfifo(fifo_path)
+    try:
+        yield fifo_path
+    finally:
+        release_fifo_reader(fifo_path)
+
+
+@pytest.fixture
+def valid_manifest(tmp_path: Path) -> Path:
+    """A valid manifest declaring one feed that is not there, so a run that reads it fails
+    at its input, before any parser is reached."""
+    inputs_dir = tmp_path / "inputs"
+    inputs_dir.mkdir()
+    return write_inputs_manifest(inputs_dir, [build_declaration("nvdcve-2.0-2024.json.gz")])
+
+
+def test_migrate_legacy_with_a_fifo_as_manifest_is_a_usage_error_at_once(
+    tmp_path: Path,
+    manifest_fifo: Path,
+    unreached_parsers: MigrationParsers,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    command = build_migrate_legacy_command(manifest_fifo, tmp_path / "store", unreached_parsers)
+
+    recorded_command = run_on_daemon_thread(command)
+
+    assert (recorded_command.has_finished, recorded_command.exit_code) == (True, 2)
+    assert "not a regular file" in capsys.readouterr().err
+
+
+def test_migrate_legacy_with_a_symlink_to_a_valid_manifest_is_a_usage_error(
+    tmp_path: Path,
+    valid_manifest: Path,
+    unreached_parsers: MigrationParsers,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest_link = tmp_path / "linked-inputs.yaml"
+    manifest_link.symlink_to(valid_manifest)
+    command = build_migrate_legacy_command(manifest_link, tmp_path / "store", unreached_parsers)
+
+    with pytest.raises(SystemExit) as raised:
+        command()
+
+    assert raised.value.code == 2
+    assert "not a regular file" in capsys.readouterr().err
+
+
+def test_migrate_legacy_with_a_valid_manifest_at_its_own_path_reads_it_and_reports_the_run(
+    tmp_path: Path,
+    valid_manifest: Path,
+    unreached_parsers: MigrationParsers,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    command = build_migrate_legacy_command(valid_manifest, tmp_path / "store", unreached_parsers)
+
+    exit_code = command()
+
+    report = MigrationReport.model_validate_json(capsys.readouterr().out)
+    assert (exit_code, report.outcome) == (1, MigrationOutcome.FAILED)
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.INPUT_UNREADABLE

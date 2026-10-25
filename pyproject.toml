@@ -37,12 +37,18 @@ api = [
     "starlette>=0.48,<2",
     "uvicorn>=0.31.1,<1",
 ]
+# The legacy-data importer: a streaming JSON parser, so an NVD feed is never held whole
+# (ADR 0008 §8).
+migration = [
+    "ijson>=3.3,<4",
+]
 
 [project.entry-points."cve_kgrag.adapters"]
 semantic = "cve_kgrag.adapters.semantic.chroma_retriever:build_semantic_retriever"
 mcp_server = "cve_kgrag.interfaces.mcp.stdio_runner:serve_stdio"
 mcp_http_server = "cve_kgrag.interfaces.mcp.http_runner:serve_http"
 api_server = "cve_kgrag.interfaces.rest.api_runner:serve_api"
+migration_parsers = "cve_kgrag.adapters.migration.nvd_feed_reader:build_migration_parsers"
 model_planner = "cve_kgrag.adapters.planner.openai_compatible:build_model_port"
 
 [project.scripts]
@@ -58,6 +64,8 @@ dev = [
     "types-pyyaml>=6.0.12",
     # The MCP server and its tests run in the default lane.
     "cve-kgrag[mcp]",
+    # The importer and its tests run in the default lane.
+    "cve-kgrag[migration]",
     # The HTTP tests drive the servers through its in-process transport.
     "httpx2>=2.10,<3",
 ]
@@ -87,3 +95,8 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 files = ["src/cve_kgrag"]
 strict = true
 plugins = ["pydantic.mypy"]
+
+# ijson ships no type information; the feed reader is its only importer.
+[[tool.mypy.overrides]]
+module = ["ijson", "ijson.*"]
+ignore_missing_imports = true

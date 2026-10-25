@@ -8,12 +8,14 @@ from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaV
 from pydantic_core import CoreSchema, core_schema
 
 from cve_kgrag.domain.affectedness import AffectednessCheck, AffectednessRequest
+from cve_kgrag.domain.corpus_store_manifest import CorpusStoreManifest
 from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.evidence_set_verification_report import VerificationReport
 from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.http_rejection import HttpRejection
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from cve_kgrag.domain.migration_report import MigrationReport
 from cve_kgrag.domain.planning import QueryPlan
 from cve_kgrag.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
 from cve_kgrag.domain.timestamps import END_OF_VALUE
@@ -66,6 +68,9 @@ RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
     "verification_report": VerificationReport,
     # What an HTTP server answers in place of a route: a refusal, the deadline, a failure.
     "http_rejection": HttpRejection,
+    # The corpus store the legacy-data importer writes, and what an import reports.
+    "corpus_store_manifest": CorpusStoreManifest,
+    "migration_report": MigrationReport,
 }
 
 

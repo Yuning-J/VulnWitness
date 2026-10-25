@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.24` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.25` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 ## What it does
@@ -44,7 +44,8 @@ uv run cve-kgrag demo
 ```
 
 Optional extras: `mcp` (the MCP server, on stdio and over Streamable HTTP), `api` (the
-REST API) and `semantic` (Chroma and sentence-transformers).
+REST API), `migration` (the legacy-data importer's streaming JSON parser) and `semantic`
+(Chroma and sentence-transformers).
 
 ## Commands
 
@@ -66,6 +67,7 @@ uv run cve-kgrag mcp --http                             # MCP over HTTP on 127.0
 uv run cve-kgrag api                                    # REST API on 127.0.0.1:8766 (api extra)
 uv run cve-kgrag schema check                           # compare schemas with the snapshots
 uv run cve-kgrag eval planner --gold eval/gold/m4_trajectories.yaml --out eval-results
+uv run cve-kgrag migrate legacy --inputs inputs.yaml --target /data/stores/nvd-2026-10 --dry-run
 ```
 
 Every command but `mcp`, `api` and `schema` prints JSON. `--scope` is one of
@@ -75,6 +77,14 @@ repeatable) and `--kev-only`; `investigate` takes the product options and the bu
 options `--max-rounds`, `--max-tool-calls`, `--max-sources`, `--max-results-per-call`,
 `--max-wall-time-seconds` and `--max-context-bytes`. `cve-kgrag <command> --help` lists
 each command's options.
+
+`migrate legacy` imports raw NVD 1.1 and 2.0 feeds and the CISA KEV catalog CSV that an
+operator-written input manifest declares, each with the time it was obtained, into a
+new, verified corpus store; it prints a migration report and never writes beside an
+input or over an existing store ([ADR 0008](docs/rebuild/adr/0008-legacy-data-importer.md)).
+Legacy derived exports are never imported. The store holds operator-supplied data under
+NVD's and CISA's terms ([`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md)); keep it out of
+version control. Serving a store is M6 WP10.
 
 `eval planner` is a local reviewer and operator tool, served by no API: it runs each gold
 case with the deterministic policy and, with `--model-runs N` (0 to 20, default 0), N times

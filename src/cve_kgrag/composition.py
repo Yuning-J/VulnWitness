@@ -25,6 +25,11 @@ from cve_kgrag.adapters.graph.in_memory_graph import InMemoryRelationGraph
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
 from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
 from cve_kgrag.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
+from cve_kgrag.adapters.nvd.normalizer import NvdNormalizer, SourceTerms
+from cve_kgrag.adapters.provenance.source_registry import (
+    default_source_registry_file,
+    load_source_registry,
+)
 from cve_kgrag.adapters.structured.in_memory_filter import InMemoryStructuredIndex
 from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
 from cve_kgrag.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
@@ -38,6 +43,7 @@ from cve_kgrag.application.search import SearchService
 from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
 from cve_kgrag.application.topic_context import TopicContextService
 from cve_kgrag.domain.affectedness import AFFECTEDNESS_DETAILS, AffectednessFailure
+from cve_kgrag.domain.corpus_store_manifest import StoreSource
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.hashing import canonical_sha256
 from cve_kgrag.domain.investigation import (
@@ -47,6 +53,7 @@ from cve_kgrag.domain.investigation import (
     describe_planner_capability,
 )
 from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail
+from cve_kgrag.domain.provenance import SourceRegistry
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import KnowledgeSource
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
@@ -90,6 +97,21 @@ def build_search_service(
 def utc_now() -> datetime:
     """The production clock; tests inject a fixed one instead."""
     return datetime.now(UTC)
+
+
+def load_packaged_source_registry() -> SourceRegistry:
+    """The packaged source registry (``knowledge/sources.yaml``)."""
+    return load_source_registry(default_source_registry_file())
+
+
+def build_nvd_normalizer(source_registry: SourceRegistry) -> NvdNormalizer:
+    """The NVD normalizer citing the NVD and CISA KEV terms ``source_registry`` verifies."""
+    return NvdNormalizer(
+        SourceTerms(
+            nvd=source_registry.require_terms(StoreSource.NVD.value),
+            cisa_kev=source_registry.require_terms(StoreSource.CISA_KEV.value),
+        )
+    )
 
 
 def build_topic_registry() -> TopicRegistry:

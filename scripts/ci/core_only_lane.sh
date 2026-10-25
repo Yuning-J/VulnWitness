@@ -47,7 +47,27 @@ if [ "$api_status" -ne 1 ] || ! grep -qF "the 'api' extra is not installed" <<< 
   exit 1
 fi
 
+# The legacy-data importer refuses the same way without the migration extra, before it
+# reads the manifest or creates the target, so neither needs to exist.
+migrate_status=0
+migrate_stderr="$("$work_dir/core-venv/bin/cve-kgrag" migrate legacy \
+  --inputs "$work_dir/absent-inputs.yaml" --target "$work_dir/absent-target" \
+  < /dev/null 2>&1 > /dev/null)" || migrate_status=$?
+if [ "$migrate_status" -ne 1 ] \
+  || ! grep -qF "the 'migration' extra is not installed" <<< "$migrate_stderr"; then
+  echo "cve-kgrag migrate legacy without the migration extra: expected exit 1 and the" \
+    "missing-extra refusal, got exit $migrate_status: $migrate_stderr" >&2
+  exit 1
+fi
+if [ -e "$work_dir/absent-target" ]; then
+  echo "cve-kgrag migrate legacy without the migration extra created its target" >&2
+  exit 1
+fi
+
 uv pip install -p "$core_python" pytest jsonschema
+# The importer's tests, and the store tests that build their stores with it, need the
+# migration extra, as the interface tests need theirs.
 "$core_python" -m pytest -q tests/unit tests/contract tests/integration \
   --ignore=tests/integration/interfaces/mcp --ignore=tests/integration/interfaces/http \
-  --ignore=tests/integration/interfaces/rest
+  --ignore=tests/integration/interfaces/rest --ignore=tests/integration/adapters/migration \
+  --ignore=tests/integration/adapters/store

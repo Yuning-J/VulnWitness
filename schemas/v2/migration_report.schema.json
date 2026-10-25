@@ -1,0 +1,1063 @@
+{
+  "$defs": {
+    "CandidateOutcome": {
+      "description": "What became of each NVD entry.",
+      "enum": [
+        "chosen",
+        "superseded",
+        "identical_duplicate",
+        "dropped_for_format",
+        "malformed",
+        "in_excluded_cve"
+      ],
+      "title": "CandidateOutcome",
+      "type": "string"
+    },
+    "CveOutcome": {
+      "description": "What became of each CVE the NVD inputs name (ADR 0008 §5).",
+      "enum": [
+        "imported",
+        "withdrawn_by_source",
+        "conflicting_duplicate",
+        "malformed_winning_candidate",
+        "unorderable_candidate"
+      ],
+      "title": "CveOutcome",
+      "type": "string"
+    },
+    "EntryLocator": {
+      "additionalProperties": false,
+      "description": "Where a skipped NVD entry sits: never its content.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/NormalizationFailureCode"
+        },
+        "entry_index": {
+          "minimum": 0,
+          "title": "Entry Index",
+          "type": "integer"
+        },
+        "input_position": {
+          "minimum": 0,
+          "title": "Input Position",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_position",
+        "entry_index",
+        "code"
+      ],
+      "title": "EntryLocator",
+      "type": "object"
+    },
+    "KevOutcome": {
+      "description": "What became of each KEV row (ADR 0008 §6).",
+      "enum": [
+        "merged",
+        "identical_duplicate",
+        "kev_without_nvd_record",
+        "kev_for_rejected_nvd_record",
+        "kev_for_excluded_nvd_record"
+      ],
+      "title": "KevOutcome",
+      "type": "string"
+    },
+    "LegacyFileKind": {
+      "description": "What a file found under the legacy root is, by structure or magic bytes.",
+      "enum": [
+        "enhanced_documents",
+        "rag_export",
+        "cpe_parsing_results",
+        "graph_export",
+        "mapping",
+        "analytics",
+        "pickle",
+        "numpy_array",
+        "model_archive"
+      ],
+      "title": "LegacyFileKind",
+      "type": "string"
+    },
+    "MigrationFailure": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "input_not_a_regular_file"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input is not a regular file."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "input_unreadable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input cannot be read."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "input_repeated"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "Two inputs name the same file."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "input_bytes_repeated"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "Two inputs hold the same bytes."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "input_changed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input changed while the import read it."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "artifact_undeclared"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD input has no standard feed name and declares no artifact."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "artifact_conflict"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD input's file name and declared artifact disagree."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "format_mismatch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD input's content declares another format than its artifact."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "unrecognised_format"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input is not in a format the importer reads."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "derived_file_declared_as_source"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input is a legacy derived file, which is never imported as a source."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "bad_compression"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input's compression cannot be read."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "invalid_json"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD input is not valid JSON."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "duplicate_json_key"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD input repeats a key within one object."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "entry_too_deep"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD entry nests deeper than the importer reads."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "entry_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD entry or top-level value is larger than the importer reads."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "generated_at_invalid"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD input's generation time is not a valid timestamp."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "retrieved_before_generated"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input is declared retrieved before its source generated it."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "retrieved_in_future"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input is declared retrieved in the future."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "compressed_file_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input file is larger than the cap."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "decompressed_file_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An input decompresses to more than the cap."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "total_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The inputs decompress to more than the total cap."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "too_many_candidates"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The inputs hold more NVD entries than the cap."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "staging_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The staging directory grew past its cap."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "staging_failed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The staging database could not be written."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "kev_invalid_encoding"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The KEV input is not UTF-8 CSV. Fix the file, or remove the cisa-kev input from the manifest and run again without KEV."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "kev_invalid_header"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The KEV input's header is not the KEV column set. Fix the file, or remove the cisa-kev input from the manifest and run again without KEV."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "kev_invalid_row"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A KEV row is malformed or lacks a required value. Fix the file, or remove the cisa-kev input from the manifest and run again without KEV."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "kev_conflicting_rows"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The KEV input lists one CVE in rows that disagree. Fix the file, or remove the cisa-kev input from the manifest and run again without KEV."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "kev_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The KEV input is larger or longer than the cap. Fix the file, or remove the cisa-kev input from the manifest and run again without KEV."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "legacy_root_unreadable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "Part of the legacy root cannot be read."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "legacy_root_changed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The legacy root changed while it was walked."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "legacy_root_too_deep"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The legacy root nests deeper than the walk goes."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "legacy_root_too_many_entries"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The legacy root holds more entries than the walk examines."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "legacy_root_read_budget"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "Recognising the legacy root's files needs more reading than the walk allows."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "target_exists"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The target exists and holds another import; it is never overwritten."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "target_unusable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The target cannot be resolved, or its parent is not a writable directory."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "target_overlaps_input"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The target is, holds or lies inside the manifest, an input or the legacy root."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "target_parent_holds_input"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The target's parent directory holds an input."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "existing_store_invalid"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The target holds this import, but the store fails verification; it is never repaired."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "no_importable_records"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The inputs yield no importable record."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "store_write_failed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The store could not be written."
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/MigrationFailureCode"
+        },
+        "input_position": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The failing input's position in the sorted input list, when it failed later.",
+          "title": "Input Position"
+        },
+        "manifest_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The failing input's index in the manifest, when it failed while the inputs were resolved.",
+          "title": "Manifest Index"
+        },
+        "message": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "manifest_index",
+        "input_position"
+      ],
+      "title": "MigrationFailure",
+      "type": "object"
+    },
+    "MigrationFailureCode": {
+      "description": "Why a run failed as a whole; no store is published.",
+      "enum": [
+        "input_not_a_regular_file",
+        "input_unreadable",
+        "input_repeated",
+        "input_bytes_repeated",
+        "input_changed",
+        "artifact_undeclared",
+        "artifact_conflict",
+        "format_mismatch",
+        "unrecognised_format",
+        "derived_file_declared_as_source",
+        "bad_compression",
+        "invalid_json",
+        "duplicate_json_key",
+        "entry_too_deep",
+        "entry_too_large",
+        "generated_at_invalid",
+        "retrieved_before_generated",
+        "retrieved_in_future",
+        "compressed_file_too_large",
+        "decompressed_file_too_large",
+        "total_too_large",
+        "too_many_candidates",
+        "staging_too_large",
+        "staging_failed",
+        "kev_invalid_encoding",
+        "kev_invalid_header",
+        "kev_invalid_row",
+        "kev_conflicting_rows",
+        "kev_too_large",
+        "legacy_root_unreadable",
+        "legacy_root_changed",
+        "legacy_root_too_deep",
+        "legacy_root_too_many_entries",
+        "legacy_root_read_budget",
+        "target_exists",
+        "target_unusable",
+        "target_overlaps_input",
+        "target_parent_holds_input",
+        "existing_store_invalid",
+        "no_importable_records",
+        "store_write_failed"
+      ],
+      "title": "MigrationFailureCode",
+      "type": "string"
+    },
+    "MigrationOutcome": {
+      "enum": [
+        "imported",
+        "already_imported",
+        "dry_run",
+        "failed"
+      ],
+      "title": "MigrationOutcome",
+      "type": "string"
+    },
+    "NormalizationFailureCode": {
+      "enum": [
+        "wrong_json_type",
+        "missing_field",
+        "invalid_timestamp",
+        "invalid_date",
+        "invalid_configuration",
+        "invalid_cpe",
+        "invalid_reference",
+        "invalid_cvss",
+        "invalid_kev_entry",
+        "no_description",
+        "contract_violation",
+        "rejected_by_source"
+      ],
+      "title": "NormalizationFailureCode",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A run's report. A failed run has its ``failure``; a run that wrote or found a store\nnames it and states how to roll it back.",
+  "properties": {
+    "candidate_outcomes": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/CandidateOutcome"
+      },
+      "title": "Candidate Outcomes",
+      "type": "object"
+    },
+    "cve_outcomes": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/CveOutcome"
+      },
+      "title": "Cve Outcomes",
+      "type": "object"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MigrationFailure"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "import_identity_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Import Identity Sha256"
+    },
+    "kev_advice": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "What to add when a KEV row names a CVE no NVD input holds; set exactly when kev_without_nvd_record is above zero.",
+      "title": "Kev Advice"
+    },
+    "kev_outcomes": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/KevOutcome"
+      },
+      "title": "Kev Outcomes",
+      "type": "object"
+    },
+    "legacy_formats_commit": {
+      "anyOf": [
+        {
+          "const": "b64eef3",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The CVE-KGRAG commit whose writers define the derived formats counted in legacy_root_findings; set exactly with them.",
+      "title": "Legacy Formats Commit"
+    },
+    "legacy_root_findings": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "$ref": "#/$defs/LegacyFileKind"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Files found by kind under --legacy-root; null without one.",
+      "title": "Legacy Root Findings"
+    },
+    "normalization_failures": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/NormalizationFailureCode"
+      },
+      "title": "Normalization Failures",
+      "type": "object"
+    },
+    "outcome": {
+      "$ref": "#/$defs/MigrationOutcome"
+    },
+    "rollback_instruction": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "How to undo the import; set exactly when a store is named.",
+      "title": "Rollback Instruction"
+    },
+    "rollback_kind": {
+      "anyOf": [
+        {
+          "const": "delete_unactivated_target",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "How the import is undone; set exactly when a store is named.",
+      "title": "Rollback Kind"
+    },
+    "rollback_scope": {
+      "anyOf": [
+        {
+          "const": "before_activation_only",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "When that undoing applies; set exactly when a store is named.",
+      "title": "Rollback Scope"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.25",
+      "default": "2.0.0-dev.25",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "skipped_entries": {
+      "description": "The first 100 skipped malformed entries.",
+      "items": {
+        "$ref": "#/$defs/EntryLocator"
+      },
+      "maxItems": 100,
+      "title": "Skipped Entries",
+      "type": "array"
+    },
+    "store_manifest_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Store Manifest Sha256"
+    }
+  },
+  "required": [
+    "schema_version",
+    "outcome",
+    "failure",
+    "import_identity_sha256",
+    "store_manifest_sha256",
+    "cve_outcomes",
+    "candidate_outcomes",
+    "normalization_failures",
+    "kev_outcomes",
+    "skipped_entries",
+    "kev_advice",
+    "legacy_root_findings",
+    "legacy_formats_commit",
+    "rollback_kind",
+    "rollback_scope",
+    "rollback_instruction"
+  ],
+  "title": "MigrationReport",
+  "type": "object"
+}

@@ -12,7 +12,15 @@ from cve_kgrag.adapters.nvd.normalizer import (
     RejectedCveError,
     SourceSnapshot,
 )
+from cve_kgrag.composition import build_nvd_normalizer, load_packaged_source_registry
+from cve_kgrag.domain.normalization import NormalizationFailureCode
 from cve_kgrag.domain.taxonomy import SourceType, TrustLevel
+
+
+def build_normalizer() -> NvdNormalizer:
+    """The normalizer composition builds, citing the packaged registry's terms."""
+    return build_nvd_normalizer(load_packaged_source_registry())
+
 
 NVD_SNAPSHOT = SourceSnapshot(
     source_uri="https://services.nvd.nist.gov/rest/json/cves/2.0",
@@ -128,7 +136,7 @@ def build_v1(**cve_overrides: Any) -> dict[str, Any]:
 
 
 def test_v2_keeps_every_cvss_scorer_vendor_and_version_range() -> None:
-    normalized = NvdNormalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
+    normalized = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
 
     record = normalized.record
     assert [metric.scorer for metric in record.cvss] == [
@@ -144,7 +152,7 @@ def test_v2_keeps_every_cvss_scorer_vendor_and_version_range() -> None:
 
 
 def test_v2_platform_cpe_not_marked_vulnerable_is_not_an_affected_product() -> None:
-    record = NvdNormalizer().normalize_v2(build_v2(), NVD_SNAPSHOT).record
+    record = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT).record
 
     vendors: list[str] = []
     for affected_product in record.affected:
@@ -153,7 +161,7 @@ def test_v2_platform_cpe_not_marked_vulnerable_is_not_an_affected_product() -> N
 
 
 def test_v2_descriptions_are_attributed_to_the_source_identifier() -> None:
-    record = NvdNormalizer().normalize_v2(build_v2(), NVD_SNAPSHOT).record
+    record = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT).record
 
     assert record.descriptions[0].source == "psirt@democorp.example"
 
@@ -171,8 +179,8 @@ def test_v2_evidence_hash_covers_the_configurations() -> None:
         }
     ]
 
-    first = NvdNormalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
-    second = NvdNormalizer().normalize_v2(
+    first = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
+    second = build_normalizer().normalize_v2(
         build_v2(configurations=other_configurations), NVD_SNAPSHOT
     )
 
@@ -182,13 +190,13 @@ def test_v2_evidence_hash_covers_the_configurations() -> None:
 
 def test_v2_rejected_status_raises_rejected_error() -> None:
     with pytest.raises(RejectedCveError, match="CVE-9999-0201"):
-        NvdNormalizer().normalize_v2(build_v2(vulnStatus="Rejected"), NVD_SNAPSHOT)
+        build_normalizer().normalize_v2(build_v2(vulnStatus="Rejected"), NVD_SNAPSHOT)
 
 
 def test_v2_inline_cisa_listing_becomes_kev_entry_without_ransomware_claim() -> None:
     vulnerability = build_v2(cisaExploitAdd="2026-01-02", cisaActionDue="2026-01-23")
 
-    normalized = NvdNormalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
+    normalized = build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
 
     kev = normalized.record.kev
     assert kev is not None
@@ -264,25 +272,25 @@ def test_v2_malformed_entry_raises_instead_of_dropping_fields(
     vulnerability: dict[str, Any],
 ) -> None:
     with pytest.raises(NvdNormalizationError):
-        NvdNormalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
+        build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
 
 
 def test_v1_derives_cvss_31_from_the_vector_when_the_version_says_30() -> None:
-    record = NvdNormalizer().normalize_v1(build_v1(), NVD_SNAPSHOT).record
+    record = build_normalizer().normalize_v1(build_v1(), NVD_SNAPSHOT).record
 
     assert record.cvss[0].version == "3.1"
     assert record.cvss[0].scorer == "NVD"
 
 
 def test_v1_cvss_v2_severity_comes_from_base_metric_v2() -> None:
-    record = NvdNormalizer().normalize_v1(build_v1(), NVD_SNAPSHOT).record
+    record = build_normalizer().normalize_v1(build_v1(), NVD_SNAPSHOT).record
 
     assert record.cvss[1].version == "2.0"
     assert record.cvss[1].base_severity == "HIGH"
 
 
 def test_v1_reference_source_is_the_refsource_not_the_name_url() -> None:
-    record = NvdNormalizer().normalize_v1(build_v1(), NVD_SNAPSHOT).record
+    record = build_normalizer().normalize_v1(build_v1(), NVD_SNAPSHOT).record
 
     assert record.references[0].source == "CONFIRM"
     assert record.references[0].tags == ("Vendor Advisory",)
@@ -294,7 +302,7 @@ def test_v1_reject_marker_raises_rejected_error() -> None:
     }
 
     with pytest.raises(RejectedCveError):
-        NvdNormalizer().normalize_v1(build_v1(description=rejected_description), NVD_SNAPSHOT)
+        build_normalizer().normalize_v1(build_v1(description=rejected_description), NVD_SNAPSHOT)
 
 
 def test_v1_description_mentioning_withdrawn_is_not_rejected() -> None:
@@ -302,7 +310,7 @@ def test_v1_description_mentioning_withdrawn_is_not_rejected() -> None:
         "description_data": [{"lang": "en", "value": "SYNTHETIC: a withdrawn token is reused."}]
     }
 
-    record = NvdNormalizer().normalize_v1(build_v1(description=description), NVD_SNAPSHOT).record
+    record = build_normalizer().normalize_v1(build_v1(description=description), NVD_SNAPSHOT).record
 
     assert record.cve_id == "CVE-9999-0202"
 
@@ -318,7 +326,7 @@ def test_kev_entry_adds_an_anchor_with_the_catalog_snapshot_identity() -> None:
         snapshot=KEV_SNAPSHOT,
     )
 
-    normalized = NvdNormalizer().normalize_v2(build_v2(metrics={}), NVD_SNAPSHOT, kev)
+    normalized = build_normalizer().normalize_v2(build_v2(metrics={}), NVD_SNAPSHOT, kev)
 
     kev_anchor = normalized.evidence[1]
     assert normalized.record.cvss == ()
@@ -337,7 +345,7 @@ def test_kev_entry_for_another_cve_is_rejected() -> None:
     )
 
     with pytest.raises(NvdNormalizationError, match="does not match"):
-        NvdNormalizer().normalize_v2(build_v2(), NVD_SNAPSHOT, kev)
+        build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT, kev)
 
 
 def build_v1_configurations() -> dict[str, Any]:
@@ -374,7 +382,7 @@ def test_v1_nested_cpe_matches_become_affected_products_with_exact_versions() ->
     cve_item = build_v1()
     cve_item["configurations"] = build_v1_configurations()
 
-    record = NvdNormalizer().normalize_v1(cve_item, NVD_SNAPSHOT).record
+    record = build_normalizer().normalize_v1(cve_item, NVD_SNAPSHOT).record
 
     assert len(record.affected) == 1
     assert record.affected[0].product == "legacy_gateway"
@@ -382,8 +390,8 @@ def test_v1_nested_cpe_matches_become_affected_products_with_exact_versions() ->
 
 
 def test_normalizing_the_same_entry_twice_yields_identical_output() -> None:
-    first = NvdNormalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
-    second = NvdNormalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
+    first = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
+    second = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
 
     assert first == second
 
@@ -397,7 +405,9 @@ def test_v2_matches_under_a_negated_node_are_not_affected_products() -> None:
     configurations[0]["nodes"].append(negated_node)
 
     record = (
-        NvdNormalizer().normalize_v2(build_v2(configurations=configurations), NVD_SNAPSHOT).record
+        build_normalizer()
+        .normalize_v2(build_v2(configurations=configurations), NVD_SNAPSHOT)
+        .record
     )
 
     products: list[str] = []
@@ -407,7 +417,7 @@ def test_v2_matches_under_a_negated_node_are_not_affected_products() -> None:
 
 
 def test_v2_scorer_type_is_case_folded() -> None:
-    record = NvdNormalizer().normalize_v2(build_v2(), NVD_SNAPSHOT).record
+    record = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT).record
 
     assert record.cvss[0].scorer_type == "primary"
     assert record.cvss[1].scorer_type == "secondary"
@@ -440,7 +450,7 @@ def test_v2_contract_violation_raises_the_normalization_error(
     vulnerability: dict[str, Any],
 ) -> None:
     with pytest.raises(NvdNormalizationError):
-        NvdNormalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
+        build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
 
 
 def test_explicit_kev_entry_supersedes_the_listing_nvd_mirrors() -> None:
@@ -454,7 +464,7 @@ def test_explicit_kev_entry_supersedes_the_listing_nvd_mirrors() -> None:
     )
     vulnerability = build_v2(cisaExploitAdd="2026-01-02")
 
-    record = NvdNormalizer().normalize_v2(vulnerability, NVD_SNAPSHOT, kev).record
+    record = build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT, kev).record
 
     assert record.kev is not None
     assert record.kev.date_added == date(2026, 2, 1)
@@ -471,7 +481,9 @@ def test_v2_negated_configuration_contributes_no_affected_product() -> None:
     )
 
     record = (
-        NvdNormalizer().normalize_v2(build_v2(configurations=configurations), NVD_SNAPSHOT).record
+        build_normalizer()
+        .normalize_v2(build_v2(configurations=configurations), NVD_SNAPSHOT)
+        .record
     )
 
     assert len(record.affected) == 1
@@ -482,4 +494,92 @@ def test_v2_configuration_with_string_negate_flag_is_rejected() -> None:
     configurations = [{"negate": "true", "nodes": []}]
 
     with pytest.raises(NvdNormalizationError, match="negate"):
-        NvdNormalizer().normalize_v2(build_v2(configurations=configurations), NVD_SNAPSHOT)
+        build_normalizer().normalize_v2(build_v2(configurations=configurations), NVD_SNAPSHOT)
+
+
+@pytest.mark.parametrize(
+    ("vulnerability", "expected_code"),
+    [
+        (build_v2(id=None), NormalizationFailureCode.MISSING_FIELD),
+        (build_v2(configurations={"nodes": []}), NormalizationFailureCode.WRONG_JSON_TYPE),
+        (build_v2(published="yesterday"), NormalizationFailureCode.INVALID_TIMESTAMP),
+        (build_v2(cisaExploitAdd="soon"), NormalizationFailureCode.INVALID_DATE),
+        (
+            build_v2(configurations=[{"nodes": [{"negate": "true", "cpeMatch": []}]}]),
+            NormalizationFailureCode.INVALID_CONFIGURATION,
+        ),
+        (
+            build_v2(
+                configurations=[
+                    {"nodes": [{"cpeMatch": [{"criteria": "cpe:2.3:a:x", "vulnerable": True}]}]}
+                ]
+            ),
+            NormalizationFailureCode.INVALID_CPE,
+        ),
+        (
+            build_v2(references=[{"url": "https://example.invalid/", "tags": [1]}]),
+            NormalizationFailureCode.INVALID_REFERENCE,
+        ),
+        (
+            build_v2(
+                metrics={
+                    "cvssMetricV31": [
+                        {
+                            "source": "nvd@nist.gov",
+                            "cvssData": {"vectorString": "CVSS:3.1/AV:N", "baseScore": "9.8"},
+                        }
+                    ]
+                }
+            ),
+            NormalizationFailureCode.INVALID_CVSS,
+        ),
+        (build_v2(descriptions=[]), NormalizationFailureCode.NO_DESCRIPTION),
+        (build_v2(id="not-a-cve-id"), NormalizationFailureCode.CONTRACT_VIOLATION),
+        (build_v2(vulnStatus="Rejected"), NormalizationFailureCode.REJECTED_BY_SOURCE),
+    ],
+    ids=[
+        "missing_id",
+        "configurations_object",
+        "unparseable_timestamp",
+        "unparseable_cisa_date",
+        "string_negate_flag",
+        "truncated_cpe",
+        "non_string_reference_tag",
+        "string_base_score",
+        "no_description",
+        "malformed_cve_id",
+        "rejected",
+    ],
+)
+def test_every_normalization_error_names_its_reason_by_code(
+    vulnerability: dict[str, Any], expected_code: NormalizationFailureCode
+) -> None:
+    with pytest.raises(NvdNormalizationError) as raised:
+        build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
+
+    assert raised.value.code is expected_code
+
+
+def test_kev_entry_for_another_cve_names_its_reason_by_code() -> None:
+    kev = KevSource(
+        entry={"cveID": "CVE-9999-0999", "dateAdded": "2026-01-02"}, snapshot=KEV_SNAPSHOT
+    )
+
+    with pytest.raises(NvdNormalizationError) as raised:
+        build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT, kev)
+
+    assert raised.value.code is NormalizationFailureCode.INVALID_KEV_ENTRY
+
+
+def test_anchors_cite_the_terms_the_source_registry_verifies() -> None:
+    source_registry = load_packaged_source_registry()
+    kev = KevSource(
+        entry={"cveID": "CVE-9999-0201", "dateAdded": "2026-01-02"}, snapshot=KEV_SNAPSHOT
+    )
+
+    nvd_anchor, kev_anchor = (
+        build_nvd_normalizer(source_registry).normalize_v2(build_v2(), NVD_SNAPSHOT, kev).evidence
+    )
+
+    assert nvd_anchor.license_or_terms_ref == source_registry.require_terms("nvd")
+    assert kev_anchor.license_or_terms_ref == source_registry.require_terms("cisa-kev")

@@ -210,8 +210,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.24",
-      "default": "2.0.0-dev.24",
+      "const": "2.0.0-dev.25",
+      "default": "2.0.0-dev.25",
       "title": "Schema Version",
       "type": "string"
     }

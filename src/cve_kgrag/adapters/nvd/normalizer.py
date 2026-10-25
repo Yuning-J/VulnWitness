@@ -1,9 +1,11 @@
 """Normalize NVD JSON 1.1 and API 2.0 records into the canonical contract.
 
-The normalizer is pure: callers supply each source's identity and retrieval time,
+The normalizer is pure: callers supply each source's identity, retrieval time and terms,
 and no network or filesystem access occurs here. Input is validated at this
 boundary. A field present with the wrong JSON type raises
 ``NvdNormalizationError`` rather than being dropped; an absent field stays absent.
+Every error carries a ``NormalizationFailureCode``; its message may quote the entry, so
+only the code may be reported to anyone but the developer.
 
 Only CPE matches NVD marks ``vulnerable`` become affected products. The other
 matches in a configuration name the platform a vulnerable product runs on, and
@@ -31,6 +33,7 @@ from cve_kgrag.domain.cve import (
 )
 from cve_kgrag.domain.evidence import UNSEALED_EVIDENCE_ID, EvidenceAnchor, seal_evidence_anchor
 from cve_kgrag.domain.hashing import canonical_sha256
+from cve_kgrag.domain.normalization import NormalizationFailureCode
 from cve_kgrag.domain.taxonomy import (
     AssertionKind,
     KnowledgeScope,
@@ -38,8 +41,6 @@ from cve_kgrag.domain.taxonomy import (
     TrustLevel,
 )
 
-NVD_TERMS = "https://nvd.nist.gov/general/terms-of-use"
-CISA_TERMS = "https://www.cisa.gov/news-events/legal-policies"
 # NVD JSON 1.1 has no status field; rejected entries carry this description prefix.
 V1_REJECTED_PREFIX = "** REJECT **"
 UNSPECIFIED_CPE_VERSIONS = frozenset({"", "*", "-"})
@@ -49,11 +50,27 @@ RANSOMWARE_USE = {"known": "known", "unknown": "unknown"}
 
 
 class NvdNormalizationError(ValueError):
-    """An NVD or KEV entry is malformed or lacks the identity the contract needs."""
+    """An NVD or KEV entry is malformed or lacks the identity the contract needs;
+    ``code`` says why."""
+
+    def __init__(self, code: NormalizationFailureCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class RejectedCveError(NvdNormalizationError):
     """The source marks the CVE rejected, so it describes no vulnerability."""
+
+    def __init__(self, cve_id: str) -> None:
+        super().__init__(NormalizationFailureCode.REJECTED_BY_SOURCE, f"{cve_id} is rejected")
+
+
+@dataclass(frozen=True)
+class SourceTerms:
+    """The terms each source's anchors cite, read from the source registry."""
+
+    nvd: str
+    cisa_kev: str
 
 
 @dataclass(frozen=True)
@@ -88,7 +105,9 @@ def _optional_mapping(container: Mapping[str, Any], key: str) -> Mapping[str, An
 
 def _as_mapping(value: object, what: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
-        raise NvdNormalizationError(f"{what} is not a JSON object")
+        raise NvdNormalizationError(
+            NormalizationFailureCode.WRONG_JSON_TYPE, f"{what} is not a JSON object"
+        )
     return cast(Mapping[str, Any], value)
 
 
@@ -97,7 +116,9 @@ def _optional_list(container: Mapping[str, Any], key: str) -> list[Any]:
     if value is None:
         return []
     if not isinstance(value, list):
-        raise NvdNormalizationError(f"{key} is not a JSON array")
+        raise NvdNormalizationError(
+            NormalizationFailureCode.WRONG_JSON_TYPE, f"{key} is not a JSON array"
+        )
     return value
 
 
@@ -106,14 +127,16 @@ def _optional_text(container: Mapping[str, Any], key: str) -> str | None:
     if value is None or value == "":
         return None
     if not isinstance(value, str):
-        raise NvdNormalizationError(f"{key} is not a string")
+        raise NvdNormalizationError(
+            NormalizationFailureCode.WRONG_JSON_TYPE, f"{key} is not a string"
+        )
     return value
 
 
 def _required_text(container: Mapping[str, Any], key: str) -> str:
     value = _optional_text(container, key)
     if value is None:
-        raise NvdNormalizationError(f"{key} is missing")
+        raise NvdNormalizationError(NormalizationFailureCode.MISSING_FIELD, f"{key} is missing")
     return value
 
 
@@ -124,7 +147,9 @@ def _optional_datetime(container: Mapping[str, Any], key: str) -> datetime | Non
     try:
         timestamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as error:
-        raise NvdNormalizationError(f"{key} is not an ISO 8601 timestamp") from error
+        raise NvdNormalizationError(
+            NormalizationFailureCode.INVALID_TIMESTAMP, f"{key} is not an ISO 8601 timestamp"
+        ) from error
     # NVD API 2.0 timestamps carry no offset and are UTC.
     return timestamp.replace(tzinfo=UTC) if timestamp.tzinfo is None else timestamp
 
@@ -136,7 +161,9 @@ def _optional_date(container: Mapping[str, Any], key: str) -> date | None:
     try:
         return date.fromisoformat(text)
     except ValueError as error:
-        raise NvdNormalizationError(f"{key} is not an ISO 8601 date") from error
+        raise NvdNormalizationError(
+            NormalizationFailureCode.INVALID_DATE, f"{key} is not an ISO 8601 date"
+        ) from error
 
 
 def _split_cpe(cpe: str) -> list[str]:
@@ -171,7 +198,10 @@ def _walk_cpe_matches(nodes: Iterable[object]) -> Iterable[Mapping[str, Any]]:
         node = _as_mapping(node_value, "configuration node")
         is_negated = node.get("negate", False)
         if not isinstance(is_negated, bool):
-            raise NvdNormalizationError("configuration node negate is not a boolean")
+            raise NvdNormalizationError(
+                NormalizationFailureCode.INVALID_CONFIGURATION,
+                "configuration node negate is not a boolean",
+            )
         if is_negated:
             continue
         for cpe_match in _optional_list(node, "cpeMatch") + _optional_list(node, "cpe_match"):
@@ -203,15 +233,22 @@ def _affected_products(nodes: Iterable[object]) -> tuple[AffectedProduct, ...]:
     for cpe_match in _walk_cpe_matches(nodes):
         is_vulnerable = cpe_match.get("vulnerable")
         if not isinstance(is_vulnerable, bool):
-            raise NvdNormalizationError("CPE match lacks a boolean vulnerable flag")
+            raise NvdNormalizationError(
+                NormalizationFailureCode.INVALID_CPE, "CPE match lacks a boolean vulnerable flag"
+            )
         if not is_vulnerable:
             continue
         cpe = _optional_text(cpe_match, "criteria") or _required_text(cpe_match, "cpe23Uri")
         components = _split_cpe(cpe)
         if not cpe.startswith("cpe:2.3:") or len(components) != 11:
-            raise NvdNormalizationError(f"not a CPE 2.3 formatted string: {cpe!r}")
+            raise NvdNormalizationError(
+                NormalizationFailureCode.INVALID_CPE, f"not a CPE 2.3 formatted string: {cpe!r}"
+            )
         if components[1] in CPE_LOGICAL_VALUES or components[2] in CPE_LOGICAL_VALUES:
-            raise NvdNormalizationError(f"CPE names no concrete vendor and product: {cpe!r}")
+            raise NvdNormalizationError(
+                NormalizationFailureCode.INVALID_CPE,
+                f"CPE names no concrete vendor and product: {cpe!r}",
+            )
         version_range = _version_range(cpe_match, components[3])
         affected_product = AffectedProduct(
             vendor=components[1],
@@ -260,7 +297,9 @@ def _references(entries: Iterable[object], source_key: str) -> tuple[Reference, 
         tags: list[str] = []
         for tag in _optional_list(reference, "tags"):
             if not isinstance(tag, str):
-                raise NvdNormalizationError("reference tag is not a string")
+                raise NvdNormalizationError(
+                    NormalizationFailureCode.INVALID_REFERENCE, "reference tag is not a string"
+                )
             tags.append(tag)
         references.append(
             Reference(url=url, source=_optional_text(reference, source_key), tags=tuple(tags))
@@ -278,7 +317,9 @@ def _cvss_metric(
     vector = _required_text(cvss_data, "vectorString")
     base_score = cvss_data.get("baseScore")
     if isinstance(base_score, bool) or not isinstance(base_score, int | float):
-        raise NvdNormalizationError("CVSS baseScore is not a number")
+        raise NvdNormalizationError(
+            NormalizationFailureCode.INVALID_CVSS, "CVSS baseScore is not a number"
+        )
     version = _optional_text(cvss_data, "version") or default_version
     # NVD JSON 1.1 files CVSS 3.1 vectors under baseMetricV3 labelled 3.0.
     if vector.startswith("CVSS:3.1/"):
@@ -377,19 +418,27 @@ def _anchor(
     return seal_evidence_anchor(unsealed_anchor)
 
 
-def _kev_entry(cve_id: str, kev: KevSource) -> tuple[KevEntry, EvidenceAnchor]:
+def _kev_entry(cve_id: str, kev: KevSource, terms: str) -> tuple[KevEntry, EvidenceAnchor]:
     kev_id = _optional_text(kev.entry, "cveID")
     if kev_id != cve_id:
-        raise NvdNormalizationError(f"KEV entry {kev_id!r} does not match {cve_id}")
+        raise NvdNormalizationError(
+            NormalizationFailureCode.INVALID_KEV_ENTRY,
+            f"KEV entry {kev_id!r} does not match {cve_id}",
+        )
     date_added = _optional_date(kev.entry, "dateAdded")
     if date_added is None:
-        raise NvdNormalizationError("KEV entry needs dateAdded")
+        raise NvdNormalizationError(
+            NormalizationFailureCode.INVALID_KEV_ENTRY, "KEV entry needs dateAdded"
+        )
     ransomware_text = _optional_text(kev.entry, "knownRansomwareCampaignUse")
     ransomware_use: str | None = None
     if ransomware_text is not None:
         ransomware_use = RANSOMWARE_USE.get(ransomware_text.casefold())
         if ransomware_use is None:
-            raise NvdNormalizationError("knownRansomwareCampaignUse is neither Known nor Unknown")
+            raise NvdNormalizationError(
+                NormalizationFailureCode.INVALID_KEV_ENTRY,
+                "knownRansomwareCampaignUse is neither Known nor Unknown",
+            )
     kev_entry = KevEntry.model_validate(
         {
             "date_added": date_added,
@@ -403,7 +452,7 @@ def _kev_entry(cve_id: str, kev: KevSource) -> tuple[KevEntry, EvidenceAnchor]:
         kev.snapshot,
         canonical_sha256(kev.entry),
         f"vulnerabilities/{cve_id}",
-        CISA_TERMS,
+        terms,
         TrustLevel.AUTHORITATIVE,
     )
     return kev_entry, anchor
@@ -414,13 +463,16 @@ def _assemble(
     record_fields: dict[str, object],
     nvd_anchor: EvidenceAnchor,
     kev: KevSource | None,
+    kev_terms: str,
 ) -> NormalizedCve:
     """Attach evidence; an explicit KEV catalog entry supersedes NVD's mirrored listing."""
     if not record_fields["descriptions"]:
-        raise NvdNormalizationError(f"{cve_id} has no description")
+        raise NvdNormalizationError(
+            NormalizationFailureCode.NO_DESCRIPTION, f"{cve_id} has no description"
+        )
     anchors = [nvd_anchor]
     if kev is not None:
-        kev_entry, kev_anchor = _kev_entry(cve_id, kev)
+        kev_entry, kev_anchor = _kev_entry(cve_id, kev, kev_terms)
         record_fields["kev"] = kev_entry
         anchors.append(kev_anchor)
     evidence_ids: list[str] = []
@@ -434,7 +486,11 @@ def _assemble(
 
 class NvdNormalizer:
     """Every malformed entry raises ``NvdNormalizationError``, including values the
-    canonical models reject, so a batch import can skip one entry and continue."""
+    canonical models reject, so a batch import can skip one entry and continue. Each
+    anchor cites ``terms``, which composition reads from the source registry."""
+
+    def __init__(self, terms: SourceTerms) -> None:
+        self._terms = terms
 
     def normalize_v2(
         self,
@@ -449,7 +505,10 @@ class NvdNormalizer:
         try:
             return self._normalize_v2(vulnerability, snapshot, kev)
         except ValidationError as error:
-            raise NvdNormalizationError(f"NVD 2.0 entry breaks the contract: {error}") from error
+            raise NvdNormalizationError(
+                NormalizationFailureCode.CONTRACT_VIOLATION,
+                f"NVD 2.0 entry breaks the contract: {error}",
+            ) from error
 
     def normalize_v1(
         self,
@@ -464,7 +523,10 @@ class NvdNormalizer:
         try:
             return self._normalize_v1(cve_item, snapshot, kev)
         except ValidationError as error:
-            raise NvdNormalizationError(f"NVD 1.1 entry breaks the contract: {error}") from error
+            raise NvdNormalizationError(
+                NormalizationFailureCode.CONTRACT_VIOLATION,
+                f"NVD 1.1 entry breaks the contract: {error}",
+            ) from error
 
     def _normalize_v2(
         self,
@@ -474,14 +536,14 @@ class NvdNormalizer:
     ) -> NormalizedCve:
         cve_id = _required_text(vulnerability, "id")
         if _optional_text(vulnerability, "vulnStatus") == "Rejected":
-            raise RejectedCveError(f"{cve_id} is rejected")
+            raise RejectedCveError(cve_id)
         nvd_anchor = _anchor(
             SourceType.NVD_API_2,
             cve_id,
             snapshot,
             canonical_sha256(vulnerability),
             f"vulnerabilities/{cve_id}",
-            NVD_TERMS,
+            self._terms.nvd,
             TrustLevel.SECONDARY,
         )
         # Descriptions come from the CNA named in sourceIdentifier.
@@ -499,7 +561,7 @@ class NvdNormalizer:
             "references": _references(_optional_list(vulnerability, "references"), "source"),
             "kev": _inline_kev(vulnerability),
         }
-        return _assemble(cve_id, record_fields, nvd_anchor, kev)
+        return _assemble(cve_id, record_fields, nvd_anchor, kev, self._terms.cisa_kev)
 
     def _normalize_v1(
         self,
@@ -516,14 +578,14 @@ class NvdNormalizer:
             description_source,
         )
         if any(description.value.startswith(V1_REJECTED_PREFIX) for description in descriptions):
-            raise RejectedCveError(f"{cve_id} is rejected")
+            raise RejectedCveError(cve_id)
         nvd_anchor = _anchor(
             SourceType.NVD_JSON_11,
             cve_id,
             snapshot,
             canonical_sha256(cve_item),
             f"CVE_Items/{cve_id}",
-            NVD_TERMS,
+            self._terms.nvd,
             TrustLevel.SECONDARY,
         )
         problem_types = _optional_list(_optional_mapping(cve, "problemtype"), "problemtype_data")
@@ -539,4 +601,4 @@ class NvdNormalizer:
             "references": _references(references, "refsource"),
             "kev": None,
         }
-        return _assemble(cve_id, record_fields, nvd_anchor, kev)
+        return _assemble(cve_id, record_fields, nvd_anchor, kev, self._terms.cisa_kev)

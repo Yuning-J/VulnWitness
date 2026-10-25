@@ -7,6 +7,7 @@ from cve_kgrag.adapters.nvd.normalizer import (
     NvdNormalizer,
     RejectedCveError,
     SourceSnapshot,
+    SourceTerms,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "NvdNormalizer",
     "RejectedCveError",
     "SourceSnapshot",
+    "SourceTerms",
 ]

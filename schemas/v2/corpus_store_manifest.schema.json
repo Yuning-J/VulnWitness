@@ -1,0 +1,301 @@
+{
+  "$defs": {
+    "InputContainer": {
+      "enum": [
+        "plain",
+        "gzip",
+        "zip"
+      ],
+      "title": "InputContainer",
+      "type": "string"
+    },
+    "NvdArtifact": {
+      "additionalProperties": false,
+      "description": "One published NVD feed: its format, its series and, for the year series, its year.",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/NvdFeedFormat"
+        },
+        "series": {
+          "$ref": "#/$defs/NvdFeedSeries"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "maximum": 9999,
+              "minimum": 2002,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        }
+      },
+      "required": [
+        "format",
+        "series",
+        "year"
+      ],
+      "title": "NvdArtifact",
+      "type": "object"
+    },
+    "NvdFeedFormat": {
+      "enum": [
+        "1.1",
+        "2.0"
+      ],
+      "title": "NvdFeedFormat",
+      "type": "string"
+    },
+    "NvdFeedSeries": {
+      "enum": [
+        "year",
+        "recent",
+        "modified"
+      ],
+      "title": "NvdFeedSeries",
+      "type": "string"
+    },
+    "StoreFile": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^[a-z_]+\\.jsonl$(?!\\n)",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "title": "StoreFile",
+      "type": "object"
+    },
+    "StoreInput": {
+      "additionalProperties": false,
+      "description": "One input as the store records it, in the sorted order of the import identity.",
+      "properties": {
+        "artifact": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NvdArtifact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Every NVD input's; null for KEV."
+        },
+        "container": {
+          "$ref": "#/$defs/InputContainer"
+        },
+        "input_bytes": {
+          "minimum": 0,
+          "title": "Input Bytes",
+          "type": "integer"
+        },
+        "input_file_sha256": {
+          "description": "SHA-256 of the file's bytes as supplied.",
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Input File Sha256",
+          "type": "string"
+        },
+        "payload_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SHA-256 of an NVD feed's decompressed JSON payload; null for KEV.",
+          "title": "Payload Sha256"
+        },
+        "retrieved_at": {
+          "description": "When the operator obtained the file.",
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/StoreSource"
+        },
+        "source_generated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the source generated the feed, as it states; null for KEV and for a feed that states no generation time.",
+          "title": "Source Generated At"
+        },
+        "source_uri": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Source Uri",
+          "type": "string"
+        },
+        "source_version": {
+          "pattern": "^sha256:[0-9a-f]{64}$(?!\\n)",
+          "title": "Source Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "artifact",
+        "container",
+        "source_uri",
+        "source_version",
+        "input_file_sha256",
+        "payload_sha256",
+        "retrieved_at",
+        "source_generated_at",
+        "input_bytes"
+      ],
+      "title": "StoreInput",
+      "type": "object"
+    },
+    "StoreSource": {
+      "description": "The sources an import reads, by their source-registry names.",
+      "enum": [
+        "nvd",
+        "cisa-kev"
+      ],
+      "title": "StoreSource",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What a store holds and where it came from; every file it lists is pinned by\nSHA-256, and a reader refuses any other file.",
+  "properties": {
+    "anchor_count": {
+      "minimum": 1,
+      "title": "Anchor Count",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+      "title": "Created At",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/StoreFile"
+      },
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    },
+    "import_identity_sha256": {
+      "description": "Names the import: equal identities build equal records and anchors.",
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Import Identity Sha256",
+      "type": "string"
+    },
+    "importer_version": {
+      "description": "The cve-kgrag distribution version.",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Importer Version",
+      "type": "string"
+    },
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/StoreInput"
+      },
+      "minItems": 1,
+      "title": "Inputs",
+      "type": "array"
+    },
+    "inputs_manifest_sha256": {
+      "description": "SHA-256 of the input manifest's bytes; audit only.",
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Inputs Manifest Sha256",
+      "type": "string"
+    },
+    "record_count": {
+      "minimum": 1,
+      "title": "Record Count",
+      "type": "integer"
+    },
+    "rollback_instruction": {
+      "default": "Before activation, remove the newly created target directory. After activation, use the WP10 store rollback operation.",
+      "title": "Rollback Instruction",
+      "type": "string"
+    },
+    "rollback_kind": {
+      "const": "delete_unactivated_target",
+      "default": "delete_unactivated_target",
+      "title": "Rollback Kind",
+      "type": "string"
+    },
+    "rollback_scope": {
+      "const": "before_activation_only",
+      "default": "before_activation_only",
+      "title": "Rollback Scope",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.25",
+      "default": "2.0.0-dev.25",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "store_format_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Store Format Version",
+      "type": "integer"
+    },
+    "synthetic": {
+      "const": false,
+      "default": false,
+      "title": "Synthetic",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "store_format_version",
+    "synthetic",
+    "created_at",
+    "importer_version",
+    "import_identity_sha256",
+    "inputs_manifest_sha256",
+    "inputs",
+    "files",
+    "record_count",
+    "anchor_count",
+    "rollback_kind",
+    "rollback_scope",
+    "rollback_instruction"
+  ],
+  "title": "CorpusStoreManifest",
+  "type": "object"
+}

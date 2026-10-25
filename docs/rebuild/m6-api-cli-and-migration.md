@@ -1,6 +1,6 @@
 # M6 — API, CLI and migration
 
-Schema version `2.0.0-dev.24`. M6 is built in work packages; this document records each
+Schema version `2.0.0-dev.25`. M6 is built in work packages; this document records each
 one as it lands.
 
 ## Work packages
@@ -16,7 +16,7 @@ one as it lands.
 | WP5 | Full CLI, verification report contract, served-bundle seam | done |
 | WP6 | HTTP guard, HTTP settings, health and readiness, opt-in Streamable HTTP for MCP | done |
 | WP7 | v2 REST API, set verification over HTTP, `api` extra | done |
-| WP9 | Read-only legacy-data importer (ADR 0008) | not started |
+| WP9 | Read-only legacy-data importer (ADR 0008) | done |
 | WP10 | Store activation and serving, operator FiGHT snapshot, M6 exit audit | not started |
 
 v1 compatibility is not an M6 package here: it stays in CVE-KGRAG (ADR 0006).
@@ -543,3 +543,122 @@ Decisions: ADR 0007, decisions 8 and 9.
   many requests as it takes; retry later.", for the verification route's one-at-a-time
   bound.
 - Every versioned schema moves to `2.0.0-dev.24`; no other contract changes.
+
+## WP9 — read-only legacy-data importer
+
+Decisions: ADR 0008.
+
+- **Command.** `cve-kgrag migrate legacy --inputs FILE --target DIR [--legacy-root DIR]
+  [--dry-run]` imports the raw NVD 1.1 and 2.0 feeds and the CISA KEV catalog CSV the
+  input manifest declares into a new corpus store at `--target`, and prints the
+  `MigrationReport`. Exit 0 for `imported`, `already_imported` and `dry_run`; 1 for
+  `failed`, which the report explains, and without the `migration` extra (`the
+  'migration' extra is not installed: pip install 'cve-kgrag[migration]'`, checked by
+  the core-only lane); 2 for an input manifest that is not valid, reported without
+  quoting it. The parsers load through the `migration_parsers` entry point
+  (`adapters/migration/nvd_feed_reader.py`, `build_migration_parsers`); every importer
+  module except `nvd_feed_reader`, `json_fingerprint` and `ijson_events`, which import
+  ijson, is core.
+- **Input manifest** (`domain/migration_inputs.py`, `adapters/migration/inputs_manifest.py`).
+  Opened like every importer file (a regular file, no link followed, no FIFO waited on)
+  and read with the declaration loader: the strict loader with aliases forbidden and
+  timestamps kept as text (`load_declaration_yaml`), so `retrieved_at` is validated as
+  written, RFC 3339 with an offset, and refused when UTC cannot express it. At most
+  1 MiB, 128 inputs and one `cisa-kev` input; no path holds a NUL. Paths resolve against
+  the manifest's directory; an input must be a regular file, and two declarations naming
+  one file, or two files with the same bytes, are refused.
+- **Provenance and identity** (`adapters/migration/input_resolution.py`). A standard
+  feed name gives the artifact (a year before 2002 is no standard name); another name
+  declares it; both must agree. `source_uri` is the registry's template filled for the
+  artifact (`artifact_uri_template` in `knowledge/sources.yaml`), whatever the container;
+  `source_version` is `sha256:` of the decompressed payload for NVD and of the file for
+  KEV, which `StoreInput` enforces. `retrieved_at` is normalized to UTC, so two offsets
+  naming one instant give one evidence ID. The normalizer keeps no terms constant of its
+  own: it cites the registry's terms, which composition injects (`build_nvd_normalizer`),
+  and its errors carry a `NormalizationFailureCode`. `import_identity_sha256` hashes the inputs
+  sorted by source, artifact and file hash, the cited registry entries, the importer,
+  store format and contract versions; the raw manifest's hash is recorded for audit
+  only.
+- **NVD entries** (`adapters/migration/nvd_entry_stager.py`, `candidate_staging.py`).
+  Every entry with a readable CVE ID is staged in SQLite with its modification time
+  (exact microseconds, a time UTC cannot express counting as none), format, state,
+  semantic hash and raw entry; one without is counted with its locator, a withdrawn one
+  included. A database or disk error is `staging_failed`. `resolve_cve` applies ADR 0008 §5: the latest candidates win; equal
+  ones collapse to one chosen by the tie-break; across formats 2.0 decides; unequal ones
+  are a `conflicting_duplicate`; a rejected winner withdraws the CVE; a malformed latest
+  or an unorderable group excludes it. The winner is normalized again with its final
+  snapshot (the payload hash is known only once its feed is read whole) and its KEV
+  entry.
+- **KEV** (`adapters/migration/kev_csv_reader.py`). All or nothing: a fixed column set in
+  any order (`notes`, `knownRansomwareCampaignUse` and `cwes` may be absent), `cveID` (a
+  CVE ID of at most 32 characters) and `dateAdded` required, dates `YYYY-MM-DD`, UTF-8
+  with one optional BOM, the strict `excel` dialect, no blank line, at most 16 MiB and
+  50,000 rows; unequal repeated rows fail the run. Rows merge onto final records only,
+  superseding NVD's mirrored CISA fields; the others are counted as
+  `kev_without_nvd_record`, `kev_for_rejected_nvd_record` or `kev_for_excluded_nvd_record`,
+  and the first brings the fixed `kev_advice` to add the covering year feed.
+- **Reading** (`adapters/migration/input_files.py`, `nvd_feed_reader.py`,
+  `entry_assembler.py`, `surrogate_guard.py`, `adapters/regular_files.py`). Every file is
+  opened without following a link and without blocking, so a FIFO is refused at once,
+  and an input is hashed again whenever it is opened to be read (`input_changed` on a
+  mismatch). Containers are told by their first bytes; a gzip or zip file is capped at
+  256 MiB, a plain one by the 512 MiB decompressed cap. A zip's end record must declare
+  one member and a one-member directory before `zipfile` reads it, and any damage, CRC
+  included, is `bad_compression`. Feeds stream through ijson's `yajl2_c` backend with
+  64 KiB reads; entries are assembled from events, with the cap checked on the stream
+  and on the assembled keys and values; top-level keys and values count against the
+  same cap, and a feed has at most 32 top-level members. A high surrogate escape without
+  its low escape is refused before the parser could turn it into `?`. The reading,
+  staging, KEV and walk bounds are `MigrationLimits`, whose defaults are the ADR's
+  constants; tests pass smaller ones. The manifest caps, the top-level member caps and
+  the 100-locator report bound are module constants.
+- **Legacy root** (`adapters/migration/legacy_root_scan.py`, `json_fingerprint.py`). A
+  bounded, read-only walk that counts derived files by structure and files never
+  deserialized by magic bytes or suffix; the report cites the formats' commit
+  (`legacy_formats_commit`, `b64eef3`). A missing root is `legacy_root_unreadable`.
+  Every input's first decompressed bytes are fingerprinted before it is read, so a
+  derived file declared as an input, under either source, fails the run as
+  `derived_file_declared_as_source`.
+- **Store** (`adapters/store/corpus_store.py`, `domain/corpus_store_manifest.py`).
+  `manifest.json` plus `records.jsonl` and `anchors.jsonl`, canonical JSON lines in CVE
+  ID and evidence ID order. The target's parent must be a writable directory, in a dry
+  run too (`target_unusable`); target and protected paths are compared by file identity,
+  so another case of a name on a case-insensitive file system does not slip past, and a
+  dangling link at the target is refused. The run writes the store in a sibling partial
+  directory, deletes its sibling staging directory, verifies the partial store
+  (`verify_corpus_store`, which keeps only an anchor index) and renames it into place
+  with mode 0755. `load_corpus_store` runs the same checks and keeps the records and
+  anchors, for WP10; both read the manifest and every line within a cap and check a
+  file's size before its lines. The report and the store manifest carry the fixed
+  rollback (`rollback_kind` `delete_unactivated_target`, `rollback_scope`
+  `before_activation_only` and the instruction); WP9 never deletes anything itself.
+- **Scale.** `scripts/operator/migration_scale.sh` (an operator lane, not CI) imports
+  synthetic gzipped 2.0 feeds. The lane imported 250,000 records,
+  using resident memory, temporary disk and a
+  store (one run; the disk figures are sampled once a second).
+- **Packaging.** The `migration` extra declares `ijson` only (`ijson` 3.6.0 in
+  `uv.lock`, no transitive dependency); the dev group installs it, so the default lane
+  runs the importer's tests. `ijson_events`, `json_fingerprint` and `nvd_feed_reader`
+  stay out of the core module walk, and the core-only lane ignores the tests that run
+  the importer.
+
+### Known limits
+
+- Real feeds were not available offline: the importer is proven on authored synthetic
+  inputs, and the first real run checks the 512 MiB per-file cap against a current 2.0
+  year feed.
+- An integer of magnitude 2^63 or more, which `json.loads` would read, is refused
+  as `invalid_json`: the `yajl2_c` backend reads no wider integer.
+- An entry's memory is a bounded multiple of its encoded bytes
+  for an entry of many empty containers.
+- The rename into place is atomic only on one file system, which the sibling partial
+  directory guarantees. A target another process creates between the last check and
+  the rename is replaced if it is an empty directory and otherwise fails the run as
+  `store_write_failed`; the window is not closed.
+- The legacy-root walk lists directories by path, so a directory replaced by a link
+  while the walk runs is not detected.
+
+### Contracts at `2.0.0-dev.25`
+
+- `corpus_store_manifest.schema.json` and `migration_report.schema.json` are new.
+- Every versioned schema moves to `2.0.0-dev.25`; no other contract changes.
