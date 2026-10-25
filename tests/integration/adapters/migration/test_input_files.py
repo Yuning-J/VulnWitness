@@ -1,18 +1,23 @@
-"""``inspect_input_file`` and ``open_payload`` on real files under ``tmp_path``: an input is
-read only when it is a regular file reached without a symbolic link; its container is told
-by its bytes; its file SHA-256 covers the bytes as supplied while its payload SHA-256 is
-the same whichever container holds the payload; an input whose bytes change after
-inspection is refused as ``input_changed``; a zip must hold exactly one unencrypted,
-stored or deflated file, which its end record must declare before ``zipfile`` reads it;
-damaged compression fails as ``bad_compression``; and the compressed, decompressed, total
-and per-entry caps (ADR 0008 §1, §2, §8) hold at their boundaries."""
+"""``inspect_input_file``, ``snapshot_input`` and ``open_payload`` on real files under
+``tmp_path``: an input is read only when it is a regular file reached without a symbolic
+link; its container is told by its bytes; its file SHA-256 covers the bytes as supplied
+while its payload SHA-256 is the same whichever container holds the payload; its snapshot
+is a new owner-only file holding exactly the inspected bytes, and an input whose bytes
+changed since inspection is refused as ``input_changed`` without copying more than one
+chunk past its inspected size; a zip must hold exactly one unencrypted, stored or
+deflated file, which its end record must declare before ``zipfile`` reads it; damaged
+compression fails as ``bad_compression``; and the compressed, decompressed, total and
+per-entry caps (ADR 0008 §1, §2, §8) hold at their boundaries."""
 
 import gzip
 import os
+import stat
 import struct
+import subprocess
+import sys
 import threading
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +25,7 @@ from typing import Any
 import pytest
 
 from cve_kgrag.adapters.migration.input_files import (
+    HASH_CHUNK_BYTES,
     ZIP_END_SIGNATURE,
     ZIP_MAX_ONE_MEMBER_DIRECTORY_BYTES,
     DecompressionBudget,
@@ -28,6 +34,7 @@ from cve_kgrag.adapters.migration.input_files import (
     check_zip_directory,
     inspect_input_file,
     open_payload,
+    snapshot_input,
 )
 from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
 from cve_kgrag.domain.corpus_store_manifest import InputContainer
@@ -63,7 +70,6 @@ UNSUPPORTED_ZIP_VERSION = 166
 
 FeedWriter = Callable[[Path, dict[str, Any]], Path]
 FileWriter = Callable[[Path], Path]
-InputChange = Callable[[Path, InputContainer, bytes], None]
 
 
 def inspect_with_default_cap(path: Path) -> InputFile:
@@ -263,13 +269,29 @@ def write_one_member_zip(path: Path) -> Path:
     return write_zip_feed(path, FEED)
 
 
-def rewrite_in_place(path: Path, container: InputContainer, payload_bytes: bytes) -> None:
-    write_payload_in(container, path, payload_bytes)
+def rewrite_in_place_with_other_bytes_of_the_same_size(path: Path) -> None:
+    with path.open("r+b") as input_stream:
+        input_stream.write(OTHER_FEED_PAYLOAD)
 
 
-def replace_by_rename(path: Path, container: InputContainer, payload_bytes: bytes) -> None:
-    replacement_path = write_payload_in(container, path.with_name("replacement.bin"), payload_bytes)
+def replace_by_rename(path: Path) -> None:
+    replacement_path = path.with_name("replacement.json")
+    replacement_path.write_bytes(OTHER_FEED_PAYLOAD)
     replacement_path.replace(path)
+
+
+def truncate_by_one_byte(path: Path) -> None:
+    os.truncate(path, path.stat().st_size - 1)
+
+
+def grow_by_one_byte(path: Path) -> None:
+    with path.open("ab") as input_stream:
+        input_stream.write(b" ")
+
+
+def grow_by_more_than_a_chunk(path: Path) -> None:
+    with path.open("ab") as input_stream:
+        input_stream.write(b" " * (HASH_CHUNK_BYTES + 1))
 
 
 @dataclass
@@ -583,23 +605,213 @@ def test_check_zip_directory_refuses_an_end_record_not_for_one_member_as_bad_com
     assert failure.value.code is MigrationFailureCode.BAD_COMPRESSION
 
 
+# Copies an inspected input under a file-size limit, as a full disk would cut it short,
+# and prints the failure code. It runs in its own process, so the limit binds no other
+# test; SIGXFSZ is ignored so the write fails with EFBIG instead of killing the process.
+SNAPSHOT_UNDER_A_SIZE_LIMIT = """
+import resource
+import signal
+import sys
+from pathlib import Path
+
+from cve_kgrag.adapters.migration.input_files import inspect_input_file, snapshot_input
+from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
+from cve_kgrag.domain.migration_report import MigrationFailed
+
+input_path, snapshot_path, size_limit = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3])
+input_file = inspect_input_file(input_path, MigrationLimits())
+signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+resource.setrlimit(resource.RLIMIT_FSIZE, (size_limit, size_limit))
+try:
+    snapshot_input(input_file, snapshot_path)
+except MigrationFailed as failure:
+    print(failure.code.value)
+"""
+
+
+@pytest.fixture
+def snapshot_path(tmp_path: Path) -> Path:
+    """Where the copy goes: a path in an empty directory standing in for a run's staging
+    directory."""
+    staging_dir = tmp_path / "staging"
+    staging_dir.mkdir()
+    return staging_dir / "input.snapshot"
+
+
+@pytest.fixture
+def umask_zero() -> Iterator[None]:
+    """The process umask cleared for the test, so a file's mode is the one it was created
+    with; the previous umask comes back afterwards."""
+    previous_umask = os.umask(0)
+    try:
+        yield
+    finally:
+        os.umask(previous_umask)
+
+
 @pytest.mark.parametrize(
-    "change_input", [rewrite_in_place, replace_by_rename], ids=["rewritten", "renamed_over"]
+    "write_feed",
+    [write_plain_feed, write_gzip_feed, write_zip_feed],
+    ids=["plain", "gzip", "zip"],
 )
-@pytest.mark.parametrize(
-    "container", [InputContainer.PLAIN, InputContainer.GZIP], ids=["plain", "gzip"]
-)
-def test_open_payload_refuses_an_input_whose_bytes_changed_after_inspection_as_input_changed(
-    tmp_path: Path, container: InputContainer, change_input: InputChange
+def test_snapshot_input_copies_an_unchanged_input_byte_for_byte(
+    tmp_path: Path, snapshot_path: Path, write_feed: FeedWriter
 ) -> None:
-    path = write_payload_in(container, tmp_path / "feed.bin", FEED_PAYLOAD)
+    path = write_feed(tmp_path / "feed.bin", FEED)
     input_file = inspect_with_default_cap(path)
-    change_input(path, container, OTHER_FEED_PAYLOAD)
+
+    snapshot_input(input_file, snapshot_path)
+
+    assert snapshot_path.read_bytes() == path.read_bytes()
+
+
+@pytest.mark.parametrize(
+    "write_feed",
+    [write_plain_feed, write_gzip_feed, write_zip_feed],
+    ids=["plain", "gzip", "zip"],
+)
+def test_snapshot_input_describes_the_copy_with_the_inspected_size_container_and_sha256(
+    tmp_path: Path, snapshot_path: Path, write_feed: FeedWriter
+) -> None:
+    input_file = inspect_with_default_cap(write_feed(tmp_path / "feed.bin", FEED))
+
+    snapshot = snapshot_input(input_file, snapshot_path)
+
+    assert snapshot == InputFile(
+        path=snapshot_path,
+        size_bytes=input_file.size_bytes,
+        container=input_file.container,
+        sha256=input_file.sha256,
+    )
+
+
+# OTHER_FEED_PAYLOAD is exactly as long as FEED_PAYLOAD, so only the bytes tell a file
+# rewritten with it apart.
+@pytest.mark.parametrize(
+    "alter_input",
+    [
+        rewrite_in_place_with_other_bytes_of_the_same_size,
+        replace_by_rename,
+        truncate_by_one_byte,
+        grow_by_one_byte,
+        grow_by_more_than_a_chunk,
+    ],
+    ids=[
+        "rewritten_in_place",
+        "renamed_over",
+        "truncated",
+        "grown_by_one_byte",
+        "grown_by_more_than_a_chunk",
+    ],
+)
+def test_snapshot_input_refuses_an_input_altered_since_inspection_as_input_changed(
+    tmp_path: Path, snapshot_path: Path, alter_input: Callable[[Path], None]
+) -> None:
+    path = write_plain_feed(tmp_path / "feed.json", FEED)
+    input_file = inspect_with_default_cap(path)
+    alter_input(path)
 
     with pytest.raises(MigrationFailed) as failure:
-        read_whole_payload(input_file)
+        snapshot_input(input_file, snapshot_path)
 
     assert failure.value.code is MigrationFailureCode.INPUT_CHANGED
+
+
+def test_snapshot_input_copies_at_most_one_chunk_past_the_inspected_size_of_a_grown_input(
+    tmp_path: Path, snapshot_path: Path
+) -> None:
+    path = write_plain_feed(tmp_path / "feed.json", FEED)
+    input_file = inspect_with_default_cap(path)
+    with path.open("ab") as input_stream:
+        input_stream.write(b" " * (3 * HASH_CHUNK_BYTES))
+
+    with pytest.raises(MigrationFailed):
+        snapshot_input(input_file, snapshot_path)
+
+    assert snapshot_path.stat().st_size <= input_file.size_bytes + HASH_CHUNK_BYTES
+
+
+def test_snapshot_input_reports_an_input_removed_since_inspection_as_unreadable(
+    tmp_path: Path, snapshot_path: Path
+) -> None:
+    path = write_plain_feed(tmp_path / "feed.json", FEED)
+    input_file = inspect_with_default_cap(path)
+    path.unlink()
+
+    with pytest.raises(MigrationFailed) as failure:
+        snapshot_input(input_file, snapshot_path)
+
+    assert failure.value.code is MigrationFailureCode.INPUT_UNREADABLE
+
+
+def test_snapshot_input_refuses_an_existing_snapshot_path_as_staging_failed_leaving_it_as_it_was(
+    tmp_path: Path, snapshot_path: Path
+) -> None:
+    input_file = inspect_with_default_cap(write_plain_feed(tmp_path / "feed.json", FEED))
+    snapshot_path.write_bytes(b"left by another process")
+
+    with pytest.raises(MigrationFailed) as failure:
+        snapshot_input(input_file, snapshot_path)
+
+    assert failure.value.code is MigrationFailureCode.STAGING_FAILED
+    assert snapshot_path.read_bytes() == b"left by another process"
+
+
+def test_snapshot_input_refuses_a_symlink_at_the_snapshot_path_leaving_its_target_as_it_was(
+    tmp_path: Path, snapshot_path: Path
+) -> None:
+    input_file = inspect_with_default_cap(write_plain_feed(tmp_path / "feed.json", FEED))
+    link_target = tmp_path / "elsewhere.json"
+    link_target.write_bytes(b"not the run's to write")
+    snapshot_path.symlink_to(link_target)
+
+    with pytest.raises(MigrationFailed) as failure:
+        snapshot_input(input_file, snapshot_path)
+
+    assert failure.value.code is MigrationFailureCode.STAGING_FAILED
+    assert link_target.read_bytes() == b"not the run's to write"
+
+
+def test_snapshot_input_never_creates_the_target_of_a_dangling_symlink_at_the_snapshot_path(
+    tmp_path: Path, snapshot_path: Path
+) -> None:
+    input_file = inspect_with_default_cap(write_plain_feed(tmp_path / "feed.json", FEED))
+    link_target = tmp_path / "elsewhere.json"
+    snapshot_path.symlink_to(link_target)
+
+    with pytest.raises(MigrationFailed) as failure:
+        snapshot_input(input_file, snapshot_path)
+
+    assert failure.value.code is MigrationFailureCode.STAGING_FAILED
+    assert not link_target.exists()
+
+
+@pytest.mark.usefixtures("umask_zero")
+def test_snapshot_input_creates_the_copy_readable_by_its_owner_alone_even_under_umask_zero(
+    tmp_path: Path, snapshot_path: Path
+) -> None:
+    input_file = inspect_with_default_cap(write_plain_feed(tmp_path / "feed.json", FEED))
+
+    snapshot_input(input_file, snapshot_path)
+
+    assert stat.S_IMODE(snapshot_path.stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize(
+    "write_feed",
+    [write_plain_feed, write_gzip_feed, write_zip_feed],
+    ids=["plain", "gzip", "zip"],
+)
+def test_open_payload_reads_the_snapshot_it_is_given_once_the_input_is_gone(
+    tmp_path: Path, snapshot_path: Path, write_feed: FeedWriter
+) -> None:
+    path = write_feed(tmp_path / "feed.bin", FEED)
+    snapshot = snapshot_input(inspect_with_default_cap(path), snapshot_path)
+    path.unlink()
+
+    payload_bytes, _ = read_whole_payload(snapshot)
+
+    assert payload_bytes == FEED_PAYLOAD
 
 
 def test_open_payload_refuses_an_input_replaced_by_a_symlink_after_inspection(
@@ -789,3 +1001,34 @@ def test_each_begin_entry_starts_a_fresh_entry_count(tmp_path: Path) -> None:
         second_entry_bytes = payload.read(14)
 
     assert second_entry_bytes == ENTRY_PAYLOAD[14:28]
+
+
+@pytest.mark.parametrize(
+    ("input_bytes", "size_limit"),
+    [(5_000, 4_000), (3 * 1024 * 1024, 1024 * 1024)],
+    ids=["failing_when_the_copy_is_closed", "failing_while_the_copy_is_written"],
+)
+def test_snapshot_input_cut_short_by_a_full_disk_fails_as_staging_failed(
+    tmp_path: Path, snapshot_path: Path, input_bytes: int, size_limit: int
+) -> None:
+    # A small copy fits the write buffer whole, so the disk refuses it only when the copy
+    # is closed; a large one is refused by a write.
+    input_path = tmp_path / "feed.json"
+    input_path.write_bytes(b"x" * input_bytes)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            SNAPSHOT_UNDER_A_SIZE_LIMIT,
+            str(input_path),
+            str(snapshot_path),
+            str(size_limit),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert (completed.returncode, completed.stdout.strip()) == (0, "staging_failed")

@@ -1,8 +1,9 @@
 """Proves the corpus store's write and read protocol (ADR 0008 §9): a store the importer
-writes from a synthetic feed loads back whole, the writers reproduce it byte for byte,
-and both readers (``verify_corpus_store`` and ``load_corpus_store``) refuse every store
-that is not exactly what its manifest pins — tampered or reordered lines, extra, missing
-or symlinked files, broken record-to-anchor links, wrong counts and invalid manifests.
+writes from a synthetic feed loads back whole, the writers reproduce it byte for byte
+with mode 0644 whatever the umask, and both readers (``verify_corpus_store`` and
+``load_corpus_store``) refuse every store that is not exactly what its manifest pins —
+tampered or reordered lines, extra, missing or symlinked files, broken record-to-anchor
+links, wrong counts and invalid manifests.
 
 Every refused store except the raw-byte cases is written with ``StoreFileWriter`` and
 ``write_store_manifest``, so its files are correctly pinned and only the defect under
@@ -13,6 +14,7 @@ import functools
 import json
 import os
 import shutil
+import stat
 import threading
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
@@ -294,6 +296,44 @@ def test_store_writers_reproduce_imported_store_byte_for_byte(
 
     # Assert
     assert rewritten_bytes == (imported_store / file_name).read_bytes()
+
+
+@pytest.fixture
+def process_umask(request: pytest.FixtureRequest) -> Iterator[int]:
+    """The process umask set to the test's parameter for the test; the previous umask
+    comes back afterwards."""
+    umask: int = request.param
+    previous_umask = os.umask(umask)
+    try:
+        yield umask
+    finally:
+        os.umask(previous_umask)
+
+
+@pytest.mark.parametrize(
+    "process_umask", [0o077, 0o000], indirect=True, ids=["umask_077", "umask_000"]
+)
+@pytest.mark.parametrize(
+    "file_name",
+    [RECORDS_FILE, ANCHORS_FILE, STORE_MANIFEST_FILE],
+    ids=["records", "anchors", "manifest"],
+)
+def test_store_writers_create_files_with_mode_0644_whatever_the_umask(
+    imported_contents: StoreContents, rewritten_dir: Path, process_umask: int, file_name: str
+) -> None:
+    # Arrange
+    write_store(
+        rewritten_dir,
+        imported_contents.manifest,
+        imported_contents.records,
+        imported_contents.anchors,
+    )
+
+    # Act
+    file_mode = stat.S_IMODE((rewritten_dir / file_name).stat().st_mode)
+
+    # Assert
+    assert file_mode == 0o644
 
 
 def test_store_file_writer_refuses_to_overwrite_existing_file(imported_store: Path) -> None:

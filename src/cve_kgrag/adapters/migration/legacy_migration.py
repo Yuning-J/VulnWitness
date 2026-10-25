@@ -1,9 +1,10 @@
 """Run a legacy-data import end to end (ADR 0008).
 
 A run resolves the declared inputs, checks the target, optionally walks the legacy root,
-then fingerprints every input, stages every NVD entry and reads the KEV catalog, chooses
-each CVE's winner, normalizes the winners with their final provenance and KEV entries,
-and writes the store in a partial directory beside the target. The store is verified
+then copies each input in turn into its staging directory and reads only that copy:
+it fingerprints every input, stages every NVD entry and reads the KEV catalog. It then
+chooses each CVE's winner, normalizes the winners with their final provenance and KEV
+entries, and writes the store in a partial directory beside the target. The store is verified
 there and renamed into place; a dry run stages in the system's temporary directory and
 writes no store. Any failure removes only what the run created, and the report says why
 in the server's words.
@@ -27,7 +28,9 @@ from cve_kgrag.adapters.migration.candidate_staging import (
 )
 from cve_kgrag.adapters.migration.input_files import (
     DecompressionBudget,
+    InputFile,
     open_payload,
+    snapshot_input,
 )
 from cve_kgrag.adapters.migration.input_resolution import (
     ResolvedInput,
@@ -37,7 +40,11 @@ from cve_kgrag.adapters.migration.input_resolution import (
     resolve_inputs,
     resolve_path,
 )
-from cve_kgrag.adapters.migration.kev_csv_reader import KevCatalog, read_kev_catalog
+from cve_kgrag.adapters.migration.kev_csv_reader import (
+    KevCatalog,
+    check_kev_input,
+    read_kev_catalog,
+)
 from cve_kgrag.adapters.migration.legacy_root_scan import scan_legacy_root
 from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
 from cve_kgrag.adapters.migration.nvd_entry_stager import (
@@ -87,6 +94,8 @@ from cve_kgrag.domain.provenance import SourceRegistry
 
 STAGING_DIR_SUFFIX = "staging"
 PARTIAL_DIR_SUFFIX = "partial"
+# The copy of the input being read, in the staging directory; one at a time.
+INPUT_SNAPSHOT_FILE = "input.snapshot"
 
 
 @dataclass(frozen=True)
@@ -179,7 +188,7 @@ class Migration:
         with self._working_directories(target) as (staging_dir, partial_dir):
             staging = CandidateStaging(staging_dir, limits)
             try:
-                reading = self._read_inputs(inputs, staging)
+                reading = self._read_inputs(inputs, staging, staging_dir)
                 identity = compute_import_identity(
                     inputs,
                     self._map_payload_hashes(inputs, reading),
@@ -274,31 +283,32 @@ class Migration:
         )
 
     def _read_inputs(
-        self, inputs: Sequence[ResolvedInput], staging: CandidateStaging
+        self, inputs: Sequence[ResolvedInput], staging: CandidateStaging, staging_dir: Path
     ) -> InputReading:
         reading = InputReading()
         limits = self._dependencies.limits
         budget = DecompressionBudget(remaining_bytes=limits.max_total_decompressed_bytes)
         for resolved_input in inputs:
             try:
-                self._refuse_derived_file(resolved_input, budget)
                 if resolved_input.source is StoreSource.CISA_KEV:
-                    reading.kev_catalog = read_kev_catalog(resolved_input.input_file, limits)
-                    reading.kev_input = resolved_input
-                    continue
-                self._read_nvd_input(resolved_input, staging, budget, reading)
+                    check_kev_input(resolved_input.input_file, limits)
+                with open_snapshot(resolved_input.input_file, staging_dir) as snapshot:
+                    self._refuse_derived_file(snapshot, budget)
+                    if resolved_input.source is StoreSource.CISA_KEV:
+                        reading.kev_catalog = read_kev_catalog(snapshot, limits)
+                        reading.kev_input = resolved_input
+                        continue
+                    self._read_nvd_input(resolved_input, snapshot, staging, budget, reading)
             except MigrationFailed as failure:
                 raise with_position(failure, resolved_input.position) from None
         staging.check_size()
         return reading
 
-    def _refuse_derived_file(
-        self, resolved_input: ResolvedInput, budget: DecompressionBudget
-    ) -> None:
+    def _refuse_derived_file(self, snapshot: InputFile, budget: DecompressionBudget) -> None:
         """Raise ``derived_file_declared_as_source`` when the input, whatever source it is
         declared as, is a legacy derived file, told by its first decompressed bytes."""
         limits = self._dependencies.limits
-        with open_payload(resolved_input.input_file, budget, limits) as payload:
+        with open_payload(snapshot, budget, limits) as payload:
             prefix = payload.read(limits.max_fingerprint_file_bytes)
         if self._dependencies.parsers.classify_json_prefix(prefix) is not None:
             raise MigrationFailed(MigrationFailureCode.DERIVED_FILE_DECLARED_AS_SOURCE)
@@ -306,12 +316,13 @@ class Migration:
     def _read_nvd_input(
         self,
         resolved_input: ResolvedInput,
+        snapshot: InputFile,
         staging: CandidateStaging,
         budget: DecompressionBudget,
         reading: InputReading,
     ) -> None:
         stager = NvdEntryStager(resolved_input, staging, self._dependencies.normalizer, self.tally)
-        with open_payload(resolved_input.input_file, budget, self._dependencies.limits) as payload:
+        with open_payload(snapshot, budget, self._dependencies.limits) as payload:
             header = self._dependencies.parsers.read_nvd_feed(payload, stager.stage_entry)
             payload_sha256 = payload.read_payload_sha256()
         # Checked again here for a feed with no entries, which the stager never sees.
@@ -347,8 +358,42 @@ class Migration:
     ) -> WrittenStore | None:
         """Choose each CVE's winner, normalize it with its final provenance and KEV entry,
         and, unless this is a dry run (no ``partial_dir``), write the records and anchors.
-        Raises ``OSError`` when a store file cannot be written."""
+        Raises ``OSError`` when a store file cannot be written. Each writer is closed on
+        every way out, without a sync when the run fails, since the partial store goes."""
         records_writer = None if partial_dir is None else StoreFileWriter(partial_dir, RECORDS_FILE)
+        try:
+            records_file = self._write_records(inputs, reading, staging, records_writer)
+        except BaseException:
+            if records_writer is not None:
+                records_writer.discard()
+            raise
+        if records_writer is None or records_file is None:
+            return None
+        anchors_writer = StoreFileWriter(records_writer.store_dir, ANCHORS_FILE)
+        try:
+            for anchor_json in staging.list_anchor_lines():
+                anchors_writer.write_line(anchor_json.encode())
+            anchors_file = anchors_writer.close()
+        except BaseException:
+            anchors_writer.discard()
+            raise
+        return WrittenStore(
+            store_dir=records_writer.store_dir,
+            files=(anchors_file, records_file),
+            record_count=records_writer.line_count,
+            anchor_count=anchors_writer.line_count,
+        )
+
+    def _write_records(
+        self,
+        inputs: Sequence[ResolvedInput],
+        reading: InputReading,
+        staging: CandidateStaging,
+        records_writer: StoreFileWriter | None,
+    ) -> StoreFile | None:
+        """Choose and normalize every CVE's winner; with ``records_writer``, write each
+        record and stage its anchors, and return the records file, closed. A dry run, with
+        no writer, returns ``None``."""
         kev_entries = {} if reading.kev_catalog is None else reading.kev_catalog.entries
         kev_cve_outcomes: dict[str, CveOutcome] = {}
         source_versions: dict[int, str] = {}
@@ -377,17 +422,7 @@ class Migration:
             raise MigrationFailed(MigrationFailureCode.NO_IMPORTABLE_RECORDS)
         if records_writer is None:
             return None
-        records_file = records_writer.close()
-        anchors_writer = StoreFileWriter(records_writer.store_dir, ANCHORS_FILE)
-        for anchor_json in staging.list_anchor_lines():
-            anchors_writer.write_line(anchor_json.encode())
-        anchors_file = anchors_writer.close()
-        return WrittenStore(
-            store_dir=records_writer.store_dir,
-            files=(anchors_file, records_file),
-            record_count=records_writer.line_count,
-            anchor_count=anchors_writer.line_count,
-        )
+        return records_writer.close()
 
     def _normalize_winner(
         self,
@@ -488,6 +523,20 @@ class Migration:
         return self.tally.build_report(
             MigrationOutcome.IMPORTED, store_manifest_sha256=sha256_hex(manifest_bytes)
         )
+
+
+@contextmanager
+def open_snapshot(input_file: InputFile, staging_dir: Path) -> Iterator[InputFile]:
+    """The input's snapshot in ``staging_dir`` (``snapshot_input``), removed once it has
+    been read, so the staging directory holds one input copy at a time."""
+    snapshot_path = staging_dir / INPUT_SNAPSHOT_FILE
+    try:
+        yield snapshot_input(input_file, snapshot_path)
+    finally:
+        try:
+            snapshot_path.unlink(missing_ok=True)
+        except OSError:
+            raise MigrationFailed(MigrationFailureCode.STAGING_FAILED) from None
 
 
 def build_store_input(resolved_input: ResolvedInput, reading: InputReading) -> StoreInput:

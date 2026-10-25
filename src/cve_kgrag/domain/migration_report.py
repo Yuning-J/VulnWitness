@@ -58,6 +58,7 @@ class MigrationFailureCode(StrEnum):
     ARTIFACT_UNDECLARED = "artifact_undeclared"
     ARTIFACT_CONFLICT = "artifact_conflict"
     FORMAT_MISMATCH = "format_mismatch"
+    INCOMPLETE_FEED = "incomplete_feed"
     UNRECOGNISED_FORMAT = "unrecognised_format"
     DERIVED_FILE_DECLARED_AS_SOURCE = "derived_file_declared_as_source"
     BAD_COMPRESSION = "bad_compression"
@@ -108,6 +109,10 @@ MIGRATION_FAILURE_MESSAGES: dict[MigrationFailureCode, str] = {
     MigrationFailureCode.FORMAT_MISMATCH: (
         "An NVD input's content declares another format than its artifact."
     ),
+    MigrationFailureCode.INCOMPLETE_FEED: (
+        "An NVD input is not a whole feed: it does not declare its entry count, holds "
+        "another number of entries, or is one page of a larger result."
+    ),
     MigrationFailureCode.UNRECOGNISED_FORMAT: "An input is not in a format the importer reads.",
     MigrationFailureCode.DERIVED_FILE_DECLARED_AS_SOURCE: (
         "An input is a legacy derived file, which is never imported as a source."
@@ -133,7 +138,7 @@ MIGRATION_FAILURE_MESSAGES: dict[MigrationFailureCode, str] = {
     MigrationFailureCode.TOTAL_TOO_LARGE: "The inputs decompress to more than the total cap.",
     MigrationFailureCode.TOO_MANY_CANDIDATES: "The inputs hold more NVD entries than the cap.",
     MigrationFailureCode.STAGING_TOO_LARGE: "The staging directory grew past its cap.",
-    MigrationFailureCode.STAGING_FAILED: "The staging database could not be written.",
+    MigrationFailureCode.STAGING_FAILED: "The staging directory could not be written.",
     MigrationFailureCode.KEV_INVALID_ENCODING: ("The KEV input is not UTF-8 CSV." + KEV_REMEDY),
     MigrationFailureCode.KEV_INVALID_HEADER: (
         "The KEV input's header is not the KEV column set." + KEV_REMEDY

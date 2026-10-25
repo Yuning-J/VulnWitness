@@ -18,7 +18,6 @@ from cve_kgrag.adapters.migration.input_files import InputFile, open_input_file
 from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
 from cve_kgrag.domain.corpus_store_manifest import InputContainer
 from cve_kgrag.domain.cve import CVE_ID_PATTERN, MAX_CVE_ID_CHARS
-from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.migration_report import MigrationFailed, MigrationFailureCode
 
 KEV_REQUIRED_COLUMNS = frozenset(
@@ -86,12 +85,21 @@ def read_kev_row(header: list[str], row: list[str]) -> dict[str, str]:
     return entry
 
 
-def read_kev_catalog(input_file: InputFile, limits: MigrationLimits) -> KevCatalog:
-    """The catalog the KEV input holds; raises ``MigrationFailed`` for any fault in it."""
+def check_kev_input(input_file: InputFile, limits: MigrationLimits) -> None:
+    """Raise ``MigrationFailed`` unless the inspected KEV input is a plain file within the
+    KEV cap; the importer checks it before copying the input for reading, so an oversized
+    or compressed catalog costs no copy."""
     if input_file.container is not InputContainer.PLAIN:
         raise MigrationFailed(MigrationFailureCode.UNRECOGNISED_FORMAT)
     if input_file.size_bytes > limits.max_kev_bytes:
         raise MigrationFailed(MigrationFailureCode.KEV_TOO_LARGE)
+
+
+def read_kev_catalog(input_file: InputFile, limits: MigrationLimits) -> KevCatalog:
+    """The catalog the KEV input holds; raises ``MigrationFailed`` for any fault in it.
+    The importer passes the input's snapshot (``snapshot_input``), so the rows are the
+    inspected bytes, whose hash is the anchors' source version."""
+    check_kev_input(input_file, limits)
     with open_input_file(input_file.path) as input_stream:
         try:
             catalog_bytes = input_stream.read(limits.max_kev_bytes + 1)
@@ -99,9 +107,6 @@ def read_kev_catalog(input_file: InputFile, limits: MigrationLimits) -> KevCatal
             raise MigrationFailed(MigrationFailureCode.INPUT_UNREADABLE) from None
     if len(catalog_bytes) > limits.max_kev_bytes:
         raise MigrationFailed(MigrationFailureCode.KEV_TOO_LARGE)
-    # The anchors' source version is the inspected file's hash, so the rows must be its.
-    if sha256_hex(catalog_bytes) != input_file.sha256:
-        raise MigrationFailed(MigrationFailureCode.INPUT_CHANGED)
     try:
         # utf-8-sig drops one leading BOM; a second stays in the first column's name.
         catalog_text = catalog_bytes.decode("utf-8-sig")

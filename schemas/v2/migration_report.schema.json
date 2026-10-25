@@ -214,6 +214,22 @@
           "if": {
             "properties": {
               "code": {
+                "const": "incomplete_feed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An NVD input is not a whole feed: it does not declare its entry count, holds another number of entries, or is one page of a larger result."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
                 "const": "unrecognised_format"
               }
             }
@@ -461,7 +477,7 @@
           "then": {
             "properties": {
               "message": {
-                "const": "The staging database could not be written."
+                "const": "The staging directory could not be written."
               }
             }
           }
@@ -796,6 +812,7 @@
         "artifact_undeclared",
         "artifact_conflict",
         "format_mismatch",
+        "incomplete_feed",
         "unrecognised_format",
         "derived_file_declared_as_source",
         "bad_compression",

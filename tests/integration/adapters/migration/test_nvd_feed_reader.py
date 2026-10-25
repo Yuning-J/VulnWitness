@@ -6,7 +6,9 @@ fails with; that entries reach the handler in order, as ``(format, index, entry)
 equal to what ``json.loads`` reads from the same bytes, whatever the parser's buffer
 boundaries; that a huge entry, one huge string or a huge top-level member is refused
 before it is read whole; that a top-level key too long or too many top-level members is
-no feed; and that the payload hash covers every byte the payload holds.
+no feed; that only a whole feed is read, its declared entry count equal to the entries it
+holds, and a page of a larger result fails as ``incomplete_feed``; and that the payload
+hash covers every byte the payload holds.
 """
 
 import io
@@ -52,8 +54,9 @@ BUFFER_OFFSETS = range(TINY_BUFFER_BYTES)
 SMALL_ENTRY_LIMITS = MigrationLimits(
     max_entry_bytes=SMALL_ENTRY_CAP_BYTES, parser_buffer_bytes=TINY_BUFFER_BYTES
 )
-# The members every 2.0 feed here holds: its two declarations and its entry array.
-V2_FEED_MEMBER_COUNT = 3
+# The members every 2.0 feed here holds: its two declarations, its two counts and its
+# entry array.
+V2_FEED_MEMBER_COUNT = 5
 # Far past the small entry cap, though no one key or value in it is.
 MANY_SMALL_MEMBERS_COUNT = 2_000
 
@@ -129,6 +132,13 @@ def build_feed(feed_format: NvdFeedFormat, entry_count: int = 2) -> dict[str, An
     return build_v1_feed(items)
 
 
+def build_v2_feed_paged_by_another_size(entry_count: int) -> dict[str, Any]:
+    """A whole 2.0 feed whose ``resultsPerPage`` is not its ``totalResults``."""
+    feed = build_feed(NvdFeedFormat.V2_0, entry_count)
+    feed["resultsPerPage"] = 2000
+    return feed
+
+
 def order_feed_fields(feed: dict[str, Any], array_key: str, is_array_first: bool) -> dict[str, Any]:
     """``feed`` with its entry array as its first or its last field."""
     ordered_feed: dict[str, Any] = {}
@@ -142,9 +152,21 @@ def order_feed_fields(feed: dict[str, Any], array_key: str, is_array_first: bool
     return ordered_feed
 
 
+def build_v2_counts(start_index_text: str, total_results_text: str) -> str:
+    """The ``startIndex`` and ``totalResults`` members of a 2.0 feed, each value written
+    as the given JSON text."""
+    return '"startIndex": ' + start_index_text + ', "totalResults": ' + total_results_text
+
+
+def build_whole_v2_counts(entry_count: int) -> str:
+    """The counts of a whole 2.0 feed of ``entry_count`` entries."""
+    return build_v2_counts("0", str(entry_count))
+
+
 def build_v2_feed_bytes(entry_texts: list[str], padding: str = "") -> bytes:
-    """A 2.0 feed holding ``entry_texts`` verbatim, after a ``padding`` header field that
-    moves where the entries fall in the parser's buffers."""
+    """A whole 2.0 feed holding ``entry_texts`` verbatim, after a ``padding`` header field
+    that moves where the entries fall in the parser's buffers. The counts follow the
+    entries, so they move nothing before them."""
     return (
         "{"
         + V2_DECLARATION
@@ -152,19 +174,36 @@ def build_v2_feed_bytes(entry_texts: list[str], padding: str = "") -> bytes:
         + padding
         + '", "vulnerabilities": ['
         + ", ".join(entry_texts)
-        + "]}"
+        + "], "
+        + build_whole_v2_counts(len(entry_texts))
+        + "}"
     ).encode()
 
 
-def build_v2_feed_with_extra_member(member_text: str, position: MemberPosition) -> bytes:
-    """A 2.0 feed of one empty entry with ``member_text`` as one more top-level member at
-    ``position``."""
+def build_v2_feed_declaring_counts(
+    start_index_text: str, total_results_text: str, are_counts_first: bool
+) -> bytes:
+    """A 2.0 feed of one empty entry declaring the given counts, before or after its
+    entry array."""
     members = [V2_DECLARATION, '"vulnerabilities": [{}]']
+    counts = build_v2_counts(start_index_text, total_results_text)
+    if are_counts_first:
+        members.insert(0, counts)
+    else:
+        members.append(counts)
+    return ("{" + ", ".join(members) + "}").encode()
+
+
+def build_v2_feed_with_extra_member(member_text: str, position: MemberPosition) -> bytes:
+    """A whole 2.0 feed of one empty entry with ``member_text`` as one more top-level
+    member at ``position``."""
+    members = [V2_DECLARATION, build_whole_v2_counts(1)]
     if position is MemberPosition.FIRST:
         members.insert(0, member_text)
     elif position is MemberPosition.BEFORE_ENTRIES:
-        members.insert(1, member_text)
-    else:
+        members.append(member_text)
+    members.append('"vulnerabilities": [{}]')
+    if position is MemberPosition.AFTER_ENTRIES:
         members.append(member_text)
     return ("{" + ", ".join(members) + "}").encode()
 
@@ -177,12 +216,13 @@ def build_object_of_many_small_members(member_count: int) -> str:
 
 
 def build_v2_feed_with_member_count(member_count: int) -> bytes:
-    """A valid 2.0 feed of ``member_count`` top-level members: short extra members first,
-    then its declarations and its entry array."""
+    """A whole 2.0 feed of ``member_count`` top-level members: short extra members first,
+    then its declarations, its counts and its entry array."""
     members: list[str] = []
     for number in range(member_count - V2_FEED_MEMBER_COUNT):
         members.append(f'"extra{number:02d}": "x"')
     members.append(V2_DECLARATION)
+    members.append(build_whole_v2_counts(1))
     members.append('"vulnerabilities": [{}]')
     return ("{" + ", ".join(members) + "}").encode()
 
@@ -474,6 +514,199 @@ def test_feed_of_one_more_than_the_most_top_level_members_fails_as_unrecognised_
     failure_code = read_failure_code(feed_bytes)
 
     assert failure_code is MigrationFailureCode.UNRECOGNISED_FORMAT
+
+
+# Whole feeds
+
+
+@pytest.mark.parametrize("are_counts_first", [True, False], ids=["counts_first", "counts_last"])
+@pytest.mark.parametrize(
+    ("start_index_text", "total_results_text"),
+    [
+        ("2000", "1"),
+        ("0", "2"),
+        ("0", "0"),
+        ("-1", "1"),
+        ("0", "1.0"),
+        ("0", "1e0"),
+        ("0", '"1"'),
+        ("0", "true"),
+        ("0", "null"),
+        ("0.0", "1"),
+        ("-0.0", "1"),
+        ('"0"', "1"),
+        ("false", "1"),
+    ],
+    ids=[
+        "api_page_past_the_first",
+        "first_page_of_a_larger_result",
+        "total_smaller_than_the_entries",
+        "negative_start_index",
+        "total_as_a_float",
+        "total_as_an_exponent",
+        "total_as_text",
+        "total_as_a_boolean",
+        "total_as_null",
+        "start_index_as_a_float",
+        "start_index_as_negative_float_zero",
+        "start_index_as_text",
+        "start_index_as_a_boolean",
+    ],
+)
+def test_v2_feed_of_one_entry_not_declaring_a_whole_feed_fails_as_incomplete_feed(
+    start_index_text: str, total_results_text: str, are_counts_first: bool
+) -> None:
+    """Python counts ``1.0``, ``True`` and ``0.0`` equal to ``1`` and ``0``, so a feed of
+    one entry shows that only a JSON integer is read as a count."""
+    feed_bytes = build_v2_feed_declaring_counts(
+        start_index_text, total_results_text, are_counts_first
+    )
+
+    failure_code = read_failure_code(feed_bytes)
+
+    assert failure_code is MigrationFailureCode.INCOMPLETE_FEED
+
+
+@pytest.mark.parametrize("are_counts_first", [True, False], ids=["counts_first", "counts_last"])
+def test_v2_feed_starting_at_minus_zero_is_read_as_starting_at_zero(
+    are_counts_first: bool,
+) -> None:
+    """yajl reads the JSON integer ``-0`` as the integer 0, as ``json.loads`` does."""
+    feed_bytes = build_v2_feed_declaring_counts("-0", "1", are_counts_first)
+
+    entries = read_entry_values(feed_bytes)
+
+    assert entries == [{}]
+
+
+@pytest.mark.parametrize(
+    ("feed_format", "count_key"),
+    [
+        (NvdFeedFormat.V2_0, "startIndex"),
+        (NvdFeedFormat.V2_0, "totalResults"),
+        (NvdFeedFormat.V1_1, "CVE_data_numberOfCVEs"),
+    ],
+    ids=["2.0_without_start_index", "2.0_without_total_results", "1.1_without_number_of_cves"],
+)
+def test_feed_not_declaring_its_entry_count_fails_as_incomplete_feed(
+    feed_format: NvdFeedFormat, count_key: str
+) -> None:
+    feed = build_feed(feed_format)
+    del feed[count_key]
+
+    failure_code = read_failure_code(encode_feed(feed))
+
+    assert failure_code is MigrationFailureCode.INCOMPLETE_FEED
+
+
+@pytest.mark.parametrize(
+    "declared_count",
+    ["3", "1", 2, "02", " 2", "2 ", "2.0", ""],
+    ids=[
+        "more_than_the_entries",
+        "fewer_than_the_entries",
+        "integer_instead_of_text",
+        "leading_zero",
+        "leading_space",
+        "trailing_space",
+        "decimal_point",
+        "empty_text",
+    ],
+)
+def test_v1_feed_of_two_entries_declaring_another_count_fails_as_incomplete_feed(
+    declared_count: object,
+) -> None:
+    feed = build_feed(NvdFeedFormat.V1_1, entry_count=2)
+    feed["CVE_data_numberOfCVEs"] = declared_count
+
+    failure_code = read_failure_code(encode_feed(feed))
+
+    assert failure_code is MigrationFailureCode.INCOMPLETE_FEED
+
+
+@pytest.mark.parametrize(
+    ("feed_format", "feed"),
+    [
+        (
+            NvdFeedFormat.V2_0,
+            order_feed_fields(build_feed(NvdFeedFormat.V2_0), "vulnerabilities", False),
+        ),
+        (
+            NvdFeedFormat.V2_0,
+            order_feed_fields(build_feed(NvdFeedFormat.V2_0), "vulnerabilities", True),
+        ),
+        (NvdFeedFormat.V2_0, build_feed(NvdFeedFormat.V2_0, entry_count=0)),
+        (NvdFeedFormat.V2_0, build_v2_feed_paged_by_another_size(entry_count=2)),
+        (NvdFeedFormat.V1_1, build_feed(NvdFeedFormat.V1_1, entry_count=2)),
+        (NvdFeedFormat.V1_1, build_feed(NvdFeedFormat.V1_1, entry_count=0)),
+    ],
+    ids=[
+        "2.0_counts_before_the_entries",
+        "2.0_counts_after_the_entries",
+        "2.0_empty_with_total_results_0",
+        "2.0_results_per_page_other_than_total_results",
+        "1.1_count_as_decimal_text",
+        "1.1_empty_with_count_0",
+    ],
+)
+def test_whole_feed_hands_over_every_entry(
+    feed_format: NvdFeedFormat, feed: dict[str, Any]
+) -> None:
+    entries = read_entry_values(encode_feed(feed))
+
+    assert entries == feed[ENTRY_ARRAY_KEYS[feed_format]]
+
+
+@pytest.mark.parametrize(
+    ("feed_format", "declared_key", "declared_value", "count_key", "count_value"),
+    [
+        (NvdFeedFormat.V2_0, "version", "2.1", "totalResults", 5),
+        (NvdFeedFormat.V2_0, "format", "NVD_CPE", "startIndex", 2000),
+        (NvdFeedFormat.V1_1, "CVE_data_version", "1.1", "CVE_data_numberOfCVEs", "5"),
+    ],
+    ids=[
+        "2.0_wrong_version_and_total",
+        "2.0_wrong_format_and_start_index",
+        "1.1_wrong_version_and_count",
+    ],
+)
+def test_feed_with_a_wrong_declaration_and_a_wrong_count_fails_as_unrecognised_format(
+    feed_format: NvdFeedFormat,
+    declared_key: str,
+    declared_value: str,
+    count_key: str,
+    count_value: object,
+) -> None:
+    feed = build_feed(feed_format)
+    feed[declared_key] = declared_value
+    feed[count_key] = count_value
+
+    failure_code = read_failure_code(encode_feed(feed))
+
+    assert failure_code is MigrationFailureCode.UNRECOGNISED_FORMAT
+
+
+@pytest.mark.parametrize("is_array_first", [True, False], ids=["counts_last", "counts_first"])
+def test_page_of_a_larger_result_hands_over_every_entry_before_failing_as_incomplete_feed(
+    is_array_first: bool,
+) -> None:
+    """The count is checked once the whole feed is read, so a wrong count declared before
+    the entries does not keep them from the handler; the run fails as a whole."""
+    feed = order_feed_fields(
+        build_feed(NvdFeedFormat.V2_0, entry_count=3), "vulnerabilities", is_array_first
+    )
+    feed["startIndex"] = 2000
+    feed["totalResults"] = 10_000
+    expected_entries: list[HandedEntry] = []
+    for entry_index, entry in enumerate(feed["vulnerabilities"]):
+        expected_entries.append(HandedEntry(NvdFeedFormat.V2_0, entry_index, entry))
+    recorder = EntryRecorder()
+
+    with pytest.raises(MigrationFailed) as failure:
+        read_nvd_feed(open_feed(encode_feed(feed)), recorder.record)
+
+    assert failure.value.code is MigrationFailureCode.INCOMPLETE_FEED
+    assert recorder.handed_entries == expected_entries
 
 
 # Duplicate keys and nesting

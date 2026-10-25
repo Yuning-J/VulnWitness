@@ -16,6 +16,12 @@ The format is told by content: 2.0 has a ``vulnerabilities`` array and declares
 declares the CVE JSON 4.0 schema. Top-level fields are collected wherever they appear,
 each key and value counted against the entry cap, so the declaration is checked once the
 whole feed has been read.
+
+A feed must also be whole: it declares how many entries it holds and holds exactly that
+many. A 2.0 feed starts at ``startIndex`` 0 and its ``totalResults`` is the number of
+entries read; a 1.1 feed's ``CVE_data_numberOfCVEs`` is. A page of a larger API result,
+or a feed cut short by a tool that kept it valid JSON, fails as ``incomplete_feed``
+rather than leaving its missing CVEs to look absent from NVD.
 """
 
 from collections.abc import Iterator
@@ -50,6 +56,8 @@ FORMAT_DECLARATIONS: dict[NvdFeedFormat, dict[str, str]] = {
     },
 }
 GENERATED_AT_KEYS = {NvdFeedFormat.V2_0: "timestamp", NvdFeedFormat.V1_1: "CVE_data_timestamp"}
+# A top-level value the reader keeps: short text, or an integer such as a 2.0 count.
+HeaderValue = str | int
 
 
 def parse_events(payload: PayloadStream) -> Iterator[ParserEvent]:
@@ -70,8 +78,9 @@ def read_nvd_feed(payload: PayloadStream, handle_entry: EntryHandler) -> FeedHea
     if first_event is None or first_event[0] != "start_map":
         raise MigrationFailed(MigrationFailureCode.UNRECOGNISED_FORMAT)
     top_level_keys: set[str] = set()
-    header_values: dict[str, str] = {}
+    header_values: dict[str, HeaderValue] = {}
     feed_format: NvdFeedFormat | None = None
+    entry_count = 0
     # Every top-level key and the value after it count against the entry cap, from the
     # moment the previous member ends, so no huge key or string is held whole.
     payload.begin_entry()
@@ -89,7 +98,7 @@ def read_nvd_feed(payload: PayloadStream, handle_entry: EntryHandler) -> FeedHea
             if feed_format is not None:
                 raise MigrationFailed(MigrationFailureCode.UNRECOGNISED_FORMAT)
             feed_format = ENTRY_ARRAYS[key]
-            read_entries(events, payload, feed_format, handle_entry)
+            entry_count = read_entries(events, payload, feed_format, handle_entry)
         else:
             header_value = read_header_value(events)
             if header_value is not None:
@@ -105,10 +114,26 @@ def read_nvd_feed(payload: PayloadStream, handle_entry: EntryHandler) -> FeedHea
     for declared_key, declared_value in FORMAT_DECLARATIONS[feed_format].items():
         if header_values.get(declared_key) != declared_value:
             raise MigrationFailed(MigrationFailureCode.UNRECOGNISED_FORMAT)
+    if not is_whole_feed(feed_format, header_values, entry_count):
+        raise MigrationFailed(MigrationFailureCode.INCOMPLETE_FEED)
+    generated_at_text = header_values.get(GENERATED_AT_KEYS[feed_format])
     return FeedHeader(
         feed_format=feed_format,
-        generated_at_text=header_values.get(GENERATED_AT_KEYS[feed_format]),
+        generated_at_text=generated_at_text if isinstance(generated_at_text, str) else None,
     )
+
+
+def is_whole_feed(
+    feed_format: NvdFeedFormat, header_values: dict[str, HeaderValue], entry_count: int
+) -> bool:
+    """Whether the feed declares its entry count and holds exactly that many entries: a
+    2.0 feed from ``startIndex`` 0 with ``totalResults`` entries, a 1.1 feed with
+    ``CVE_data_numberOfCVEs`` entries, written as decimal text."""
+    if feed_format is NvdFeedFormat.V2_0:
+        return header_values.get("startIndex") == 0 and (
+            header_values.get("totalResults") == entry_count
+        )
+    return header_values.get("CVE_data_numberOfCVEs") == str(entry_count)
 
 
 def read_entries(
@@ -116,8 +141,9 @@ def read_entries(
     payload: PayloadStream,
     feed_format: NvdFeedFormat,
     handle_entry: EntryHandler,
-) -> None:
-    """Read the entry array, assembling and handing over one entry at a time."""
+) -> int:
+    """Read the entry array, assembling and handing over one entry at a time; how many
+    entries it held."""
     first_event = next(events, None)
     if first_event is None or first_event[0] != "start_array":
         raise MigrationFailed(MigrationFailureCode.UNRECOGNISED_FORMAT)
@@ -125,7 +151,7 @@ def read_entries(
     # this loop starts one entry.
     for entry_index, (event, event_value) in enumerate(events):
         if event == "end_array":
-            return
+            return entry_index
         payload.begin_entry()
         assembler = EntryAssembler(payload.limits.max_entry_depth, payload.limits.max_entry_bytes)
         assembler.accept(event, event_value)
@@ -141,15 +167,20 @@ def read_entries(
     raise MigrationFailed(MigrationFailureCode.INVALID_JSON)
 
 
-def read_header_value(events: Iterator[ParserEvent]) -> str | None:
-    """A top-level value: its text when it is a short string, else ``None``. A container
-    is skipped, bounded by the payload's caps like any other byte."""
+def read_header_value(events: Iterator[ParserEvent]) -> HeaderValue | None:
+    """A top-level value: its text when it is a short string, the integer when it is a
+    JSON integer, else ``None``. A container is skipped, bounded by the payload's caps
+    like any other byte."""
     value_event = next(events, None)
     if value_event is None:
         raise MigrationFailed(MigrationFailureCode.INVALID_JSON)
     event, event_value = value_event
     if event == "string" and isinstance(event_value, str):
         return event_value if len(event_value) <= MAX_HEADER_VALUE_CHARS else None
+    # ``use_float`` gives a JSON integer as ``int`` and anything with a fraction or an
+    # exponent as ``float``, so ``0.0`` is never read as a start index of 0.
+    if event == "number" and type(event_value) is int:
+        return event_value
     if event in {"start_map", "start_array"}:
         depth = 1
         while depth:

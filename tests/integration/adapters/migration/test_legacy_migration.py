@@ -7,7 +7,10 @@ whatever container carries a feed; that a rerun, an occupied target and a corrup
 store are each told apart and never written over; that a dry run reports what a real
 run would and leaves nothing behind; that a failure publishes nothing and leaves no
 working directory; that NVD duplicates resolve as §5 states and KEV rows as §6 states;
-that every file-level fault fails the run with its fixed code; that the store manifest
+that every file-level fault fails the run with its fixed code, an NVD input that is not
+a whole feed among them; that an input rewritten in place while the run reads it never
+reaches the store, which imports the inspected bytes or fails as ``input_changed``; that
+the store's modes do not depend on the umask; that the store manifest
 records each input's hashes and generation time; that anchors cite the registry's terms
 and URLs; that ``--legacy-root`` findings are reported; that a report never quotes an input;
 and that ``cve-kgrag migrate legacy`` prints the report and exits 0, 1 or 2 as §7
@@ -16,10 +19,13 @@ importer's other tests, outside the core-only lane.
 """
 
 import dataclasses
+import gc
+import gzip
 import os
 import stat
 import tempfile
-from collections.abc import Callable, Mapping
+import warnings
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -28,8 +34,10 @@ from typing import Any
 import pytest
 import yaml
 
+from cve_kgrag.adapters.migration.input_files import PayloadStream
 from cve_kgrag.adapters.migration.legacy_migration import MigrationDependencies
 from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
+from cve_kgrag.adapters.migration.parser_types import EntryHandler, FeedHeader
 from cve_kgrag.adapters.nvd.normalizer import (
     KevSource,
     NormalizedCve,
@@ -82,6 +90,7 @@ from tests.support.legacy_inputs import (
     build_v2_entry,
     build_v2_feed,
     encode_feed,
+    encode_kev_csv,
     list_names,
     run_test_migration,
     snapshot_tree,
@@ -105,6 +114,10 @@ KEV_URI = "https://www.cisa.gov/sites/default/files/csv/known_exploited_vulnerab
 MALFORMED_ENTRY_MARKER = "malformed-entry-marker-5e2b"
 INPUT_PATH_MARKER = "input-path-marker-91c4"
 DERIVED_FILE_NAME = "nvdcve-2.0-2099.json"
+V2_PLAIN_YEAR_FEED = "nvdcve-2.0-2099.json"
+ORIGINAL_DESCRIPTION = "SYNTHETIC: democorp gateway mishandles input."
+# As long as the original, so a file rewritten with it keeps its size.
+REWRITTEN_DESCRIPTION = ORIGINAL_DESCRIPTION.upper()
 
 
 @dataclass(frozen=True)
@@ -200,6 +213,20 @@ def write_derived_documents_import(inputs_dir: Path) -> Path:
         {"documents_by_year": {"2099": 1}, "basic_stats": {"total": 1}},
     )
     return write_inputs_manifest(inputs_dir, [build_declaration("nvdcve-2.0-2099.json")])
+
+
+def build_api_page(start_index: int) -> dict[str, Any]:
+    """Two entries of a 2.0 API result of 250,000, starting at ``start_index``: valid
+    JSON in the feed's format, but not a whole feed."""
+    page = build_v2_feed([build_v2_entry(1), build_v2_entry(2)])
+    page["startIndex"] = start_index
+    page["totalResults"] = 250_000
+    return page
+
+
+def write_api_page_import(inputs_dir: Path) -> Path:
+    """A 2.0 year feed that is a later page of a larger API result: an incomplete feed."""
+    return write_import(inputs_dir, {V2_YEAR_FEED: build_api_page(start_index=2000)})
 
 
 FAILING_IMPORTS = [
@@ -395,6 +422,44 @@ def test_import_publishes_the_store_directory_with_mode_0755(layout: ImportLayou
     run_test_migration(manifest_path, layout.target)
 
     assert stat.S_IMODE(layout.target.stat().st_mode) == 0o755
+
+
+@pytest.fixture
+def process_umask(request: pytest.FixtureRequest) -> Iterator[int]:
+    """The process umask set to the test's parameter for the test; the previous umask
+    comes back afterwards."""
+    umask: int = request.param
+    previous_umask = os.umask(umask)
+    try:
+        yield umask
+    finally:
+        os.umask(previous_umask)
+
+
+def read_store_modes(store_dir: Path) -> dict[str, int]:
+    """The permission bits of the store directory (``.``) and of every file in it."""
+    modes = {".": stat.S_IMODE(store_dir.stat().st_mode)}
+    for store_file in store_dir.iterdir():
+        modes[store_file.name] = stat.S_IMODE(store_file.stat().st_mode)
+    return modes
+
+
+@pytest.mark.parametrize(
+    "process_umask", [0o077, 0o000], indirect=True, ids=["umask_077", "umask_000"]
+)
+def test_import_publishes_its_files_with_mode_0644_and_its_directory_0755_whatever_the_umask(
+    layout: ImportLayout, process_umask: int
+) -> None:
+    manifest_path = write_standard_import(layout.inputs_dir)
+
+    run_test_migration(manifest_path, layout.target)
+
+    assert read_store_modes(layout.target) == {
+        ".": 0o755,
+        STORE_MANIFEST_FILE: 0o644,
+        RECORDS_FILE: 0o644,
+        ANCHORS_FILE: 0o644,
+    }
 
 
 def test_import_whose_written_store_fails_verification_fails_as_store_write_failed(
@@ -1714,6 +1779,35 @@ def test_feed_with_no_entries_whose_content_declares_another_format_fails_naming
     )
 
 
+@pytest.mark.parametrize(
+    "api_page",
+    [build_api_page(start_index=2000), build_api_page(start_index=0)],
+    ids=["later_page", "first_page"],
+)
+@pytest.mark.parametrize("is_dry_run", [False, True], ids=["real_run", "dry_run"])
+def test_api_page_saved_as_a_year_feed_fails_as_incomplete_feed_publishing_nothing(
+    layout: ImportLayout, api_page: dict[str, Any], is_dry_run: bool
+) -> None:
+    # The whole modified feed sorts before any year feed, so it is read first and the
+    # page, the second input, still fails the run.
+    manifest_path = write_import(
+        layout.inputs_dir,
+        {
+            V2_MODIFIED_FEED: build_v2_feed([build_v2_entry(3)]),
+            "nvdcve-2.0-2024.json.gz": api_page,
+        },
+    )
+
+    report = run_test_migration(manifest_path, layout.target, is_dry_run=is_dry_run)
+
+    assert report.failure is not None
+    assert (report.failure.code, report.failure.input_position) == (
+        MigrationFailureCode.INCOMPLETE_FEED,
+        1,
+    )
+    assert list_names(layout.stores_dir) == []
+
+
 def write_target_inside_the_inputs(layout: ImportLayout) -> tuple[Path, Path]:
     return write_standard_import(layout.inputs_dir), layout.inputs_dir / "store"
 
@@ -2156,6 +2250,237 @@ def test_target_inside_the_legacy_root_fails_as_target_overlaps_input(
     assert report.failure.code is MigrationFailureCode.TARGET_OVERLAPS_INPUT
 
 
+# Inputs rewritten while the run reads them (§1, §8)
+
+
+def encode_feed_in_container(file_name: str, feed: dict[str, Any]) -> bytes:
+    """The feed as the container its file name names holds it: gzip of stored blocks,
+    whose length depends on the payload's length alone, or plain JSON."""
+    payload_bytes = encode_feed(feed)
+    if file_name.endswith(".gz"):
+        return gzip.compress(payload_bytes, compresslevel=0, mtime=0)
+    return payload_bytes
+
+
+def rewrite_in_place(path: Path, replacement_bytes: bytes) -> None:
+    """Overwrite the file through its own inode with bytes of the same length."""
+    with path.open("r+b") as input_stream:
+        input_stream.write(replacement_bytes)
+
+
+@dataclass(frozen=True)
+class RewritingFeedReader:
+    """The real feed reader, which first rewrites the operator's file at ``path`` in
+    place: the input changing while the run parses it."""
+
+    read_nvd_feed: Callable[[PayloadStream, EntryHandler], FeedHeader]
+    path: Path
+    replacement_bytes: bytes
+
+    def read(self, payload: PayloadStream, handle_entry: EntryHandler) -> FeedHeader:
+        rewrite_in_place(self.path, self.replacement_bytes)
+        return self.read_nvd_feed(payload, handle_entry)
+
+
+@dataclass(frozen=True)
+class RewritingClassifier:
+    """The real JSON classifier, which first rewrites the operator's file at ``path`` in
+    place. Every call writes the same bytes, so only the first one changes the file."""
+
+    classify_json_prefix: Callable[[bytes], LegacyFileKind | None]
+    path: Path
+    replacement_bytes: bytes
+
+    def classify(self, prefix: bytes) -> LegacyFileKind | None:
+        rewrite_in_place(self.path, self.replacement_bytes)
+        return self.classify_json_prefix(prefix)
+
+
+def build_dependencies_rewriting_during_the_parse(
+    path: Path, replacement_bytes: bytes
+) -> MigrationDependencies:
+    dependencies = build_migration_dependencies()
+    feed_reader = RewritingFeedReader(dependencies.parsers.read_nvd_feed, path, replacement_bytes)
+    parsers = dataclasses.replace(dependencies.parsers, read_nvd_feed=feed_reader.read)
+    return dataclasses.replace(dependencies, parsers=parsers)
+
+
+def build_dependencies_rewriting_at_each_classification(
+    path: Path, replacement_bytes: bytes
+) -> MigrationDependencies:
+    dependencies = build_migration_dependencies()
+    classifier = RewritingClassifier(
+        dependencies.parsers.classify_json_prefix, path, replacement_bytes
+    )
+    parsers = dataclasses.replace(dependencies.parsers, classify_json_prefix=classifier.classify)
+    return dataclasses.replace(dependencies, parsers=parsers)
+
+
+def list_kev_anchor_versions(store: CorpusStore) -> list[tuple[str, str | None]]:
+    """Each KEV anchor's CVE and source version, in the store's order."""
+    kev_anchor_versions: list[tuple[str, str | None]] = []
+    for anchor in store.evidence:
+        if anchor.source_type is SourceType.CISA_KEV:
+            kev_anchor_versions.append((anchor.authoritative_record_id, anchor.source_version))
+    return kev_anchor_versions
+
+
+@pytest.mark.parametrize("file_name", [V2_PLAIN_YEAR_FEED, V2_YEAR_FEED], ids=["plain", "gzip"])
+def test_feed_rewritten_in_place_during_its_parse_is_imported_as_it_was_inspected(
+    layout: ImportLayout, file_name: str
+) -> None:
+    original_feed = build_v2_feed([build_v2_entry(1, description=ORIGINAL_DESCRIPTION)])
+    rewritten_feed = build_v2_feed([build_v2_entry(1, description=REWRITTEN_DESCRIPTION)])
+    input_path = layout.inputs_dir / file_name
+    original_bytes = encode_feed_in_container(file_name, original_feed)
+    rewritten_bytes = encode_feed_in_container(file_name, rewritten_feed)
+    input_path.write_bytes(original_bytes)
+    manifest_path = write_inputs_manifest(layout.inputs_dir, [build_declaration(file_name)])
+    dependencies = build_dependencies_rewriting_during_the_parse(input_path, rewritten_bytes)
+
+    report = run_test_migration(manifest_path, layout.target, dependencies=dependencies)
+
+    assert report.outcome is MigrationOutcome.IMPORTED
+    # The operator's file did change, and the store never saw it.
+    assert input_path.read_bytes() == rewritten_bytes
+    store = load_corpus_store(layout.target)
+    nvd_input = find_store_input(store, StoreSource.NVD)
+    record = find_record(store, build_cve_id(1))
+    assert (
+        nvd_input.input_file_sha256,
+        nvd_input.payload_sha256,
+        record.descriptions[0].value,
+    ) == (
+        sha256_hex(original_bytes),
+        sha256_hex(encode_feed(original_feed)),
+        ORIGINAL_DESCRIPTION,
+    )
+
+
+def test_feed_rewritten_in_place_after_inspection_before_its_snapshot_fails_as_input_changed(
+    tmp_path: Path, layout: ImportLayout
+) -> None:
+    # The legacy-root walk runs after the inputs are inspected and before any is copied,
+    # and classifies the root's one JSON file; that first classification rewrites the feed.
+    legacy_root = tmp_path / "legacy"
+    legacy_root.mkdir()
+    write_plain_feed(legacy_root / "notes.json", {"synthetic": True})
+    original_feed = build_v2_feed([build_v2_entry(1, description=ORIGINAL_DESCRIPTION)])
+    rewritten_feed = build_v2_feed([build_v2_entry(1, description=REWRITTEN_DESCRIPTION)])
+    input_path = write_plain_feed(layout.inputs_dir / V2_PLAIN_YEAR_FEED, original_feed)
+    manifest_path = write_inputs_manifest(
+        layout.inputs_dir, [build_declaration(V2_PLAIN_YEAR_FEED)]
+    )
+    dependencies = build_dependencies_rewriting_at_each_classification(
+        input_path, encode_feed(rewritten_feed)
+    )
+
+    report = run_test_migration(
+        manifest_path, layout.target, legacy_root=legacy_root, dependencies=dependencies
+    )
+
+    assert report.failure is not None
+    assert (report.failure.code, report.failure.input_position) == (
+        MigrationFailureCode.INPUT_CHANGED,
+        0,
+    )
+    assert list_names(layout.stores_dir) == []
+
+
+def test_kev_catalog_over_its_cap_is_refused_before_it_is_copied(
+    tmp_path: Path, layout: ImportLayout
+) -> None:
+    # The legacy-root walk runs before any input is copied and rewrites the catalog, so
+    # had the catalog been copied before its cap was checked, the copy would have failed
+    # as input_changed instead.
+    legacy_root = tmp_path / "legacy"
+    legacy_root.mkdir()
+    write_plain_feed(legacy_root / "notes.json", {"synthetic": True})
+    manifest_path = write_standard_import(layout.inputs_dir)
+    kev_path = layout.inputs_dir / KEV_FILE
+    kev_bytes = kev_path.read_bytes()
+    dependencies = dataclasses.replace(
+        build_dependencies_rewriting_at_each_classification(kev_path, kev_bytes[::-1]),
+        limits=MigrationLimits(max_kev_bytes=len(kev_bytes) - 1),
+    )
+
+    report = run_test_migration(
+        manifest_path, layout.target, legacy_root=legacy_root, dependencies=dependencies
+    )
+
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.KEV_TOO_LARGE
+
+
+def test_failed_import_leaves_no_store_file_open(layout: ImportLayout) -> None:
+    # The records file is open when the run finds nothing to import; an unclosed file
+    # warns when it is collected.
+    manifest_path = write_only_rejected_import(layout.inputs_dir)
+
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        warnings.simplefilter("always", ResourceWarning)
+        report = run_test_migration(manifest_path, layout.target)
+        gc.collect()
+
+    unclosed_file_warnings: list[warnings.WarningMessage] = []
+    for caught_warning in caught_warnings:
+        if issubclass(caught_warning.category, ResourceWarning):
+            unclosed_file_warnings.append(caught_warning)
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.NO_IMPORTABLE_RECORDS
+    assert unclosed_file_warnings == []
+
+
+def test_kev_catalog_rewritten_in_place_after_its_snapshot_is_imported_as_it_was_inspected(
+    layout: ImportLayout,
+) -> None:
+    # Each input's snapshot is classified as a possible derived file before it is read.
+    # The KEV catalog sorts first, so the first classification falls after its snapshot
+    # is taken and before its rows are read; it rewrites the catalog to list another CVE.
+    manifest_path = write_standard_import(layout.inputs_dir)
+    kev_path = layout.inputs_dir / KEV_FILE
+    original_kev_bytes = kev_path.read_bytes()
+    dependencies = build_dependencies_rewriting_at_each_classification(
+        kev_path, encode_kev_csv([build_kev_row(1)])
+    )
+
+    report = run_test_migration(manifest_path, layout.target, dependencies=dependencies)
+
+    assert report.outcome is MigrationOutcome.IMPORTED
+    assert list_kev_anchor_versions(load_corpus_store(layout.target)) == [
+        (build_cve_id(2), "sha256:" + sha256_hex(original_kev_bytes))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("write_run_import", "is_dry_run", "expected_store_names"),
+    [
+        (write_standard_import, False, ["store"]),
+        (write_standard_import, True, []),
+        (write_api_page_import, False, []),
+        (write_api_page_import, True, []),
+    ],
+    ids=["imported", "dry_run", "failed", "failed_dry_run"],
+)
+def test_run_leaves_no_copy_of_its_inputs_behind(
+    layout: ImportLayout,
+    system_temp_dir: Path,
+    write_run_import: Callable[[Path], Path],
+    is_dry_run: bool,
+    expected_store_names: list[str],
+) -> None:
+    manifest_path = write_run_import(layout.inputs_dir)
+    input_names = list_names(layout.inputs_dir)
+
+    run_test_migration(manifest_path, layout.target, is_dry_run=is_dry_run)
+
+    assert (
+        list_names(layout.stores_dir),
+        list_names(system_temp_dir),
+        list_names(layout.inputs_dir),
+    ) == (expected_store_names, [], input_names)
+
+
 # Entries and feed fields as the reader meets them (§1, §7, §8)
 
 
@@ -2180,6 +2505,8 @@ def test_feed_declaring_its_format_after_its_entries_is_imported(layout: ImportL
     feed_with_entries_first = {
         "vulnerabilities": [build_v2_entry(1)],
         "timestamp": "2026-10-20T00:00:00.000",
+        "startIndex": 0,
+        "totalResults": 1,
         "version": "2.0",
         "format": "NVD_CVE",
     }

@@ -31,6 +31,8 @@ from cve_kgrag.domain.validation import find_anchor_violations
 STORE_MANIFEST_FILE = "manifest.json"
 RECORDS_FILE = "records.jsonl"
 ANCHORS_FILE = "anchors.jsonl"
+# Every store has the same modes whatever the umask of the run that wrote it: readable by
+# every user, so by the server whichever user runs it, and writable only by its owner.
 STORE_FILE_MODE = 0o644
 STORE_DIR_MODE = 0o755
 # A manifest of the most inputs an import takes is far smaller; a record or anchor line,
@@ -50,16 +52,25 @@ class CorpusStore:
     evidence: tuple[EvidenceAnchor, ...]
 
 
+def create_store_file(path: Path) -> IO[bytes]:
+    """A new store file at ``path``, open for writing, with ``STORE_FILE_MODE`` set
+    explicitly: the mode ``os.open`` takes is narrowed by the umask."""
+    file_descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, STORE_FILE_MODE)
+    try:
+        os.fchmod(file_descriptor, STORE_FILE_MODE)
+    except BaseException:
+        os.close(file_descriptor)
+        raise
+    return os.fdopen(file_descriptor, "wb")
+
+
 class StoreFileWriter:
     """A new store file, written line by line, hashed as written and synced on close."""
 
     def __init__(self, store_dir: Path, file_name: str) -> None:
         self.store_dir = store_dir
         self._file_name = file_name
-        file_descriptor = os.open(
-            store_dir / file_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, STORE_FILE_MODE
-        )
-        self._stream: IO[bytes] = os.fdopen(file_descriptor, "wb")
+        self._stream: IO[bytes] = create_store_file(store_dir / file_name)
         self._digest = hashlib.sha256()
         self._size_bytes = 0
         self.line_count = 0
@@ -70,6 +81,10 @@ class StoreFileWriter:
         self._digest.update(content)
         self._size_bytes += len(content)
         self.line_count += 1
+
+    def discard(self) -> None:
+        """Close the file without syncing it, for a store that will not be published."""
+        self._stream.close()
 
     def close(self) -> StoreFile:
         """Sync and close the file; what the manifest pins of it."""
@@ -88,10 +103,7 @@ def encode_line(model: CveRecord | EvidenceAnchor) -> bytes:
 def write_store_manifest(store_dir: Path, manifest: CorpusStoreManifest) -> bytes:
     """Write ``manifest.json`` as canonical JSON, synced; its bytes."""
     manifest_bytes = canonical_json_bytes(manifest.model_dump(mode="json"))
-    file_descriptor = os.open(
-        store_dir / STORE_MANIFEST_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, STORE_FILE_MODE
-    )
-    with os.fdopen(file_descriptor, "wb") as manifest_stream:
+    with create_store_file(store_dir / STORE_MANIFEST_FILE) as manifest_stream:
         manifest_stream.write(manifest_bytes)
         manifest_stream.flush()
         os.fsync(manifest_stream.fileno())

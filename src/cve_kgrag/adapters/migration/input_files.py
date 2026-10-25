@@ -1,16 +1,22 @@
-"""Read an import's input files: never following a link, never writing, and never holding
-more than the caps allow (ADR 0008 §1, §8).
+"""Read an import's input files: never following a link, never writing to an input, and
+never holding more than the caps allow (ADR 0008 §1, §8).
 
 An input is opened without following a symbolic link and must be a regular file. Its
 container is told by its first bytes: gzip, a zip of exactly one stored or deflated
 member, or plain bytes. A compressed file is capped by its size, a plain one by the
-decompressed cap. Each time an input is opened for its payload, its bytes are hashed
-again and must match what was inspected, so the payload read is the file the store
-manifest names. The payload is read through a counting stream that hashes what it reads
-and refuses to go past the per-file and total caps, or past an entry's cap from where
-the parser says the entry began (``MigrationLimits``).
+decompressed cap.
+
+Before an input is read, it is copied into the run's own staging directory and hashed
+as it is copied (``snapshot_input``); the copy must hold exactly the bytes the input was
+inspected with, and every later read uses the copy. Re-hashing the operator's file
+instead could never be race-free: the file could still be rewritten in place between
+the hash and the parse, leaving the store manifest naming one file's hash and another
+payload. The payload is read through a counting stream that hashes what it reads and
+refuses to go past the per-file and total caps, or past an entry's cap from where the
+parser says the entry began (``MigrationLimits``).
 """
 
+import dataclasses
 import gzip
 import hashlib
 import os
@@ -31,6 +37,8 @@ from cve_kgrag.domain.migration_report import MigrationFailed, MigrationFailureC
 GZIP_MAGIC = b"\x1f\x8b"
 ZIP_MAGIC = b"PK\x03\x04"
 HASH_CHUNK_BYTES = 1024 * 1024
+# Only the run reads its snapshot; whatever the umask, nobody else may.
+SNAPSHOT_FILE_MODE = 0o600
 ZIP_ENCRYPTED_FLAG = 0x1
 ZIP_METHODS = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
 # The end-of-central-directory record: its signature, then disk numbers, entry counts,
@@ -120,19 +128,65 @@ def inspect_input_file(path: Path, limits: MigrationLimits) -> InputFile:
     return InputFile(path=path, size_bytes=size_bytes, container=container, sha256=sha256)
 
 
-@contextmanager
-def open_unchanged_input(input_file: InputFile) -> Iterator[IO[bytes]]:
-    """The input opened again, rewound after its bytes are hashed and found to be those
-    ``input_file`` was inspected with; raises ``MigrationFailed`` (``input_changed``)
-    for a file replaced or rewritten since."""
-    with open_input_file(input_file.path) as input_stream:
-        if read_file_sha256(input_stream) != input_file.sha256:
-            raise MigrationFailed(MigrationFailureCode.INPUT_CHANGED)
-        try:
-            input_stream.seek(0)
-        except OSError:
-            raise MigrationFailed(MigrationFailureCode.INPUT_UNREADABLE) from None
-        yield input_stream
+def read_input_chunk(input_stream: IO[bytes], size: int) -> bytes:
+    try:
+        return input_stream.read(size)
+    except OSError:
+        raise MigrationFailed(MigrationFailureCode.INPUT_UNREADABLE) from None
+
+
+def write_snapshot_chunk(snapshot_stream: IO[bytes], chunk: bytes) -> None:
+    try:
+        snapshot_stream.write(chunk)
+    except OSError:
+        raise MigrationFailed(MigrationFailureCode.STAGING_FAILED) from None
+
+
+def create_snapshot_file(snapshot_path: Path) -> IO[bytes]:
+    """A new, empty file at ``snapshot_path`` that only this run created and can read;
+    raises ``MigrationFailed`` (``staging_failed``)."""
+    try:
+        file_descriptor = os.open(
+            snapshot_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            SNAPSHOT_FILE_MODE,
+        )
+    except OSError:
+        raise MigrationFailed(MigrationFailureCode.STAGING_FAILED) from None
+    return os.fdopen(file_descriptor, "wb")
+
+
+def snapshot_input(input_file: InputFile, snapshot_path: Path) -> InputFile:
+    """The input copied to ``snapshot_path``, a path in the run's staging directory, and
+    described as ``input_file`` with the copy's path. The copy is hashed as it is written
+    and must hold exactly the inspected bytes, so whatever happens to the input later
+    never reaches the import; raises ``MigrationFailed``: ``input_changed`` when the
+    input is no longer those bytes, ``input_unreadable``, or ``staging_failed`` when the
+    copy cannot be written. At most one chunk past the inspected size is copied."""
+    digest = hashlib.sha256()
+    copied_bytes = 0
+    try:
+        with (
+            open_input_file(input_file.path) as input_stream,
+            create_snapshot_file(snapshot_path) as snapshot_stream,
+        ):
+            while copied_bytes <= input_file.size_bytes:
+                chunk = read_input_chunk(input_stream, HASH_CHUNK_BYTES)
+                if not chunk:
+                    break
+                write_snapshot_chunk(snapshot_stream, chunk)
+                digest.update(chunk)
+                copied_bytes += len(chunk)
+    except OSError:
+        # Opening, reading and writing raise MigrationFailed themselves; what is left is
+        # closing the copy, whose buffered tail can meet a full disk only then.
+        raise MigrationFailed(MigrationFailureCode.STAGING_FAILED) from None
+    is_unchanged = copied_bytes == input_file.size_bytes and (
+        digest.hexdigest() == input_file.sha256
+    )
+    if not is_unchanged:
+        raise MigrationFailed(MigrationFailureCode.INPUT_CHANGED)
+    return dataclasses.replace(input_file, path=snapshot_path)
 
 
 class PayloadStream:
@@ -233,9 +287,9 @@ def open_zip_member(input_stream: IO[bytes]) -> IO[bytes]:
 def open_payload(
     input_file: InputFile, budget: DecompressionBudget, limits: MigrationLimits
 ) -> Iterator[PayloadStream]:
-    """The input's decompressed payload as a ``PayloadStream``, read from the bytes the
-    input was inspected with (``open_unchanged_input``)."""
-    with open_unchanged_input(input_file) as input_stream:
+    """The input's decompressed payload as a ``PayloadStream``. The importer passes the
+    input's snapshot (``snapshot_input``), so the payload is the inspected bytes."""
+    with open_input_file(input_file.path) as input_stream:
         decompressed: IO[bytes] = input_stream
         if input_file.container is InputContainer.GZIP:
             decompressed = gzip.GzipFile(fileobj=input_stream, mode="rb")  # type: ignore[assignment]

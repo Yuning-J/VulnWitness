@@ -599,9 +599,13 @@ Decisions: ADR 0008.
   and the first brings the fixed `kev_advice` to add the covering year feed.
 - **Reading** (`adapters/migration/input_files.py`, `nvd_feed_reader.py`,
   `entry_assembler.py`, `surrogate_guard.py`, `adapters/regular_files.py`). Every file is
-  opened without following a link and without blocking, so a FIFO is refused at once,
-  and an input is hashed again whenever it is opened to be read (`input_changed` on a
-  mismatch). Containers are told by their first bytes; a gzip or zip file is capped at
+  opened without following a link and without blocking, so a FIFO is refused at once.
+  Each input is copied into the staging directory before it is read, hashed as it is
+  copied (`input_changed` unless the copy holds the resolved bytes), and only the copy
+  is read, so rewriting the operator's file in place during the run cannot pair one
+  file's hash with another payload. An NVD input must be a whole feed: 2.0 from
+  `startIndex` 0 with `totalResults` entries, 1.1 with `CVE_data_numberOfCVEs` entries;
+  a page of a larger API result fails as `incomplete_feed`. Containers are told by their first bytes; a gzip or zip file is capped at
   256 MiB, a plain one by the 512 MiB decompressed cap. A zip's end record must declare
   one member and a one-member directory before `zipfile` reads it, and any damage, CRC
   included, is `bad_compression`. Feeds stream through ijson's `yajl2_c` backend with
@@ -627,9 +631,10 @@ Decisions: ADR 0008.
   dangling link at the target is refused. The run writes the store in a sibling partial
   directory, deletes its sibling staging directory, verifies the partial store
   (`verify_corpus_store`, which keeps only an anchor index) and renames it into place
-  with mode 0755. `load_corpus_store` runs the same checks and keeps the records and
-  anchors, for WP10; both read the manifest and every line within a cap and check a
-  file's size before its lines. The report and the store manifest carry the fixed
+  with mode 0755, its files 0644, both set explicitly whatever the umask.
+  `load_corpus_store` runs the same checks and keeps the records and anchors, for
+  WP10; both read the manifest and every line within a cap and check a file's size
+  before its lines. The report and the store manifest carry the fixed
   rollback (`rollback_kind` `delete_unactivated_target`, `rollback_scope`
   `before_activation_only` and the instruction); WP9 never deletes anything itself.
 - **Scale.** `scripts/operator/migration_scale.sh` (an operator lane, not CI) imports
@@ -657,6 +662,9 @@ Decisions: ADR 0008.
   `store_write_failed`; the window is not closed.
 - The legacy-root walk lists directories by path, so a directory replaced by a link
   while the walk runs is not detected.
+- A whole API 2.0 result has a feed's shape, so a query narrower than the artifact it is
+  named or declared as (a date or keyword filter) is imported as that artifact; only a
+  page of a larger result is caught.
 
 ### Contracts at `2.0.0-dev.25`
 

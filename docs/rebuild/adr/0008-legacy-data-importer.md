@@ -37,6 +37,14 @@ its safeguard.
     `"CVE_data_version": "4.0"` and a `CVE_Items` array. The 1.1 feeds declare the CVE
     JSON 4.0 schema, never "1.1".
   - KEV: the CSV header of §6.
+- **Whole feeds only.** An NVD input must declare how many entries it holds and hold
+  exactly that many: a 2.0 feed has `startIndex` 0 and a `totalResults` equal to the
+  entries read (both JSON integers); a 1.1 feed has a `CVE_data_numberOfCVEs` equal to
+  them, as decimal text. Anything else fails the run as `incomplete_feed`, so a page of a
+  larger API result, or a feed some tool cut short while keeping it valid JSON, never
+  passes for the whole artifact and leaves its missing CVEs looking absent from NVD.
+  `resultsPerPage` is not checked: only the declared total and start say whether a
+  result is whole.
 - **Derived and refused files.** A manifest input whose content is a legacy derived file
   (`enhanced_documents_*`, the three `rag_exports/cve_documents_for_rag.json` variants,
   CPE parsing results, graph exports, mapping files, analytics and summaries, classified
@@ -59,9 +67,11 @@ its safeguard.
   listed and being entered is not detected.
 - **Out of scope:** CSAF and the legacy collect, process and export commands (PLAN.md
   follow-ups); NVD API 2.0 response pages; the Chroma store, which the semantic channel
-  reads in place (ADR 0006 §5); CWE, CAPEC and ATT&CK sources; Neo4j. An API 2.0 page has
-  the 2.0 feed's shape, so content cannot tell the two apart: the artifact the operator
-  names or declares is trusted, as it is for which year a feed covers.
+  reads in place (ADR 0006 §5); CWE, CAPEC and ATT&CK sources; Neo4j. A page of a larger
+  API result fails as `incomplete_feed`. A whole API result has a feed's shape, so
+  content cannot tell it from a feed: the artifact the operator names or declares is
+  trusted, as it is for which year a feed covers, and an API query narrower than the
+  artifact (a date or keyword filter) is not detected.
 
 ### 2. The input manifest
 
@@ -242,11 +252,12 @@ KEV enrichment runs after §5, on the final NVD records only.
   errors with a typed reason code, and only the code reaches the report: its message
   text, which can quote input, never does.
 - A file-level fault fails the whole migration: an unreadable file, a file that changed
-  while the import read it, bad compression, an unrecognised format, a derived file
-  declared as a source, a cap exceeded, or an invalid KEV input. So does a target that
+  between being resolved and being copied for reading, bad compression, an
+  unrecognised format, an NVD input that is not a whole feed, a derived file declared as
+  a source, a cap exceeded, or an invalid KEV input. So does a target that
   cannot be resolved or whose parent is not a writable directory (`target_unusable`),
-  and a staging database or store file that cannot be written (`staging_failed`,
-  `store_write_failed`), a full disk included: every failure the run can state is
+  and a staging database, input copy or store file that cannot be written
+  (`staging_failed`, `store_write_failed`), a full disk included: every failure the run can state is
   reported, never a traceback.
 - A run with zero importable records exits 1.
 - Exit codes: 0 imported or already imported; 1 refused or failed; 2 usage error,
@@ -291,8 +302,9 @@ KEV enrichment runs after §5, on the final NVD records only.
   content: 128 inputs; per file 512 MiB decompressed and 256 MiB for a gzip or zip file
   (a plain JSON file is its own payload, so the 512 MiB cap bounds it); 8 GiB
   decompressed in total; 1,000,000 NVD candidates; the KEV caps of §6; the
-  `--legacy-root` bounds of §1; and 16 GiB for the whole staging directory, checked
-  every 1,024 rows or 64 MiB staged and once all inputs are read. A zip's end record must
+  `--legacy-root` bounds of §1; and 16 GiB for the whole staging directory, the copy
+  of the input being read included (§9), checked every 1,024 rows or 64 MiB staged and
+  once all inputs are read. A zip's end record must
   declare one member and a central directory no larger than one member needs before
   `zipfile` reads it. Whether 512 MiB fits a current 2.0 year feed is checked on the
   first real run; the cap is a constant, changed by a later decision if a measured feed
@@ -319,7 +331,8 @@ KEV enrichment runs after §5, on the final NVD records only.
   takes shape in `.<name>.partial-<random>`, and the staging database lives in
   `.<name>.staging-<random>`. Once the store files are written and fsynced, the staging
   directory is deleted, the partial directory is read back and verified with
-  `verify_corpus_store`, given mode 0755 (its files are 0644), and renamed into place;
+  `verify_corpus_store`, given mode 0755 (its files are 0644; both modes are set
+  explicitly, so the umask of the run never narrows them), and renamed into place;
   the target's parent is opened before the rename so the rename can be synced. Any entry
   at the target just before the rename is refused (`target_exists`); one that appears
   after that check and before the rename fails the rename if it is a file or a
@@ -338,9 +351,17 @@ KEV enrichment runs after §5, on the final NVD records only.
 - Every file the importer or the reader opens is opened without following a symbolic link
   and without blocking, and refused unless it is a regular file, so a FIFO declared as
   an input or the manifest, or found in a store, fails at once instead of waiting for a
-  writer. An input is hashed when it is resolved and again each time it is opened to be
-  read, and a mismatch fails the run as `input_changed`, so the store manifest's hashes
-  describe the bytes actually imported.
+  writer.
+- An input is hashed when it is resolved. Before it is read, it is copied into the
+  run's staging directory, hashed as it is copied, and the copy must hold exactly the
+  resolved bytes, or the run fails as `input_changed` (or `staging_failed` when the copy
+  cannot be written). A KEV input's container and 16 MiB cap are checked before it is
+  copied. The fingerprint, the parse and the KEV read all use the copy, which is removed
+  once the input is read. So the store
+  manifest's `input_file_sha256`, `payload_sha256` and `source_version` always describe
+  one set of bytes, the ones imported, whatever happens to the operator's file during
+  the run: re-hashing that file instead could not stop it being rewritten in place
+  between the hash and the parse.
 - **Rollback.** A migration writes nothing but its new target: no input and no existing
   store changes, which the tests prove by content and modification time. (Creating and
   renaming the target changes its parent directory's own metadata; nothing else there

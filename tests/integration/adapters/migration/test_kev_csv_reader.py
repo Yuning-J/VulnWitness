@@ -2,8 +2,7 @@
 is read whole, in any column order, with or without the three optional columns, values
 kept exactly as parsed; equal repeated rows are counted and unequal ones refused; and
 every fault in the header, a row, a value, the encoding, the container or the size makes
-the whole input invalid with its fixed reason code, as does a catalog rewritten after it
-was inspected."""
+the whole input invalid with its fixed reason code."""
 
 import csv
 import gzip
@@ -42,7 +41,6 @@ OPTIONAL_COLUMNS = ["notes", "knownRansomwareCampaignUse", "cwes"]
 UTF8_BOM = b"\xef\xbb\xbf"
 
 FileWriter = Callable[[Path], Path]
-CatalogChange = Callable[[Path, list[dict[str, str]]], None]
 
 
 def read_catalog_at(path: Path, limits: MigrationLimits = DEFAULT_LIMITS) -> KevCatalog:
@@ -84,15 +82,6 @@ def encode_unquoted_csv_line(row: dict[str, str]) -> bytes:
     for column in KEV_COLUMNS:
         values.append(row[column])
     return (",".join(values) + "\r\n").encode()
-
-
-def rewrite_catalog_in_place(path: Path, rows: list[dict[str, str]]) -> None:
-    write_kev_csv(path, rows)
-
-
-def replace_catalog_by_rename(path: Path, rows: list[dict[str, str]]) -> None:
-    replacement_path = write_kev_csv(path.with_name("replacement.csv"), rows)
-    replacement_path.replace(path)
 
 
 def test_valid_catalog_is_read_with_every_row_by_cve_id(tmp_path: Path) -> None:
@@ -500,25 +489,6 @@ def test_compressed_catalog_is_an_unrecognised_format(
     failure_code = read_failure_code(path)
 
     assert failure_code is MigrationFailureCode.UNRECOGNISED_FORMAT
-
-
-@pytest.mark.parametrize(
-    "change_catalog",
-    [rewrite_catalog_in_place, replace_catalog_by_rename],
-    ids=["rewritten", "renamed_over"],
-)
-def test_catalog_changed_after_inspection_fails_as_input_changed(
-    tmp_path: Path, change_catalog: CatalogChange
-) -> None:
-    # The new catalog is valid and the same size; only its bytes tell it apart.
-    path = write_kev_csv(tmp_path / "kev.csv", [build_kev_row(1)])
-    input_file = inspect_input_file(path, DEFAULT_LIMITS)
-    change_catalog(path, [build_kev_row(2)])
-
-    with pytest.raises(MigrationFailed) as failure:
-        read_kev_catalog(input_file, DEFAULT_LIMITS)
-
-    assert failure.value.code is MigrationFailureCode.INPUT_CHANGED
 
 
 def test_catalog_exactly_at_the_byte_cap_is_read(tmp_path: Path) -> None:

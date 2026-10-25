@@ -78,7 +78,11 @@ def write_feed(path: Path, first_number: int, entry_count: int) -> None:
     entries: list[dict[str, object]] = []
     for number in range(first_number, first_number + entry_count):
         entries.append(build_entry(number))
+    # A whole feed, as NVD publishes one: a single result starting at 0.
     feed = {
+        "resultsPerPage": entry_count,
+        "startIndex": 0,
+        "totalResults": entry_count,
         "format": "NVD_CVE",
         "version": "2.0",
         "timestamp": FEED_TIMESTAMP,
