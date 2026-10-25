@@ -162,7 +162,9 @@ def snapshot_input(input_file: InputFile, snapshot_path: Path) -> InputFile:
     and must hold exactly the inspected bytes, so whatever happens to the input later
     never reaches the import; raises ``MigrationFailed``: ``input_changed`` when the
     input is no longer those bytes, ``input_unreadable``, or ``staging_failed`` when the
-    copy cannot be written. At most one chunk past the inspected size is copied."""
+    copy cannot be written. The copy never grows past the inspected size, which is what
+    the staging budget makes room for: one byte more is read, never written, to tell a
+    file that has grown."""
     digest = hashlib.sha256()
     copied_bytes = 0
     try:
@@ -170,19 +172,23 @@ def snapshot_input(input_file: InputFile, snapshot_path: Path) -> InputFile:
             open_input_file(input_file.path) as input_stream,
             create_snapshot_file(snapshot_path) as snapshot_stream,
         ):
-            while copied_bytes <= input_file.size_bytes:
-                chunk = read_input_chunk(input_stream, HASH_CHUNK_BYTES)
+            while copied_bytes < input_file.size_bytes:
+                chunk_bytes = min(HASH_CHUNK_BYTES, input_file.size_bytes - copied_bytes)
+                chunk = read_input_chunk(input_stream, chunk_bytes)
                 if not chunk:
                     break
                 write_snapshot_chunk(snapshot_stream, chunk)
                 digest.update(chunk)
                 copied_bytes += len(chunk)
+            has_grown = read_input_chunk(input_stream, 1) != b""
     except OSError:
         # Opening, reading and writing raise MigrationFailed themselves; what is left is
         # closing the copy, whose buffered tail can meet a full disk only then.
         raise MigrationFailed(MigrationFailureCode.STAGING_FAILED) from None
-    is_unchanged = copied_bytes == input_file.size_bytes and (
-        digest.hexdigest() == input_file.sha256
+    is_unchanged = (
+        not has_grown
+        and copied_bytes == input_file.size_bytes
+        and digest.hexdigest() == input_file.sha256
     )
     if not is_unchanged:
         raise MigrationFailed(MigrationFailureCode.INPUT_CHANGED)

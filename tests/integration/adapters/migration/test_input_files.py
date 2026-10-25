@@ -717,18 +717,20 @@ def test_snapshot_input_refuses_an_input_altered_since_inspection_as_input_chang
     assert failure.value.code is MigrationFailureCode.INPUT_CHANGED
 
 
-def test_snapshot_input_copies_at_most_one_chunk_past_the_inspected_size_of_a_grown_input(
+def test_snapshot_input_never_copies_past_the_inspected_size_of_a_grown_input(
     tmp_path: Path, snapshot_path: Path
 ) -> None:
+    # The staging budget makes room for the inspected size, so the copy must stay within it.
     path = write_plain_feed(tmp_path / "feed.json", FEED)
     input_file = inspect_with_default_cap(path)
     with path.open("ab") as input_stream:
         input_stream.write(b" " * (3 * HASH_CHUNK_BYTES))
 
-    with pytest.raises(MigrationFailed):
+    with pytest.raises(MigrationFailed) as failure:
         snapshot_input(input_file, snapshot_path)
 
-    assert snapshot_path.stat().st_size <= input_file.size_bytes + HASH_CHUNK_BYTES
+    assert failure.value.code is MigrationFailureCode.INPUT_CHANGED
+    assert snapshot_path.stat().st_size == input_file.size_bytes
 
 
 def test_snapshot_input_reports_an_input_removed_since_inspection_as_unreadable(

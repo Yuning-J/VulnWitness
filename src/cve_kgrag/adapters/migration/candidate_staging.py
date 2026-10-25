@@ -194,13 +194,15 @@ class CandidateStaging:
             self._bytes_since_size_check = 0
             self.check_size()
 
-    def check_size(self) -> None:
-        """Raise ``MigrationFailed`` once the staging directory passes its cap."""
+    def check_size(self, incoming_bytes: int = 0) -> None:
+        """Raise ``MigrationFailed`` (``staging_too_large``) once the staging directory,
+        with ``incoming_bytes`` more about to be written into it, passes its cap. Every
+        file in the directory counts, an input's copy included."""
         staging_bytes = 0
         with map_staging_errors():
             for entry in os.scandir(self._staging_dir):
                 staging_bytes += entry.stat(follow_symlinks=False).st_size
-        if staging_bytes > self._limits.max_staging_bytes:
+        if staging_bytes + incoming_bytes > self._limits.max_staging_bytes:
             raise MigrationFailed(MigrationFailureCode.STAGING_TOO_LARGE)
 
 

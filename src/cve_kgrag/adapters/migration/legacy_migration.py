@@ -292,16 +292,20 @@ class Migration:
             try:
                 if resolved_input.source is StoreSource.CISA_KEV:
                     check_kev_input(resolved_input.input_file, limits)
+                # The copy counts against the staging cap from before it is made until it
+                # is removed: there must be room for it, and the check after its input is
+                # read sees it still there.
+                staging.check_size(incoming_bytes=resolved_input.input_file.size_bytes)
                 with open_snapshot(resolved_input.input_file, staging_dir) as snapshot:
                     self._refuse_derived_file(snapshot, budget)
                     if resolved_input.source is StoreSource.CISA_KEV:
                         reading.kev_catalog = read_kev_catalog(snapshot, limits)
                         reading.kev_input = resolved_input
-                        continue
-                    self._read_nvd_input(resolved_input, snapshot, staging, budget, reading)
+                    else:
+                        self._read_nvd_input(resolved_input, snapshot, staging, budget, reading)
+                    staging.check_size()
             except MigrationFailed as failure:
                 raise with_position(failure, resolved_input.position) from None
-        staging.check_size()
         return reading
 
     def _refuse_derived_file(self, snapshot: InputFile, budget: DecompressionBudget) -> None:
@@ -357,7 +361,8 @@ class Migration:
         partial_dir: Path | None,
     ) -> WrittenStore | None:
         """Choose each CVE's winner, normalize it with its final provenance and KEV entry,
-        and, unless this is a dry run (no ``partial_dir``), write the records and anchors.
+        and stage its anchors; unless this is a dry run (no ``partial_dir``), write the
+        records and anchors.
         Raises ``OSError`` when a store file cannot be written. Each writer is closed on
         every way out, without a sync when the run fails, since the partial store goes."""
         records_writer = None if partial_dir is None else StoreFileWriter(partial_dir, RECORDS_FILE)
@@ -391,9 +396,9 @@ class Migration:
         staging: CandidateStaging,
         records_writer: StoreFileWriter | None,
     ) -> StoreFile | None:
-        """Choose and normalize every CVE's winner; with ``records_writer``, write each
-        record and stage its anchors, and return the records file, closed. A dry run, with
-        no writer, returns ``None``."""
+        """Choose and normalize every CVE's winner and stage its anchors; with
+        ``records_writer``, write each record and return the records file, closed. A dry
+        run, with no writer, returns ``None``."""
         kev_entries = {} if reading.kev_catalog is None else reading.kev_catalog.entries
         kev_cve_outcomes: dict[str, CveOutcome] = {}
         source_versions: dict[int, str] = {}
@@ -415,8 +420,11 @@ class Migration:
             imported_records += 1
             if records_writer is not None:
                 records_writer.write_line(encode_line(normalized.record))
-                for anchor in normalized.evidence:
-                    staging.add_anchor(anchor.evidence_id, encode_line(anchor).decode())
+            # Staged in a dry run too, so it meets the staging cap where a real run would.
+            for anchor in normalized.evidence:
+                staging.add_anchor(anchor.evidence_id, encode_line(anchor).decode())
+        # The last anchors may follow the last periodic measurement.
+        staging.check_size()
         self._count_kev_outcomes(reading, kev_cve_outcomes)
         if imported_records == 0:
             raise MigrationFailed(MigrationFailureCode.NO_IMPORTABLE_RECORDS)

@@ -22,6 +22,7 @@ import dataclasses
 import gc
 import gzip
 import os
+import shutil
 import stat
 import tempfile
 import warnings
@@ -247,8 +248,7 @@ FAILING_IMPORTS = [
         MigrationLimits(),
         MigrationFailureCode.DERIVED_FILE_DECLARED_AS_SOURCE,
     ),
-    # Two rows are far below the rows between staging size checks, so only the check
-    # after every input is read meets the cap.
+    # No input fits a one-byte staging directory, so the room for its copy is refused.
     (
         write_two_entry_import,
         MigrationLimits(max_staging_bytes=1),
@@ -261,7 +261,7 @@ FAILING_IMPORT_IDS = [
     "too_many_candidates",
     "entry_too_large",
     "derived_file",
-    "staging_too_large_at_the_final_check",
+    "staging_too_large",
 ]
 
 
@@ -2384,6 +2384,187 @@ def test_feed_rewritten_in_place_after_inspection_before_its_snapshot_fails_as_i
         MigrationFailureCode.INPUT_CHANGED,
         0,
     )
+    assert list_names(layout.stores_dir) == []
+
+
+@dataclass(frozen=True)
+class StagingSize:
+    """The staging directory's size as its cap check counts it: every file's size, and of
+    them the input copy's."""
+
+    total_bytes: int
+    snapshot_bytes: int
+
+
+def measure_staging(stores_dir: Path) -> StagingSize:
+    """The size of the one staging directory a real run keeps beside its target."""
+    (staging_dir,) = stores_dir.glob(".store.staging-*")
+    total_bytes = 0
+    snapshot_bytes = 0
+    for entry in os.scandir(staging_dir):
+        entry_bytes = entry.stat(follow_symlinks=False).st_size
+        total_bytes += entry_bytes
+        if entry.name == "input.snapshot":
+            snapshot_bytes = entry_bytes
+    return StagingSize(total_bytes, snapshot_bytes)
+
+
+@dataclass
+class MeasuringFeedReader:
+    """The real feed reader, measuring the staging directory as the parse begins and as
+    it ends, while the input's copy is still there."""
+
+    read_nvd_feed: Callable[[PayloadStream, EntryHandler], FeedHeader]
+    stores_dir: Path
+    sizes: list[StagingSize] = dataclasses.field(default_factory=list)
+
+    def read(self, payload: PayloadStream, handle_entry: EntryHandler) -> FeedHeader:
+        self.sizes.append(measure_staging(self.stores_dir))
+        feed_header = self.read_nvd_feed(payload, handle_entry)
+        self.sizes.append(measure_staging(self.stores_dir))
+        return feed_header
+
+
+def measure_import_staging(layout: ImportLayout) -> tuple[StagingSize, StagingSize]:
+    """The staging directory's size as its one feed's parse begins and ends, from a run
+    under no staging cap, which is then removed so the next run finds no target."""
+    dependencies = build_migration_dependencies()
+    feed_reader = MeasuringFeedReader(dependencies.parsers.read_nvd_feed, layout.stores_dir)
+    parsers = dataclasses.replace(dependencies.parsers, read_nvd_feed=feed_reader.read)
+    report = run_test_migration(
+        layout.inputs_dir / "inputs.yaml",
+        layout.target,
+        dependencies=dataclasses.replace(dependencies, parsers=parsers),
+    )
+    assert report.outcome is MigrationOutcome.IMPORTED
+    shutil.rmtree(layout.target)
+    (size_at_start, size_at_end) = feed_reader.sizes
+    return size_at_start, size_at_end
+
+
+@dataclass
+class RecordingClassifier:
+    """The real JSON classifier, recording every prefix it is handed."""
+
+    classify_json_prefix: Callable[[bytes], LegacyFileKind | None]
+    classified_prefixes: list[bytes] = dataclasses.field(default_factory=list)
+
+    def classify(self, prefix: bytes) -> LegacyFileKind | None:
+        self.classified_prefixes.append(prefix)
+        return self.classify_json_prefix(prefix)
+
+
+def build_numbered_entries(entry_count: int, **entry_fields: Any) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for number in range(1, entry_count + 1):
+        entries.append(build_v2_entry(number, **entry_fields))
+    return entries
+
+
+def run_under_staging_cap(layout: ImportLayout, max_staging_bytes: int) -> MigrationReport:
+    dependencies = dataclasses.replace(
+        build_migration_dependencies(), limits=MigrationLimits(max_staging_bytes=max_staging_bytes)
+    )
+    return run_test_migration(
+        layout.inputs_dir / "inputs.yaml", layout.target, dependencies=dependencies
+    )
+
+
+def test_input_copy_that_would_pass_the_staging_cap_fails_and_publishes_nothing(
+    layout: ImportLayout,
+) -> None:
+    # Arrange: a cap between the staging size once the copy is removed and the size while
+    # it exists, so only counting the copy meets it.
+    write_import(
+        layout.inputs_dir, {V2_PLAIN_YEAR_FEED: build_v2_feed(build_numbered_entries(300))}
+    )
+    _, size_at_end = measure_import_staging(layout)
+    size_without_copy = size_at_end.total_bytes - size_at_end.snapshot_bytes
+    max_staging_bytes = (size_without_copy + size_at_end.total_bytes) // 2
+
+    # Act
+    report = run_under_staging_cap(layout, max_staging_bytes)
+
+    # Assert
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.STAGING_TOO_LARGE
+    assert list_names(layout.stores_dir) == []
+
+
+def test_input_without_room_in_the_staging_directory_is_never_copied(
+    layout: ImportLayout,
+) -> None:
+    # Each input's copy is fingerprinted first; a run that made the copy would classify it.
+    write_import(layout.inputs_dir, {V2_PLAIN_YEAR_FEED: build_v2_feed([build_v2_entry(1)])})
+    input_bytes = (layout.inputs_dir / V2_PLAIN_YEAR_FEED).stat().st_size
+    dependencies = build_migration_dependencies(MigrationLimits(max_staging_bytes=input_bytes - 1))
+    classifier = RecordingClassifier(dependencies.parsers.classify_json_prefix)
+    parsers = dataclasses.replace(dependencies.parsers, classify_json_prefix=classifier.classify)
+
+    report = run_test_migration(
+        layout.inputs_dir / "inputs.yaml",
+        layout.target,
+        dependencies=dataclasses.replace(dependencies, parsers=parsers),
+    )
+
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.STAGING_TOO_LARGE
+    assert classifier.classified_prefixes == []
+
+
+def test_staging_grown_past_its_cap_while_an_input_is_read_fails_before_the_copy_goes(
+    layout: ImportLayout,
+) -> None:
+    # Arrange: entries enough to spill SQLite's page cache to disk during the parse, yet
+    # fewer rows and bytes than a periodic size check needs, so the database grows while
+    # the copy exists and only the check at the end of the input sees both. The cap fits
+    # the start of the parse and the database alone, but not the end with the copy.
+    long_description = "SYNTHETIC: " + "democorp gateway mishandles input. " * 140
+    entries = build_numbered_entries(1000, description=long_description)
+    write_import(layout.inputs_dir, {V2_PLAIN_YEAR_FEED: build_v2_feed(entries)})
+    size_at_start, size_at_end = measure_import_staging(layout)
+    database_bytes_at_end = size_at_end.total_bytes - size_at_end.snapshot_bytes
+    max_staging_bytes = max(size_at_start.total_bytes, database_bytes_at_end)
+    assert max_staging_bytes < size_at_end.total_bytes, "the database did not grow on disk"
+
+    # Act
+    report = run_under_staging_cap(layout, max_staging_bytes)
+
+    # Assert
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.STAGING_TOO_LARGE
+    assert list_names(layout.stores_dir) == []
+
+
+@pytest.mark.parametrize("is_dry_run", [False, True], ids=["real_run", "dry_run"])
+def test_staging_grown_past_its_cap_by_the_last_anchors_fails_in_both_modes(
+    layout: ImportLayout, is_dry_run: bool
+) -> None:
+    # Arrange: 1,024 candidates end on a periodic size check, and the 904 anchors of the
+    # entries the source did not reject are fewer than the rows to the next one, so only
+    # the measurement after the last anchor sees them. The cap is the largest size
+    # reading the input reaches, gzip keeping the input's copy small.
+    long_description = "SYNTHETIC: " + "democorp gateway mishandles input. " * 140
+    entries = build_numbered_entries(904, description=long_description)
+    for number in range(905, 1025):
+        entries.append(build_v2_entry(number, description=long_description, status="Rejected"))
+    write_import(layout.inputs_dir, {V2_YEAR_FEED: build_v2_feed(entries)})
+    _, size_at_end = measure_import_staging(layout)
+    dependencies = build_migration_dependencies(
+        MigrationLimits(max_staging_bytes=size_at_end.total_bytes)
+    )
+
+    # Act
+    report = run_test_migration(
+        layout.inputs_dir / "inputs.yaml",
+        layout.target,
+        is_dry_run=is_dry_run,
+        dependencies=dependencies,
+    )
+
+    # Assert
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.STAGING_TOO_LARGE
     assert list_names(layout.stores_dir) == []
 
 

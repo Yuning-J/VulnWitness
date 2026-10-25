@@ -583,12 +583,12 @@ Decisions: ADR 0008.
   Every entry with a readable CVE ID is staged in SQLite with its modification time
   (exact microseconds, a time UTC cannot express counting as none), format, state,
   semantic hash and raw entry; one without is counted with its locator, a withdrawn one
-  included. A database or disk error is `staging_failed`. `resolve_cve` applies ADR 0008 §5: the latest candidates win; equal
-  ones collapse to one chosen by the tie-break; across formats 2.0 decides; unequal ones
-  are a `conflicting_duplicate`; a rejected winner withdraws the CVE; a malformed latest
-  or an unorderable group excludes it. The winner is normalized again with its final
-  snapshot (the payload hash is known only once its feed is read whole) and its KEV
-  entry.
+  included. A database or disk error is `staging_failed`. `resolve_cve` applies ADR 0008
+  §5: the latest candidates win; equal ones collapse to one chosen by the tie-break;
+  across formats 2.0 decides; unequal ones are a `conflicting_duplicate`; a rejected
+  winner withdraws the CVE; a malformed latest or an unorderable group excludes it. The
+  winner is normalized again with its final snapshot (the payload hash is known only
+  once its feed is read whole) and its KEV entry.
 - **KEV** (`adapters/migration/kev_csv_reader.py`). All or nothing: a fixed column set in
   any order (`notes`, `knownRansomwareCampaignUse` and `cwes` may be absent), `cveID` (a
   CVE ID of at most 32 characters) and `dateAdded` required, dates `YYYY-MM-DD`, UTF-8
@@ -598,24 +598,28 @@ Decisions: ADR 0008.
   `kev_without_nvd_record`, `kev_for_rejected_nvd_record` or `kev_for_excluded_nvd_record`,
   and the first brings the fixed `kev_advice` to add the covering year feed.
 - **Reading** (`adapters/migration/input_files.py`, `nvd_feed_reader.py`,
-  `entry_assembler.py`, `surrogate_guard.py`, `adapters/regular_files.py`). Every file is
-  opened without following a link and without blocking, so a FIFO is refused at once.
+  `entry_assembler.py`, `surrogate_guard.py`, `adapters/regular_files.py`). Every file
+  is opened without following a link and without blocking, so a FIFO is refused at once.
   Each input is copied into the staging directory before it is read, hashed as it is
   copied (`input_changed` unless the copy holds the resolved bytes), and only the copy
   is read, so rewriting the operator's file in place during the run cannot pair one
-  file's hash with another payload. An NVD input must be a whole feed: 2.0 from
-  `startIndex` 0 with `totalResults` entries, 1.1 with `CVE_data_numberOfCVEs` entries;
-  a page of a larger API result fails as `incomplete_feed`. Containers are told by their first bytes; a gzip or zip file is capped at
-  256 MiB, a plain one by the 512 MiB decompressed cap. A zip's end record must declare
-  one member and a one-member directory before `zipfile` reads it, and any damage, CRC
-  included, is `bad_compression`. Feeds stream through ijson's `yajl2_c` backend with
-  64 KiB reads; entries are assembled from events, with the cap checked on the stream
-  and on the assembled keys and values; top-level keys and values count against the
-  same cap, and a feed has at most 32 top-level members. A high surrogate escape without
-  its low escape is refused before the parser could turn it into `?`. The reading,
-  staging, KEV and walk bounds are `MigrationLimits`, whose defaults are the ADR's
-  constants; tests pass smaller ones. The manifest caps, the top-level member caps and
-  the 100-locator report bound are module constants.
+  file's hash with another payload. The copy counts against the 16 GiB staging cap:
+  there must be room for its inspected size before it is made, it never grows past that
+  size, and the directory is measured again before the copy is removed and once the last
+  anchor is staged, which a dry run stages too. An NVD input must be a whole feed: 2.0
+  from `startIndex` 0 with `totalResults` entries, 1.1 with `CVE_data_numberOfCVEs`
+  entries; a page of a larger API result fails as `incomplete_feed`. Containers are told
+  by their first bytes; a gzip or zip file is capped at 256 MiB, a plain one by the 512
+  MiB decompressed cap. A zip's end record must declare one member and a one-member
+  directory before `zipfile` reads it, and any damage, CRC included, is
+  `bad_compression`. Feeds stream through ijson's `yajl2_c` backend with 64 KiB reads;
+  entries are assembled from events, with the cap checked on the stream and on the
+  assembled keys and values; top-level keys and values count against the same cap, and a
+  feed has at most 32 top-level members. A high surrogate escape without its low escape
+  is refused before the parser could turn it into `?`. The reading, staging, KEV and
+  walk bounds are `MigrationLimits`, whose defaults are the ADR's constants; tests pass
+  smaller ones. The manifest caps, the top-level member caps and the 100-locator report
+  bound are module constants.
 - **Legacy root** (`adapters/migration/legacy_root_scan.py`, `json_fingerprint.py`). A
   bounded, read-only walk that counts derived files by structure and files never
   deserialized by magic bytes or suffix; the report cites the formats' commit

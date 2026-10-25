@@ -303,12 +303,15 @@ KEV enrichment runs after §5, on the final NVD records only.
   (a plain JSON file is its own payload, so the 512 MiB cap bounds it); 8 GiB
   decompressed in total; 1,000,000 NVD candidates; the KEV caps of §6; the
   `--legacy-root` bounds of §1; and 16 GiB for the whole staging directory, the copy
-  of the input being read included (§9), checked every 1,024 rows or 64 MiB staged and
-  once all inputs are read. A zip's end record must
-  declare one member and a central directory no larger than one member needs before
-  `zipfile` reads it. Whether 512 MiB fits a current 2.0 year feed is checked on the
-  first real run; the cap is a constant, changed by a later decision if a measured feed
-  exceeds it.
+  of the input being read included (§9). Before an input is copied there must be room
+  for its inspected size, the copy never grows past that size, and the directory is
+  measured every 1,024 rows or 64 MiB staged, again at the end of each input while its
+  copy is still there, and once the last anchor is staged; between two measurements it
+  can pass the cap by what that interval stages. A dry run stages the anchors too, so it
+  meets the cap where a real run would. A zip's end record must declare one member and a
+  central directory no larger than one member needs before `zipfile` reads it. Whether
+  512 MiB fits a current 2.0 year feed is checked on the first real run; the cap is a
+  constant, changed by a later decision if a measured feed exceeds it.
 - An operator lane (not CI) builds 250,000 synthetic records and records the migration's
   peak RSS, temporary disk and run time.
 
