@@ -57,12 +57,14 @@ from cve_kgrag.domain.investigation import (
 )
 from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail
 from cve_kgrag.domain.provenance import SourceRegistry
-from cve_kgrag.domain.served_dataset import ServedDataset
+from cve_kgrag.domain.search import SemanticUnavailableDetail
+from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import KnowledgeSource
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.ports.affectedness import TrustifyPort
+from cve_kgrag.ports.retrieval import SemanticRetriever
 from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.ports.sources import FightSource
 from cve_kgrag.settings import ModelPlannerSettings, SemanticSettings
@@ -104,18 +106,33 @@ def build_store_activation(store_root: Path) -> StoreActivation:
 
 
 def build_search_service(
-    served_corpus: ServedCorpus, semantic_settings: SemanticSettings | None = None
+    served_corpus: ServedCorpus,
+    semantic_settings: SemanticSettings | None = None,
+    list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
 ) -> SearchService:
     """The search channels over ``served_corpus``, with the semantic channel
-    ``semantic_settings`` enable (none without them)."""
+    ``semantic_settings`` enable (none without them), found among the adapters
+    ``list_adapters`` lists.
+
+    With a corpus store served, a requested semantic channel is unavailable
+    (``COLLECTION_NOT_BOUND``) and no adapter is looked up or loaded: no collection
+    records the dataset it was built from, and one built from another dataset whose CVE
+    IDs overlap the store's would pass every check its hits get (ADR 0009 §14)."""
     repository = InMemoryKnowledgeRepository(served_corpus.records, served_corpus.evidence)
+    semantic_retriever: SemanticRetriever | SemanticUnavailableDetail | None = None
+    if semantic_settings is not None:
+        served_kind = served_corpus.describe_served_dataset().kind
+        if served_kind is ServedDatasetKind.CORPUS_STORE:
+            semantic_retriever = SemanticUnavailableDetail.COLLECTION_NOT_BOUND
+        else:
+            semantic_retriever = discover_semantic_retriever(semantic_settings, list_adapters)
     return SearchService(
         cve_repository=repository,
         evidence_catalog=InMemoryEvidenceCatalog(served_corpus.evidence, served_corpus.records),
         lexical_retriever=Bm25LexicalIndex(repository.list_cves()),
         structured_retriever=InMemoryStructuredIndex(repository.list_cves()),
         graph_retriever=InMemoryRelationGraph(repository.list_cves()),
-        semantic_retriever=discover_semantic_retriever(semantic_settings),
+        semantic_retriever=semantic_retriever,
     )
 
 

@@ -10,6 +10,7 @@ from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.hashing import UNSEALED_SHA256
 from cve_kgrag.domain.relations import record_relations
 from cve_kgrag.domain.search import (
+    SEMANTIC_UNAVAILABLE_FAILURES,
     Candidate,
     ChannelOutcome,
     MatchedField,
@@ -49,10 +50,6 @@ CVE_SCOPE_ASSESSMENT = ScopeAssessment(
 )
 UNCONFIGURED_SEMANTIC = RetrievalOutcome(
     status=BackendStatus.UNAVAILABLE, failure=BackendFailure.NOT_CONFIGURED
-)
-# What a semantic search answers when the channel is enabled but its adapter is unusable.
-UNUSABLE_SEMANTIC = RetrievalOutcome(
-    status=BackendStatus.UNAVAILABLE, failure=BackendFailure.ADAPTER_UNUSABLE
 )
 
 
@@ -233,7 +230,10 @@ class SearchService:
         if self._semantic_retriever is None:
             return UNCONFIGURED_SEMANTIC
         if isinstance(self._semantic_retriever, SemanticUnavailableDetail):
-            return UNUSABLE_SEMANTIC
+            return RetrievalOutcome(
+                status=BackendStatus.UNAVAILABLE,
+                failure=SEMANTIC_UNAVAILABLE_FAILURES[self._semantic_retriever],
+            )
         return self._semantic_retriever.search(query_text, request.limit, allowed_cve_ids)
 
     def _seal(

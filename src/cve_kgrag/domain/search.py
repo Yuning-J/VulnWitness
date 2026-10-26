@@ -358,9 +358,19 @@ class Candidate(ContractModel):
 
 
 class SemanticUnavailableDetail(StrEnum):
-    """The server's sentence for an enabled semantic channel that cannot search."""
+    """The server's sentence for a requested semantic channel that cannot search."""
 
     ADAPTER_UNUSABLE = "the semantic adapter is not installed or could not be loaded"
+    # No collection records the corpus content digest it was built from, so none can be
+    # bound to a served store; its hits would be unchecked against the store (ADR 0009 §14).
+    COLLECTION_NOT_BOUND = "the semantic collection is not bound to the served corpus store"
+
+
+# The failure a semantic search reports for each reason the channel cannot search.
+SEMANTIC_UNAVAILABLE_FAILURES = {
+    SemanticUnavailableDetail.ADAPTER_UNUSABLE: BackendFailure.ADAPTER_UNUSABLE,
+    SemanticUnavailableDetail.COLLECTION_NOT_BOUND: BackendFailure.COLLECTION_NOT_BOUND,
+}
 
 
 class SearchWarningCode(StrEnum):

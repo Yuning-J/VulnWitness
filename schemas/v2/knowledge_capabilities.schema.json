@@ -39,9 +39,10 @@
       "type": "string"
     },
     "SemanticUnavailableDetail": {
-      "description": "The server's sentence for an enabled semantic channel that cannot search.",
+      "description": "The server's sentence for a requested semantic channel that cannot search.",
       "enum": [
-        "the semantic adapter is not installed or could not be loaded"
+        "the semantic adapter is not installed or could not be loaded",
+        "the semantic collection is not bound to the served corpus store"
       ],
       "title": "SemanticUnavailableDetail",
       "type": "string"
@@ -285,6 +286,7 @@
                   "detail": {
                     "enum": [
                       "the semantic adapter is not installed or could not be loaded",
+                      "the semantic collection is not bound to the served corpus store",
                       null
                     ]
                   }

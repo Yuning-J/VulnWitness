@@ -98,7 +98,8 @@
         "The backend failed while searching.",
         "The backend's index holds no entries for the searched records.",
         "The backend cannot apply the search's filters before its limit.",
-        "The backend returned nothing and does not report its own errors."
+        "The backend returned nothing and does not report its own errors.",
+        "The backend's collection is not bound to the served dataset."
       ],
       "title": "BackendFailureDetail",
       "type": "string"
@@ -1126,6 +1127,7 @@
                   "The backend's index holds no entries for the searched records.",
                   "The backend cannot apply the search's filters before its limit.",
                   "The backend returned nothing and does not report its own errors.",
+                  "The backend's collection is not bound to the served dataset.",
                   null
                 ]
               }

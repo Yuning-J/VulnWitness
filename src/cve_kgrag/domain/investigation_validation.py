@@ -137,8 +137,15 @@ from cve_kgrag.domain.planning import (
     is_tool_permitted,
     list_tool_sources,
 )
-from cve_kgrag.domain.search import Candidate, SearchWarning, SearchWarningCode
+from cve_kgrag.domain.search import (
+    SEMANTIC_UNAVAILABLE_FAILURES,
+    Candidate,
+    SearchWarning,
+    SearchWarningCode,
+    SemanticUnavailableDetail,
+)
 from cve_kgrag.domain.taxonomy import (
+    BACKEND_FAILURE_DETAILS,
     AssertionKind,
     BackendFailureDetail,
     KnowledgeScope,
@@ -1220,11 +1227,15 @@ def find_semantic_failure_detail_violations(
     evidence_set: KnowledgeEvidenceSet, semantic_capability: SourceCapability
 ) -> list[str]:
     """A semantic channel that cannot search fails every search for the capability's
-    reason: ``NOT_CONFIGURED`` when it is not configured, ``ADAPTER_UNUSABLE`` when it is
-    unavailable. Every CVE-search outcome, in the steps and the coverage, says so."""
+    reason: ``NOT_CONFIGURED`` when it is not configured, and when it is unavailable the
+    failure its detail names (``ADAPTER_UNUSABLE`` or ``COLLECTION_NOT_BOUND``). Every
+    CVE-search outcome, in the steps and the coverage, says so."""
     expected_detail = BackendFailureDetail.NOT_CONFIGURED
-    if semantic_capability.state is SourceCapabilityState.UNAVAILABLE:
-        expected_detail = BackendFailureDetail.ADAPTER_UNUSABLE
+    # The capability rules let an unavailable semantic channel carry only its own details.
+    unavailable_detail = semantic_capability.detail
+    if isinstance(unavailable_detail, SemanticUnavailableDetail):
+        unavailable_failure = SEMANTIC_UNAVAILABLE_FAILURES[unavailable_detail]
+        expected_detail = BACKEND_FAILURE_DETAILS[unavailable_failure]
     cve_search_outcomes: list[tuple[str, SourceOutcome]] = []
     for step in evidence_set.trajectory.steps:
         for outcome in step.source_outcomes:

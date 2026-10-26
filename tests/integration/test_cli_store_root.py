@@ -5,6 +5,7 @@ commands whose row loads no served corpus run whatever state the root is in; and
 ``demo`` and ``eval planner`` stay on the packaged fixture and say so."""
 
 import json
+import logging
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -13,10 +14,15 @@ import pytest
 from cve_kgrag.adapter_discovery import InterfaceUnavailable
 from cve_kgrag.adapters.store.corpus_store import load_corpus_store
 from cve_kgrag.cli import main, run_mcp_server
-from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
-from cve_kgrag.domain.search import SearchResponse
+from cve_kgrag.domain.investigation import (
+    KnowledgeEvidenceSet,
+    SourceCapability,
+    SourceCapabilityState,
+)
+from cve_kgrag.domain.search import SearchResponse, SemanticUnavailableDetail
 from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.store_status import ActiveRecordState, StoreStatus
+from cve_kgrag.domain.taxonomy import BackendFailureDetail
 from cve_kgrag.domain.tool_contracts import KnowledgeCapabilities
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from tests.support.corpus_stores import import_store
@@ -407,3 +413,78 @@ def test_demo_says_once_it_uses_the_fixture_and_prints_what_it_prints_without_a_
         "cve-kgrag demo uses the packaged synthetic fixture, not the store root\n"
     )
     assert output_without_root.err == captured.err
+
+
+# --- The semantic channel in store mode -----------------------------------------------
+
+
+def build_store_semantic_settings(
+    active_settings: dict[str, str], persist_directory: Path
+) -> dict[str, str]:
+    return {
+        **active_settings,
+        "CVE_KGRAG_SEMANTIC_ENABLED": "true",
+        "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": str(persist_directory),
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["search", STORE_MARKER, "--semantic"],
+        ["topic", "5gaka", "--scope", "mixed", "--semantic"],
+        ["investigate", f"{STORE_MARKER} input", "--scope", "implementation_only", "--semantic"],
+    ],
+    ids=["search", "topic", "investigate"],
+)
+def test_semantic_request_against_a_store_reports_the_collection_unbound_and_opens_nothing(
+    active_settings: dict[str, str],
+    tmp_path: Path,
+    arguments: list[str],
+    caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    persist_directory = tmp_path / "vectors"
+    environment = build_store_semantic_settings(active_settings, persist_directory)
+
+    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+        main(arguments, environment)
+
+    output = capsys.readouterr().out
+    assert BackendFailureDetail.COLLECTION_NOT_BOUND.value in output
+    assert BackendFailureDetail.ADAPTER_UNUSABLE.value not in output
+    assert caplog.records == []
+    assert not persist_directory.exists()
+
+
+@pytest.mark.parametrize(
+    ("extra_arguments", "expected_capability"),
+    [
+        (
+            ["--semantic"],
+            SourceCapability(
+                source="semantic_channel",
+                state=SourceCapabilityState.UNAVAILABLE,
+                detail=SemanticUnavailableDetail.COLLECTION_NOT_BOUND,
+            ),
+        ),
+        (
+            [],
+            SourceCapability(source="semantic_channel", state=SourceCapabilityState.NOT_CONFIGURED),
+        ),
+    ],
+    ids=["requested", "not_requested"],
+)
+def test_store_capabilities_report_the_semantic_channel_by_whether_it_is_requested(
+    active_settings: dict[str, str],
+    tmp_path: Path,
+    extra_arguments: list[str],
+    expected_capability: SourceCapability,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    environment = build_store_semantic_settings(active_settings, tmp_path / "vectors")
+
+    main(["capabilities", *extra_arguments], environment)
+
+    capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
+    assert capabilities.source_capabilities[3] == expected_capability

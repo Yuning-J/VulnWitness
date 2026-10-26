@@ -96,6 +96,7 @@ class BackendFailure(StrEnum):
     INDEX_INCOMPLETE = "index_incomplete"
     FILTERS_UNSUPPORTED = "filters_unsupported"
     NO_ANSWER = "no_answer"
+    COLLECTION_NOT_BOUND = "collection_not_bound"
 
 
 class BackendFailureDetail(StrEnum):
@@ -108,6 +109,7 @@ class BackendFailureDetail(StrEnum):
     INDEX_INCOMPLETE = "The backend's index holds no entries for the searched records."
     FILTERS_UNSUPPORTED = "The backend cannot apply the search's filters before its limit."
     NO_ANSWER = "The backend returned nothing and does not report its own errors."
+    COLLECTION_NOT_BOUND = "The backend's collection is not bound to the served dataset."
 
 
 BACKEND_FAILURE_DETAILS: dict[BackendFailure, BackendFailureDetail] = {
@@ -118,6 +120,7 @@ BACKEND_FAILURE_DETAILS: dict[BackendFailure, BackendFailureDetail] = {
     BackendFailure.INDEX_INCOMPLETE: BackendFailureDetail.INDEX_INCOMPLETE,
     BackendFailure.FILTERS_UNSUPPORTED: BackendFailureDetail.FILTERS_UNSUPPORTED,
     BackendFailure.NO_ANSWER: BackendFailureDetail.NO_ANSWER,
+    BackendFailure.COLLECTION_NOT_BOUND: BackendFailureDetail.COLLECTION_NOT_BOUND,
 }
 
 
