@@ -9,10 +9,10 @@ source.
 
 | Source | Terms | Redistribution | Stored here |
 |---|---|---|---|
-| NVD | https://nvd.nist.gov/developers/terms-of-use | allowed with conditions | operator-supplied feeds only |
+| NVD | https://nvd.nist.gov/developers/terms-of-use | allowed with conditions | operator-supplied feeds and the corpus stores imported from them only |
 | CVE Program | https://www.cve.org/Legal/TermsOfUse | allowed with conditions | operator-supplied only |
-| CISA KEV | https://www.cisa.gov/sites/default/files/licenses/kev/license.txt | allowed (CC0 1.0) | operator-supplied only |
-| MITRE FiGHT | https://fight.mitre.org/resources/terms/ | allowed with conditions (FiGHT Terms of Use; ATT&CK terms for derived content) | six-technique excerpt (`src/cve_kgrag/fixtures/fight/`) |
+| CISA KEV | https://www.cisa.gov/sites/default/files/licenses/kev/license.txt | allowed (CC0 1.0) | operator-supplied catalogs and the corpus stores imported from them only |
+| MITRE FiGHT | https://fight.mitre.org/resources/terms/ | allowed with conditions (FiGHT Terms of Use; ATT&CK terms for derived content) | six-technique excerpt (`src/cve_kgrag/fixtures/fight/`); the full file only as an operator-supplied snapshot |
 | MITRE ATT&CK | https://attack.mitre.org/resources/legal-and-branding/terms-of-use/ | allowed with conditions | inside the FiGHT excerpt only: five ATT&CK tactics and two FiGHT sub-techniques of ATT&CK techniques |
 | MITRE CWE | https://cwe.mitre.org/about/termsofuse.html | copies allowed with conditions | CWE IDs only |
 | MITRE CAPEC | https://capec.mitre.org/about/termsofuse.html | copies allowed with conditions | nothing |
@@ -21,6 +21,7 @@ source.
 | Data returned by Trustify | per upstream source; not verified; no adapter ships | unknown | nothing |
 | trustify-mcp tool schemas (commit ac8955f) | Apache-2.0 (LICENSE at that commit) | allowed with conditions | unmodified excerpt in `tests/contract/data/trustify_mcp_ac8955f/` |
 | Synthetic CVE fixture | this repository (MIT) | allowed | `src/cve_kgrag/fixtures/synthetic/` |
+| Format-1 compatibility store | this repository (MIT) | allowed | `tests/contract/data/corpus_store_format1_28e5b4d/` |
 
 ## Conditions, quoted
 
@@ -74,6 +75,22 @@ source.
   modified files to carry prominent notices stating that You changed the files".
   The excerpt is unmodified and its directory holds the licence text; the commit
   has no `NOTICE` file.
+
+## Operator-supplied data
+
+An operator imports NVD feeds and the CISA KEV catalog into a corpus store
+(`cve-kgrag migrate legacy`, ADR 0008) and may supply the full FiGHT `fight.yaml` as a
+pinned snapshot (ADR 0009 §11). Both stay on the operator's machine under the sources'
+own terms; neither belongs in version control. A server over a corpus store gives MCP
+clients the notice NVD asks services that use its data to display: "This product uses
+data from the NVD API but is not endorsed or certified by the NVD." A FiGHT snapshot is
+served only when the reviewed catalog lists its SHA-256, and every technique anchor it
+serves cites the FiGHT terms (`license_or_terms_ref`).
+
+The format-1 compatibility store under `tests/contract/data/` is synthetic test data
+(`CVE-9999-*` records of a fictional vendor) written by this repository's importer. Its
+anchors cite the canonical NVD and CISA artifact URLs and terms pages the importer cites
+for real inputs; it holds no data from those sources.
 
 ## Committed third-party data
 

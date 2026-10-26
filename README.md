@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.25` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.26` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 ## What it does
@@ -30,8 +30,9 @@ without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/re
 - **A v2 REST API** on a loopback address behind the same token: search, investigate,
   evidence, capabilities and evidence-set verification.
 
-The package runs offline on a bundled synthetic fixture (`CVE-9999-*` records). It
-commits no NVD, CVE Program, CISA KEV, CWE or CAPEC data; see
+The package runs offline on a bundled synthetic fixture (`CVE-9999-*` records), or on a
+corpus store an operator imports from raw NVD feeds and the CISA KEV catalog and
+activates. It commits no NVD, CVE Program, CISA KEV, CWE or CAPEC data; see
 [`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md).
 
 ## Install
@@ -68,6 +69,9 @@ uv run cve-kgrag api                                    # REST API on 127.0.0.1:
 uv run cve-kgrag schema check                           # compare schemas with the snapshots
 uv run cve-kgrag eval planner --gold eval/gold/m4_trajectories.yaml --out eval-results
 uv run cve-kgrag migrate legacy --inputs inputs.yaml --target /data/stores/nvd-2026-10 --dry-run
+uv run cve-kgrag store activate nvd-2026-10             # serve that store (store root set)
+uv run cve-kgrag store status                           # the active and previous stores
+uv run cve-kgrag store rollback                         # back to the store active before
 ```
 
 Every command but `mcp`, `api` and `schema` prints JSON. `--scope` is one of
@@ -84,7 +88,15 @@ new, verified corpus store; it prints a migration report and never writes beside
 input or over an existing store ([ADR 0008](docs/rebuild/adr/0008-legacy-data-importer.md)).
 Legacy derived exports are never imported. The store holds operator-supplied data under
 NVD's and CISA's terms ([`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md)); keep it out of
-version control. Serving a store is M6 WP10.
+version control.
+
+With `CVE_KGRAG_STORE_ROOT` set, `store validate`, `store activate`, `store rollback` and
+`store status` manage the stores under it, and every surface that serves CVE records
+serves the store `ACTIVE` names, or refuses to start; it never falls back to the
+fixture. `demo` and `eval planner` always use the fixture. The
+[operator runbook](docs/runbook.md) covers importing, activating, serving, rolling back
+and the full FiGHT snapshot
+([ADR 0009](docs/rebuild/adr/0009-store-activation-and-serving.md)).
 
 `eval planner` is a local reviewer and operator tool, served by no API: it runs each gold
 case with the deterministic policy and, with `--model-runs N` (0 to 20, default 0), N times
@@ -117,6 +129,11 @@ with `python -c "import secrets; print(secrets.token_urlsafe(32))"`. The MCP end
 `GET /api/v2/evidence/{evidence_id}`, `GET /api/v2/capabilities` and
 `POST /api/v2/verify`. On both, `/health` answers 204, and `/ready` answers 204 while a
 toolbox worker is free and 503 otherwise.
+
+The served data has no switch: `CVE_KGRAG_STORE_ROOT`, an absolute directory, serves the
+store its `ACTIVE` names in place of the fixture, and `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` with
+`CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`, set together, serve a reviewed full FiGHT snapshot in
+place of the packaged excerpt ([`docs/runbook.md`](docs/runbook.md)).
 
 Keep keys and tokens in the environment, never on a command line or in a committed file.
 

@@ -17,7 +17,7 @@ one as it lands.
 | WP6 | HTTP guard, HTTP settings, health and readiness, opt-in Streamable HTTP for MCP | done |
 | WP7 | v2 REST API, set verification over HTTP, `api` extra | done |
 | WP9 | Read-only legacy-data importer (ADR 0008) | done |
-| WP10 | Store activation and serving, operator FiGHT snapshot, M6 exit audit | not started |
+| WP10 | Store activation and serving, operator FiGHT snapshot, visible truncation, M6 exit audit (ADR 0009) | done |
 
 v1 compatibility is not an M6 package here: it stays in CVE-KGRAG (ADR 0006).
 
@@ -674,3 +674,86 @@ Decisions: ADR 0008.
 
 - `corpus_store_manifest.schema.json` and `migration_report.schema.json` are new.
 - Every versioned schema moves to `2.0.0-dev.25`; no other contract changes.
+
+## WP10 — store activation and serving
+
+Decisions: ADR 0009, which amends ADR 0003, 0004, 0006 and 0008. Operator steps:
+[`docs/runbook.md`](../runbook.md).
+
+- **Settings.** `CVE_KGRAG_STORE_ROOT`, an absolute directory, and the pair
+  `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` and `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`, set together, are
+  always read and open nothing; errors name the variable, never its value.
+- **The seam.** Every composition function takes a `ServedCorpus` (`ports/served_corpus.py`):
+  the packaged `FixtureBundle` or a `CorpusStore`. Its `ServedDataset` names the kind and
+  the `cve_search` capability version: the fixture's `fixture_id@version+sha256:<manifest
+  hash>`, a store's `corpus-store-v1@sha256:<corpus_content_sha256>`. The content digest
+  is taken over the records' and anchors' pins only, once both files match them, so
+  stores with byte-for-byte equal records and anchors serve one dataset whatever their
+  manifests say. MCP instructions are one of two fixed texts by kind; the store's carry
+  the NVD notice.
+- **Store commands** (`adapters/store/`). `store validate | activate | rollback | status`.
+  `ACTIVE` is canonical JSON with its own format version, read within 4 KiB and never
+  through a link; changes hold a non-blocking `flock` on `.lock` and go through an
+  injected file seam (check sync, temporary file, `os.replace`, confirming sync), so a
+  failure is either `active_write_failed` (unchanged) or `active_write_unconfirmed`. An
+  unreadable `ACTIVE` is refused and left as it is. A store is checked in a fixed order:
+  present as a directory, manifest digest as recorded (on the raw bytes), format version,
+  then full verification. `store_status.schema.json` is published.
+- **Startup.** `load_served_corpus` serves the fixture without a root and the active
+  store with one; a root that cannot be served stops the command, exit 2, with a closed
+  reason and no fallback. The order is settings, the HTTP token, the extra and runner,
+  the store, the FiGHT snapshot. A command loads only what its row of ADR 0009 §10 names:
+  `resolve`, `affectedness`, `migrate`, `store` and `schema` load no served corpus;
+  `demo` and `eval planner` always use the fixture and say so on stderr; `eval planner`
+  refuses an `--out` inside the root. `migrate legacy` refuses a target in the root that
+  is not a validly named store directly under it.
+- **Data plane** (`application/serving_data_plane.py`). Every deployment is built over a
+  `ServingDataPlane`: the topic cards, the search service and its indexes, the FiGHT
+  source and pin, and the evidence catalog, each built once. The `api` process's tool
+  deployment and verification route share one, with separate call runners and admission.
+- **Semantic channel.** Over a store, a requested channel is unavailable
+  (`COLLECTION_NOT_BOUND`, failure `collection_not_bound`) and no adapter is looked up;
+  ADR 0004 §1 holds the four-row table.
+- **FiGHT snapshot** (`adapters/fight/operator_snapshot.py`). One open; a 4 MiB cap
+  while reading, the pin, the catalog, then the strict parse, on those bytes; seven
+  fixed reason codes; never the excerpt instead. The full catalogued 3.1.0 file (183
+  techniques) loads through it.
+- **Truncation.** The FiGHT source reports its matched count (internal);
+  `protocol_context_truncated` and `candidates_truncated` say what a topic response's
+  bounds left out, without changing its status; an investigation's `answer_truncated`
+  counts |K| − |L| + F (ADR 0009 §11a). Both validators check the warnings' structure and
+  relations; replay re-derives the counts.
+- **Format guards.** The format-1 compatibility store, written by the importer at
+  `28e5b4d`, is committed with every file's SHA-256 pinned outside it
+  (`tests/contract/data/corpus_store_format1_28e5b4d/`); a pinned digest of the
+  manifest, record and anchor schemas raises the alarm on any change to them.
+- **Scale** (`scripts/operator/serving_scale.sh`, an operator lane). On 250,000
+  synthetic records: loading the store; `api` startup with the
+  shared data plane, compared with two separate
+  data planes (one run; the peak is reached while the store loads).
+
+### Known limits
+
+- Every figure is from synthetic records; real NVD records need more time and memory.
+- `graph_expand` over a large store can reach the tool time limit; the follow-up in
+  `PLAN.md` settles it before the public release.
+- A server serves the store active when it started; activation takes effect on restart.
+- The semantic channel is unavailable over a store until a collection records the
+  dataset it was built from.
+
+### Contracts at `2.0.0-dev.26`
+
+- `store_status.schema.json` is new.
+- `corpus_store_manifest.schema.json`: `schema_version` and the rollback instruction are
+  bounded provenance with no default, so the schema no longer moves with the contract
+  version; a `2.0.0-dev.25` manifest is valid under it.
+- `migration_report.schema.json`: `corpus_content_sha256`, the instruction naming
+  `cve-kgrag store rollback`, and the failure codes `target_in_store_root` and
+  `store_root_unusable`.
+- `knowledge_capabilities`, `search_response`, `topic_context_response` and
+  `knowledge_evidence_set`: `collection_not_bound`; the topic and evidence-set schemas
+  also gain the two truncation codes, the coverage description and the meaning of
+  `answer_truncated`'s count.
+- `search_request`, `topic_context_request` and `fight_search_request`: the limit
+  descriptions say what is and is not counted.
+- Every versioned schema moves to `2.0.0-dev.26`.

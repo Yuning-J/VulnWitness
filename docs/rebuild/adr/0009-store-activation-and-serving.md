@@ -260,7 +260,7 @@ ADR 0004 §1 lists these variables with the others.
 
 ### 9. Startup
 
-- `load_served_bundle(settings)` returns the fixture when the root is unset. Otherwise
+- `load_served_corpus(store_root)` returns the fixture when the root is unset. Otherwise
   it reads `ACTIVE` (a regular file, never followed through a link), loads the named
   store with `load_corpus_store` and checks its digest against the record. Any failure
   raises `StoreUnavailable` with a closed reason code and never a path or file content:
@@ -632,7 +632,7 @@ Two guards protect format 1:
 ### 17. Operations and the M6 exit
 
 - An operator measurement lane beside `scripts/operator/migration_scale.sh` migrates
-  synthetic feeds into a store, activates it and records `load_served_bundle` and the
+  synthetic feeds into a store, activates it and records `load_served_corpus` and the
   `api` build's time and memory.
 - The runbook covers migrate, validate, activate, status, roll back and restart; the
   re-import a store format change requires; removing an unreadable `ACTIVE` (§6); and,

@@ -12,7 +12,7 @@ milestone once its exit criterion is met and the offline lane is green.
 | M3 | Topic registry + 5G-AKA card (`pending_review` by owner decision while the design is experimental: technically checked against TS 33.501 V19.7.0, no named reviewer, every answer that uses it carries `topic_pending_review`), pinned FiGHT YAML source + licensed excerpt, relevance tiers, scoped topic-context service, gold queries, source registry and THIRD_PARTY_DATA.md | done |
 | M4 | Bounded investigation state machine, deterministic policy m4.1, model-planner port with plan gate and deterministic fallback, budgets, replayable trajectory, gold trajectories, hard wall time via abandoning call runner, per-request result cap, catalog re-check of served content, trajectory cross-validation (network LLM adapter follows separately) | done |
 | M5 | Trustify port + disabled adapter (real adapter BLOCKED_UNVERIFIED, ADR 0003), read-only stdio MCP server with eight bounded tools, evidence-set verification (`cve-kgrag verify`), server-owned text at the MCP boundary (typed affectedness and backend failures, vouched match explanations), search-tool boundary below; contracts `2.0.0-dev.16` | done |
-| M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, loopback, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; WP4 offline CI; WP5 full CLI and the verification report contract, with bounded violations in the server's own words; WP6 HTTP guard, HTTP settings and MCP over Streamable HTTP; WP7 v2 REST API with set verification over HTTP; WP9 read-only legacy-data importer, ADR 0008; contracts `2.0.0-dev.25`) | in progress |
+| M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, loopback, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; WP4 offline CI; WP5 full CLI and the verification report contract, with bounded violations in the server's own words; WP6 HTTP guard, HTTP settings and MCP over Streamable HTTP; WP7 v2 REST API with set verification over HTTP; WP9 read-only legacy-data importer, ADR 0008; WP10 store activation and serving, the operator FiGHT snapshot, visible truncation and the M6 exit audit, ADR 0009; contracts `2.0.0-dev.26`); exit audit in [`m6-exit-audit.md`](m6-exit-audit.md) | done |
 | M7a | Planner behaviour baseline before WP9: `cve-kgrag eval planner`, a pure analyzer over the evidence sets' trajectories (outcomes, fallbacks, divergence from the policy's plans, run stability), the deterministic baseline on the M4 gold file; no agent, vocabulary, round or contract change; [`m7a-planner-baseline.md`](m7a-planner-baseline.md) | done offline; live model runs are the owner's |
 | M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | not started |
 
@@ -100,13 +100,40 @@ The migration map lives with the legacy modules it describes, in CVE-KGRAG
 (`docs/rebuild/migration-map.md`). Its rows not yet covered here:
 
 - CSAF import and the legacy pipeline commands (collect, process, export) have no v2
-  counterpart; M6 WP9 records them and WP10 lists the follow-up.
+  counterpart; M6 WP9 records them, and CSAF is an M6 follow-up below.
 - `export_kg_for_rag` output is detected by the M6 WP9 importer and reported as derived
   data, never imported as a source of record.
 - The CVE→CWE→CAPEC→ATT&CK mapper becomes a derived mapping with its method, inputs,
   confidence and asserted or inferred status; FiGHT threat context stays matched by
   reviewed topic terms, not derived from CVEs.
 - There is no v2 Neo4j adapter; whether one is built is open.
+
+## Follow-ups from M6 (ADR 0009)
+
+Recorded when M6 closed; none blocks M7b unless it says so.
+
+- CSAF import; an allowlisted refresh command; the Trustify adapter (above); the planner
+  round-2 fix (above).
+- The semantic index build from a store: a collection built from a store records its
+  `corpus_content_sha256`, and the semantic channel serves a store only when that
+  digest equals the served one; it also settles legacy `KEV-` chunk IDs.
+- The `search_cves` filtered seam; hot reload of an activated store; removing old
+  stores; a matched count for `search` responses; revisiting the 20-technique cap on
+  topic context, whose cuts are now reported.
+- The corpus content digest in the planner evaluation's identity (M7b), so reports from
+  two datasets never compare as equal.
+- A real-feed check of the importer's 512 MiB per-file cap and of serving memory, which
+  are measured on synthetic records only; `gc.freeze()` if the operator lane shows
+  collection stalls.
+- `graph_expand` at scale, acceptance work on a real NVD store: record the relation
+  degree distribution (CWE, vendor, product, CPE, purl) and, for typical and
+  high-degree seeds, latency, peak memory and candidate count, each with the store's
+  `corpus_content_sha256`; try exact optimizations first (build paths only for the
+  final top-k, no full path set per candidate); only if those are not enough, design
+  pruning of high-degree relations with its own warning (such as
+  `graph_expansion_truncated`) and an omitted count. If ordinary graph queries often time
+  out on real data, fix it or disable `graph_expand` over a corpus store before the
+  public release.
 
 ## Offline lane
 

@@ -726,8 +726,15 @@ only.
 - **No affectedness source.** Every product question ends `source_unavailable`
   with `partial` or a failure status, and applicability is `unknown`, while no
   verified affectedness source exists (ADR 0003).
-- **Truncation is reported only when merging.** An `answer_truncated` warning
-  reports cuts made while merging steps, not a single tool's own cut.
+- **Truncation counts what the adopted steps knew, not what backends left unseen.**
+  `answer_truncated` counts, each once, the items the adopted steps knew and the answer
+  does not list: the CVEs they kept, those the topic step kept and left out at its limit
+  included, less the CVEs the answer lists, plus the techniques the topic step matched
+  and did not list (ADR 0009 §11a). A CVE tool's own top-k and each retrieval channel's
+  cut are never counted, so more matches may exist unseen. The topic step's cuts are
+  also its own `candidates_truncated` and `protocol_context_truncated` warnings; the
+  validator checks the relations a set carries, and replay re-derives every count from
+  the sources.
 - **The pending 5G-AKA card drives retrieval.** Its `pending_review` status is
   reported with a `topic_pending_review` warning; gating retrieval on review is a
   human decision.
