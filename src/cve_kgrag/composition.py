@@ -45,7 +45,6 @@ from cve_kgrag.application.topic_context import TopicContextService
 from cve_kgrag.domain.affectedness import AFFECTEDNESS_DETAILS, AffectednessFailure
 from cve_kgrag.domain.corpus_store_manifest import StoreSource
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.hashing import canonical_sha256
 from cve_kgrag.domain.investigation import (
     FightUnavailableDetail,
     SourceCapability,
@@ -54,11 +53,13 @@ from cve_kgrag.domain.investigation import (
 )
 from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail
 from cve_kgrag.domain.provenance import SourceRegistry
+from cve_kgrag.domain.served_dataset import ServedDataset
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import KnowledgeSource
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.ports.affectedness import TrustifyPort
+from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.ports.sources import FightSource
 from cve_kgrag.settings import ModelPlannerSettings, SemanticSettings
 from cve_kgrag.topics.registry import TopicRegistry
@@ -79,14 +80,14 @@ def load_served_bundle() -> FixtureBundle:
 
 
 def build_search_service(
-    bundle: FixtureBundle, semantic_settings: SemanticSettings | None = None
+    served_corpus: ServedCorpus, semantic_settings: SemanticSettings | None = None
 ) -> SearchService:
-    """The search channels over ``bundle``, with the semantic channel ``semantic_settings``
-    enable (none without them)."""
-    repository = InMemoryKnowledgeRepository(bundle.records, bundle.evidence)
+    """The search channels over ``served_corpus``, with the semantic channel
+    ``semantic_settings`` enable (none without them)."""
+    repository = InMemoryKnowledgeRepository(served_corpus.records, served_corpus.evidence)
     return SearchService(
         cve_repository=repository,
-        evidence_catalog=InMemoryEvidenceCatalog(bundle.evidence, bundle.records),
+        evidence_catalog=InMemoryEvidenceCatalog(served_corpus.evidence, served_corpus.records),
         lexical_retriever=Bm25LexicalIndex(repository.list_cves()),
         structured_retriever=InMemoryStructuredIndex(repository.list_cves()),
         graph_retriever=InMemoryRelationGraph(repository.list_cves()),
@@ -128,24 +129,26 @@ def load_packaged_fight_source(
     return packaged_source, snapshot_catalog.find(packaged_source.describe().snapshot_sha256)
 
 
-def build_evidence_catalog(bundle: FixtureBundle, fight_source: FightSource) -> EvidenceCatalog:
-    """Everything this deployment serves: the bundle's CVE records and evidence, and the
-    FiGHT snapshot's techniques and anchors. Final validation re-checks each served
-    anchor, record and technique against it."""
+def build_evidence_catalog(
+    served_corpus: ServedCorpus, fight_source: FightSource
+) -> EvidenceCatalog:
+    """Everything this deployment serves: the served corpus's CVE records and evidence,
+    and the FiGHT snapshot's techniques and anchors. Final validation re-checks each
+    served anchor, record and technique against it."""
     return InMemoryEvidenceCatalog(
-        (*bundle.evidence, *fight_source.list_evidence()),
-        bundle.records,
+        (*served_corpus.evidence, *fight_source.list_evidence()),
+        served_corpus.records,
         fight_source.list_techniques(),
     )
 
 
 def build_topic_context_service(
-    bundle: FixtureBundle,
+    served_corpus: ServedCorpus,
     fight_source: FightSource | None = None,
     pinned_fight_snapshot: KnownFightSnapshot | None = None,
     semantic_settings: SemanticSettings | None = None,
 ) -> TopicContextService:
-    """Packaged topic cards over the bundle's CVEs, whose template searches run the
+    """Packaged topic cards over the served corpus's CVEs, whose template searches run the
     semantic channel ``semantic_settings`` enable when a request asks for it.
 
     Without ``fight_source``, FiGHT is the packaged excerpt, pinned to its entry in
@@ -156,10 +159,10 @@ def build_topic_context_service(
         fight_source, pinned_fight_snapshot = load_packaged_fight_source(utc_now)
     return TopicContextService(
         topic_registry=build_topic_registry(),
-        search_service=build_search_service(bundle, semantic_settings),
+        search_service=build_search_service(served_corpus, semantic_settings),
         fight_source=fight_source,
         pinned_fight_snapshot=pinned_fight_snapshot,
-        evidence_catalog=build_evidence_catalog(bundle, fight_source),
+        evidence_catalog=build_evidence_catalog(served_corpus, fight_source),
     )
 
 
@@ -188,7 +191,7 @@ def describe_affectedness(trustify_port: TrustifyPort) -> SourceCapability:
 
 
 def describe_source_capabilities(
-    bundle: FixtureBundle,
+    served_dataset: ServedDataset,
     fight_source: FightSource,
     pinned_fight_snapshot: KnownFightSnapshot | None,
     search_service: SearchService,
@@ -201,13 +204,11 @@ def describe_source_capabilities(
     The semantic channel's capability is ``describe_semantic_capability``'s, read from
     ``search_service``.
     """
-    manifest = bundle.manifest
-    manifest_sha256 = canonical_sha256(manifest.model_dump(mode="json"))
     capabilities = [
         SourceCapability(
             source=KnowledgeSource.CVE_SEARCH,
             state=SourceCapabilityState.AVAILABLE,
-            version=f"{manifest.fixture_id}@{manifest.version}+sha256:{manifest_sha256}",
+            version=served_dataset.cve_search_version,
         )
     ]
     if fight_source.describe() is not None and pinned_fight_snapshot is not None:
@@ -250,7 +251,7 @@ def describe_semantic_capability(search_service: SearchService) -> SourceCapabil
 
 
 def build_investigation_deployment(
-    bundle: FixtureBundle,
+    served_corpus: ServedCorpus,
     *,
     search_service: SearchService | None = None,
     fight_source: FightSource | None = None,
@@ -264,8 +265,8 @@ def build_investigation_deployment(
     """One search service shared by the topic-context service and the tool executor, and
     one topic-context service, the tool executor's.
 
-    A caller passing ``search_service`` passes one over ``bundle``: the evidence
-    catalog every served anchor and record is re-checked against holds ``bundle``'s
+    A caller passing ``search_service`` passes one over ``served_corpus``: the evidence
+    catalog every served anchor and record is re-checked against holds ``served_corpus``'s
     records and evidence. ``semantic_settings`` configures only the search service built
     here; the ``semantic_channel`` capability reports the service actually used.
     Without ``fight_source``, FiGHT is the packaged excerpt and its catalog pin; a
@@ -278,7 +279,7 @@ def build_investigation_deployment(
     caller passing one shares it, and with it the count of live calls, across deployments.
     """
     if search_service is None:
-        search_service = build_search_service(bundle, semantic_settings)
+        search_service = build_search_service(served_corpus, semantic_settings)
     if fight_source is None:
         fight_source, pinned_fight_snapshot = load_packaged_fight_source(wall_clock)
     if trustify_port is None:
@@ -287,7 +288,7 @@ def build_investigation_deployment(
         call_runner = ThreadedCallRunner()
     affectedness_capability = describe_affectedness(trustify_port)
     topic_registry = build_topic_registry()
-    evidence_catalog = build_evidence_catalog(bundle, fight_source)
+    evidence_catalog = build_evidence_catalog(served_corpus, fight_source)
     topic_context_service = TopicContextService(
         topic_registry=topic_registry,
         search_service=search_service,
@@ -295,14 +296,20 @@ def build_investigation_deployment(
         pinned_fight_snapshot=pinned_fight_snapshot,
         evidence_catalog=evidence_catalog,
     )
+    served_dataset = served_corpus.describe_served_dataset()
     return InvestigationDeployment(
+        served_dataset=served_dataset,
         topic_registry=topic_registry,
         tool_executor=ToolExecutor(search_service, topic_context_service, topic_registry),
         search_service=search_service,
         topic_context_service=topic_context_service,
         trustify_port=trustify_port,
         source_capabilities=describe_source_capabilities(
-            bundle, fight_source, pinned_fight_snapshot, search_service, affectedness_capability
+            served_dataset,
+            fight_source,
+            pinned_fight_snapshot,
+            search_service,
+            affectedness_capability,
         ),
         pinned_fight_snapshot=pinned_fight_snapshot,
         evidence_catalog=evidence_catalog,
@@ -313,7 +320,7 @@ def build_investigation_deployment(
 
 
 def build_investigation_service(
-    bundle: FixtureBundle,
+    served_corpus: ServedCorpus,
     *,
     search_service: SearchService | None = None,
     fight_source: FightSource | None = None,
@@ -334,7 +341,7 @@ def build_investigation_service(
     the call runner. A ``trustify_port`` is described once, when the deployment is built.
     """
     deployment = build_investigation_deployment(
-        bundle,
+        served_corpus,
         search_service=search_service,
         fight_source=fight_source,
         pinned_fight_snapshot=pinned_fight_snapshot,
@@ -376,7 +383,7 @@ def list_accepted_planner_capabilities(
 
 
 def build_knowledge_toolbox(
-    bundle: FixtureBundle,
+    served_corpus: ServedCorpus,
     *,
     search_service: SearchService | None = None,
     fight_source: FightSource | None = None,
@@ -387,7 +394,7 @@ def build_knowledge_toolbox(
     tool_clock: Callable[[], float] = time.monotonic,
     limits: ToolLimits | None = None,
 ) -> KnowledgeToolbox:
-    """The knowledge tools over one deployment of ``bundle``
+    """The knowledge tools over one deployment of ``served_corpus``
     (``build_investigation_deployment``): its search service, its FiGHT source (the
     packaged excerpt without ``fight_source``), its affectedness port
     (``DisabledTrustifyAdapter`` without ``trustify_port``), no semantic channel (its
@@ -397,11 +404,12 @@ def build_knowledge_toolbox(
     ``wall_clock`` and ``monotonic_clock`` are the deployment's, which every investigation
     runs on; ``tool_clock`` bounds each tool call, so reading it never moves a run's
     deadline arithmetic. Without ``limits`` every call runs under the default
-    ``ToolLimits``. A caller passing ``search_service`` passes one over ``bundle``; one
-    passing ``fight_source`` also passes the pin it chose for it (``None`` for none).
+    ``ToolLimits``. A caller passing ``search_service`` passes one over
+    ``served_corpus``; one passing ``fight_source`` also passes the pin it chose for it
+    (``None`` for none).
     """
     deployment = build_investigation_deployment(
-        bundle,
+        served_corpus,
         search_service=search_service,
         fight_source=fight_source,
         pinned_fight_snapshot=pinned_fight_snapshot,

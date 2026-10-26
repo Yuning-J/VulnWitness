@@ -24,6 +24,7 @@ from cve_kgrag.domain.evidence import (
     seal_evidence_anchor,
 )
 from cve_kgrag.domain.hashing import canonical_sha256, sha256_hex
+from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.domain.taxonomy import (
     AssertionKind,
     KnowledgeScope,
@@ -59,6 +60,17 @@ class FixtureBundle:
     manifest: FixtureManifest
     records: tuple[CveRecord, ...]
     evidence: tuple[EvidenceAnchor, ...]
+
+    def describe_served_dataset(self) -> ServedDataset:
+        """The fixture, named by its ID, its version and the hash of its manifest, which
+        pins every fixture file."""
+        manifest_sha256 = canonical_sha256(self.manifest.model_dump(mode="json"))
+        return ServedDataset(
+            kind=ServedDatasetKind.SYNTHETIC_FIXTURE,
+            cve_search_version=(
+                f"{self.manifest.fixture_id}@{self.manifest.version}+sha256:{manifest_sha256}"
+            ),
+        )
 
 
 def default_fixture_dir() -> Traversable:

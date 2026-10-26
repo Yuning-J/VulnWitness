@@ -14,6 +14,7 @@ from pydantic import Field, model_validator
 
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.evidence import SHA256_PATTERN
+from cve_kgrag.domain.hashing import canonical_sha256
 from cve_kgrag.domain.search import SCHEMA_VERSION, SchemaVersion
 from cve_kgrag.domain.timestamps import Timestamp
 
@@ -22,6 +23,8 @@ STORE_FORMAT_VERSION: Literal[1] = 1
 FIRST_FEED_YEAR = 2002
 STORE_FILE_NAME_PATTERN = r"^[a-z_]+\.jsonl$"
 SOURCE_VERSION_PATTERN = r"^sha256:[0-9a-f]{64}$"
+# The version of the corpus content identity, named in a store's ``cve_search`` version.
+CORPUS_CONTENT_IDENTITY_VERSION = 1
 ROLLBACK_INSTRUCTION = (
     "Before activation, remove the newly created target directory. After activation, use "
     "the WP10 store rollback operation."
@@ -187,3 +190,33 @@ class CorpusStoreManifest(ContractModel):
                 raise ValueError("each store file is pinned once")
             pinned_paths.add(store_file.path)
         return self
+
+
+def derive_corpus_content_sha256(records_file: StoreFile, anchors_file: StoreFile) -> str:
+    """The SHA-256 naming the dataset a store's records and anchors hold, from their pins
+    alone: no manifest field other than the two files' hashes and sizes enters it, so
+    stores with byte-for-byte equal records and anchors serve one dataset (ADR 0009 §2).
+    Taken only once both files have been checked against their pins."""
+    return canonical_sha256(
+        {
+            "identity_version": CORPUS_CONTENT_IDENTITY_VERSION,
+            "files": [
+                {
+                    "role": "records",
+                    "sha256": records_file.sha256,
+                    "size_bytes": records_file.size_bytes,
+                },
+                {
+                    "role": "anchors",
+                    "sha256": anchors_file.sha256,
+                    "size_bytes": anchors_file.size_bytes,
+                },
+            ],
+        }
+    )
+
+
+def name_corpus_store_version(corpus_content_sha256: str) -> str:
+    """A store's ``cve_search`` capability version: its content identity's version and
+    digest."""
+    return f"corpus-store-v{CORPUS_CONTENT_IDENTITY_VERSION}@sha256:{corpus_content_sha256}"

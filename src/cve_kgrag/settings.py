@@ -14,11 +14,13 @@ import hashlib
 import ipaddress
 import re
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Literal, TypeVar
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
 
+from cve_kgrag.domain.evidence import SHA256_PATTERN
 from cve_kgrag.domain.planning import MODEL_NAME_PATTERN, REASONING_EFFORT_PATTERN
 
 PLANNER_ENABLED_VARIABLE = "CVE_KGRAG_PLANNER_ENABLED"
@@ -44,6 +46,16 @@ HTTP_VARIABLES = {
     "CVE_KGRAG_MCP_HTTP_PORT": "mcp_port",
     "CVE_KGRAG_API_PORT": "api_port",
 }
+# The variables naming the served data, and the field each sets; the section has no switch:
+# an unset store root serves the packaged fixture, an unset snapshot the packaged excerpt
+# (ADR 0009 §3).
+SERVED_DATA_VARIABLES = {
+    "CVE_KGRAG_STORE_ROOT": "store_root",
+    "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": "fight_snapshot_path",
+    "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": "fight_snapshot_sha256",
+}
+MAX_PATH_CHARS = 4096
+INVALID_ABSOLUTE_PATH = "must be an absolute path with no control character"
 # A bearer token as RFC 6750 writes one (``b64token``), long enough to be a generated
 # secret, for example ``python -c "import secrets; print(secrets.token_urlsafe(32))"``.
 HTTP_TOKEN_PATTERN = r"^[A-Za-z0-9._~+/-]+=*$"
@@ -210,14 +222,54 @@ class HttpSettings(BaseModel):
         return token
 
 
+def check_absolute_path(path: Path) -> Path:
+    path_text = str(path)
+    if not path.is_absolute() or not path_text.isprintable() or len(path_text) > MAX_PATH_CHARS:
+        raise ValueError(INVALID_ABSOLUTE_PATH)
+    return path
+
+
+class ServedDataVariables(BaseModel):
+    """The served-data variables as read, each checked on its own; ``load_settings``
+    checks that the snapshot's path and hash are set together, so its error names the
+    variable that is missing."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    store_root: Path | None = None
+    fight_snapshot_path: Path | None = None
+    fight_snapshot_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+
+    @field_validator("store_root", "fight_snapshot_path")
+    @classmethod
+    def check_path(cls, path: Path | None) -> Path | None:
+        if path is None:
+            return None
+        return check_absolute_path(path)
+
+
+class FightSnapshotSettings(BaseModel):
+    """An operator FiGHT snapshot: the file and the SHA-256 it must have. Whether the
+    catalog lists that hash is checked when a command loads the snapshot (ADR 0009 §11)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    path: Path
+    sha256: str = Field(pattern=SHA256_PATTERN)
+
+
 class ServiceSettings(BaseModel):
-    """Every setting a service reads; a switched section is ``None`` unless it is enabled."""
+    """Every setting a service reads; a switched section is ``None`` unless it is enabled.
+    ``store_root`` is ``None`` when the packaged fixture is served, and ``fight_snapshot``
+    when the packaged FiGHT excerpt is."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
     model_planner: ModelPlannerSettings | None = None
     semantic: SemanticSettings | None = None
     http: HttpSettings = HttpSettings()
+    store_root: Path | None = None
+    fight_snapshot: FightSnapshotSettings | None = None
 
 
 def find_section_variable(section_variables: Mapping[str, str], field_name: str) -> str:
@@ -282,14 +334,37 @@ def load_section(
     return section_settings
 
 
+def pair_fight_snapshot(served_data: ServedDataVariables) -> FightSnapshotSettings | None:
+    """The snapshot the path and hash name, ``None`` when neither is set. Raises
+    ``SettingsError`` naming the one that is missing when only the other is set."""
+    path = served_data.fight_snapshot_path
+    sha256 = served_data.fight_snapshot_sha256
+    if path is None and sha256 is None:
+        return None
+    if path is None or sha256 is None:
+        missing_field = "fight_snapshot_path" if path is None else "fight_snapshot_sha256"
+        present_field = "fight_snapshot_sha256" if path is None else "fight_snapshot_path"
+        missing_variable = find_section_variable(SERVED_DATA_VARIABLES, missing_field)
+        present_variable = find_section_variable(SERVED_DATA_VARIABLES, present_field)
+        raise SettingsError(
+            f"invalid settings: {missing_variable}: required with {present_variable}"
+        )
+    return FightSnapshotSettings(path=path, sha256=sha256)
+
+
 def load_settings(environment: Mapping[str, str]) -> ServiceSettings:
     """The settings ``environment`` holds. Raises ``SettingsError``, naming the variables
     and never their values, when any is invalid. A switched section's variables are read
     only when its switch (``CVE_KGRAG_PLANNER_ENABLED``, ``CVE_KGRAG_SEMANTIC_ENABLED``) is
-    on; the HTTP variables are always read."""
+    on; the HTTP and served-data variables are always read. Nothing is opened: whether
+    the store root or the snapshot can be used is checked by the commands that load them."""
     http_settings = parse_section(environment, HTTP_VARIABLES, HttpSettings)
     if isinstance(http_settings, SettingsError):
         raise http_settings
+    served_data = parse_section(environment, SERVED_DATA_VARIABLES, ServedDataVariables)
+    if isinstance(served_data, SettingsError):
+        raise served_data
+    fight_snapshot = pair_fight_snapshot(served_data)
     return ServiceSettings(
         model_planner=load_section(
             environment, PLANNER_ENABLED_VARIABLE, PLANNER_VARIABLES, ModelPlannerSettings
@@ -298,4 +373,6 @@ def load_settings(environment: Mapping[str, str]) -> ServiceSettings:
             environment, SEMANTIC_ENABLED_VARIABLE, SEMANTIC_VARIABLES, SemanticSettings
         ),
         http=http_settings,
+        store_root=served_data.store_root,
+        fight_snapshot=fight_snapshot,
     )

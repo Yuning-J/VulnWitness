@@ -32,6 +32,8 @@ from cve_kgrag.adapters.store.corpus_store import (
     CorpusStore,
     CorpusStoreIntegrityError,
     StoreFileWriter,
+    UnsupportedStoreFormatError,
+    VerifiedStore,
     encode_line,
     load_corpus_store,
     verify_corpus_store,
@@ -40,7 +42,9 @@ from cve_kgrag.adapters.store.corpus_store import (
 from cve_kgrag.domain.corpus_store_manifest import CorpusStoreManifest
 from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
+from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.migration_report import MigrationOutcome
+from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.domain.taxonomy import KnowledgeScope
 from tests.support.builders import build_anchor
 from tests.support.legacy_inputs import (
@@ -60,6 +64,19 @@ EMPTY_FILE_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b785
 BLOCKING_READ_TIMEOUT_SECONDS = 5
 StoreReader = Callable[[Path], object]
 ModelT = TypeVar("ModelT", CveRecord, EvidenceAnchor)
+
+
+def build_content_identity(store_dir: Path) -> bytes:
+    """The canonical JSON the corpus content digest is taken over, written out as ADR 0009
+    §2 specifies it, from the bytes of the store's two files."""
+    records_bytes = (store_dir / RECORDS_FILE).read_bytes()
+    anchors_bytes = (store_dir / ANCHORS_FILE).read_bytes()
+    return (
+        '{"files":['
+        f'{{"role":"records","sha256":"{sha256_hex(records_bytes)}","size_bytes":{len(records_bytes)}}},'
+        f'{{"role":"anchors","sha256":"{sha256_hex(anchors_bytes)}","size_bytes":{len(anchors_bytes)}}}'
+        '],"identity_version":1}'
+    ).encode()
 
 
 @dataclass(frozen=True)
@@ -227,6 +244,8 @@ def test_load_corpus_store_returns_manifest_records_and_anchors_as_written(
     # Assert
     assert corpus_store == CorpusStore(
         manifest=imported_contents.manifest,
+        store_manifest_sha256=sha256_hex((imported_store / STORE_MANIFEST_FILE).read_bytes()),
+        corpus_content_sha256=sha256_hex(build_content_identity(imported_store)),
         records=tuple(imported_contents.records),
         evidence=tuple(imported_contents.anchors),
     )
@@ -243,14 +262,87 @@ def test_load_corpus_store_returns_records_in_cve_id_order(imported_store: Path)
     assert cve_ids == ["CVE-9999-0001", "CVE-9999-0002"]
 
 
-def test_verify_corpus_store_returns_store_manifest(
+def test_verify_corpus_store_returns_manifest_and_both_digests(
     imported_store: Path, imported_contents: StoreContents
 ) -> None:
     # Act
-    manifest = verify_corpus_store(imported_store)
+    verified_store = verify_corpus_store(imported_store)
 
     # Assert
-    assert manifest == imported_contents.manifest
+    assert verified_store == VerifiedStore(
+        manifest=imported_contents.manifest,
+        store_manifest_sha256=sha256_hex((imported_store / STORE_MANIFEST_FILE).read_bytes()),
+        corpus_content_sha256=sha256_hex(build_content_identity(imported_store)),
+    )
+
+
+def test_loaded_store_names_its_dataset_by_its_content_digest(imported_store: Path) -> None:
+    # Act
+    served_dataset = load_corpus_store(imported_store).describe_served_dataset()
+
+    # Assert
+    content_sha256 = sha256_hex(build_content_identity(imported_store))
+    assert served_dataset == ServedDataset(
+        kind=ServedDatasetKind.CORPUS_STORE,
+        cve_search_version=f"corpus-store-v1@sha256:{content_sha256}",
+    )
+
+
+def test_stores_with_equal_files_and_other_manifests_serve_one_dataset(
+    imported_contents: StoreContents, rewritten_dir: Path, tmp_path: Path
+) -> None:
+    # Arrange
+    write_store(
+        rewritten_dir,
+        imported_contents.manifest,
+        imported_contents.records,
+        imported_contents.anchors,
+    )
+    other_manifest = imported_contents.manifest.model_copy(
+        update={"importer_version": "9.9.9", "inputs_manifest_sha256": "f" * 64}
+    )
+    other_dir = tmp_path / "other"
+    write_store(other_dir, other_manifest, imported_contents.records, imported_contents.anchors)
+
+    # Act
+    first_store = load_corpus_store(rewritten_dir)
+    second_store = load_corpus_store(other_dir)
+
+    # Assert
+    assert first_store.store_manifest_sha256 != second_store.store_manifest_sha256
+    assert first_store.describe_served_dataset() == second_store.describe_served_dataset()
+    assert (first_store.records, first_store.evidence) == (
+        second_store.records,
+        second_store.evidence,
+    )
+
+
+def test_stores_whose_records_differ_serve_other_datasets(
+    imported_contents: StoreContents, rewritten_dir: Path, tmp_path: Path
+) -> None:
+    # Arrange
+    write_store(
+        rewritten_dir,
+        imported_contents.manifest,
+        imported_contents.records,
+        imported_contents.anchors,
+    )
+    first_record = imported_contents.records[0]
+    edited_record = first_record.model_copy(update={"cwe_ids": ("CWE-79",)})
+    other_dir = tmp_path / "other"
+    write_store(
+        other_dir,
+        imported_contents.manifest,
+        [edited_record, *imported_contents.records[1:]],
+        imported_contents.anchors,
+    )
+
+    # Act
+    first_dataset = load_corpus_store(rewritten_dir).describe_served_dataset()
+    second_dataset = load_corpus_store(other_dir).describe_served_dataset()
+
+    # Assert
+    assert first_dataset != second_dataset
 
 
 def test_store_written_with_store_writers_loads_back_unchanged(
@@ -270,6 +362,8 @@ def test_store_written_with_store_writers_loads_back_unchanged(
     # Assert
     assert corpus_store == CorpusStore(
         manifest=manifest,
+        store_manifest_sha256=sha256_hex((rewritten_dir / STORE_MANIFEST_FILE).read_bytes()),
+        corpus_content_sha256=sha256_hex(build_content_identity(rewritten_dir)),
         records=tuple(imported_contents.records),
         evidence=tuple(imported_contents.anchors),
     )
@@ -707,7 +801,10 @@ def test_reading_store_whose_manifest_is_not_json_object_is_refused(
     [
         {"synthetic": True},
         {"unexpected_field": 1},
-        {"store_format_version": 2},
+        {"store_format_version": None},
+        {"store_format_version": "1"},
+        {"store_format_version": 1.5},
+        {"store_format_version": True},
         {"schema_version": "1.0.0"},
         {"rollback_instruction": "Delete the directory."},
         {"rollback_kind": "repair_in_place"},
@@ -719,7 +816,10 @@ def test_reading_store_whose_manifest_is_not_json_object_is_refused(
     ids=[
         "synthetic",
         "unknown_field",
-        "store_format_version",
+        "store_format_version_null",
+        "store_format_version_string",
+        "store_format_version_fraction",
+        "store_format_version_boolean",
         "schema_version",
         "rollback_instruction",
         "rollback_kind",
@@ -737,6 +837,33 @@ def test_reading_store_with_invalid_manifest_field_is_refused(
 
     # Act / Assert
     with pytest.raises(CorpusStoreIntegrityError, match="not a corpus store manifest"):
+        read_store(imported_store)
+
+
+def test_reading_store_without_a_format_version_is_refused_as_invalid(
+    imported_store: Path, read_store: StoreReader
+) -> None:
+    # Arrange
+    manifest_fields = json.loads((imported_store / STORE_MANIFEST_FILE).read_bytes())
+    del manifest_fields["store_format_version"]
+    (imported_store / STORE_MANIFEST_FILE).write_text(json.dumps(manifest_fields))
+
+    # Act / Assert
+    with pytest.raises(CorpusStoreIntegrityError, match="not a corpus store manifest"):
+        read_store(imported_store)
+
+
+@pytest.mark.parametrize("format_version", [0, 2, 10**30], ids=["zero", "next", "huge"])
+def test_reading_store_of_another_format_version_is_refused_as_unsupported(
+    imported_store: Path, read_store: StoreReader, format_version: int
+) -> None:
+    # Arrange: a later format may change any other field, which this reader must not judge.
+    write_manifest_overrides(
+        imported_store, {"store_format_version": format_version, "records_layout": "v2"}
+    )
+
+    # Act / Assert
+    with pytest.raises(UnsupportedStoreFormatError):
         read_store(imported_store)
 
 
@@ -927,7 +1054,7 @@ def test_verify_corpus_store_whose_manifest_is_exactly_at_its_cap_passes(
     pad_manifest(imported_store, MAX_STORE_MANIFEST_BYTES)
 
     # Act
-    manifest = verify_corpus_store(imported_store)
+    verified_store = verify_corpus_store(imported_store)
 
     # Assert
-    assert manifest == imported_contents.manifest
+    assert verified_store.manifest == imported_contents.manifest

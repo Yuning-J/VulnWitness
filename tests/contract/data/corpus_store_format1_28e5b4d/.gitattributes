@@ -1,0 +1,2 @@
+# The pinned store bytes must reach every checkout unchanged, whatever its line-ending settings.
+store/* -text

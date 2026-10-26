@@ -141,7 +141,7 @@ def build_knowledge_mcp_server(toolbox: KnowledgeToolbox) -> Server[LifespanStat
     server: Server[LifespanState] = Server(
         SERVER_NAME,
         version=read_installed_version(),
-        instructions=SERVER_INSTRUCTIONS,
+        instructions=SERVER_INSTRUCTIONS[toolbox.describe_served_dataset().kind],
         on_list_tools=handlers.list_tools,
         on_call_tool=handlers.call_tool,
     )

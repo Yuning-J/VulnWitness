@@ -1041,7 +1041,7 @@ def test_gold_row_reports_the_capabilities_its_deployment_is_built_with(
     fight_source, pinned_fight_snapshot = choose_fight_source(fight_choice)
     deployment_capabilities = (
         *describe_source_capabilities(
-            fixture_bundle,
+            fixture_bundle.describe_served_dataset(),
             fight_source,
             pinned_fight_snapshot,
             build_fixture_service(fixture_bundle),

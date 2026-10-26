@@ -10,12 +10,15 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
+from cve_kgrag.composition import load_packaged_source_registry
 from cve_kgrag.domain.cve import CveRecord
+from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.threat_context import ThreatContextItem
 from cve_kgrag.interfaces.knowledge_tools import (
     CVE_RECORD_SOURCE_TEXT_FIELDS,
     FIGHT_TECHNIQUE_SOURCE_TEXT_FIELDS,
     KNOWLEDGE_TOOL_SPECS,
+    NVD_ATTRIBUTION,
     PUBLISHER_AFFECTED_STATEMENT,
     SERVER_INSTRUCTIONS,
     ToolLimits,
@@ -171,7 +174,28 @@ def test_every_source_text_field_is_named_untrusted_in_the_server_instructions(
     source_text_fields = list_free_text_fields(record_model) - SERVICE_MATCH_FIELDS
 
     assert source_text_fields == set(untrusted_fields)
-    assert f"({', '.join(untrusted_fields)})" in SERVER_INSTRUCTIONS
+    for instructions in SERVER_INSTRUCTIONS.values():
+        assert f"({', '.join(untrusted_fields)})" in instructions
+
+
+def test_there_are_server_instructions_for_every_dataset_kind() -> None:
+    assert set(SERVER_INSTRUCTIONS) == set(ServedDatasetKind)
+
+
+def test_only_the_store_instructions_carry_the_registry_s_nvd_attribution() -> None:
+    nvd_attribution = load_packaged_source_registry().find_source("nvd").attribution
+
+    assert nvd_attribution == NVD_ATTRIBUTION
+    assert SERVER_INSTRUCTIONS[ServedDatasetKind.CORPUS_STORE].endswith(NVD_ATTRIBUTION)
+    assert NVD_ATTRIBUTION not in SERVER_INSTRUCTIONS[ServedDatasetKind.SYNTHETIC_FIXTURE]
+
+
+def test_store_instructions_neither_claim_a_fixture_nor_real_data() -> None:
+    store_instructions = SERVER_INSTRUCTIONS[ServedDatasetKind.CORPUS_STORE]
+
+    assert "synthetic fixture" not in store_instructions
+    assert "real" not in store_instructions.lower().split()
+    assert "cve_search version" in store_instructions
 
 
 def test_affectedness_timeout_not_below_the_tool_limit_is_refused() -> None:
@@ -197,4 +221,5 @@ def test_every_tool_answering_with_cve_records_says_their_affected_entries_are_n
         "investigate_telecom_topic",
     ]
     assert unstated_tool_names == []
-    assert PUBLISHER_AFFECTED_STATEMENT in SERVER_INSTRUCTIONS
+    for instructions in SERVER_INSTRUCTIONS.values():
+        assert PUBLISHER_AFFECTED_STATEMENT in instructions

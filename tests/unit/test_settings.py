@@ -2,10 +2,12 @@
 
 import logging
 import traceback
+from pathlib import Path
 
 import pytest
 
 from cve_kgrag.settings import (
+    FightSnapshotSettings,
     HttpSettings,
     ModelPlannerSettings,
     SemanticSettings,
@@ -525,3 +527,119 @@ def test_http_token_is_masked_in_every_rendering_of_the_settings() -> None:
 
     for rendering in renderings:
         assert_secret_absent(rendering, HTTP_TOKEN, "a rendering of the settings")
+
+
+SNAPSHOT_SHA256 = "59a9addb" + "0" * 56
+
+
+def test_served_data_defaults_to_the_packaged_fixture_and_excerpt() -> None:
+    settings = load_settings({})
+
+    assert settings.store_root is None
+    assert settings.fight_snapshot is None
+
+
+def test_served_data_settings_read_the_store_root_and_the_snapshot_pin() -> None:
+    environment = {
+        "CVE_KGRAG_STORE_ROOT": "/srv/cve-kgrag/stores",
+        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": "/srv/cve-kgrag/fight.yaml",
+        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
+    }
+
+    settings = load_settings(environment)
+
+    assert settings.store_root == Path("/srv/cve-kgrag/stores")
+    assert settings.fight_snapshot == FightSnapshotSettings(
+        path=Path("/srv/cve-kgrag/fight.yaml"), sha256=SNAPSHOT_SHA256
+    )
+
+
+def test_settings_open_nothing_the_served_data_variables_name(tmp_path: Path) -> None:
+    missing_root = tmp_path / "no-such-root"
+    environment = {
+        "CVE_KGRAG_STORE_ROOT": str(missing_root),
+        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(tmp_path / "no-such-snapshot.yaml"),
+        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
+    }
+
+    settings = load_settings(environment)
+
+    assert settings.store_root == missing_root
+    assert not missing_root.exists()
+
+
+@pytest.mark.parametrize(
+    ("variable_name", "value"),
+    [
+        ("CVE_KGRAG_STORE_ROOT", "stores"),
+        ("CVE_KGRAG_STORE_ROOT", "./stores"),
+        ("CVE_KGRAG_STORE_ROOT", "~/stores"),
+        ("CVE_KGRAG_STORE_ROOT", "/srv/stores\x01"),
+        ("CVE_KGRAG_STORE_ROOT", "/" + "s" * 4096),
+        ("CVE_KGRAG_FIGHT_SNAPSHOT_PATH", "fight.yaml"),
+        ("CVE_KGRAG_FIGHT_SNAPSHOT_PATH", "/srv/fight\n.yaml"),
+    ],
+    ids=[
+        "relative_root",
+        "dot_relative_root",
+        "unexpanded_home_root",
+        "root_with_a_control_character",
+        "root_too_long",
+        "relative_snapshot",
+        "snapshot_with_a_newline",
+    ],
+)
+def test_path_that_is_not_absolute_names_the_variable_not_the_value(
+    variable_name: str, value: str
+) -> None:
+    environment = {
+        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": "/srv/fight.yaml",
+        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
+        variable_name: value,
+    }
+
+    with pytest.raises(SettingsError) as raised:
+        load_settings(environment)
+
+    assert str(raised.value).startswith(f"invalid settings: {variable_name}: ")
+    assert_secret_absent(describe_raised(raised.value), value, "the settings error")
+    assert raised.value.__context__ is None
+
+
+@pytest.mark.parametrize(
+    "snapshot_sha256",
+    ["59A9ADDB" + "0" * 56, "0" * 63, "0" * 65, "sha256:" + "0" * 64],
+    ids=["upper_case", "too_short", "too_long", "prefixed"],
+)
+def test_snapshot_hash_that_is_not_lower_case_hex_names_the_variable(
+    snapshot_sha256: str,
+) -> None:
+    environment = {
+        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": "/srv/fight.yaml",
+        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": snapshot_sha256,
+    }
+
+    with pytest.raises(SettingsError) as raised:
+        load_settings(environment)
+
+    assert str(raised.value).startswith("invalid settings: CVE_KGRAG_FIGHT_SNAPSHOT_SHA256: ")
+    assert snapshot_sha256 not in describe_raised(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("present_variable", "value", "missing_variable"),
+    [
+        ("CVE_KGRAG_FIGHT_SNAPSHOT_PATH", "/srv/fight.yaml", "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"),
+        ("CVE_KGRAG_FIGHT_SNAPSHOT_SHA256", SNAPSHOT_SHA256, "CVE_KGRAG_FIGHT_SNAPSHOT_PATH"),
+    ],
+    ids=["path_without_hash", "hash_without_path"],
+)
+def test_snapshot_path_and_hash_are_set_together(
+    present_variable: str, value: str, missing_variable: str
+) -> None:
+    with pytest.raises(SettingsError) as raised:
+        load_settings({present_variable: value})
+
+    assert str(raised.value) == (
+        f"invalid settings: {missing_variable}: required with {present_variable}"
+    )

@@ -10,6 +10,7 @@ from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
 from cve_kgrag.application.topic_context import TopicContextService
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.investigation import SourceCapability
+from cve_kgrag.domain.served_dataset import ServedDataset
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.ports.affectedness import TrustifyPort
 from cve_kgrag.topics.registry import TopicRegistry
@@ -21,7 +22,9 @@ class InvestigationDeployment:
     the capabilities it serves, and its call runner and clocks. The investigation service
     runs every request against it, and replay runs a recorded request against it again.
 
-    ``source_capabilities`` is what the composition root found the deployment's sources
+    ``served_dataset`` names the CVE records and evidence the deployment serves, which its
+    ``cve_search`` capability version states. ``source_capabilities`` is what the
+    composition root found the deployment's sources
     serve: every capability subject but ``model_planner``, which describes the planner of
     the service running against the deployment. ``search_service`` and
     ``topic_context_service`` are the ones the tool executor searches and explores topics
@@ -32,6 +35,7 @@ class InvestigationDeployment:
     waits in real seconds.
     """
 
+    served_dataset: ServedDataset
     topic_registry: TopicRegistry
     tool_executor: ToolExecutor
     search_service: SearchService

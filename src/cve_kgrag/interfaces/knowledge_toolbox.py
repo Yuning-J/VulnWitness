@@ -23,6 +23,7 @@ from cve_kgrag.domain.affectedness import AffectednessCheck, AffectednessRequest
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.search import SearchRequest, SearchResponse
+from cve_kgrag.domain.served_dataset import ServedDataset
 from cve_kgrag.domain.tool_contracts import (
     CapabilitiesRequest,
     ConceptResolution,
@@ -113,6 +114,10 @@ class KnowledgeToolbox:
     @property
     def limits(self) -> ToolLimits:
         return self._limits
+
+    def describe_served_dataset(self) -> ServedDataset:
+        """The dataset the tools serve CVE records and evidence from."""
+        return self._deployment.served_dataset
 
     def has_free_worker(self) -> bool:
         """Whether a tool body could start now: fewer than ``max_calls_in_flight`` bodies

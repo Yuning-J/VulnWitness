@@ -68,8 +68,7 @@ from cve_kgrag.adapters.store.corpus_store import (
     StoreFileWriter,
     encode_line,
     publish_store_directory,
-    read_manifest_file,
-    read_manifest_sha256,
+    read_store_manifest,
     sync_directory,
     verify_corpus_store,
     write_store_manifest,
@@ -255,9 +254,10 @@ class Migration:
         as it is; one that fails verification is refused and never repaired; anything else
         there is refused."""
         try:
-            existing_manifest = read_manifest_file(target)
+            parsed_manifest = read_store_manifest(target)
         except (CorpusStoreIntegrityError, OSError):
             raise MigrationFailed(MigrationFailureCode.TARGET_EXISTS) from None
+        existing_manifest = parsed_manifest.manifest
         payload_hashes: dict[str, str | None] = {}
         for store_input in existing_manifest.inputs:
             payload_hashes[store_input.input_file_sha256] = store_input.payload_sha256
@@ -274,12 +274,16 @@ class Migration:
             raise MigrationFailed(MigrationFailureCode.TARGET_EXISTS)
         self.tally.import_identity_sha256 = identity
         try:
-            verify_corpus_store(target)
-            manifest_sha256 = read_manifest_sha256(target)
+            verified_store = verify_corpus_store(target)
         except (CorpusStoreIntegrityError, OSError):
             raise MigrationFailed(MigrationFailureCode.EXISTING_STORE_INVALID) from None
+        # The report names the store this run checked: one replaced between the two reads
+        # is refused rather than reported under either manifest.
+        if verified_store.store_manifest_sha256 != parsed_manifest.store_manifest_sha256:
+            raise MigrationFailed(MigrationFailureCode.EXISTING_STORE_INVALID)
         return self.tally.build_report(
-            MigrationOutcome.ALREADY_IMPORTED, store_manifest_sha256=manifest_sha256
+            MigrationOutcome.ALREADY_IMPORTED,
+            store_manifest_sha256=verified_store.store_manifest_sha256,
         )
 
     def _read_inputs(
@@ -519,7 +523,9 @@ class Migration:
             manifest_bytes = write_store_manifest(store_dir, manifest)
             sync_directory(store_dir)
             shutil.rmtree(staging_dir)
-            verify_corpus_store(store_dir)
+            verified_store = verify_corpus_store(store_dir)
+            if verified_store.store_manifest_sha256 != sha256_hex(manifest_bytes):
+                raise MigrationFailed(MigrationFailureCode.STORE_WRITE_FAILED)
             # Any entry at the target now is refused. One that appears after this check and
             # before the rename fails the rename if it is a file or a directory with
             # entries; an empty directory is replaced, as rename(2) does.
@@ -529,7 +535,7 @@ class Migration:
         except (OSError, CorpusStoreIntegrityError):
             raise MigrationFailed(MigrationFailureCode.STORE_WRITE_FAILED) from None
         return self.tally.build_report(
-            MigrationOutcome.IMPORTED, store_manifest_sha256=sha256_hex(manifest_bytes)
+            MigrationOutcome.IMPORTED, store_manifest_sha256=verified_store.store_manifest_sha256
         )
 
 

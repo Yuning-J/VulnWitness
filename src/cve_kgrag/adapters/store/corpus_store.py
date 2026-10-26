@@ -9,9 +9,15 @@ store holds; no anchor is left uncited. A store is read as untrusted input, so t
 manifest and every line are read within a cap and a file's size is checked before its
 lines are. ``verify_corpus_store`` checks a store keeping only an index of anchor IDs in
 memory; ``load_corpus_store`` also keeps every record and anchor, for serving.
+
+A store has three identities (ADR 0009 §2): the SHA-256 of the manifest bytes the reader
+parsed names the physical store; the manifest's import identity names the import; and the
+corpus content digest, derived from the records' and anchors' pins once both files match
+them, names the dataset served.
 """
 
 import hashlib
+import json
 import os
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -21,10 +27,17 @@ from typing import IO
 from pydantic import ValidationError
 
 from cve_kgrag.adapters.regular_files import open_regular_file
-from cve_kgrag.domain.corpus_store_manifest import CorpusStoreManifest, StoreFile
+from cve_kgrag.domain.corpus_store_manifest import (
+    STORE_FORMAT_VERSION,
+    CorpusStoreManifest,
+    StoreFile,
+    derive_corpus_content_sha256,
+    name_corpus_store_version,
+)
 from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.hashing import canonical_json_bytes, sha256_hex
+from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.domain.taxonomy import KnowledgeScope
 from cve_kgrag.domain.validation import find_anchor_violations
 
@@ -45,11 +58,44 @@ class CorpusStoreIntegrityError(ValueError):
     """The store fails verification; nothing in it may be served."""
 
 
+class UnsupportedStoreFormatError(CorpusStoreIntegrityError):
+    """The manifest declares a store format version this release does not read, such as
+    one a later release wrote."""
+
+
+@dataclass(frozen=True)
+class ParsedStoreManifest:
+    """A store's manifest and the SHA-256 of the very bytes it was parsed from."""
+
+    manifest: CorpusStoreManifest
+    store_manifest_sha256: str
+
+
+@dataclass(frozen=True)
+class VerifiedStore:
+    """What one verification of a store found: its manifest, the digest of the manifest
+    bytes it read, and the content digest of the records and anchors it checked."""
+
+    manifest: CorpusStoreManifest
+    store_manifest_sha256: str
+    corpus_content_sha256: str
+
+
 @dataclass(frozen=True)
 class CorpusStore:
+    """A verified store's records and evidence, for serving."""
+
     manifest: CorpusStoreManifest
+    store_manifest_sha256: str
+    corpus_content_sha256: str
     records: tuple[CveRecord, ...]
     evidence: tuple[EvidenceAnchor, ...]
+
+    def describe_served_dataset(self) -> ServedDataset:
+        return ServedDataset(
+            kind=ServedDatasetKind.CORPUS_STORE,
+            cve_search_version=name_corpus_store_version(self.corpus_content_sha256),
+        )
 
 
 def create_store_file(path: Path) -> IO[bytes]:
@@ -147,19 +193,42 @@ def read_manifest_bytes(store_dir: Path) -> bytes:
     return manifest_bytes
 
 
-def read_manifest_file(store_dir: Path) -> CorpusStoreManifest:
-    """The store's ``manifest.json``, parsed, without checking the store's files."""
-    manifest_bytes = read_manifest_bytes(store_dir)
+def check_store_format(manifest_bytes: bytes) -> None:
+    """Refuse a manifest whose ``store_format_version`` is an integer other than the one
+    this release reads, before the rest of it is parsed against this release's model, and
+    one whose format version is missing or not an integer (``true`` included, which the
+    model's literal would take for 1)."""
     try:
-        return CorpusStoreManifest.model_validate_json(manifest_bytes)
+        manifest_document = json.loads(manifest_bytes)
+    except ValueError as error:
+        raise CorpusStoreIntegrityError("manifest.json is not a corpus store manifest") from error
+    if not isinstance(manifest_document, dict):
+        raise CorpusStoreIntegrityError("manifest.json is not a corpus store manifest")
+    format_version = manifest_document.get("store_format_version")
+    is_integer = isinstance(format_version, int) and not isinstance(format_version, bool)
+    if not is_integer:
+        raise CorpusStoreIntegrityError("manifest.json is not a corpus store manifest")
+    if format_version != STORE_FORMAT_VERSION:
+        raise UnsupportedStoreFormatError(
+            "the store's format version is not one this release reads"
+        )
+
+
+def read_store_manifest(store_dir: Path) -> ParsedStoreManifest:
+    """The store's ``manifest.json``, parsed, with the SHA-256 of the bytes parsed, without
+    checking the store's files. Every reader of a manifest goes through this one read, so
+    no digest is taken over bytes other than those parsed."""
+    manifest_bytes = read_manifest_bytes(store_dir)
+    check_store_format(manifest_bytes)
+    try:
+        manifest = CorpusStoreManifest.model_validate_json(manifest_bytes)
     except ValidationError as error:
         raise CorpusStoreIntegrityError("manifest.json is not a corpus store manifest") from error
+    return ParsedStoreManifest(manifest=manifest, store_manifest_sha256=sha256_hex(manifest_bytes))
 
 
-def read_store_manifest(store_dir: Path) -> CorpusStoreManifest:
-    """The store's manifest, after checking the directory holds nothing else but the
-    files it pins."""
-    manifest = read_manifest_file(store_dir)
+def check_store_entries(store_dir: Path, manifest: CorpusStoreManifest) -> None:
+    """The directory holds the manifest and the files it pins, and nothing else."""
     expected_names = {STORE_MANIFEST_FILE}
     for store_file in manifest.files:
         expected_names.add(store_file.path)
@@ -170,7 +239,6 @@ def read_store_manifest(store_dir: Path) -> CorpusStoreManifest:
         raise CorpusStoreIntegrityError("the store holds files its manifest does not pin")
     if {RECORDS_FILE, ANCHORS_FILE} != expected_names - {STORE_MANIFEST_FILE}:
         raise CorpusStoreIntegrityError("the manifest pins other files than a store's")
-    return manifest
 
 
 def read_pinned_lines(store_dir: Path, store_file: StoreFile) -> Iterator[bytes]:
@@ -212,12 +280,16 @@ def check_store(
     store_dir: Path,
     keep_anchor: Callable[[EvidenceAnchor], None],
     keep_record: Callable[[CveRecord], None],
-) -> CorpusStoreManifest:
+) -> VerifiedStore:
     """Verify the store, handing each anchor and record to the callbacks as it is read."""
-    manifest = read_store_manifest(store_dir)
+    parsed_manifest = read_store_manifest(store_dir)
+    manifest = parsed_manifest.manifest
+    check_store_entries(store_dir, manifest)
+    anchors_file = find_store_file(manifest, ANCHORS_FILE)
+    records_file = find_store_file(manifest, RECORDS_FILE)
     anchors_by_id: dict[str, IndexedAnchor] = {}
     previous_evidence_id = ""
-    for line in read_pinned_lines(store_dir, find_store_file(manifest, ANCHORS_FILE)):
+    for line in read_pinned_lines(store_dir, anchors_file):
         try:
             anchor = EvidenceAnchor.model_validate_json(line)
         except ValidationError as error:
@@ -234,7 +306,7 @@ def check_store(
     cited_evidence_ids: set[str] = set()
     previous_cve_id = ""
     record_count = 0
-    for line in read_pinned_lines(store_dir, find_store_file(manifest, RECORDS_FILE)):
+    for line in read_pinned_lines(store_dir, records_file):
         try:
             record = CveRecord.model_validate_json(line)
         except ValidationError as error:
@@ -250,7 +322,11 @@ def check_store(
         raise CorpusStoreIntegrityError("the store holds an anchor no record cites")
     if record_count != manifest.record_count or len(anchors_by_id) != manifest.anchor_count:
         raise CorpusStoreIntegrityError("the store's counts differ from its manifest's")
-    return manifest
+    return VerifiedStore(
+        manifest=manifest,
+        store_manifest_sha256=parsed_manifest.store_manifest_sha256,
+        corpus_content_sha256=derive_corpus_content_sha256(records_file, anchors_file),
+    )
 
 
 def check_record_evidence(record: CveRecord, anchors_by_id: dict[str, IndexedAnchor]) -> None:
@@ -273,19 +349,22 @@ def ignore_model(model: CveRecord | EvidenceAnchor) -> None:
     """Keep nothing: verification needs only the anchor index."""
 
 
-def verify_corpus_store(store_dir: Path) -> CorpusStoreManifest:
-    """Verify the store at ``store_dir``; raises ``CorpusStoreIntegrityError``."""
+def verify_corpus_store(store_dir: Path) -> VerifiedStore:
+    """Verify the store at ``store_dir``; raises ``CorpusStoreIntegrityError``
+    (``UnsupportedStoreFormatError`` for a format this release does not read) and any
+    ``OSError`` reading it raises."""
     return check_store(store_dir, ignore_model, ignore_model)
 
 
 def load_corpus_store(store_dir: Path) -> CorpusStore:
-    """The store at ``store_dir``, verified; raises ``CorpusStoreIntegrityError``."""
+    """The store at ``store_dir``, verified; raises as ``verify_corpus_store`` does."""
     anchors: list[EvidenceAnchor] = []
     records: list[CveRecord] = []
-    manifest = check_store(store_dir, anchors.append, records.append)
-    return CorpusStore(manifest=manifest, records=tuple(records), evidence=tuple(anchors))
-
-
-def read_manifest_sha256(store_dir: Path) -> str:
-    """The SHA-256 of the store's manifest, which a report names a store by."""
-    return sha256_hex(read_manifest_bytes(store_dir))
+    verified_store = check_store(store_dir, anchors.append, records.append)
+    return CorpusStore(
+        manifest=verified_store.manifest,
+        store_manifest_sha256=verified_store.store_manifest_sha256,
+        corpus_content_sha256=verified_store.corpus_content_sha256,
+        records=tuple(records),
+        evidence=tuple(anchors),
+    )
