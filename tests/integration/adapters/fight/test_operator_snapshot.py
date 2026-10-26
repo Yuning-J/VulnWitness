@@ -22,7 +22,6 @@ from cve_kgrag.adapters.fight.snapshot_catalog import (
     default_fight_snapshot_catalog_file,
     load_fight_snapshot_catalog,
 )
-from cve_kgrag.adapters.fixture.fight_fixture import default_fight_fixture_dir
 from cve_kgrag.adapters.regular_files import open_regular_file
 from cve_kgrag.composition import load_fight_source
 from cve_kgrag.domain.hashing import sha256_hex
@@ -30,9 +29,7 @@ from cve_kgrag.domain.threat_context import FightSnapshotCatalog, SnapshotCovera
 from cve_kgrag.settings import FightSnapshotSettings
 from tests.support.builders import build_catalog, build_known_snapshot
 from tests.support.clocks import read_fixed_clock
-
-EXCERPT_BYTES = default_fight_fixture_dir().joinpath("fight-excerpt.yaml").read_bytes()
-EXCERPT_SHA256 = sha256_hex(EXCERPT_BYTES)
+from tests.support.fight_excerpt import EXCERPT_BYTES, EXCERPT_SHA256
 
 
 @pytest.fixture
@@ -171,25 +168,28 @@ def test_read_that_fails_part_way_is_unreadable_without_the_error_text(
     )
 
 
-def test_snapshot_of_exactly_the_cap_is_read_and_one_byte_more_is_too_large(
-    tmp_path: Path, packaged_catalog: FightSnapshotCatalog
+@pytest.mark.parametrize(
+    ("size_bytes", "failure"),
+    [
+        (MAX_FIGHT_SNAPSHOT_BYTES, FightSnapshotFailure.HASH_MISMATCH),
+        (MAX_FIGHT_SNAPSHOT_BYTES + 1, FightSnapshotFailure.TOO_LARGE),
+    ],
+    ids=["at_the_cap_read_whole", "one_byte_over_refused"],
+)
+def test_snapshot_is_read_up_to_its_cap_and_refused_past_it(
+    tmp_path: Path,
+    packaged_catalog: FightSnapshotCatalog,
+    size_bytes: int,
+    failure: FightSnapshotFailure,
 ) -> None:
-    at_cap_path = tmp_path / "at-cap.yaml"
-    at_cap_path.write_bytes(b"#" * MAX_FIGHT_SNAPSHOT_BYTES)
-    over_cap_path = tmp_path / "over-cap.yaml"
-    over_cap_path.write_bytes(b"#" * (MAX_FIGHT_SNAPSHOT_BYTES + 1))
+    snapshot_path = tmp_path / "sized.yaml"
+    snapshot_path.write_bytes(b"#" * size_bytes)
 
     expect_failure(
         lambda: load_operator_fight_snapshot(
-            at_cap_path, EXCERPT_SHA256, packaged_catalog, read_fixed_clock
+            snapshot_path, EXCERPT_SHA256, packaged_catalog, read_fixed_clock
         ),
-        FightSnapshotFailure.HASH_MISMATCH,
-    )
-    expect_failure(
-        lambda: load_operator_fight_snapshot(
-            over_cap_path, EXCERPT_SHA256, packaged_catalog, read_fixed_clock
-        ),
-        FightSnapshotFailure.TOO_LARGE,
+        failure,
     )
 
 

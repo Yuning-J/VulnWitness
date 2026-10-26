@@ -171,6 +171,7 @@ from cve_kgrag.domain.validation import (
     find_record_violations,
     find_schema_version_violations,
     find_served_violations,
+    find_source_status,
     find_status_violations,
     find_threat_context_violations,
     find_topic_warning_violations,
@@ -1376,10 +1377,6 @@ def find_step_topic_warning_violations(
     """The topic-response warning rules (``find_topic_warning_violations``) over what a
     topic step records: its FiGHT outcome, and the techniques and CVEs among its answer
     IDs."""
-    fight_status: ResultStatus | None = None
-    for outcome in step.source_outcomes:
-        if outcome.source is KnowledgeSource.MITRE_FIGHT:
-            fight_status = outcome.status
     listed_technique_count = 0
     listed_candidate_count = 0
     for answer_id in step.answer_ids:
@@ -1390,10 +1387,10 @@ def find_step_topic_warning_violations(
     violations: list[str] = []
     for violation in find_topic_warning_violations(
         step.topic_warnings,
-        fight_status,
-        listed_technique_count,
-        listed_candidate_count,
-        pinned_fight_snapshot,
+        fight_status=find_source_status(step.source_outcomes, KnowledgeSource.MITRE_FIGHT),
+        listed_technique_count=listed_technique_count,
+        listed_candidate_count=listed_candidate_count,
+        pinned_snapshot=pinned_fight_snapshot,
     ):
         violations.append(f"step {step.step_index}: {violation}")
     return violations
@@ -1417,12 +1414,13 @@ def find_truncation_violations(
     per-call cap, the topic step left no CVE out, so it equals the FiGHT count. Whether a
     count is true is replay's to prove: the set does not carry what derives it."""
     violations: list[str] = []
+    # An invalid_evidence run returns nothing any step retrieved, so it adopts no step.
+    is_answer_adopted = evidence_set.stop_reason is not StopReason.INVALID_EVIDENCE
     adopted_steps: list[ToolStep] = []
     for step in evidence_set.trajectory.steps:
         if step.topic_warnings:
             violations.extend(find_step_topic_warning_violations(step, pinned_fight_snapshot))
-        is_adopted = evidence_set.stop_reason is not StopReason.INVALID_EVIDENCE
-        if is_adopted and step.admission is StepAdmission.ADMITTED:
+        if is_answer_adopted and step.admission is StepAdmission.ADMITTED:
             adopted_steps.append(step)
     truncation_counts: list[int] = []
     for warning in evidence_set.warnings:

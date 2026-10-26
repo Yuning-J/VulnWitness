@@ -71,7 +71,7 @@ from cve_kgrag.domain.topic_context import (
     TopicContextWarningCode,
     summarize_statuses,
 )
-from cve_kgrag.domain.validation import index_anchors
+from cve_kgrag.domain.validation import index_anchors, read_count_subject
 from cve_kgrag.topics.relevance import assess_relevance
 
 # The warnings assembling the answer raises, always after the run's other warnings.
@@ -252,7 +252,7 @@ def count_topic_cuts(
         omitted_cve_ids.update(execution.omitted_topic_cve_ids)
         for warning in execution.topic_response.warnings:
             if warning.code is TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED:
-                unlisted_technique_count += int(warning.subject)
+                unlisted_technique_count += read_count_subject(warning.subject) or 0
     return omitted_cve_ids, unlisted_technique_count
 
 

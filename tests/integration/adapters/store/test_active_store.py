@@ -3,7 +3,6 @@
 reason and never falls back to the fixture; startup writes nothing under the root, so a
 read-only root serves."""
 
-import json
 import os
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -29,15 +28,16 @@ from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.store_status import StoreUnavailable, StoreUnavailableReason
 from cve_kgrag.domain.taxonomy import ResultStatus
-from tests.support.corpus_stores import copy_compatibility_store, import_store
+from tests.support.corpus_stores import (
+    ROOT_BREAKERS,
+    copy_compatibility_store,
+    declare_later_format,
+    import_store,
+    move_store,
+    rewrite_manifest,
+    tamper_with_anchors,
+)
 from tests.support.legacy_inputs import snapshot_tree
-
-
-@pytest.fixture
-def store_root(tmp_path: Path) -> Path:
-    store_root = tmp_path / "stores"
-    store_root.mkdir()
-    return store_root
 
 
 @pytest.fixture
@@ -98,30 +98,6 @@ def test_unreadable_active_refuses_to_start(store_root: Path, active_store: Path
     expect_unavailable(store_root, StoreUnavailableReason.ACTIVE_UNREADABLE)
 
 
-def move_store(store_dir: Path) -> None:
-    store_dir.rename(store_dir.with_name("moved"))
-
-
-def rewrite_manifest(store_dir: Path) -> None:
-    manifest_path = store_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(json.loads(manifest_path.read_bytes()), indent=1))
-
-
-def tamper_with_anchors(store_dir: Path) -> None:
-    anchors_path = store_dir / "anchors.jsonl"
-    anchors_bytes = anchors_path.read_bytes()
-    assert b"2026-10-24" in anchors_bytes
-    anchors_path.write_bytes(anchors_bytes.replace(b"2026-10-24", b"2026-10-23"))
-
-
-def move_to_a_later_format(store_dir: Path) -> None:
-    """A store a later release wrote: same digest recorded, format version 2."""
-    manifest_path = store_dir / "manifest.json"
-    manifest_fields = json.loads(manifest_path.read_bytes())
-    manifest_fields["store_format_version"] = 2
-    manifest_path.write_text(json.dumps(manifest_fields, sort_keys=True, separators=(",", ":")))
-
-
 @pytest.mark.parametrize(
     ("break_store", "reason"),
     [
@@ -145,7 +121,7 @@ def test_active_store_that_is_not_as_recorded_refuses_to_start(
 def test_active_store_of_a_later_format_refuses_as_unsupported(
     store_root: Path, active_store: Path
 ) -> None:
-    move_to_a_later_format(active_store)
+    declare_later_format(active_store)
     record_later_store(store_root, active_store)
 
     expect_unavailable(store_root, StoreUnavailableReason.STORE_FORMAT_UNSUPPORTED)
@@ -164,14 +140,11 @@ def record_later_store(store_root: Path, store_dir: Path) -> None:
     (store_root / "ACTIVE").write_bytes(encode_active_record(active_record))
 
 
-@pytest.mark.parametrize("root_kind", ["missing", "file", "symbolic_link"])
-def test_unusable_root_refuses_to_start(tmp_path: Path, root_kind: str) -> None:
-    store_root = tmp_path / "stores"
-    if root_kind == "file":
-        store_root.write_bytes(b"")
-    elif root_kind == "symbolic_link":
-        (tmp_path / "real-stores").mkdir()
-        store_root.symlink_to(tmp_path / "real-stores")
+@pytest.mark.parametrize("break_root", ROOT_BREAKERS)
+def test_unusable_root_refuses_to_start(
+    store_root: Path, break_root: Callable[[Path], None]
+) -> None:
+    break_root(store_root)
 
     expect_unavailable(store_root, StoreUnavailableReason.STORE_ROOT_UNUSABLE)
 

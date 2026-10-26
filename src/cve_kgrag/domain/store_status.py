@@ -209,6 +209,15 @@ class StoreUnavailableReason(StrEnum):
     STORE_FORMAT_UNSUPPORTED = "store_format_unsupported"
 
 
+# The active store's condition as the reason startup refuses it.
+STARTUP_REASONS = {
+    StoreCondition.STORE_MISSING: StoreUnavailableReason.ACTIVE_STORE_MISSING,
+    StoreCondition.STORE_CHANGED: StoreUnavailableReason.ACTIVE_STORE_CHANGED,
+    StoreCondition.STORE_FORMAT_UNSUPPORTED: StoreUnavailableReason.STORE_FORMAT_UNSUPPORTED,
+    StoreCondition.STORE_INVALID: StoreUnavailableReason.STORE_INVALID,
+}
+
+
 class StoreOperationFailed(Exception):
     """A store operation failed for ``failure``; nothing under the root changed unless
     ``failure`` is ``active_write_unconfirmed``."""

@@ -200,7 +200,9 @@ def check_store_format(manifest_bytes: bytes) -> None:
     model's literal would take for 1)."""
     try:
         manifest_document = json.loads(manifest_bytes)
-    except ValueError as error:
+    # json.loads recurses per nesting level: a deeply nested manifest within the cap
+    # raises RecursionError, which is as much a malformed manifest as a syntax error.
+    except (ValueError, RecursionError) as error:
         raise CorpusStoreIntegrityError("manifest.json is not a corpus store manifest") from error
     if not isinstance(manifest_document, dict):
         raise CorpusStoreIntegrityError("manifest.json is not a corpus store manifest")
@@ -276,7 +278,7 @@ class IndexedAnchor:
     authoritative_record_id: str
 
 
-def check_store(
+def verify_store_files(
     store_dir: Path,
     keep_anchor: Callable[[EvidenceAnchor], None],
     keep_record: Callable[[CveRecord], None],
@@ -353,14 +355,14 @@ def verify_corpus_store(store_dir: Path) -> VerifiedStore:
     """Verify the store at ``store_dir``; raises ``CorpusStoreIntegrityError``
     (``UnsupportedStoreFormatError`` for a format this release does not read) and any
     ``OSError`` reading it raises."""
-    return check_store(store_dir, ignore_model, ignore_model)
+    return verify_store_files(store_dir, ignore_model, ignore_model)
 
 
 def load_corpus_store(store_dir: Path) -> CorpusStore:
     """The store at ``store_dir``, verified; raises as ``verify_corpus_store`` does."""
     anchors: list[EvidenceAnchor] = []
     records: list[CveRecord] = []
-    verified_store = check_store(store_dir, anchors.append, records.append)
+    verified_store = verify_store_files(store_dir, anchors.append, records.append)
     return CorpusStore(
         manifest=verified_store.manifest,
         store_manifest_sha256=verified_store.store_manifest_sha256,

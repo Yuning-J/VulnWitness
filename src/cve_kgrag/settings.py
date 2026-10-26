@@ -315,6 +315,19 @@ def parse_section(
         return SettingsError("invalid settings: " + "; ".join(problems))
 
 
+def require_section(
+    environment: Mapping[str, str],
+    section_variables: Mapping[str, str],
+    section_model: type[SectionSettings],
+) -> SectionSettings:
+    """A section's settings (``parse_section``); raises its ``SettingsError``, outside
+    the ``except`` that built it."""
+    section_settings = parse_section(environment, section_variables, section_model)
+    if isinstance(section_settings, SettingsError):
+        raise section_settings
+    return section_settings
+
+
 def load_section(
     environment: Mapping[str, str],
     switch_variable: str,
@@ -328,10 +341,7 @@ def load_section(
         raise is_enabled
     if not is_enabled:
         return None
-    section_settings = parse_section(environment, section_variables, section_model)
-    if isinstance(section_settings, SettingsError):
-        raise section_settings
-    return section_settings
+    return require_section(environment, section_variables, section_model)
 
 
 def pair_fight_snapshot(served_data: ServedDataVariables) -> FightSnapshotSettings | None:
@@ -358,12 +368,8 @@ def load_settings(environment: Mapping[str, str]) -> ServiceSettings:
     only when its switch (``CVE_KGRAG_PLANNER_ENABLED``, ``CVE_KGRAG_SEMANTIC_ENABLED``) is
     on; the HTTP and served-data variables are always read. Nothing is opened: whether
     the store root or the snapshot can be used is checked by the commands that load them."""
-    http_settings = parse_section(environment, HTTP_VARIABLES, HttpSettings)
-    if isinstance(http_settings, SettingsError):
-        raise http_settings
-    served_data = parse_section(environment, SERVED_DATA_VARIABLES, ServedDataVariables)
-    if isinstance(served_data, SettingsError):
-        raise served_data
+    http_settings = require_section(environment, HTTP_VARIABLES, HttpSettings)
+    served_data = require_section(environment, SERVED_DATA_VARIABLES, ServedDataVariables)
     fight_snapshot = pair_fight_snapshot(served_data)
     return ServiceSettings(
         model_planner=load_section(

@@ -2089,6 +2089,16 @@ def test_set_whose_topic_step_cut_its_sections_counts_every_cut_and_validates(
             "not a positive count",
         ),
         (
+            lambda evidence_set: rewrite_answer_truncation(evidence_set, "1" + "0" * 5000),
+            "not a positive count",
+        ),
+        (
+            lambda evidence_set: rewrite_topic_warning(
+                evidence_set, TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED, "4" * 5000
+            ),
+            "not a positive count",
+        ),
+        (
             lambda evidence_set: rewrite_topic_warning(
                 evidence_set, TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED, "9"
             ),
@@ -2105,6 +2115,8 @@ def test_set_whose_topic_step_cut_its_sections_counts_every_cut_and_validates(
         "count_below_the_topic_cuts",
         "count_given_twice",
         "count_not_a_number",
+        "count_too_long_to_read",
+        "topic_count_too_long_to_read",
         "technique_cut_beyond_the_snapshot",
         "candidate_cut_of_zero",
     ],

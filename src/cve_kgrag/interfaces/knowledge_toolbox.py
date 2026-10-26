@@ -115,6 +115,11 @@ class KnowledgeToolbox:
     def limits(self) -> ToolLimits:
         return self._limits
 
+    @property
+    def deployment(self) -> InvestigationDeployment:
+        """The deployment the tools run against."""
+        return self._deployment
+
     def describe_served_dataset(self) -> ServedDataset:
         """The dataset the tools serve CVE records and evidence from."""
         return self._deployment.served_dataset

@@ -2,6 +2,7 @@
 imported from synthetic feeds, the file operations ``ACTIVE`` is written through with a
 chosen point failing, and readers of what the root holds."""
 
+import json
 import os
 import shutil
 from dataclasses import dataclass
@@ -80,6 +81,60 @@ def list_hidden_entries(store_root: Path) -> list[str]:
         if entry.name.startswith(".") and entry.name != ".lock":
             hidden_names.append(entry.name)
     return hidden_names
+
+
+def move_store(store_dir: Path) -> None:
+    """The store moved away: nothing is left under its name."""
+    store_dir.rename(store_dir.with_name("moved"))
+
+
+def rewrite_manifest(store_dir: Path) -> None:
+    """The manifest rewritten with the same fields, indented: the store still verifies,
+    but its manifest no longer hashes to a digest recorded for it."""
+    manifest_path = store_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(json.loads(manifest_path.read_bytes()), indent=1))
+
+
+def tamper_with_records(store_dir: Path) -> None:
+    """One record line changed, so the records file no longer matches its pin."""
+    records_path = store_dir / "records.jsonl"
+    records_bytes = records_path.read_bytes()
+    assert b"democorp" in records_bytes
+    records_path.write_bytes(records_bytes.replace(b"democorp", b"DEMOCORP"))
+
+
+def tamper_with_anchors(store_dir: Path) -> None:
+    """The anchors' retrieval time changed, so the anchors file no longer matches its pin."""
+    anchors_path = store_dir / "anchors.jsonl"
+    anchors_bytes = anchors_path.read_bytes()
+    assert b"2026-10-24" in anchors_bytes
+    anchors_path.write_bytes(anchors_bytes.replace(b"2026-10-24", b"2026-10-23"))
+
+
+def declare_later_format(store_dir: Path) -> None:
+    """The manifest declaring store format 2, as a later release would write it."""
+    manifest_path = store_dir / "manifest.json"
+    manifest_fields = json.loads(manifest_path.read_bytes())
+    manifest_fields["store_format_version"] = 2
+    manifest_path.write_text(json.dumps(manifest_fields, sort_keys=True, separators=(",", ":")))
+
+
+def make_root_missing(store_root: Path) -> None:
+    store_root.rmdir()
+
+
+def make_root_a_file(store_root: Path) -> None:
+    store_root.rmdir()
+    store_root.write_bytes(b"")
+
+
+def make_root_a_symbolic_link(store_root: Path) -> None:
+    real_root = store_root.with_name("real-stores")
+    store_root.rename(real_root)
+    store_root.symlink_to(real_root)
+
+
+ROOT_BREAKERS = [make_root_missing, make_root_a_file, make_root_a_symbolic_link]
 
 
 @dataclass

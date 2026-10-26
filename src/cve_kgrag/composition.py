@@ -208,20 +208,29 @@ def build_topic_context_service(
     semantic_settings: SemanticSettings | None = None,
 ) -> TopicContextService:
     """Packaged topic cards over the served corpus's CVEs, whose template searches run the
-    semantic channel ``semantic_settings`` enable when a request asks for it.
-
-    Without ``fight_source``, FiGHT is the packaged excerpt, pinned to its entry in
-    the packaged reviewed catalog. A caller passing its own source also passes the
-    catalog entry it pinned for that source (``None`` when it serves no snapshot).
+    semantic channel ``semantic_settings`` enable when a request asks for it: the
+    topic-context service over a data plane built from these arguments
+    (``build_serving_data_plane``), whose rules for ``fight_source`` it follows.
     """
-    if fight_source is None:
-        fight_source, pinned_fight_snapshot = load_packaged_fight_source(utc_now)
+    return assemble_topic_context_service(
+        build_serving_data_plane(
+            served_corpus,
+            fight_source=fight_source,
+            pinned_fight_snapshot=pinned_fight_snapshot,
+            semantic_settings=semantic_settings,
+        )
+    )
+
+
+def assemble_topic_context_service(data_plane: ServingDataPlane) -> TopicContextService:
+    """The topic-context service over ``data_plane``'s cards, search service, FiGHT source
+    and pin, and evidence catalog."""
     return TopicContextService(
-        topic_registry=build_topic_registry(),
-        search_service=build_search_service(served_corpus, semantic_settings),
-        fight_source=fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
-        evidence_catalog=build_evidence_catalog(served_corpus, fight_source),
+        topic_registry=data_plane.topic_registry,
+        search_service=data_plane.search_service,
+        fight_source=data_plane.fight_source,
+        pinned_fight_snapshot=data_plane.pinned_fight_snapshot,
+        evidence_catalog=data_plane.evidence_catalog,
     )
 
 
@@ -368,13 +377,7 @@ def build_investigation_deployment(
     if call_runner is None:
         call_runner = ThreadedCallRunner()
     affectedness_capability = describe_affectedness(trustify_port)
-    topic_context_service = TopicContextService(
-        topic_registry=data_plane.topic_registry,
-        search_service=data_plane.search_service,
-        fight_source=data_plane.fight_source,
-        pinned_fight_snapshot=data_plane.pinned_fight_snapshot,
-        evidence_catalog=data_plane.evidence_catalog,
-    )
+    topic_context_service = assemble_topic_context_service(data_plane)
     return InvestigationDeployment(
         served_dataset=data_plane.served_dataset,
         topic_registry=data_plane.topic_registry,
@@ -467,7 +470,7 @@ def build_knowledge_toolbox(
     (``build_investigation_deployment``): its search service and FiGHT source, its
     affectedness port (``DisabledTrustifyAdapter`` without ``trustify_port``) and the
     deterministic planner. A server passes a data plane built with no semantic channel:
-    its store cannot be opened read-only, and the tools are read-only.
+    its Chroma collection cannot be opened read-only, and the tools are read-only.
 
     ``wall_clock`` and ``monotonic_clock`` are the deployment's, which every investigation
     runs on; ``tool_clock`` bounds each tool call, so reading it never moves a run's

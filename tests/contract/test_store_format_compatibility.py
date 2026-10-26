@@ -10,7 +10,6 @@ regenerated with a later importer.
 
 import hashlib
 import json
-from pathlib import Path
 
 from cve_kgrag.adapters.store.corpus_store import load_corpus_store, verify_corpus_store
 from cve_kgrag.domain.corpus_store_manifest import STORE_FORMAT_SCHEMA_SHA256, CorpusStoreManifest
@@ -19,8 +18,8 @@ from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.hashing import canonical_sha256
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.schema_snapshots import render_schema
+from tests.support.corpus_stores import COMPATIBILITY_STORE
 
-COMPATIBILITY_STORE = Path(__file__).parent / "data" / "corpus_store_format1_28e5b4d" / "store"
 PINNED_FILE_SHA256 = {
     "anchors.jsonl": "0ba19427011f5c654577952ad6636ee931bd52b984e8fa5b3e60e015b8e5fd10",
     "manifest.json": "c17f09856dc00eaf75a97dba788dc8154bb36714ada7e9a6a2fb56b8e798702f",

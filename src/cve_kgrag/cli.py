@@ -23,11 +23,11 @@ for an evaluation stopped before its report, for a failed import, for ``migrate 
 without the ``migration`` extra and for a failed ``store`` operation, named by its
 reason code. 2 for invalid usage: an argument a contract rejects, invalid settings, a
 ``store`` command without a store root or with a name that is no store name, an HTTP
-server without a token, a configured store root that cannot be served (one line naming
-the reason), model runs without an enabled planner, an evaluation ``--out`` inside the
-package or the store root, an input manifest that is not valid, a ``verify`` file that
-cannot be read or is larger than ``MAX_EVIDENCE_SET_BYTES``, and a gold file that cannot
-be read or is no investigation gold file.
+server without a token, a configured store root or FiGHT snapshot that cannot be served
+(one line naming the reason), model runs without an enabled planner, an evaluation
+``--out`` inside the package or the store root, an input manifest that is not valid, a
+``verify`` file that cannot be read or is larger than ``MAX_EVIDENCE_SET_BYTES``, and a
+gold file that cannot be read or is no investigation gold file.
 """
 
 import argparse
@@ -65,6 +65,7 @@ from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
 from cve_kgrag.adapters.migration.parser_types import MigrationParsers
 from cve_kgrag.adapters.regular_files import NotARegularFileError, open_regular_file
 from cve_kgrag.adapters.store.store_activation import StoreActivation, describe_identity
+from cve_kgrag.adapters.store.store_root import lies_in_store_root
 from cve_kgrag.application.affectedness import check_affectedness
 from cve_kgrag.application.evidence_set_verification import (
     MAX_EVIDENCE_SET_BYTES,
@@ -77,6 +78,7 @@ from cve_kgrag.application.planner_setup import ModelPlanning
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.application.serving_data_plane import ServingDataPlane
 from cve_kgrag.composition import (
+    assemble_topic_context_service,
     build_investigation_deployment,
     build_investigation_service,
     build_knowledge_toolbox,
@@ -84,7 +86,6 @@ from cve_kgrag.composition import (
     build_search_service,
     build_serving_data_plane,
     build_store_activation,
-    build_topic_context_service,
     build_topic_registry,
     build_trustify_port,
     list_accepted_planner_capabilities,
@@ -114,7 +115,6 @@ from cve_kgrag.domain.search import (
 )
 from cve_kgrag.domain.store_status import (
     STORE_OPERATION_FAILURE_MESSAGES,
-    ActiveRecordState,
     ActiveStoreCondition,
     StoreOperationFailed,
     StoreStatus,
@@ -173,7 +173,7 @@ SEMANTIC_HELP = (
     "this flag is its adapter loaded"
 )
 # Logged when `mcp`, `api` or `verify` runs with the semantic channel enabled: none serves
-# it, since its store cannot be opened read-only (ADR 0004 §1).
+# it, since its Chroma collection cannot be opened read-only (ADR 0004 §1).
 SEMANTIC_NOT_SERVED = "the semantic channel is not served by cve-kgrag %s"
 # Filter options, each repeatable, with the `SearchFilters` field it fills and how its text
 # is read. The product ones are also `investigate`'s product context.
@@ -767,7 +767,7 @@ def run_mcp_server(
     missing ``mcp`` extra, or the reason the runner is unusable. The runner is checked
     before the corpus is loaded, so a core install exits before it touches any data.
     Writes nothing to stdout, which carries the protocol. The tools are read-only, so they
-    serve no semantic channel: its store cannot be opened read-only."""
+    serve no semantic channel: its Chroma collection cannot be opened read-only."""
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag mcp cannot start: {runner.detail}", file=sys.stderr)
         return 1
@@ -884,7 +884,7 @@ def run_planner_evaluation_command(
     resolved_out = arguments.out.resolve()
     if resolved_out.is_relative_to(PACKAGE_DIR):
         parser.error(OUT_INSIDE_THE_PACKAGE)
-    if store_root is not None and resolved_out.is_relative_to(store_root.resolve()):
+    if store_root is not None and lies_in_store_root(resolved_out, store_root):
         parser.error(OUT_INSIDE_THE_STORE_ROOT)
     gold_bytes = read_input_file(parser, arguments.gold, MAX_GOLD_FILE_BYTES)
     try:
@@ -977,13 +977,10 @@ def print_store_status(store_status: StoreStatus) -> None:
 
 def is_store_status_ok(store_status: StoreStatus) -> bool:
     """Whether the record is readable and the active store is ``ok``; a previous store
-    that is not ``ok`` does not count against it."""
-    if store_status.active_record is not ActiveRecordState.OK:
-        return False
-    return (
-        store_status.active_store is not None
-        and store_status.active_store.condition is ActiveStoreCondition.OK
-    )
+    that is not ``ok`` does not count against it. A status shows an active store exactly
+    when the record is readable."""
+    active_store = store_status.active_store
+    return active_store is not None and active_store.condition is ActiveStoreCondition.OK
 
 
 def run_store_command(arguments: argparse.Namespace, store_activation: StoreActivation) -> int:
@@ -1002,7 +999,10 @@ def run_store_command(arguments: argparse.Namespace, store_activation: StoreActi
         if store_command == "rollback":
             print_store_status(store_activation.roll_back())
             return 0
+        # The parser offers one more store command: status.
         store_status = store_activation.describe_status()
+        print_store_status(store_status)
+        return 0 if is_store_status_ok(store_status) else 1
     except StoreOperationFailed as error:
         message = STORE_OPERATION_FAILURE_MESSAGES[error.failure]
         print(
@@ -1010,8 +1010,6 @@ def run_store_command(arguments: argparse.Namespace, store_activation: StoreActi
             file=sys.stderr,
         )
         return 1
-    print_store_status(store_status)
-    return 0 if is_store_status_ok(store_status) else 1
 
 
 def run_schema_command(action: str, schema_dir: Path) -> int:
@@ -1126,15 +1124,10 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             max_results_per_search=arguments.max_results_per_search,
             semantic=arguments.semantic,
         )
-        served_corpus = load_served_corpus_or_exit("topic", settings.store_root)
-        fight_source, pinned_fight_snapshot = load_fight_source_or_exit(
-            "topic", settings.fight_snapshot
-        )
-        topic_context_service = build_topic_context_service(
-            served_corpus,
-            fight_source,
-            pinned_fight_snapshot,
-            semantic_settings=choose_semantic_settings(settings, arguments),
+        topic_context_service = assemble_topic_context_service(
+            load_data_plane_or_exit(
+                "topic", settings, choose_semantic_settings(settings, arguments)
+            )
         )
         return print_response(topic_context_service.explore(topic_request))
     if arguments.command == "capabilities":

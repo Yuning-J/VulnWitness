@@ -554,6 +554,23 @@ def test_api_serves_the_packaged_fixture_and_verifies_as_the_verify_command_does
     assert runner.evidence_set_checks[0](genuine_set).verdict is VerificationVerdict.VERIFIED
 
 
+def test_api_builds_its_tool_and_verification_deployments_over_one_data_plane() -> None:
+    """ADR 0009 §11, §12: one set of indexes, one FiGHT source and one catalog, and two
+    call runners."""
+    runner = RecordingApiServerRunner()
+
+    run_api_server(runner, ServiceSettings(), **HTTP_LISTENER)
+
+    tool_deployment = runner.served_toolboxes[0].deployment
+    evidence_set_check = runner.evidence_set_checks[0]
+    assert isinstance(evidence_set_check, functools.partial)
+    verification_deployment = evidence_set_check.keywords["deployment"]
+    assert verification_deployment.search_service is tool_deployment.search_service
+    # The catalog is built only with a data plane, from its one FiGHT source.
+    assert verification_deployment.evidence_catalog is tool_deployment.evidence_catalog
+    assert verification_deployment.call_runner is not tool_deployment.call_runner
+
+
 @pytest.mark.parametrize(
     ("planner_environment", "expected_verdict"),
     [

@@ -733,7 +733,7 @@
           "then": {
             "properties": {
               "message": {
-                "const": "The target lies in the store root, which is not a directory or is a symbolic link."
+                "const": "The target lies in the store root, which is missing, not a directory, a symbolic link or unreadable."
               }
             }
           }

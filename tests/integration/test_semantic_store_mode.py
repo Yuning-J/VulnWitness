@@ -25,6 +25,7 @@ from cve_kgrag.domain.search import SearchRequest, SemanticUnavailableDetail
 from cve_kgrag.domain.taxonomy import BackendFailureDetail, BackendStatus, RetrievalChannel
 from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.settings import SemanticSettings
+from tests.support.collect import find_capability
 from tests.support.corpus_stores import COMPATIBILITY_STORE
 from tests.support.entry_points import FakeAdapterRegistry, FakeEntryPoint
 from tests.support.vector_store import FakeCollection, FixedEncoder
@@ -200,8 +201,7 @@ def test_store_investigation_requesting_the_channel_seals_a_set_naming_why_it_is
         for channel_failure in source_outcome.channel_failures:
             if channel_failure.channel is RetrievalChannel.SEMANTIC:
                 semantic_details.add(channel_failure.detail)
-    assert evidence_set.source_capabilities[3].detail is (
-        SemanticUnavailableDetail.COLLECTION_NOT_BOUND
-    )
+    semantic_capability = find_capability(evidence_set.source_capabilities, "semantic_channel")
+    assert semantic_capability.detail is SemanticUnavailableDetail.COLLECTION_NOT_BOUND
     assert semantic_details == {BackendFailureDetail.COLLECTION_NOT_BOUND}
     assert overlapping_registry.is_listed is False

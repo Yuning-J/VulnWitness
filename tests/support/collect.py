@@ -1,8 +1,9 @@
 """Small loop-based extractors used in assertions."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Protocol
 
+from cve_kgrag.domain.investigation import SourceCapability
 from cve_kgrag.domain.search import Candidate
 
 
@@ -35,3 +36,13 @@ def list_technique_ids(items: Iterable[HasTechniqueId]) -> list[str]:
     for item in items:
         technique_ids.append(item.technique_id)
     return technique_ids
+
+
+def find_capability(
+    source_capabilities: Sequence[SourceCapability], source: str
+) -> SourceCapability:
+    """The capability of ``source`` (a knowledge source or ``semantic_channel``)."""
+    for capability in source_capabilities:
+        if capability.source == source:
+            return capability
+    raise LookupError(source)

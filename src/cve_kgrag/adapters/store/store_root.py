@@ -32,3 +32,23 @@ def check_store_root(store_root: Path) -> None:
     os.close(root_descriptor)
     if not os.access(store_root, os.X_OK):
         raise StoreRootUnusableError("the store root cannot be searched")
+
+
+def lies_in_store_root(path: Path, store_root: Path) -> bool:
+    """Whether ``path`` is the store root or lies under it, compared by file identity
+    (device and inode), so another spelling of the root, such as another letter case on
+    a case-insensitive file system, is still the root. A path that does not exist lies
+    where its nearest existing ancestor does; a root that cannot be found holds nothing."""
+    try:
+        root_status = os.stat(store_root)
+    except OSError:
+        return False
+    root_identity = (root_status.st_dev, root_status.st_ino)
+    for candidate in (path, *path.parents):
+        try:
+            candidate_status = os.stat(candidate)
+        except OSError:
+            continue
+        if (candidate_status.st_dev, candidate_status.st_ino) == root_identity:
+            return True
+    return False

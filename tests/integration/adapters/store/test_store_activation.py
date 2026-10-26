@@ -32,19 +32,17 @@ from cve_kgrag.domain.store_status import (
     StoreOperationFailure,
 )
 from tests.support.corpus_stores import (
+    ROOT_BREAKERS,
     FailingActiveRecordFiles,
     copy_compatibility_store,
+    declare_later_format,
     import_store,
     list_hidden_entries,
+    move_store,
     read_active_bytes,
+    rewrite_manifest,
+    tamper_with_records,
 )
-
-
-@pytest.fixture
-def store_root(tmp_path: Path) -> Path:
-    store_root = tmp_path / "stores"
-    store_root.mkdir()
-    return store_root
 
 
 @pytest.fixture
@@ -75,21 +73,6 @@ def read_record_fields(store_root: Path) -> dict[str, object]:
 
 def describe_pointer(store_dir: Path) -> dict[str, str]:
     return {"name": store_dir.name, "store_manifest_sha256": hash_manifest(store_dir)}
-
-
-def tamper_with_records(store_dir: Path) -> None:
-    records_path = store_dir / "records.jsonl"
-    records_bytes = records_path.read_bytes()
-    assert b"democorp" in records_bytes
-    records_path.write_bytes(records_bytes.replace(b"democorp", b"DEMOCORP"))
-
-
-def replace_manifest_bytes(store_dir: Path) -> None:
-    """Rewrite the manifest with the same fields in another key order: it still
-    verifies, but no longer hashes to the digest recorded for it."""
-    manifest_path = store_dir / "manifest.json"
-    manifest_fields = json.loads(manifest_path.read_bytes())
-    manifest_path.write_text(json.dumps(manifest_fields, indent=1))
 
 
 def expect_failure(operation: Callable[[], object], failure: StoreOperationFailure) -> None:
@@ -168,7 +151,7 @@ def test_activating_a_store_replaced_under_its_name_records_it_and_keeps_the_pre
 ) -> None:
     store_activation.activate("first")
     store_activation.activate("second")
-    replace_manifest_bytes(second_store)
+    rewrite_manifest(second_store)
 
     store_activation.activate("second")
 
@@ -210,14 +193,7 @@ def test_compatibility_store_written_by_an_earlier_release_activates(
         (lambda store_dir: None, StoreOperationFailure.STORE_MISSING),
         (tamper_with_records, StoreOperationFailure.STORE_INVALID),
         (
-            lambda store_dir: (store_dir / "manifest.json").write_text(
-                json.dumps(
-                    {
-                        **json.loads((store_dir / "manifest.json").read_bytes()),
-                        "store_format_version": 2,
-                    }
-                )
-            ),
+            declare_later_format,
             StoreOperationFailure.STORE_FORMAT_UNSUPPORTED,
         ),
     ],
@@ -317,10 +293,10 @@ def test_rollback_without_active_has_no_previous_store(
     ("break_previous", "failure"),
     [
         (
-            lambda store_dir: os.rename(store_dir, store_dir.with_name("moved")),
+            move_store,
             StoreOperationFailure.STORE_MISSING,
         ),
-        (replace_manifest_bytes, StoreOperationFailure.STORE_CHANGED),
+        (rewrite_manifest, StoreOperationFailure.STORE_CHANGED),
         (tamper_with_records, StoreOperationFailure.STORE_INVALID),
     ],
     ids=["missing", "replaced", "tampered"],
@@ -443,14 +419,20 @@ def test_rollback_over_an_unreadable_active_is_refused(
     expect_failure(store_activation.roll_back, StoreOperationFailure.ACTIVE_UNREADABLE)
 
 
-def test_active_of_exactly_the_cap_is_read_and_one_byte_more_is_not(store_root: Path) -> None:
-    active_path = store_root / "ACTIVE"
-    active_path.write_bytes(b" " * MAX_ACTIVE_BYTES)
-    with pytest.raises(ActiveRecordUnreadableError, match="not a record this release reads"):
-        read_active_record(store_root)
+@pytest.mark.parametrize(
+    ("size_bytes", "refusal"),
+    [
+        (MAX_ACTIVE_BYTES, "not a record this release reads"),
+        (MAX_ACTIVE_BYTES + 1, "larger than a record"),
+    ],
+    ids=["at_the_cap_read_whole", "one_byte_over_refused"],
+)
+def test_active_is_read_up_to_its_cap_and_refused_past_it(
+    store_root: Path, size_bytes: int, refusal: str
+) -> None:
+    (store_root / "ACTIVE").write_bytes(b" " * size_bytes)
 
-    active_path.write_bytes(b" " * (MAX_ACTIVE_BYTES + 1))
-    with pytest.raises(ActiveRecordUnreadableError, match="larger than a record"):
+    with pytest.raises(ActiveRecordUnreadableError, match=refusal):
         read_active_record(store_root)
 
 
@@ -562,24 +544,7 @@ def test_rollback_whose_replace_fails_leaves_the_record_to_roll_back_again(
 # --- The root -------------------------------------------------------------------------
 
 
-def make_root_missing(store_root: Path) -> None:
-    store_root.rmdir()
-
-
-def make_root_a_file(store_root: Path) -> None:
-    store_root.rmdir()
-    store_root.write_bytes(b"")
-
-
-def make_root_a_symbolic_link(store_root: Path) -> None:
-    real_root = store_root.with_name("real-stores")
-    store_root.rename(real_root)
-    store_root.symlink_to(real_root)
-
-
-@pytest.mark.parametrize(
-    "break_root", [make_root_missing, make_root_a_file, make_root_a_symbolic_link]
-)
+@pytest.mark.parametrize("break_root", ROOT_BREAKERS)
 @pytest.mark.parametrize("operation_name", ["validate", "activate", "roll_back", "describe_status"])
 def test_every_operation_on_an_unusable_root_fails_as_store_root_unusable(
     store_root: Path, break_root: Callable[[Path], None], operation_name: str
@@ -631,10 +596,10 @@ def test_status_without_active_reports_no_active_store(
     ("break_active", "condition"),
     [
         (
-            lambda store_dir: os.rename(store_dir, store_dir.with_name("moved")),
+            move_store,
             ActiveStoreCondition.ACTIVE_STORE_MISSING,
         ),
-        (replace_manifest_bytes, ActiveStoreCondition.ACTIVE_STORE_CHANGED),
+        (rewrite_manifest, ActiveStoreCondition.ACTIVE_STORE_CHANGED),
         (tamper_with_records, ActiveStoreCondition.STORE_INVALID),
     ],
     ids=["missing", "replaced", "tampered"],

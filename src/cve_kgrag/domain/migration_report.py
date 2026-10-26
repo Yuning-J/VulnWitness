@@ -180,7 +180,8 @@ MIGRATION_FAILURE_MESSAGES: dict[MigrationFailureCode, str] = {
         "store name."
     ),
     MigrationFailureCode.STORE_ROOT_UNUSABLE: (
-        "The target lies in the store root, which is not a directory or is a symbolic link."
+        "The target lies in the store root, which is missing, not a directory, a symbolic "
+        "link or unreadable."
     ),
     MigrationFailureCode.EXISTING_STORE_INVALID: (
         "The target holds this import, but the store fails verification; it is never repaired."

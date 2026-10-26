@@ -30,6 +30,7 @@ from cve_kgrag.domain.store_status import (
     ACTIVE_STORE_CONDITIONS,
     STORE_CONDITION_FAILURES,
     ActiveRecordState,
+    ActiveStoreCondition,
     ActiveStoreStatus,
     PreviousStoreStatus,
     ServedStoreIdentity,
@@ -128,23 +129,16 @@ class StoreActivation:
                 active_store=None,
                 previous_store=None,
             )
-        active_check = check_store(
-            self._store_root,
-            active_record.active.name,
-            active_record.active.store_manifest_sha256,
-            verify_corpus_store,
-        )
-        identity = None
-        if active_check.read_store is not None:
-            identity = describe_identity(active_check.read_store)
+        active_store = active_record.active
+        active_condition, active_identity = self._check_recorded_store(active_store)
         return StoreStatus(
             schema_version=SCHEMA_VERSION,
             active_record=ActiveRecordState.OK,
             active_store=ActiveStoreStatus(
-                name=active_record.active.name,
-                store_manifest_sha256=active_record.active.store_manifest_sha256,
-                condition=ACTIVE_STORE_CONDITIONS[active_check.condition],
-                identity=identity,
+                name=active_store.name,
+                store_manifest_sha256=active_store.store_manifest_sha256,
+                condition=ACTIVE_STORE_CONDITIONS[active_condition],
+                identity=active_identity,
             ),
             previous_store=self._describe_previous_store(active_record.previous),
         )
@@ -191,7 +185,7 @@ class StoreActivation:
         return ActiveStoreStatus(
             name=active_store.name,
             store_manifest_sha256=active_store.store_manifest_sha256,
-            condition=ACTIVE_STORE_CONDITIONS[StoreCondition.OK],
+            condition=ActiveStoreCondition.OK,
             identity=describe_identity(verified_store),
         )
 
@@ -200,18 +194,25 @@ class StoreActivation:
     ) -> PreviousStoreStatus | None:
         if previous_store is None:
             return None
-        previous_check = check_store(
-            self._store_root,
-            previous_store.name,
-            previous_store.store_manifest_sha256,
-            verify_corpus_store,
-        )
-        identity = None
-        if previous_check.read_store is not None:
-            identity = describe_identity(previous_check.read_store)
+        previous_condition, previous_identity = self._check_recorded_store(previous_store)
         return PreviousStoreStatus(
             name=previous_store.name,
             store_manifest_sha256=previous_store.store_manifest_sha256,
-            condition=previous_check.condition,
-            identity=identity,
+            condition=previous_condition,
+            identity=previous_identity,
         )
+
+    def _check_recorded_store(
+        self, recorded_store: StorePointer
+    ) -> tuple[StoreCondition, ServedStoreIdentity | None]:
+        """A store ``ACTIVE`` records, checked under the digest it records and verified
+        when that matches; its identity only when it is ``ok``."""
+        store_check = check_store(
+            self._store_root,
+            recorded_store.name,
+            recorded_store.store_manifest_sha256,
+            verify_corpus_store,
+        )
+        if store_check.read_store is None:
+            return store_check.condition, None
+        return store_check.condition, describe_identity(store_check.read_store)

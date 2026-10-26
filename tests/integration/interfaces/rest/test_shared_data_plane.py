@@ -9,7 +9,6 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 
 import anyio
 import httpx2
@@ -30,8 +29,6 @@ from cve_kgrag.domain.evidence_set_verification_report import (
 )
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.search import SearchResponse
-from cve_kgrag.domain.tool_contracts import KnowledgeCapabilities
-from cve_kgrag.domain.topic_context import KnowledgeSource
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
 from cve_kgrag.interfaces.rest.api_runner import build_api_app
@@ -98,17 +95,6 @@ def test_deployments_of_one_data_plane_share_it_and_keep_their_own_call_runners(
     assert tool_deployment.topic_context_service is not (
         verification_deployment.topic_context_service
     )
-
-
-def test_api_verification_check_runs_over_the_data_plane_it_is_given(
-    data_plane: ServingDataPlane,
-) -> None:
-    check = build_evidence_set_check(data_plane, None)
-
-    assert isinstance(check, partial)
-    verification_deployment = check.keywords["deployment"]
-    assert verification_deployment.search_service is data_plane.search_service
-    assert verification_deployment.evidence_catalog is data_plane.evidence_catalog
 
 
 async def test_investigation_runs_while_verification_holds_its_route(
@@ -228,23 +214,18 @@ def test_concurrent_searches_and_replays_answer_as_serial_runs_do(
     assert verdicts == {VerificationVerdict.VERIFIED}
 
 
-def test_tools_and_verification_report_the_same_capability_versions(
+def test_set_the_tools_seal_verifies_on_the_route_sharing_their_data_plane(
     data_plane: ServingDataPlane,
 ) -> None:
+    """Verification compares every capability version, so a set the tool deployment
+    sealed verifies only where the route reports the same cve_search and mitre_fight
+    versions."""
     toolbox = build_knowledge_toolbox(data_plane)
     check = build_evidence_set_check(data_plane, None)
-    assert isinstance(check, partial)
-
-    tool_capabilities = KnowledgeCapabilities.model_validate_json(
-        require_answer(toolbox.call(KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES, None)).json_text
+    investigation_answer = require_answer(
+        toolbox.call(KnowledgeToolName.INVESTIGATE_TELECOM_TOPIC, INVESTIGATION)
     )
 
-    tool_versions: dict[str, str | None] = {}
-    for capability in tool_capabilities.source_capabilities:
-        tool_versions[str(capability.source)] = capability.version
-    verification_versions: dict[str, str | None] = {}
-    for capability in check.keywords["deployment"].source_capabilities:
-        verification_versions[str(capability.source)] = capability.version
-    for source in (KnowledgeSource.CVE_SEARCH, KnowledgeSource.MITRE_FIGHT):
-        assert tool_versions[str(source)] == verification_versions[str(source)]
-        assert tool_versions[str(source)] is not None
+    report = check(investigation_answer.json_text.encode())
+
+    assert report.verdict is VerificationVerdict.VERIFIED

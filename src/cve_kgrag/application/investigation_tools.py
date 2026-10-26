@@ -101,11 +101,11 @@ class ToolExecutor:
                 )
                 topic_response = topic_exploration.response
                 return ToolExecution(
-                    None,
-                    topic_response,
-                    (),
-                    measure_context_bytes(topic_response),
-                    topic_exploration.omitted_cve_ids,
+                    search_response=None,
+                    topic_response=topic_response,
+                    integrity_violations=(),
+                    context_bytes=measure_context_bytes(topic_response),
+                    omitted_topic_cve_ids=topic_exploration.omitted_cve_ids,
                 )
             search_response = self._search_service.search(build_search_request(call, request))
         except EvidenceValidationError as error:

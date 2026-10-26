@@ -17,17 +17,10 @@ from cve_kgrag.adapters.store.corpus_store import CorpusStore, load_corpus_store
 from cve_kgrag.adapters.store.store_check import check_store
 from cve_kgrag.adapters.store.store_root import StoreRootUnusableError, check_store_root
 from cve_kgrag.domain.store_status import (
-    StoreCondition,
+    STARTUP_REASONS,
     StoreUnavailable,
     StoreUnavailableReason,
 )
-
-STARTUP_REASONS = {
-    StoreCondition.STORE_MISSING: StoreUnavailableReason.ACTIVE_STORE_MISSING,
-    StoreCondition.STORE_CHANGED: StoreUnavailableReason.ACTIVE_STORE_CHANGED,
-    StoreCondition.STORE_FORMAT_UNSUPPORTED: StoreUnavailableReason.STORE_FORMAT_UNSUPPORTED,
-    StoreCondition.STORE_INVALID: StoreUnavailableReason.STORE_INVALID,
-}
 
 
 def load_active_store(store_root: Path) -> CorpusStore:

@@ -4,7 +4,6 @@ and fail with a reason code and never a path; every serving command serves the s
 commands whose row loads no served corpus run whatever state the root is in; and
 ``demo`` and ``eval planner`` stay on the packaged fixture and say so."""
 
-import hashlib
 import json
 import logging
 from collections.abc import Mapping
@@ -13,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from cve_kgrag.adapter_discovery import InterfaceUnavailable
-from cve_kgrag.adapters.fixture.fight_fixture import default_fight_fixture_dir
 from cve_kgrag.adapters.store.corpus_store import load_corpus_store
 from cve_kgrag.cli import main, run_mcp_server
 from cve_kgrag.domain.investigation import (
@@ -23,13 +21,15 @@ from cve_kgrag.domain.investigation import (
 )
 from cve_kgrag.domain.search import SearchResponse, SemanticUnavailableDetail
 from cve_kgrag.domain.served_dataset import ServedDatasetKind
-from cve_kgrag.domain.store_status import ActiveRecordState, StoreStatus
+from cve_kgrag.domain.store_status import ActiveRecordState, StoreCondition, StoreStatus
 from cve_kgrag.domain.taxonomy import BackendFailureDetail
 from cve_kgrag.domain.tool_contracts import KnowledgeCapabilities
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.settings import ServiceSettings, load_settings
+from tests.support.collect import find_capability
 from tests.support.corpus_stores import import_store
 from tests.support.evaluation import SMALL_GOLD_ROWS, write_gold_file
+from tests.support.fight_excerpt import EXCERPT_BYTES, EXCERPT_SHA256
 from tests.support.legacy_inputs import (
     build_declaration,
     build_v2_entry,
@@ -38,8 +38,6 @@ from tests.support.legacy_inputs import (
     write_inputs_manifest,
 )
 
-EXCERPT_BYTES = default_fight_fixture_dir().joinpath("fight-excerpt.yaml").read_bytes()
-EXCERPT_SHA256 = hashlib.sha256(EXCERPT_BYTES).hexdigest()
 STORE_MARKER = "storemarker"
 STORE_DESCRIPTION = f"SYNTHETIC: {STORE_MARKER} gateway mishandles input."
 
@@ -183,7 +181,7 @@ def test_store_status_with_an_ok_active_store_exits_zero_whatever_the_previous(
     store_status = StoreStatus.model_validate_json(capsys.readouterr().out)
     assert exit_code == 0
     assert store_status.previous_store is not None
-    assert store_status.previous_store.condition.value == "store_invalid"
+    assert store_status.previous_store.condition is StoreCondition.STORE_INVALID
 
 
 def test_store_command_on_an_unusable_root_names_the_reason_not_the_root(
@@ -208,7 +206,7 @@ def test_capabilities_name_the_active_store_s_dataset(
     exit_code = main(["capabilities"], active_settings)
 
     capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
-    cve_search = capabilities.source_capabilities[0]
+    cve_search = find_capability(capabilities.source_capabilities, "cve_search")
     assert exit_code == 0
     assert cve_search.version == (
         load_corpus_store(store_root / "second").describe_served_dataset().cve_search_version
@@ -495,7 +493,8 @@ def test_store_capabilities_report_the_semantic_channel_by_whether_it_is_request
     main(["capabilities", *extra_arguments], environment)
 
     capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
-    assert capabilities.source_capabilities[3] == expected_capability
+    semantic_capability = find_capability(capabilities.source_capabilities, "semantic_channel")
+    assert semantic_capability == expected_capability
 
 
 # --- The operator FiGHT snapshot ------------------------------------------------------
@@ -620,8 +619,53 @@ def test_capabilities_name_the_configured_snapshot_s_pin(
     exit_code = main(["capabilities"], environment)
 
     capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
-    fight_capability = capabilities.source_capabilities[1]
+    fight_capability = find_capability(capabilities.source_capabilities, "mitre_fight")
     assert exit_code == 0
     assert fight_capability.state is SourceCapabilityState.AVAILABLE
     assert fight_capability.version is not None
     assert fight_capability.version.endswith(f"+sha256:{EXCERPT_SHA256}")
+
+
+def test_store_whose_manifest_nests_too_deep_fails_as_invalid_without_a_traceback(
+    root_settings: dict[str, str], store_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (store_root / "first" / "manifest.json").write_bytes(b"[" * 200_000)
+
+    exit_code = main(["store", "validate", "first"], root_settings)
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err == (
+        "cve-kgrag store validate failed: store_invalid: the store fails verification\n"
+    )
+
+
+def test_eval_planner_out_inside_the_root_spelled_another_way_is_a_usage_error(
+    root_settings: dict[str, str], store_root: Path, tmp_path: Path
+) -> None:
+    root_alias = tmp_path / "root-alias"
+    root_alias.symlink_to(store_root)
+    gold_path = write_gold_file(tmp_path, SMALL_GOLD_ROWS)
+
+    exit_code = run_usage_error(
+        ["eval", "planner", "--gold", str(gold_path), "--out", str(root_alias / "results")],
+        root_settings,
+    )
+
+    assert exit_code == 2
+    assert not (store_root / "results").exists()
+
+
+def test_eval_planner_prints_the_report_it_prints_without_a_root(
+    unservable_settings: dict[str, str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    gold_path = write_gold_file(tmp_path, SMALL_GOLD_ROWS)
+    main(["eval", "planner", "--gold", str(gold_path), "--out", str(tmp_path / "plain")], {})
+    report_without_root = capsys.readouterr().out
+
+    main(
+        ["eval", "planner", "--gold", str(gold_path), "--out", str(tmp_path / "rooted")],
+        unservable_settings,
+    )
+
+    assert capsys.readouterr().out == report_without_root

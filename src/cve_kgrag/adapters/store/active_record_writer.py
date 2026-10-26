@@ -99,7 +99,9 @@ def hold_store_lock(store_root: Path) -> Iterator[None]:
     open_flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK
     try:
         try:
-            lock_descriptor = os.open(lock_path, open_flags | os.O_CREAT | os.O_EXCL, 0o600)
+            lock_descriptor = os.open(
+                lock_path, open_flags | os.O_CREAT | os.O_EXCL, ACTIVE_FILE_MODE
+            )
             is_created = True
         except FileExistsError:
             lock_descriptor = os.open(lock_path, open_flags)

@@ -782,8 +782,8 @@ def test_reading_store_whose_counts_differ_from_manifest_is_refused(
 
 @pytest.mark.parametrize(
     "manifest_bytes",
-    [b"", b"{", b"[]", b"null"],
-    ids=["empty", "truncated", "array", "null"],
+    [b"", b"{", b"[]", b"null", b"[" * 200_000],
+    ids=["empty", "truncated", "array", "null", "nested_past_the_recursion_limit"],
 )
 def test_reading_store_whose_manifest_is_not_json_object_is_refused(
     imported_store: Path, read_store: StoreReader, manifest_bytes: bytes

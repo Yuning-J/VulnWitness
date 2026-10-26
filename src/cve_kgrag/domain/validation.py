@@ -69,8 +69,9 @@ from cve_kgrag.domain.topic_context import (
     list_consulted_sources,
 )
 
-# A warning's count: a positive decimal number, as str(int) writes it.
-COUNT_SUBJECT_PATTERN = r"[1-9][0-9]*"
+# A warning's count: a positive decimal number, as str(int) writes it, of at most nine
+# digits, far above any count a response can make; int() refuses very long digit strings.
+COUNT_SUBJECT_PATTERN = r"[1-9][0-9]{0,8}"
 IMPLEMENTATION = KnowledgeScope.IMPLEMENTATION_VULNERABILITY
 THREAT_CONTEXT = KnowledgeScope.PROTOCOL_THREAT_CONTEXT
 CVE_SOURCE_TYPES = frozenset({SourceType.NVD_API_2, SourceType.NVD_JSON_11, SourceType.CISA_KEV})
@@ -496,8 +497,19 @@ def read_count_subject(subject: str) -> int | None:
     return int(subject)
 
 
+def find_source_status(
+    source_outcomes: Iterable[SourceOutcome], source: KnowledgeSource
+) -> ResultStatus | None:
+    """The status of ``source``'s outcome, ``None`` when none names it."""
+    for outcome in source_outcomes:
+        if outcome.source is source:
+            return outcome.status
+    return None
+
+
 def find_topic_warning_violations(
     warnings: Sequence[TopicContextWarning],
+    *,
     fight_status: ResultStatus | None,
     listed_technique_count: int,
     listed_candidate_count: int,
@@ -639,17 +651,13 @@ def validate_topic_context_response(
 
     violations.extend(find_topic_status_violations(response, candidates))
     violations.extend(find_fight_snapshot_violations(response, pinned_fight_snapshot))
-    fight_status: ResultStatus | None = None
-    for outcome in response.source_outcomes:
-        if outcome.source is KnowledgeSource.MITRE_FIGHT:
-            fight_status = outcome.status
     violations.extend(
         find_topic_warning_violations(
             response.warnings,
-            fight_status,
-            len(response.protocol_context),
-            len(candidates),
-            pinned_fight_snapshot,
+            fight_status=find_source_status(response.source_outcomes, KnowledgeSource.MITRE_FIGHT),
+            listed_technique_count=len(response.protocol_context),
+            listed_candidate_count=len(candidates),
+            pinned_snapshot=pinned_fight_snapshot,
         )
     )
     if response.result_sha256 != response.compute_result_sha256():
