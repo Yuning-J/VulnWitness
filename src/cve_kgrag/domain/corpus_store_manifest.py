@@ -8,17 +8,23 @@ migration back before activation is deleting the directory.
 
 import re
 from enum import StrEnum
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.evidence import SHA256_PATTERN
 from cve_kgrag.domain.hashing import canonical_sha256
-from cve_kgrag.domain.search import SCHEMA_VERSION, SchemaVersion
+from cve_kgrag.domain.search import HIDDEN_REQUEST_CHARACTERS
 from cve_kgrag.domain.timestamps import Timestamp
 
 STORE_FORMAT_VERSION: Literal[1] = 1
+# The SHA-256 of the canonical JSON of the published schemas of CorpusStoreManifest,
+# CveRecord and EvidenceAnchor, which a format-1 store persists. A test fails when they
+# change: the change is then judged by hand (ADR 0008 §9 lists what moves the format) and
+# either re-pinned here, with the reason it keeps format 1, or made a format change. It
+# proves nothing about compatibility by itself.
+STORE_FORMAT_SCHEMA_SHA256 = "d1dc03f12fac0937b87103b38114ea060ff069dc9680b1a5bb90f34166080038"
 # NVD's first year feed; it also holds the CVE IDs of 1999 to 2001.
 FIRST_FEED_YEAR = 2002
 STORE_FILE_NAME_PATTERN = r"^[a-z_]+\.jsonl$"
@@ -27,8 +33,12 @@ SOURCE_VERSION_PATTERN = r"^sha256:[0-9a-f]{64}$"
 CORPUS_CONTENT_IDENTITY_VERSION = 1
 ROLLBACK_INSTRUCTION = (
     "Before activation, remove the newly created target directory. After activation, use "
-    "the WP10 store rollback operation."
+    "cve-kgrag store rollback."
 )
+MAX_ROLLBACK_INSTRUCTION_CHARS = 512
+# A contract version's shape, as the store records the one it was created under.
+STORE_SCHEMA_VERSION_PATTERN = r"^[0-9]+\.[0-9]+\.[0-9]+(-dev\.[0-9]+)?$"
+StoreSchemaVersion = Annotated[str, Field(pattern=STORE_SCHEMA_VERSION_PATTERN, max_length=32)]
 RollbackKind = Literal["delete_unactivated_target"]
 RollbackScope = Literal["before_activation_only"]
 ROLLBACK_KIND: RollbackKind = "delete_unactivated_target"
@@ -154,8 +164,15 @@ class CorpusStoreManifest(ContractModel):
     """What a store holds and where it came from; every file it lists is pinned by
     SHA-256, and a reader refuses any other file."""
 
-    schema_version: SchemaVersion = SCHEMA_VERSION
-    store_format_version: Literal[1] = STORE_FORMAT_VERSION
+    schema_version: StoreSchemaVersion = Field(
+        description="The contract version the store was created under; provenance only, "
+        "never compared with the version a reader serves."
+    )
+    store_format_version: Literal[1] = Field(
+        default=STORE_FORMAT_VERSION,
+        description="What decides whether a reader can read the store; a reader refuses "
+        "any other integer.",
+    )
     synthetic: Literal[False] = False
     created_at: Timestamp
     importer_version: str = Field(
@@ -174,13 +191,13 @@ class CorpusStoreManifest(ContractModel):
     anchor_count: int = Field(ge=1)
     rollback_kind: RollbackKind = ROLLBACK_KIND
     rollback_scope: RollbackScope = ROLLBACK_SCOPE
-    rollback_instruction: str = ROLLBACK_INSTRUCTION
-
-    @model_validator(mode="after")
-    def check_rollback_instruction(self) -> Self:
-        if self.rollback_instruction != ROLLBACK_INSTRUCTION:
-            raise ValueError("the rollback instruction is the server's fixed sentence")
-        return self
+    rollback_instruction: str = Field(
+        min_length=1,
+        max_length=MAX_ROLLBACK_INSTRUCTION_CHARS,
+        pattern=rf"^[^{HIDDEN_REQUEST_CHARACTERS}]+$",
+        description="The instruction the importer that wrote the store gave; a record of "
+        "the store's creation, never current guidance.",
+    )
 
     @model_validator(mode="after")
     def check_files_pinned_once(self) -> Self:

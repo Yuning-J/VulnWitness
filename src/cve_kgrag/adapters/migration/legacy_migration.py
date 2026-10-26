@@ -35,6 +35,7 @@ from cve_kgrag.adapters.migration.input_files import (
 from cve_kgrag.adapters.migration.input_resolution import (
     ResolvedInput,
     check_target,
+    check_target_in_store_root,
     check_target_parent,
     compute_import_identity,
     resolve_inputs,
@@ -74,6 +75,7 @@ from cve_kgrag.adapters.store.corpus_store import (
     write_store_manifest,
 )
 from cve_kgrag.domain.corpus_store_manifest import (
+    ROLLBACK_INSTRUCTION,
     CorpusStoreManifest,
     StoreFile,
     StoreInput,
@@ -90,6 +92,7 @@ from cve_kgrag.domain.migration_report import (
     MigrationReport,
 )
 from cve_kgrag.domain.provenance import SourceRegistry
+from cve_kgrag.domain.search import SCHEMA_VERSION
 
 STAGING_DIR_SUFFIX = "staging"
 PARTIAL_DIR_SUFFIX = "partial"
@@ -100,7 +103,8 @@ INPUT_SNAPSHOT_FILE = "input.snapshot"
 @dataclass(frozen=True)
 class MigrationRequest:
     """What the operator asked: the manifest (already parsed, with its bytes and path),
-    the target, an optional legacy root, and whether this is a dry run."""
+    the target, an optional legacy root, and whether this is a dry run; and the store root
+    the settings configure, if any, which constrains a target inside it."""
 
     manifest: InputsManifest
     manifest_bytes: bytes
@@ -108,6 +112,7 @@ class MigrationRequest:
     target: Path
     legacy_root: Path | None
     is_dry_run: bool
+    store_root: Path | None
 
 
 @dataclass(frozen=True)
@@ -177,6 +182,7 @@ class Migration:
                 self._request.legacy_root, MigrationFailureCode.LEGACY_ROOT_UNREADABLE
             )
         check_target_parent(target)
+        check_target_in_store_root(target, self._request.store_root)
         check_target(target, manifest_path, inputs, legacy_root)
         if legacy_root is not None:
             self.tally.legacy_root_findings = scan_legacy_root(
@@ -282,8 +288,7 @@ class Migration:
         if verified_store.store_manifest_sha256 != parsed_manifest.store_manifest_sha256:
             raise MigrationFailed(MigrationFailureCode.EXISTING_STORE_INVALID)
         return self.tally.build_report(
-            MigrationOutcome.ALREADY_IMPORTED,
-            store_manifest_sha256=verified_store.store_manifest_sha256,
+            MigrationOutcome.ALREADY_IMPORTED, named_store=verified_store
         )
 
     def _read_inputs(
@@ -509,6 +514,7 @@ class Migration:
         for resolved_input in inputs:
             store_inputs.append(build_store_input(resolved_input, reading))
         manifest = CorpusStoreManifest(
+            schema_version=SCHEMA_VERSION,
             created_at=now,
             importer_version=self._dependencies.importer_version,
             import_identity_sha256=identity,
@@ -517,6 +523,7 @@ class Migration:
             files=written_store.files,
             record_count=written_store.record_count,
             anchor_count=written_store.anchor_count,
+            rollback_instruction=ROLLBACK_INSTRUCTION,
         )
         store_dir = written_store.store_dir
         try:
@@ -534,9 +541,7 @@ class Migration:
             publish_store_directory(store_dir, target)
         except (OSError, CorpusStoreIntegrityError):
             raise MigrationFailed(MigrationFailureCode.STORE_WRITE_FAILED) from None
-        return self.tally.build_report(
-            MigrationOutcome.IMPORTED, store_manifest_sha256=verified_store.store_manifest_sha256
-        )
+        return self.tally.build_report(MigrationOutcome.IMPORTED, named_store=verified_store)
 
 
 @contextmanager

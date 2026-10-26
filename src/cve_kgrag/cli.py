@@ -785,6 +785,7 @@ def run_legacy_migration_command(
     parser: argparse.ArgumentParser,
     arguments: argparse.Namespace,
     parsers: MigrationParsers | InterfaceUnavailable,
+    store_root: Path | None,
 ) -> int:
     """Run the import the arguments ask for (``run_migration``) and print its report.
     0 when the run imported, found the import already done, or completed a dry run; 1
@@ -807,6 +808,7 @@ def run_legacy_migration_command(
             target=arguments.target,
             legacy_root=arguments.legacy_root,
             is_dry_run=arguments.dry_run,
+            store_root=store_root,
         ),
         MigrationDependencies(
             parsers=parsers,
@@ -867,7 +869,9 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             token=api_token,
         )
     if arguments.command == "migrate":
-        return run_legacy_migration_command(parser, arguments, discover_migration_parsers())
+        return run_legacy_migration_command(
+            parser, arguments, discover_migration_parsers(), settings.store_root
+        )
 
     bundle = load_served_bundle()
     if arguments.command == "eval":

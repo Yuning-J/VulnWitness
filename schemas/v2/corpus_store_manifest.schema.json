@@ -245,7 +245,10 @@
       "type": "integer"
     },
     "rollback_instruction": {
-      "default": "Before activation, remove the newly created target directory. After activation, use the WP10 store rollback operation.",
+      "description": "The instruction the importer that wrote the store gave; a record of the store's creation, never current guidance.",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]+$(?!\\n)",
       "title": "Rollback Instruction",
       "type": "string"
     },
@@ -262,14 +265,16 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.25",
-      "default": "2.0.0-dev.25",
+      "description": "The contract version the store was created under; provenance only, never compared with the version a reader serves.",
+      "maxLength": 32,
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-dev\\.[0-9]+)?$(?!\\n)",
       "title": "Schema Version",
       "type": "string"
     },
     "store_format_version": {
       "const": 1,
       "default": 1,
+      "description": "What decides whether a reader can read the store; a reader refuses any other integer.",
       "title": "Store Format Version",
       "type": "integer"
     },

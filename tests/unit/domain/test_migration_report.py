@@ -1,7 +1,8 @@
 """The migration report's contract (ADR 0008 §1, §6, §7, §9, §10): a failed run, and only
 one, carries its failure, whose message is the fixed sentence of its code; a run that
-wrote or found a store names it by its import identity and manifest hash and states the
-server's fixed rollback kind, scope and instruction; a run that published no store names
+wrote or found a store names it by its import identity and manifest hash, names its
+dataset by its corpus content digest (ADR 0009 §2) and states the server's fixed rollback
+kind, scope and instruction; a run that published no store names
 none; KEV rows without an NVD record bring the fixed advice; legacy root findings cite the
 legacy formats' commit; skipped entries are located, bounded, and never quoted."""
 
@@ -36,6 +37,12 @@ STORE_ROLLBACK = {
 }
 NO_ROLLBACK = {"rollback_kind": None, "rollback_scope": None, "rollback_instruction": None}
 STORE_MANIFEST_SHA256 = "b" * 64
+CORPUS_CONTENT_SHA256 = "c" * 64
+NAMED_STORE = {
+    "store_manifest_sha256": STORE_MANIFEST_SHA256,
+    "corpus_content_sha256": CORPUS_CONTENT_SHA256,
+}
+NO_STORE = {"store_manifest_sha256": None, "corpus_content_sha256": None}
 KEV_FAILURE_CODES = [
     MigrationFailureCode.KEV_INVALID_ENCODING,
     MigrationFailureCode.KEV_INVALID_HEADER,
@@ -53,6 +60,7 @@ def build_report_fields(outcome: str, **overrides: Any) -> dict[str, Any]:
         "failure": None,
         "import_identity_sha256": IMPORT_IDENTITY_SHA256,
         "store_manifest_sha256": None,
+        "corpus_content_sha256": None,
         "cve_outcomes": {"imported": 1},
         "candidate_outcomes": {"chosen": 1},
         "normalization_failures": {},
@@ -68,7 +76,7 @@ def build_report_fields(outcome: str, **overrides: Any) -> dict[str, Any]:
     if outcome == "failed":
         fields["failure"] = build_migration_failure(MigrationFailureCode.NO_IMPORTABLE_RECORDS)
     if outcome in ("imported", "already_imported"):
-        fields["store_manifest_sha256"] = STORE_MANIFEST_SHA256
+        fields.update(NAMED_STORE)
         fields.update(STORE_ROLLBACK)
     fields.update(overrides)
     return fields
@@ -161,19 +169,39 @@ def test_report_with_another_rollback_instruction_is_refused(rollback_instructio
     "outcome", ["imported", "already_imported"], ids=["imported", "already_imported"]
 )
 def test_report_of_a_written_or_found_store_that_names_no_store_is_refused(outcome: str) -> None:
-    report_fields = build_report_fields(outcome, store_manifest_sha256=None, **NO_ROLLBACK)
+    report_fields = build_report_fields(outcome, **NO_STORE, **NO_ROLLBACK)
 
     with pytest.raises(ValidationError):
         MigrationReport.model_validate(report_fields)
 
 
 def test_dry_run_report_naming_a_store_is_refused() -> None:
-    report_fields = build_report_fields(
-        "dry_run", store_manifest_sha256=STORE_MANIFEST_SHA256, **STORE_ROLLBACK
-    )
+    report_fields = build_report_fields("dry_run", **NAMED_STORE, **STORE_ROLLBACK)
 
     with pytest.raises(ValidationError):
         MigrationReport.model_validate(report_fields)
+
+
+@pytest.mark.parametrize(
+    "outcome", ["imported", "already_imported"], ids=["imported", "already_imported"]
+)
+def test_report_naming_a_store_without_its_dataset_is_refused(outcome: str) -> None:
+    report_fields = build_report_fields(outcome, corpus_content_sha256=None)
+
+    with pytest.raises(ValidationError, match="names its dataset"):
+        MigrationReport.model_validate(report_fields)
+
+
+@pytest.mark.parametrize("outcome", ["dry_run", "failed"], ids=["dry_run", "failed"])
+def test_report_naming_a_dataset_without_a_store_is_refused(outcome: str) -> None:
+    report_fields = build_report_fields(outcome, corpus_content_sha256=CORPUS_CONTENT_SHA256)
+
+    with pytest.raises(ValidationError, match="names its dataset"):
+        MigrationReport.model_validate(report_fields)
+
+
+def test_store_rollback_instruction_names_the_store_rollback_command() -> None:
+    assert ROLLBACK_INSTRUCTION.endswith("After activation, use cve-kgrag store rollback.")
 
 
 @pytest.mark.parametrize(

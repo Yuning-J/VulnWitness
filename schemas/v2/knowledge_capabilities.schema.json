@@ -491,8 +491,8 @@
   "description": "What the deployment serves, in the shape every evidence set reports it.",
   "properties": {
     "schema_version": {
-      "const": "2.0.0-dev.25",
-      "default": "2.0.0-dev.25",
+      "const": "2.0.0-dev.26",
+      "default": "2.0.0-dev.26",
       "title": "Schema Version",
       "type": "string"
     },

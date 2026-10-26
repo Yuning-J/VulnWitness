@@ -1596,7 +1596,7 @@ def test_migrate_legacy_without_the_migration_extra_exits_one_naming_it_before_r
     )
 
     exit_code = run_legacy_migration_command(
-        parser, arguments, InterfaceUnavailable(MIGRATION_EXTRA.missing_detail)
+        parser, arguments, InterfaceUnavailable(MIGRATION_EXTRA.missing_detail), None
     )
 
     captured = capsys.readouterr()
@@ -1664,7 +1664,7 @@ def build_migrate_legacy_command(
     arguments = parser.parse_args(
         ["migrate", "legacy", "--inputs", str(manifest_path), "--target", str(target)]
     )
-    return functools.partial(run_legacy_migration_command, parser, arguments, parsers)
+    return functools.partial(run_legacy_migration_command, parser, arguments, parsers, None)
 
 
 def release_fifo_reader(fifo_path: Path) -> None:

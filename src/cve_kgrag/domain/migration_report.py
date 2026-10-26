@@ -89,6 +89,8 @@ class MigrationFailureCode(StrEnum):
     TARGET_UNUSABLE = "target_unusable"
     TARGET_OVERLAPS_INPUT = "target_overlaps_input"
     TARGET_PARENT_HOLDS_INPUT = "target_parent_holds_input"
+    TARGET_IN_STORE_ROOT = "target_in_store_root"
+    STORE_ROOT_UNUSABLE = "store_root_unusable"
     EXISTING_STORE_INVALID = "existing_store_invalid"
     NO_IMPORTABLE_RECORDS = "no_importable_records"
     STORE_WRITE_FAILED = "store_write_failed"
@@ -172,6 +174,13 @@ MIGRATION_FAILURE_MESSAGES: dict[MigrationFailureCode, str] = {
     ),
     MigrationFailureCode.TARGET_PARENT_HOLDS_INPUT: (
         "The target's parent directory holds an input."
+    ),
+    MigrationFailureCode.TARGET_IN_STORE_ROOT: (
+        "The target lies in the store root but is not a store directly under it with a valid "
+        "store name."
+    ),
+    MigrationFailureCode.STORE_ROOT_UNUSABLE: (
+        "The target lies in the store root, which is not a directory or is a symbolic link."
     ),
     MigrationFailureCode.EXISTING_STORE_INVALID: (
         "The target holds this import, but the store fails verification; it is never repaired."
@@ -298,6 +307,11 @@ class MigrationReport(ContractModel):
     failure: MigrationFailure | None
     import_identity_sha256: str | None = Field(pattern=SHA256_PATTERN)
     store_manifest_sha256: str | None = Field(pattern=SHA256_PATTERN)
+    corpus_content_sha256: str | None = Field(
+        pattern=SHA256_PATTERN,
+        description="The dataset the named store holds, as a server serving it names it; "
+        "set exactly when a store is named.",
+    )
     cve_outcomes: dict[CveOutcome, int]
     candidate_outcomes: dict[CandidateOutcome, int]
     normalization_failures: dict[NormalizationFailureCode, int]
@@ -340,6 +354,8 @@ class MigrationReport(ContractModel):
             raise ValueError("a run that wrote or found a store, and only one, names it")
         if names_store and self.import_identity_sha256 is None:
             raise ValueError("a run names its store by its import identity too")
+        if names_store != (self.corpus_content_sha256 is not None):
+            raise ValueError("a run that names a store, and only one, names its dataset")
         rollback = (self.rollback_kind, self.rollback_scope, self.rollback_instruction)
         expected_rollback = (ROLLBACK_KIND, ROLLBACK_SCOPE, ROLLBACK_INSTRUCTION)
         if rollback != (expected_rollback if names_store else (None, None, None)):

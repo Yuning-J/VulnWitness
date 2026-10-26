@@ -263,8 +263,10 @@ def run_test_migration(
     legacy_root: Path | None = None,
     is_dry_run: bool = False,
     dependencies: MigrationDependencies | None = None,
+    store_root: Path | None = None,
 ) -> MigrationReport:
-    """The importer run on the manifest at ``manifest_path``."""
+    """The importer run on the manifest at ``manifest_path``, with ``store_root`` as the
+    configured store root (none by default)."""
     manifest_bytes = manifest_path.read_bytes()
     return run_migration(
         MigrationRequest(
@@ -274,6 +276,7 @@ def run_test_migration(
             target=target,
             legacy_root=legacy_root,
             is_dry_run=is_dry_run,
+            store_root=store_root,
         ),
         dependencies or build_migration_dependencies(),
     )

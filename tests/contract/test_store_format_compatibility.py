@@ -1,6 +1,7 @@
 """Store format 1 stays readable (ADR 0009 §15): the compatibility store the importer at
 28e5b4d wrote is still verified and loaded whole, with the records, evidence and dataset
-version it held then.
+version it held then; and any change to the schemas of what a store persists raises the
+alarm that makes someone judge it.
 
 The store's bytes are pinned here, outside it, so the store and the reader cannot both
 change while this test still passes. Its README says how it was written; it is never
@@ -8,10 +9,16 @@ regenerated with a later importer.
 """
 
 import hashlib
+import json
 from pathlib import Path
 
 from cve_kgrag.adapters.store.corpus_store import load_corpus_store, verify_corpus_store
+from cve_kgrag.domain.corpus_store_manifest import STORE_FORMAT_SCHEMA_SHA256, CorpusStoreManifest
+from cve_kgrag.domain.cve import CveRecord
+from cve_kgrag.domain.evidence import EvidenceAnchor
+from cve_kgrag.domain.hashing import canonical_sha256
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
+from cve_kgrag.schema_snapshots import render_schema
 
 COMPATIBILITY_STORE = Path(__file__).parent / "data" / "corpus_store_format1_28e5b4d" / "store"
 PINNED_FILE_SHA256 = {
@@ -70,3 +77,18 @@ def test_compatibility_store_serves_the_dataset_version_its_files_name() -> None
     assert served_dataset == ServedDataset(
         kind=ServedDatasetKind.CORPUS_STORE, cve_search_version=CVE_SEARCH_VERSION
     )
+
+
+def test_persisted_models_match_the_schemas_format_1_was_judged_against() -> None:
+    # A failure here is a reminder, not a verdict: judge the change against ADR 0008 §9,
+    # then re-pin STORE_FORMAT_SCHEMA_SHA256 with the reason it keeps format 1, or move
+    # the store format version.
+    persisted_schemas: dict[str, object] = {}
+    for contract_name, model in (
+        ("corpus_store_manifest", CorpusStoreManifest),
+        ("cve_record", CveRecord),
+        ("evidence_anchor", EvidenceAnchor),
+    ):
+        persisted_schemas[contract_name] = json.loads(render_schema(model, "serialization"))
+
+    assert canonical_sha256(persisted_schemas) == STORE_FORMAT_SCHEMA_SHA256

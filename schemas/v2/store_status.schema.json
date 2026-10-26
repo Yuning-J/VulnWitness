@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "ActiveRecordState": {
+      "description": "Whether ``ACTIVE`` is there and readable.",
+      "enum": [
+        "ok",
+        "no_active_store",
+        "active_unreadable"
+      ],
+      "title": "ActiveRecordState",
+      "type": "string"
+    },
+    "ActiveStoreCondition": {
+      "description": "The active store as found now, in the reason codes a server's startup gives.",
+      "enum": [
+        "ok",
+        "active_store_missing",
+        "active_store_changed",
+        "store_format_unsupported",
+        "store_invalid"
+      ],
+      "title": "ActiveStoreCondition",
+      "type": "string"
+    },
+    "ActiveStoreStatus": {
+      "additionalProperties": false,
+      "description": "The store ``ACTIVE`` names as active. ``identity`` is set exactly when it is\n``ok``: only a store that verifies under the recorded digest has its digests shown.",
+      "properties": {
+        "condition": {
+          "$ref": "#/$defs/ActiveStoreCondition"
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServedStoreIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$(?!\\n)",
+          "title": "Name",
+          "type": "string"
+        },
+        "store_manifest_sha256": {
+          "description": "The manifest digest ACTIVE records for it.",
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Store Manifest Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "store_manifest_sha256",
+        "condition",
+        "identity"
+      ],
+      "title": "ActiveStoreStatus",
+      "type": "object"
+    },
+    "PreviousStoreStatus": {
+      "additionalProperties": false,
+      "description": "The store ``ACTIVE`` names as previous, a rollback's target. ``identity`` is set\nexactly when it is ``ok``.",
+      "properties": {
+        "condition": {
+          "$ref": "#/$defs/StoreCondition"
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServedStoreIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$(?!\\n)",
+          "title": "Name",
+          "type": "string"
+        },
+        "store_manifest_sha256": {
+          "description": "The manifest digest ACTIVE records for it.",
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Store Manifest Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "store_manifest_sha256",
+        "condition",
+        "identity"
+      ],
+      "title": "PreviousStoreStatus",
+      "type": "object"
+    },
+    "ServedStoreIdentity": {
+      "additionalProperties": false,
+      "description": "What a store that verifies serves, and where it came from.",
+      "properties": {
+        "corpus_content_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Corpus Content Sha256",
+          "type": "string"
+        },
+        "created_under_schema_version": {
+          "description": "The contract version the store was created under; provenance only.",
+          "maxLength": 32,
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-dev\\.[0-9]+)?$(?!\\n)",
+          "title": "Created Under Schema Version",
+          "type": "string"
+        },
+        "cve_search_version": {
+          "description": "The cve_search capability version a server serving it reports.",
+          "minLength": 1,
+          "title": "Cve Search Version",
+          "type": "string"
+        },
+        "import_identity_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Import Identity Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "import_identity_sha256",
+        "corpus_content_sha256",
+        "cve_search_version",
+        "created_under_schema_version"
+      ],
+      "title": "ServedStoreIdentity",
+      "type": "object"
+    },
+    "StoreCondition": {
+      "description": "A store ``ACTIVE`` records, as found now: ``ok`` when its manifest still hashes to\nthe recorded digest and it verifies.",
+      "enum": [
+        "ok",
+        "store_missing",
+        "store_changed",
+        "store_format_unsupported",
+        "store_invalid"
+      ],
+      "title": "StoreCondition",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The stores ``ACTIVE`` records under the root, each as found now. With a readable\nrecord there is an active store, and a previous one or null; otherwise neither.",
+  "properties": {
+    "active_record": {
+      "$ref": "#/$defs/ActiveRecordState"
+    },
+    "active_store": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActiveStoreStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "previous_store": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PreviousStoreStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.26",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "active_record",
+    "active_store",
+    "previous_store"
+  ],
+  "title": "StoreStatus",
+  "type": "object"
+}

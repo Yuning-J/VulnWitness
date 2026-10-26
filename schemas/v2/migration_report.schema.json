@@ -710,6 +710,38 @@
           "if": {
             "properties": {
               "code": {
+                "const": "target_in_store_root"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The target lies in the store root but is not a store directly under it with a valid store name."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "store_root_unusable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The target lies in the store root, which is not a directory or is a symbolic link."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
                 "const": "existing_store_invalid"
               }
             }
@@ -843,6 +875,8 @@
         "target_unusable",
         "target_overlaps_input",
         "target_parent_holds_input",
+        "target_in_store_root",
+        "store_root_unusable",
         "existing_store_invalid",
         "no_importable_records",
         "store_write_failed"
@@ -892,6 +926,19 @@
       },
       "title": "Candidate Outcomes",
       "type": "object"
+    },
+    "corpus_content_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The dataset the named store holds, as a server serving it names it; set exactly when a store is named.",
+      "title": "Corpus Content Sha256"
     },
     "cve_outcomes": {
       "additionalProperties": {
@@ -1030,8 +1077,8 @@
       "title": "Rollback Scope"
     },
     "schema_version": {
-      "const": "2.0.0-dev.25",
-      "default": "2.0.0-dev.25",
+      "const": "2.0.0-dev.26",
+      "default": "2.0.0-dev.26",
       "title": "Schema Version",
       "type": "string"
     },
@@ -1063,6 +1110,7 @@
     "failure",
     "import_identity_sha256",
     "store_manifest_sha256",
+    "corpus_content_sha256",
     "cve_outcomes",
     "candidate_outcomes",
     "normalization_failures",

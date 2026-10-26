@@ -1,7 +1,9 @@
 """The corpus store's contract (ADR 0008 §2, §3, §9): an NVD artifact names one published
 feed, a standard feed file name gives its artifact and any other name gives none, an NVD
 input and a KEV input each carry exactly their own provenance fields, and a store
-manifest records imported data with the server's fixed rollback values."""
+manifest records imported data with the fixed rollback kind and scope. The contract
+version it was created under and the instruction its importer gave are provenance:
+bounded, never compared with this release's (ADR 0009 §15)."""
 
 from typing import Any
 
@@ -59,6 +61,7 @@ def build_kev_input_fields(**overrides: Any) -> dict[str, Any]:
 
 def build_store_manifest_fields(**overrides: Any) -> dict[str, Any]:
     fields: dict[str, Any] = {
+        "schema_version": "2.0.0-dev.26",
         "created_at": "2026-10-25T12:00:00Z",
         "importer_version": "2.0.0.dev0",
         "import_identity_sha256": "d" * 64,
@@ -67,6 +70,7 @@ def build_store_manifest_fields(**overrides: Any) -> dict[str, Any]:
         "files": [{"path": "records.jsonl", "sha256": STORE_FILE_SHA256, "size_bytes": 10}],
         "record_count": 1,
         "anchor_count": 1,
+        "rollback_instruction": ROLLBACK_INSTRUCTION,
     }
     fields.update(overrides)
     return fields
@@ -364,8 +368,39 @@ def test_store_manifest_records_imported_data_and_the_fixed_rollback() -> None:
 def test_rollback_instruction_is_the_servers_fixed_sentence() -> None:
     assert ROLLBACK_INSTRUCTION == (
         "Before activation, remove the newly created target directory. After activation, "
-        "use the WP10 store rollback operation."
+        "use cve-kgrag store rollback."
     )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"schema_version": "2.0.0-dev.25"},
+        {"schema_version": "2.1.0"},
+        {
+            "rollback_instruction": (
+                "Before activation, remove the newly created target directory. After "
+                "activation, use the WP10 store rollback operation."
+            )
+        },
+        {"rollback_instruction": "x" * 512},
+    ],
+    ids=["earlier_dev_version", "release_version", "earlier_instruction", "longest_instruction"],
+)
+def test_store_manifest_keeps_the_provenance_its_importer_wrote(overrides: dict[str, Any]) -> None:
+    manifest = CorpusStoreManifest.model_validate(build_store_manifest_fields(**overrides))
+
+    for field_name, value in overrides.items():
+        assert getattr(manifest, field_name) == value
+
+
+@pytest.mark.parametrize("missing_field", ["schema_version", "rollback_instruction"])
+def test_store_manifest_without_its_provenance_is_refused(missing_field: str) -> None:
+    manifest_fields = build_store_manifest_fields()
+    del manifest_fields[missing_field]
+
+    with pytest.raises(ValidationError, match=missing_field):
+        CorpusStoreManifest.model_validate(manifest_fields)
 
 
 @pytest.mark.parametrize(
@@ -374,15 +409,25 @@ def test_rollback_instruction_is_the_servers_fixed_sentence() -> None:
         build_store_manifest_fields(synthetic=True),
         build_store_manifest_fields(rollback_kind="restore_previous_store"),
         build_store_manifest_fields(rollback_scope="after_activation"),
-        build_store_manifest_fields(rollback_instruction="Delete the target."),
-        build_store_manifest_fields(rollback_instruction=ROLLBACK_INSTRUCTION + " "),
+        build_store_manifest_fields(rollback_instruction=""),
+        build_store_manifest_fields(rollback_instruction="x" * 513),
+        build_store_manifest_fields(rollback_instruction=ROLLBACK_INSTRUCTION + "\x00"),
+        build_store_manifest_fields(rollback_instruction="\u2066" + ROLLBACK_INSTRUCTION),
+        build_store_manifest_fields(schema_version="dev.26"),
+        build_store_manifest_fields(schema_version="2.0.0-dev.26 "),
+        build_store_manifest_fields(schema_version="9" * 30 + ".0.0"),
     ],
     ids=[
         "synthetic_store",
         "other_rollback_kind",
         "other_rollback_scope",
-        "other_rollback_instruction",
-        "instruction_with_trailing_space",
+        "empty_instruction",
+        "instruction_too_long",
+        "instruction_with_a_control_character",
+        "instruction_with_a_bidirectional_isolate",
+        "schema_version_without_release_numbers",
+        "schema_version_with_trailing_space",
+        "schema_version_too_long",
     ],
 )
 def test_store_manifest_with_synthetic_data_or_another_rollback_is_refused(

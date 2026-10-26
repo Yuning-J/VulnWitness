@@ -12,6 +12,7 @@ from pathlib import Path
 
 from cve_kgrag.adapters.migration.input_files import InputFile, inspect_input_file
 from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
+from cve_kgrag.adapters.store.store_root import StoreRootUnusableError, check_store_root
 from cve_kgrag.domain.corpus_store_manifest import (
     STORE_FORMAT_VERSION,
     NvdArtifact,
@@ -23,6 +24,7 @@ from cve_kgrag.domain.migration_inputs import InputDeclaration, InputsManifest
 from cve_kgrag.domain.migration_report import MigrationFailed, MigrationFailureCode
 from cve_kgrag.domain.provenance import SourceRegistry
 from cve_kgrag.domain.search import SCHEMA_VERSION
+from cve_kgrag.domain.store_status import is_store_name
 
 
 @dataclass(frozen=True)
@@ -220,6 +222,23 @@ def check_target_parent(target: Path) -> None:
     parent = target.parent
     if not parent.is_dir() or not os.access(parent, os.W_OK | os.X_OK):
         raise MigrationFailed(MigrationFailureCode.TARGET_UNUSABLE)
+
+
+def check_target_in_store_root(target: Path, store_root: Path | None) -> None:
+    """A target the store root holds is a store directly under it with a valid name, so
+    a migration never writes into an existing store, and a root that serving would
+    refuse is refused here too, before anything is written (ADR 0009 §4). The resolved
+    target is compared with the resolved root by file identity; a target outside the
+    root is not checked against it. Raises ``MigrationFailed``."""
+    if store_root is None or not lies_within(target, store_root.resolve()):
+        return
+    try:
+        check_store_root(store_root)
+    except StoreRootUnusableError:
+        raise MigrationFailed(MigrationFailureCode.STORE_ROOT_UNUSABLE) from None
+    is_root_child = read_file_identity(target.parent) == read_file_identity(store_root)
+    if not is_root_child or not is_store_name(target.name):
+        raise MigrationFailed(MigrationFailureCode.TARGET_IN_STORE_ROOT)
 
 
 def check_target(

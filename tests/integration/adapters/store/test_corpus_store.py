@@ -805,8 +805,14 @@ def test_reading_store_whose_manifest_is_not_json_object_is_refused(
         {"store_format_version": "1"},
         {"store_format_version": 1.5},
         {"store_format_version": True},
-        {"schema_version": "1.0.0"},
-        {"rollback_instruction": "Delete the directory."},
+        {"schema_version": "2.0.0-beta"},
+        {"schema_version": "2.0.0-dev.26\n"},
+        {"schema_version": "1" * 31 + ".0.0"},
+        {"schema_version": None},
+        {"rollback_instruction": ""},
+        {"rollback_instruction": "x" * 513},
+        {"rollback_instruction": "Delete the \u202edirectory."},
+        {"rollback_instruction": "Delete the directory.\n"},
         {"rollback_kind": "repair_in_place"},
         {"record_count": 0},
         {"files": []},
@@ -820,8 +826,14 @@ def test_reading_store_whose_manifest_is_not_json_object_is_refused(
         "store_format_version_string",
         "store_format_version_fraction",
         "store_format_version_boolean",
-        "schema_version",
-        "rollback_instruction",
+        "schema_version_not_a_contract_version",
+        "schema_version_with_a_newline",
+        "schema_version_too_long",
+        "schema_version_null",
+        "rollback_instruction_empty",
+        "rollback_instruction_too_long",
+        "rollback_instruction_with_a_bidirectional_override",
+        "rollback_instruction_with_a_newline",
         "rollback_kind",
         "zero_records",
         "no_files",
@@ -838,6 +850,35 @@ def test_reading_store_with_invalid_manifest_field_is_refused(
     # Act / Assert
     with pytest.raises(CorpusStoreIntegrityError, match="not a corpus store manifest"):
         read_store(imported_store)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"schema_version": "2.0.0-dev.25"},
+        {"schema_version": "3.1.4"},
+        {"rollback_instruction": "Delete the directory."},
+        {"rollback_instruction": "x" * 512},
+    ],
+    ids=[
+        "earlier_contract_version",
+        "later_release_version",
+        "other_instruction",
+        "longest_instruction",
+    ],
+)
+def test_reading_store_never_compares_its_provenance_with_this_release(
+    imported_store: Path, overrides: dict[str, Any]
+) -> None:
+    # Arrange
+    write_manifest_overrides(imported_store, overrides)
+
+    # Act
+    manifest = load_corpus_store(imported_store).manifest
+
+    # Assert
+    for field_name, value in overrides.items():
+        assert getattr(manifest, field_name) == value
 
 
 def test_reading_store_without_a_format_version_is_refused_as_invalid(

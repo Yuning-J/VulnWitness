@@ -18,6 +18,7 @@ from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEviden
 from cve_kgrag.domain.migration_report import MigrationReport
 from cve_kgrag.domain.planning import QueryPlan
 from cve_kgrag.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
+from cve_kgrag.domain.store_status import StoreStatus
 from cve_kgrag.domain.timestamps import END_OF_VALUE
 from cve_kgrag.domain.tool_contracts import (
     CapabilitiesRequest,
@@ -71,6 +72,7 @@ RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
     # The corpus store the legacy-data importer writes, and what an import reports.
     "corpus_store_manifest": CorpusStoreManifest,
     "migration_report": MigrationReport,
+    "store_status": StoreStatus,
 }
 
 

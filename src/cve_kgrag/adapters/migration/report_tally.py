@@ -1,6 +1,7 @@
 """The counts an import gathers as it runs, and the report built from them (ADR 0008 §7,
 §10)."""
 
+from cve_kgrag.adapters.store.corpus_store import VerifiedStore
 from cve_kgrag.domain.corpus_store_manifest import (
     ROLLBACK_INSTRUCTION,
     ROLLBACK_KIND,
@@ -50,9 +51,11 @@ class ReportTally:
         self,
         outcome: MigrationOutcome,
         failure: MigrationFailed | None = None,
-        store_manifest_sha256: str | None = None,
+        named_store: VerifiedStore | None = None,
     ) -> MigrationReport:
-        names_store = store_manifest_sha256 is not None
+        """The report of a run ending in ``outcome``; ``named_store`` is the verification
+        of the store it wrote or found, which names that store and its dataset."""
+        names_store = named_store is not None
         has_kev_without_nvd = self.kev_outcomes[KevOutcome.WITHOUT_NVD_RECORD] > 0
         return MigrationReport(
             outcome=outcome,
@@ -62,7 +65,12 @@ class ReportTally:
                 failure.code, failure.input_position, failure.manifest_index
             ),
             import_identity_sha256=self.import_identity_sha256,
-            store_manifest_sha256=store_manifest_sha256,
+            store_manifest_sha256=None
+            if named_store is None
+            else named_store.store_manifest_sha256,
+            corpus_content_sha256=None
+            if named_store is None
+            else named_store.corpus_content_sha256,
             cve_outcomes=self.cve_outcomes,
             candidate_outcomes=self.candidate_outcomes,
             normalization_failures=self.normalization_failures,

@@ -320,6 +320,7 @@ def describe_counts(report: MigrationReport) -> dict[str, Any]:
         exclude={
             "outcome",
             "store_manifest_sha256",
+            "corpus_content_sha256",
             "rollback_kind",
             "rollback_scope",
             "rollback_instruction",
@@ -1866,6 +1867,95 @@ def test_dangling_symbolic_link_at_the_target_fails_as_target_exists(
 
     assert report.failure is not None
     assert report.failure.code is MigrationFailureCode.TARGET_EXISTS
+
+
+def test_import_into_a_named_store_directly_under_the_store_root_succeeds(
+    layout: ImportLayout,
+) -> None:
+    manifest_path = write_standard_import(layout.inputs_dir)
+
+    report = run_test_migration(
+        manifest_path, layout.stores_dir / "nvd-2099.v1", store_root=layout.stores_dir
+    )
+
+    assert report.outcome is MigrationOutcome.IMPORTED
+    assert list_names(layout.stores_dir) == ["nvd-2099.v1"]
+
+
+@pytest.mark.parametrize(
+    "target_path",
+    [
+        ".",
+        "nested/store",
+        ".hidden",
+        "ACTIVE",
+        "active",
+        "-store",
+        "s" * 65,
+    ],
+    ids=[
+        "the_root_itself",
+        "nested_below_a_store",
+        "hidden_name",
+        "active_record_name",
+        "active_record_name_lower_case",
+        "name_starting_with_a_dash",
+        "name_too_long",
+    ],
+)
+def test_target_in_the_store_root_that_is_not_a_named_store_is_refused(
+    layout: ImportLayout, target_path: str
+) -> None:
+    (layout.stores_dir / "nested").mkdir()
+    manifest_path = write_standard_import(layout.inputs_dir)
+
+    report = run_test_migration(
+        manifest_path, layout.stores_dir / target_path, store_root=layout.stores_dir
+    )
+
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.TARGET_IN_STORE_ROOT
+    assert list_names(layout.stores_dir) == ["nested"]
+
+
+def test_target_naming_the_store_root_another_way_is_still_in_it(
+    layout: ImportLayout, tmp_path: Path
+) -> None:
+    root_alias = tmp_path / "root-alias"
+    root_alias.symlink_to(layout.stores_dir)
+    (layout.stores_dir / "nested").mkdir()
+    manifest_path = write_standard_import(layout.inputs_dir)
+
+    report = run_test_migration(
+        manifest_path, root_alias / "nested" / "store", store_root=layout.stores_dir
+    )
+
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.TARGET_IN_STORE_ROOT
+
+
+def test_target_under_a_store_root_that_is_a_symbolic_link_is_refused_before_writing(
+    layout: ImportLayout, tmp_path: Path
+) -> None:
+    linked_root = tmp_path / "linked-root"
+    linked_root.symlink_to(layout.stores_dir)
+    manifest_path = write_standard_import(layout.inputs_dir)
+
+    report = run_test_migration(manifest_path, linked_root / "store", store_root=linked_root)
+
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.STORE_ROOT_UNUSABLE
+    assert list_names(layout.stores_dir) == []
+
+
+def test_target_outside_the_store_root_is_not_checked_against_it(
+    layout: ImportLayout, tmp_path: Path
+) -> None:
+    manifest_path = write_standard_import(layout.inputs_dir)
+
+    report = run_test_migration(manifest_path, layout.target, store_root=tmp_path / "missing-root")
+
+    assert report.outcome is MigrationOutcome.IMPORTED
 
 
 def test_dangling_symbolic_link_at_the_target_is_never_followed(layout: ImportLayout) -> None:
