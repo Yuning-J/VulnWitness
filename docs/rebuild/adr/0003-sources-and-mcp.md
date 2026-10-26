@@ -3,8 +3,9 @@
 Status: accepted (M5). Applies to `ports/affectedness.py`, `adapters/trustify/`,
 `domain/affectedness.py`, `domain/tool_contracts.py`, the capability contract in
 `domain/investigation.py`, `application/affectedness.py`,
-`application/evidence_set_verification.py`, `interfaces/` and the `mcp` and
-`verify` CLI commands. §10 and §12 are amended by ADR 0007 (HTTP surfaces).
+`application/evidence_set_verification.py`, `interfaces/` and the `mcp` and `verify` CLI
+commands. §10 and §12 are amended by ADR 0007 (HTTP surfaces); §10, §11 and
+Consequences by ADR 0009 (store activation and serving).
 
 ## Context
 
@@ -476,11 +477,11 @@ It raises `EvidenceValidationError` when validation or the audit rejects the set
 when the replayed set fails the checks the controller runs at seal, and returns the
 replay outcome otherwise.
 
-`cve-kgrag verify FILE` checks against the packaged fixture and the planners its
-settings configure (ADR 0004 §7); with no planner configured, a model-planned set is
-`invalid` there.
-It reads at most 4 MiB and prints a `VerificationReport`
-(`domain/evidence_set_verification_report.py`, published as
+`cve-kgrag verify FILE` checks against the dataset the process serves, the active corpus
+store or, with no store root set, the packaged fixture (ADR 0009 §10, §16), and the
+planners its settings configure (ADR 0004 §7); with no planner configured, a
+model-planned set is `invalid` there. It reads at most 4 MiB and prints a
+`VerificationReport` (`domain/evidence_set_verification_report.py`, published as
 `verification_report.schema.json` from `2.0.0-dev.21`): one of the verdicts `verified`,
 `malformed`, `invalid`, `replay_differs`, `replay_timed_out`, with the violations or
 differences behind it: at most 100 violations of at most 1024 characters each (from
@@ -527,13 +528,15 @@ a re-derived ID.
 
 **Start-up.**
 
-- `cve-kgrag mcp` starts the stdio server over the packaged synthetic fixture, the
-  deterministic planner, the disabled Trustify adapter and no semantic channel.
+- `cve-kgrag mcp` starts the stdio server over the dataset the process serves (the
+  active corpus store, or the packaged synthetic fixture with no store root set; ADR
+  0009 §9), the deterministic planner, the disabled Trustify adapter and no semantic
+  channel.
 - The CLI loads the runner through `discover_mcp_server_runner`, from the entry
   point `mcp_server = "cve_kgrag.interfaces.mcp.stdio_runner:serve_stdio"` in the
   `cve_kgrag.adapters` group, and hands it the SDK-free toolbox the composition root
   builds (`build_knowledge_toolbox`). The runner is looked up first, so an install
-  that cannot serve the command never loads the fixture.
+  that cannot serve the command never loads the served dataset or the FiGHT snapshot.
 - That group stays the single dynamic-loading point (ADR 0001 §3). An optional
   interface loads through it the way an optional adapter does.
 - Without the extra, the command exits 1 and its stderr is one fixed line naming the
@@ -572,15 +575,17 @@ a re-derived ID.
   check. Adding a
   verdict, a Trustify anchor or an `available` affectedness state is a contract change,
   made with the adapter that needs it.
-- The M5 server serves the packaged synthetic fixture only. Its `cve_search`
-  capability names the fixture.
+- The server serves the dataset the process serves: the packaged synthetic fixture
+  with no store root set, the active corpus store otherwise (ADR 0009). Its
+  `cve_search` capability names that dataset.
 - `tools/list` carries the full committed schemas, about 160 KB. Clients that
   validate structured output validate against the files the repository commits.
 - An abandoned call keeps its daemon thread, and its place under the toolbox's cap,
   until it returns. A backend that never returns therefore makes the server answer
-  `server_busy` once 4 such calls are live, instead of accumulating threads. Every M5
-  backend is in memory, so none outlives its call for long; a network adapter must
-  still honour its timeout, or it degrades the server to `server_busy`.
+  `server_busy` once 4 such calls are live, instead of accumulating threads. The
+  in-memory backends usually return well within the limit, though a `graph_expand`
+  search over a large store can outlive it (ADR 0009 §12); a network adapter must still
+  honour its timeout, or it degrades the server to `server_busy`.
 - The stdio peer is the local process that launched the server. Frames are read by
   the SDK before any of our caps apply, so the 64 KiB argument cap applies only after
   the SDK has decoded the whole frame, and a frame it cannot decode gets no reply

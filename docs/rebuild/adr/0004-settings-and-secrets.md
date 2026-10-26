@@ -4,7 +4,9 @@ Status: accepted (M6, work package 1). Applies to `settings.py`, the model plann
 discovery in `adapter_discovery.py`, `application/planner_setup.py`, the
 `model_planner` capability in `domain/planning.py` and `domain/investigation.py`,
 `list_accepted_planner_capabilities` in `composition.py`,
-`application/evidence_set_verification.py` and the CLI.
+`application/evidence_set_verification.py` and the CLI. §1 is amended by ADR 0009
+(store activation and serving), which adds the store and FiGHT snapshot settings and,
+in its §14, the semantic channel's state when a corpus store is served.
 
 ## Context
 
@@ -37,8 +39,8 @@ The CLI calls it once, with `os.environ`; tests pass a mapping.
 
 - An empty variable counts as unset, so `KEY=` in a sourced file leaves the key missing.
 - The planner's other variables are read only when it is enabled.
-- Variables the table does not name are ignored, including other `CVE_KGRAG_*` names, so
-  a test opt-in variable never aborts a command.
+- Variables the tables of this section do not name are ignored, including other
+  `CVE_KGRAG_*` names, so a test opt-in variable never aborts a command.
 - No configuration file and no `.env` file is read; an operator who keeps settings in an
   untracked `.env` sources it in the shell (`set -a; . ./.env; set +a`). `.env` and
   `.env.*` are ignored by git.
@@ -58,26 +60,38 @@ The semantic channel is a second section, read the same way (M6 WP2):
 | `CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY` | the directory holding it, relative to the working directory unless absolute; no control character | required when enabled |
 | `CVE_KGRAG_SEMANTIC_MODEL_NAME` | the sentence-transformers model (`^[A-Za-z0-9._/-]{1,256}$`) | `sentence-transformers/all-MiniLM-L6-v2` |
 
-The collection and model defaults are what CVE-KGRAG's pipeline builds; the directory has
-no default (ADR 0006). Only an operator's own run opens the
-semantic store: `search`, `topic`, `investigate` and `capabilities` load the adapter when
-run with `--semantic`, and otherwise load no adapter; `lookup`, `demo`, `resolve`,
-`affectedness` and `evidence` never do. Every command
-still validates the semantic settings at startup, so an invalid one is a usage error. `mcp`
-and `verify` never load it, whatever the settings, and log one line saying so: Chroma has
-no read-only client (opening an existing store may write its journal or migrations), and
-both surfaces promise not to change local state, so their `semantic_channel` is
-`not_configured` and a set sealed with `--semantic` while the channel was enabled does
-not verify. The adapter opens
-only a directory that already holds a Chroma database, so a mistyped directory is
-reported unusable rather than created, and loads its model from disk only
-(`local_files_only`), so it never reaches the model hub.
-`semantic_channel` is `available` once its adapter loads, `not_configured` when it is not
-enabled, and `unavailable` with `SemanticUnavailableDetail.ADAPTER_UNUSABLE` when it is
-enabled but its adapter is not installed, installed twice, or fails to load or build. A
-search of an unusable channel reports it unavailable (`ADAPTER_UNUSABLE`), as one of an
-unconfigured channel reports `NOT_CONFIGURED`; the validator applies the same rules to
-both states and requires each search's reason to match the capability.
+The collection and model defaults are what CVE-KGRAG's pipeline builds; the directory
+has no default (ADR 0006). Only an operator's own run opens the semantic store:
+`search`, `topic`, `investigate` and `capabilities` load the adapter when run with
+`--semantic` while the packaged fixture is served (the table below), and otherwise load
+no adapter; `lookup`, `demo`, `resolve`, `affectedness` and `evidence` never do. Every
+command still validates the semantic settings at startup, so an invalid one is a usage
+error. `mcp` and `verify` never load it, whatever the settings, and log one line saying
+so: Chroma has no read-only client (opening an existing store may write its journal or
+migrations), and both surfaces promise not to change local state, so their
+`semantic_channel` is `not_configured` and a set sealed with `--semantic` while the
+channel was enabled does not verify. The adapter opens only a directory that already
+holds a Chroma database, so a mistyped directory is reported unusable rather than
+created, and loads its model from disk only (`local_files_only`), so it never reaches
+the model hub.
+
+A run requests the channel when the channel is enabled and the command runs with
+`--semantic`; every other run, and every run of `mcp`, `api` and `verify`, does not. The
+served dataset (ADR 0009 §9) decides what a request gets, and is checked before any
+adapter is looked up:
+
+| Served dataset | Channel requested | `semantic_channel` | A search's channel reports |
+|---|---|---|---|
+| packaged fixture | no | `not_configured` | `NOT_CONFIGURED` |
+| packaged fixture | yes | `available` once its adapter loads; `unavailable` with `ADAPTER_UNUSABLE` when its adapter is not installed, installed twice, or fails to load or build | its own outcome, or `ADAPTER_UNUSABLE` |
+| corpus store | no | `not_configured` | `NOT_CONFIGURED` |
+| corpus store | yes | `unavailable` with `COLLECTION_NOT_BOUND`; no adapter is looked up or loaded | `COLLECTION_NOT_BOUND` |
+
+`not_configured` says the run did not ask for the channel, so it wins over the store
+row: a store served without `--semantic` reports what the fixture would.
+`COLLECTION_NOT_BOUND` (ADR 0009 §14) wins over `ADAPTER_UNUSABLE`: in store mode no
+collection can serve, whether or not an adapter would load. The validator applies the
+same rules to every row and requires each search's reason to match the capability.
 Discovery logs a load failure by type alone, and a failed search too: a Chroma or model
 error may name a local path.
 
@@ -90,6 +104,16 @@ validates it, and only a command that serves over HTTP uses it (M6 WP6, ADR 0007
 | `CVE_KGRAG_MCP_HTTP_PORT` | the port of MCP over Streamable HTTP, 1 to 65535 | 8765 |
 | `CVE_KGRAG_API_PORT` | the port of the v2 REST API, 1 to 65535 | 8766 |
 | `CVE_KGRAG_HTTP_TOKEN` | the bearer token every route but `/health` requires: 32 to 512 characters of RFC 6750's `b64token` alphabet, a `SecretStr` | none; `mcp --http` and `api` refuse to start without it |
+
+A fourth section names the served data, and has no switch either: every command reads
+and validates it, and only a command that loads a store or the FiGHT snapshot opens what
+it names (ADR 0009 §3, §10).
+
+| Variable | Setting | Default |
+|---|---|---|
+| `CVE_KGRAG_STORE_ROOT` | the directory holding the corpus stores and `ACTIVE`: an absolute path | none: the packaged fixture is served |
+| `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` | the operator FiGHT snapshot: an absolute path; set with the hash or not at all | none: the packaged excerpt is served |
+| `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256` | the snapshot's SHA-256, 64 lower-case hex characters; set with the path or not at all. Whether the catalog lists it is checked when a command loads the snapshot, not here (ADR 0009 §11) | none |
 
 ### 2. The endpoint is one a key may be sent to
 

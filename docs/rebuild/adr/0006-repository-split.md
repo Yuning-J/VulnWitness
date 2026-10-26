@@ -1,7 +1,8 @@
 # ADR 0006 — Repository split
 
 Status: accepted (M6 WP-S), implementing the owner's split decision of 2026-10-21.
-Supersedes ADR 0001 §6; amends ADR 0001 Context, §1, §2, §5 and Consequences.
+Supersedes ADR 0001 §6; amends ADR 0001 Context, §1, §2, §5 and Consequences. §5 is
+amended by ADR 0009 (store activation and serving).
 
 ## Context
 
@@ -39,7 +40,10 @@ own repository and to keep the legacy system, and its security fixes, in CVE-KGR
    build that store. The operator names its directory
    (`CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY`, required when the channel is enabled); there
    is no default path. The collection and model names keep their defaults, because they
-   describe the store format the adapter reads.
+   describe the store format the adapter reads. A legacy collection may also hold
+   `KEV-` chunks, whose `cve_id` metadata is not a CVE ID; the channel refuses such a
+   hit as malformed, so a query that reaches one reports the semantic channel as failed
+   and the response as `partial` (ADR 0009 §14).
 6. **Provenance subjects.** The legacy fine-tuned model is not in this repository; its
    registry entry and `LocalStoragePolicy.COMMITTED_ARTIFACT` are not carried, and its
    provenance is recorded in CVE-KGRAG's `THIRD_PARTY_DATA.md`.

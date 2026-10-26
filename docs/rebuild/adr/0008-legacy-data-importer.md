@@ -5,7 +5,10 @@ writes; WP10 activates and serves that store. It restates and refines the M6 pla
 importer decisions (below, "Deviations") and the repository split plan's WP9 scope
 (CVE-KGRAG `docs/rebuild/repository-split-plan.md`, WP9). It agrees with CVE-KGRAG's
 migration map on public `main` (`b64eef3`, the `export_kg_for_rag*.py` row): legacy
-exports may be read as derived data, never as a source of record.
+exports may be read as derived data, never as a source of record. §2, §4, §9, §10 and
+§11 are amended by ADR 0009 (store activation and serving): a store's format version,
+not the contract version, decides whether it can be read, and its records and anchors,
+not its manifest, name the dataset it serves.
 
 ## Context
 
@@ -114,8 +117,8 @@ inputs:
   resolved file, or two files with the same SHA-256, are refused.
 - The manifest is read with the strict YAML loader's declaration variant
   (`load_declaration_yaml`), which refuses every alias as the document is composed and
-  keeps timestamps as text; every other caller of the loader keeps its behaviour until
-  WP10 checks a full upstream FiGHT snapshot. The
+  keeps timestamps as text. Every other caller of the strict loader keeps its behaviour:
+  for a FiGHT snapshot, the catalog review is the alias gate (ADR 0009 §11). The
   manifest's size (1 MiB), entry count (128) and path length (1,024 characters) are
   capped.
 - A manifest that is not valid is a usage error (exit 2), reported in the server's words.
@@ -158,9 +161,10 @@ the same bytes.
 - `inputs_manifest_sha256`: SHA-256 of the manifest's raw bytes, recorded for audit only.
 - `import_identity_sha256`: SHA-256 of the validated inputs sorted by `source`, artifact
   and input file SHA-256, each with its `input_file_sha256`, `payload_sha256`, `source`,
-  artifact, container and `retrieved_at`; the digest of the source registry entries
-  used (terms URLs and URL templates); the importer version (the distribution version
-  and the store format version); and the contract version. No local path and no raw manifest hash.
+  artifact, container and `retrieved_at`; the digest of the source registry entries used
+  (terms URLs and URL templates); the importer version (the distribution version and the
+  store format version); and the contract version. No local path and no raw manifest
+  hash.
 - Reordering, reindenting or commenting the manifest, or moving the files, changes
   neither the identity nor the records and anchors files; the store manifest still
   records the raw manifest's hash.
@@ -168,7 +172,16 @@ the same bytes.
   left as it is (exit 0, "already imported"); if it fails verification, the run is
   refused (exit 1) and the store is never repaired in place. Any other existing target
   is refused and never overwritten. The same bytes with another `retrieved_at` are
-  another import.
+  another import. The identity names the import, not the dataset: the dataset a store
+  serves is named by the digest of its records and anchors (ADR 0009 §2), so two imports
+  with different identities and byte-identical files serve one dataset. An anchor
+  records the `retrieved_at` of the input it cites, so another `retrieved_at` is another
+  dataset too whenever that input supplies an anchor; an input none of whose entries
+  wins (§5) changes the import, not the dataset. The content digest decides.
+- The importer alone recomputes the identity, for an existing target; the store reader
+  never does. A run under another contract version is another import: it reports
+  `target_exists` for a store written under the earlier one, and that store stays
+  readable and servable (§9).
 
 ### 5. NVD entries for the same CVE
 
@@ -252,12 +265,12 @@ KEV enrichment runs after §5, on the final NVD records only.
   errors with a typed reason code, and only the code reaches the report: its message
   text, which can quote input, never does.
 - A file-level fault fails the whole migration: an unreadable file, a file that changed
-  between being resolved and being copied for reading, bad compression, an
-  unrecognised format, an NVD input that is not a whole feed, a derived file declared as
-  a source, a cap exceeded, or an invalid KEV input. So does a target that
-  cannot be resolved or whose parent is not a writable directory (`target_unusable`),
-  and a staging database, input copy or store file that cannot be written
-  (`staging_failed`, `store_write_failed`), a full disk included: every failure the run can state is
+  between being resolved and being copied for reading, bad compression, an unrecognised
+  format, an NVD input that is not a whole feed, a derived file declared as a source, a
+  cap exceeded, or an invalid KEV input. So does a target that cannot be resolved or
+  whose parent is not a writable directory (`target_unusable`), and a staging database,
+  input copy or store file that cannot be written (`staging_failed`,
+  `store_write_failed`), a full disk included: every failure the run can state is
   reported, never a traceback.
 - A run with zero importable records exits 1.
 - Exit codes: 0 imported or already imported; 1 refused or failed; 2 usage error,
@@ -320,16 +333,52 @@ KEV enrichment runs after §5, on the final NVD records only.
 - The target directory holds `manifest.json` (`CorpusStoreManifest`), the records and
   the anchors as canonical JSON sorted by CVE ID and evidence ID, each file pinned by
   SHA-256 in the manifest. The manifest records `synthetic: false`, a creation time
-  from the injected clock, the importer and contract versions, both identity hashes,
-  each input in sorted order (source, artifact, container, `source_uri`,
-  `source_version`, `retrieved_at`, `source_generated_at`, bytes) and the counts.
+  from the injected clock, the store format version, the importer version, the
+  contract version the store was created under, both identity hashes, each input in
+  sorted order (source, artifact, container, `source_uri`, `source_version`,
+  `retrieved_at`, `source_generated_at`, bytes) and the counts.
+- **Two version axes.** `store_format_version` decides whether a reader can read a
+  store written by its own or an earlier importer; this reader reads format 1 and
+  refuses any other integer as `store_format_unsupported`, read before the rest of the
+  manifest is parsed. The manifest's `schema_version` is provenance: a well-formed
+  contract version, never compared with the version the reader serves. Moving the
+  contract version therefore leaves every existing store readable and its manifest
+  bytes unchanged; a contract change that alters what a store persists, as below, is
+  also a format change.
+- The format version moves, and stores are re-imported, only when what a store
+  persists, or what the reader accepts of it, changes: a field added to, removed from,
+  renamed in or narrowed in the manifest, `CveRecord` or `EvidenceAnchor` (an older
+  store would present an added field as one no source supplied, and an evidence ID
+  hashes every field its anchor serializes); a change to how a persisted field
+  serializes; any narrowing of a value set those models use (a source type, scope,
+  trust level, CVSS version, pattern or bound); a change to evidence ID derivation; or
+  a reader rule made stricter (a validator on any of the three models, the anchor and
+  record-to-anchor rules, the ID order, the pinned file set, or the manifest and line
+  caps). Adding a value to a value set keeps format 1.
+- Format 1 is read in one direction: a reader reads every format-1 store its own or an
+  earlier importer wrote. A store holding a value added later fails an earlier
+  reader's checks as `store_invalid`. The `2.0.0-dev.25` reader at `28e5b4d` compares a
+  manifest's `schema_version` and rollback instruction with its own, so it reads no
+  store written from `2.0.0-dev.26` on. Before an operator downgrades the program, they
+  use the newer program to activate a store the earlier release can read; the runbook
+  says so.
+- Two tests guard format 1 (ADR 0009 §15). A format-1 store written by the
+  `2.0.0-dev.25` importer is committed under `tests/` and never regenerated; a test
+  verifies and loads it in full, so it is the backward-compatibility proof for what it
+  holds. A pinned digest of the three models' published schemas fails on any change to
+  them; it is a reminder to judge the change, not a proof. A stricter reader rule is a
+  format change whether or not either test fails.
 - `--target` is required and has no default. Paths are resolved, `..` and symlinks
   included, and compared by file identity (device and inode), so two spellings of one
   directory, such as two cases of a name on a case-insensitive file system, match. The
   target must not equal, contain or lie inside the manifest, any input, or the
   `--legacy-root`, and its parent directory must hold no input, so nothing is ever
   created next to an input. A symbolic link at the target that resolves nowhere,
-  dangling or looping, is an existing entry and is refused, never followed.
+  dangling or looping, is an existing entry and is refused, never followed. With
+  `CVE_KGRAG_STORE_ROOT` set, the target must not be the root or lie under it unless the
+  root is its parent and its last component is a valid store name (exit 1,
+  `target_in_store_root`), and a target under the root needs a root that is a directory
+  and not a symbolic link (`store_root_unusable`; ADR 0009 §4).
 - Two sibling directories on the target's file system hold a run's work: the store
   takes shape in `.<name>.partial-<random>`, and the staging database lives in
   `.<name>.staging-<random>`. Once the store files are written and fsynced, the staging
@@ -350,7 +399,8 @@ KEV enrichment runs after §5, on the final NVD records only.
   They verify every checksum and size, refuse a manifest pinning a file twice, any file
   it does not pin and any store file that is not a regular file, re-derive every
   evidence ID, apply the record-to-anchor rules, refuse `synthetic: true` and confine
-  every file path to the store directory.
+  every file path to the store directory. Neither compares the manifest's
+  `schema_version` or its rollback instruction with this program's.
 - Every file the importer or the reader opens is opened without following a symbolic link
   and without blocking, and refused unless it is a regular file, so a FIFO declared as
   an input or the manifest, or found in a store, fails at once instead of waiting for a
@@ -371,30 +421,40 @@ KEV enrichment runs after §5, on the final NVD records only.
   changes.) The store manifest and the report record the rollback as fixed values,
   `rollback_kind: delete_unactivated_target` and `rollback_scope:
   before_activation_only`, with the server's fixed instruction: "Before activation,
-  remove the newly created target directory. After activation, use the WP10 store
-  rollback operation." The report names the store by its `import_identity_sha256` and
-  its manifest's SHA-256, so the operator can tell which directory to remove. WP9 has no
-  delete command and never rolls back by itself; an activated store is rolled back only
-  through WP10.
+  remove the newly created target directory. After activation, use `cve-kgrag store
+  rollback`." The report, fresh output of the run, must carry exactly these three
+  values. The manifest describes the store as it was created: the reader accepts the two
+  values above and any bounded instruction text, so rewording the instruction never
+  makes a store unreadable, and no command presents a manifest's instruction as current
+  guidance; the CLI and the runbook state the supported rollback. The report names the
+  store by its `import_identity_sha256` and its manifest's SHA-256, so the operator can
+  tell which directory to remove, and from `2.0.0-dev.26` names the dataset it holds by
+  its `corpus_content_sha256` (ADR 0009 §2). `migrate` has no delete command and never
+  rolls back by itself; an activated store is rolled back with `cve-kgrag store
+  rollback` (ADR 0009 §7).
 
 ### 10. Contracts
 
-`2.0.0-dev.25` publishes `corpus_store_manifest.schema.json` and
-`migration_report.schema.json`. The report holds counts by reason code, bounded
-locators, the derived and refused files found by kind with the commit their formats are
-cited from, the KEV advice, the rollback kind, scope and instruction, and no input
-text.
+`corpus_store_manifest.schema.json` and `migration_report.schema.json` are published
+from `2.0.0-dev.25`. The manifest schema pins `store_format_version` to 1, and from
+`2.0.0-dev.26` (ADR 0009 §15) gives `schema_version` and the rollback instruction as
+bounded strings with no default, so a later contract version leaves it unchanged. The
+report holds counts by reason code, bounded locators, the derived and refused files
+found by kind with the commit their formats are cited from, the KEV advice, the rollback
+kind, scope and instruction, and no input text.
 
 ### 11. Handed to WP10
 
 - Activation, serving, and `store rollback` to the previously active store.
-- The `cve_search` capability version binding the active store's manifest in place of
-  the fixture's, so sets sealed against one store verify only against it.
-- Load-time and serving memory budgets, the `api` process's two deployments over one
-  bundle included.
+- The `cve_search` capability version naming the active store's dataset by its corpus
+  content digest in place of the fixture's (ADR 0009 §2), so a sealed set verifies
+  against any store holding byte-identical records and anchors and is refused by any
+  other.
+- Load-time and serving memory, measured on synthetic feeds, and one data plane shared
+  by the `api` process's two deployments (ADR 0009 §12); budgets wait for real feeds.
 - The alias policy for a full FiGHT snapshot.
 - The `KEV-` chunk IDs a legacy Chroma store may hold.
-- A store digest in the planner evaluation's identity, for M7b.
+- The corpus content digest in the planner evaluation's identity, for M7b.
 
 ## Deviations from the M6 plan and the split plan
 
