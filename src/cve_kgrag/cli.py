@@ -2,24 +2,32 @@
 services, the knowledge lookups (capabilities, topic resolution, affectedness, evidence),
 the verification of an evidence set handed back, the MCP server over stdio or, with
 ``--http``, over Streamable HTTP, the v2 REST API, both HTTP servers on a loopback
-address, the local planner evaluation (``eval planner``) and the legacy-data importer
-(``migrate legacy``).
+address, the local planner evaluation (``eval planner``), the legacy-data importer
+(``migrate legacy``) and the corpus store operations (``store``).
+
+The serving commands serve the served corpus: the store ``CVE_KGRAG_STORE_ROOT``'s
+``ACTIVE`` names, or the packaged synthetic fixture when no root is configured
+(ADR 0009 §9, §10).
 
 Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
-a query that resolves to a topic, an evidence ID the catalogue serves, every affectedness
-answer established, capabilities always, an ``eval planner`` run that wrote its results,
-a ``migrate legacy`` run that imported, found its import done or completed a dry run,
-and for ``mcp`` the client closing stdin or, for ``mcp --http`` and ``api``, an interrupt
-(SIGINT; on SIGTERM the process ends by that signal). 1 for any other status, verdict or
-answer, for schema drift, for ``mcp`` or ``api`` without a usable server runner, for an
-HTTP server on a port it cannot bind, for model runs whose enabled planner cannot plan,
-for evaluation results that cannot be written, for an evaluation stopped before its
-report, for a failed import and for ``migrate legacy`` without the ``migration`` extra.
-2 for invalid usage: an argument a contract rejects, invalid settings, an HTTP server
-without a token, model runs without an enabled planner, an evaluation ``--out`` inside
-the package, an input manifest that is not valid, a ``verify`` file that cannot be read
-or is larger than ``MAX_EVIDENCE_SET_BYTES``, and a gold file that cannot be read or is
-no investigation gold file.
+a query that resolves to a topic, an evidence ID the catalogue serves, every
+affectedness answer established, capabilities always, an ``eval planner`` run that wrote
+its results, a ``migrate legacy`` run that imported, found its import done or completed
+a dry run, a ``store`` operation that succeeded (for ``status``, a readable ``ACTIVE``
+whose active store is ok), and for ``mcp`` the client closing stdin or, for
+``mcp --http`` and ``api``, an interrupt (SIGINT; on SIGTERM the process ends by that signal).
+1 for any other status, verdict or answer, for schema drift, for ``mcp`` or ``api``
+without a usable server runner, for an HTTP server on a port it cannot bind, for model
+runs whose enabled planner cannot plan, for evaluation results that cannot be written,
+for an evaluation stopped before its report, for a failed import, for ``migrate legacy``
+without the ``migration`` extra and for a failed ``store`` operation, named by its
+reason code. 2 for invalid usage: an argument a contract rejects, invalid settings, a
+``store`` command without a store root or with a name that is no store name, an HTTP
+server without a token, a configured store root that cannot be served (one line naming
+the reason), model runs without an enabled planner, an evaluation ``--out`` inside the
+package or the store root, an input manifest that is not valid, a ``verify`` file that
+cannot be read or is larger than ``MAX_EVIDENCE_SET_BYTES``, and a gold file that cannot
+be read or is no investigation gold file.
 """
 
 import argparse
@@ -46,7 +54,6 @@ from cve_kgrag.adapter_discovery import (
     discover_migration_parsers,
     discover_planner_setup,
 )
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.adapters.migration.inputs_manifest import InputsManifestError, load_inputs_manifest
 from cve_kgrag.adapters.migration.legacy_migration import (
     MigrationDependencies,
@@ -56,6 +63,7 @@ from cve_kgrag.adapters.migration.legacy_migration import (
 from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
 from cve_kgrag.adapters.migration.parser_types import MigrationParsers
 from cve_kgrag.adapters.regular_files import NotARegularFileError, open_regular_file
+from cve_kgrag.adapters.store.store_activation import StoreActivation, describe_identity
 from cve_kgrag.application.affectedness import check_affectedness
 from cve_kgrag.application.evidence_set_verification import (
     MAX_EVIDENCE_SET_BYTES,
@@ -72,11 +80,14 @@ from cve_kgrag.composition import (
     build_knowledge_toolbox,
     build_nvd_normalizer,
     build_search_service,
+    build_store_activation,
     build_topic_context_service,
     build_topic_registry,
+    build_trustify_port,
     list_accepted_planner_capabilities,
+    load_packaged_fixture,
     load_packaged_source_registry,
-    load_served_bundle,
+    load_served_corpus,
     utc_now,
 )
 from cve_kgrag.distribution import read_installed_version
@@ -96,6 +107,15 @@ from cve_kgrag.domain.search import (
     MAX_RESULTS_PER_CALL,
     SearchRequest,
     SearchResponse,
+)
+from cve_kgrag.domain.store_status import (
+    STORE_OPERATION_FAILURE_MESSAGES,
+    ActiveRecordState,
+    ActiveStoreCondition,
+    StoreOperationFailed,
+    StoreStatus,
+    StoreUnavailable,
+    is_store_name,
 )
 from cve_kgrag.domain.taxonomy import ResultStatus
 from cve_kgrag.domain.tool_contracts import (
@@ -118,10 +138,12 @@ from cve_kgrag.evaluation.planner_runner import (
 )
 from cve_kgrag.evaluation.result_directory import ResultDirectory
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
+from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
 from cve_kgrag.settings import (
     HTTP_VARIABLES,
     PLANNER_ENABLED_VARIABLE,
+    SERVED_DATA_VARIABLES,
     HttpSettings,
     ModelPlannerSettings,
     SemanticSettings,
@@ -179,6 +201,17 @@ MODEL_RUNS_WITHOUT_A_PLANNER = (
     f"invalid settings: --model-runs needs the model planner enabled ({PLANNER_ENABLED_VARIABLE})"
 )
 OUT_INSIDE_THE_PACKAGE = "--out must not lie inside the installed cve_kgrag package"
+# A result directory inside a store makes the reader refuse that store.
+OUT_INSIDE_THE_STORE_ROOT = "--out must not lie inside the store root"
+STORE_ROOT_VARIABLE = find_section_variable(SERVED_DATA_VARIABLES, "store_root")
+STORE_ROOT_REQUIRED = f"invalid settings: {STORE_ROOT_VARIABLE}: required by store"
+# Written once per run of the commands fixed to the fixture, whatever the settings: their
+# gold cases and demo queries name fixture CVEs (ADR 0009 §10).
+DEMO_FIXTURE_NOTICE = "cve-kgrag demo uses the packaged synthetic fixture, not the store root"
+EVAL_FIXTURE_NOTICE = (
+    "cve-kgrag eval planner uses the packaged synthetic fixture, not the store root, and "
+    "the FiGHT source each gold case names, not a configured snapshot"
+)
 UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
 UNSERVED_EVIDENCE_MESSAGE = (
     "the anchor catalogued under {evidence_id} fails the anchor rules, so it is not served"
@@ -194,13 +227,22 @@ def parse_cve_id(text: str) -> str:
     return cve_id
 
 
+def parse_store_name(text: str) -> str:
+    if not is_store_name(text):
+        raise argparse.ArgumentTypeError(
+            "not a store name: one path component of letters, digits, '.', '_' and '-', "
+            "starting with a letter or digit, at most 64 characters, and not ACTIVE"
+        )
+    return text
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cve-kgrag", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("demo", help="run sample queries against the bundled synthetic fixture")
 
-    search_parser = commands.add_parser("search", help="search the fixture; prints JSON")
+    search_parser = commands.add_parser("search", help="search the served CVE records; prints JSON")
     search_parser.add_argument("query")
     search_parser.add_argument("--semantic", action="store_true", help=SEMANTIC_HELP)
     add_result_limit_option(search_parser, "--limit")
@@ -279,7 +321,7 @@ def build_parser() -> argparse.ArgumentParser:
         "verify",
         help=(
             "validate, audit and replay a knowledge evidence set read from FILE against the "
-            "packaged fixture and the planners the settings configure; prints JSON"
+            "served CVE records and the planners the settings configure; prints JSON"
         ),
     )
     verify_parser.add_argument("evidence_set_path", metavar="FILE", type=Path)
@@ -287,7 +329,7 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_parser = commands.add_parser(
         "mcp",
         help=(
-            "serve the knowledge tools over MCP on stdio, over the packaged fixture and the "
+            "serve the knowledge tools over MCP on stdio, over the served CVE records and the "
             "deterministic planner; needs the 'mcp' extra"
         ),
     )
@@ -306,7 +348,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "serve the v2 REST API on the loopback host and port the CVE_KGRAG_HTTP_HOST and "
             "CVE_KGRAG_API_PORT settings name, every route but /health behind the "
-            "CVE_KGRAG_HTTP_TOKEN bearer token, over the packaged fixture and the "
+            "CVE_KGRAG_HTTP_TOKEN bearer token, over the served CVE records and the "
             "deterministic planner; runs until interrupted; needs the 'api' extra"
         ),
     )
@@ -387,6 +429,44 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="read and check everything a real run would, then write no store",
+    )
+
+    store_parser = commands.add_parser(
+        "store",
+        help=(
+            "validate, activate and roll back the corpus stores under CVE_KGRAG_STORE_ROOT, "
+            "and report them (ADR 0009)"
+        ),
+    )
+    store_commands = store_parser.add_subparsers(dest="store_command", required=True)
+    validate_parser = store_commands.add_parser(
+        "validate",
+        help="verify the store with this name under the root, changing nothing; prints its "
+        "identity as JSON",
+    )
+    validate_parser.add_argument("name", type=parse_store_name)
+    activate_parser = store_commands.add_parser(
+        "activate",
+        help=(
+            "verify the store with this name and record it active, keeping the store active "
+            "before it as the one to roll back to; prints the store status as JSON; servers "
+            "serve it once restarted"
+        ),
+    )
+    activate_parser.add_argument("name", type=parse_store_name)
+    store_commands.add_parser(
+        "rollback",
+        help=(
+            "make the store active before the current one active again, verified again; "
+            "prints the store status as JSON; servers serve it once restarted"
+        ),
+    )
+    store_commands.add_parser(
+        "status",
+        help=(
+            "the active and previous stores, each checked and verified; prints the store "
+            "status as JSON, and exits 1 unless the active store is ok"
+        ),
     )
 
     schema_parser = commands.add_parser("schema", help="export or check v2 JSON Schema snapshots")
@@ -583,9 +663,7 @@ def print_resolution(resolution: ConceptResolution) -> int:
     return 0 if resolution.resolution.matches else 1
 
 
-def run_affectedness(
-    parser: argparse.ArgumentParser, arguments: argparse.Namespace, bundle: FixtureBundle
-) -> int:
+def run_affectedness(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> int:
     """Check each CVE against ``--purl`` and print the answers as a JSON list; 0 only when
     every answer establishes applicability, which no answer does while no verified
     affectedness source exists (ADR 0003)."""
@@ -596,7 +674,7 @@ def run_affectedness(
         affectedness_requests.append(
             build_contract(parser, AffectednessRequest, cve_id=cve_id, purl=arguments.purl)
         )
-    trustify_port = build_investigation_deployment(bundle).trustify_port
+    trustify_port = build_trustify_port()
     timeout_seconds = ToolLimits().affectedness_timeout_seconds
     answers: list[dict[str, object]] = []
     all_established = True
@@ -626,16 +704,30 @@ def run_evidence_lookup(evidence_id: str, deployment: InvestigationDeployment) -
     return 0
 
 
-def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable) -> int:
-    """Serve the packaged fixture's knowledge tools with ``runner`` until the client closes
+def load_served_corpus_or_exit(command: str, store_root: Path | None) -> ServedCorpus:
+    """The served corpus (``load_served_corpus``). A configured store root that cannot be
+    served ends the run with exit 2 and one line naming the reason, never a path."""
+    try:
+        return load_served_corpus(store_root)
+    except StoreUnavailable as error:
+        print(
+            f"cve-kgrag {command} cannot start: store unavailable: {error.reason.value}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from None
+
+
+def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable, store_root: Path | None) -> int:
+    """Serve the served corpus's knowledge tools with ``runner`` until the client closes
     stdin; 1 when there is no usable runner, with one line on stderr naming why: the
-    missing ``mcp`` extra, or the reason the runner is unusable. Writes nothing to stdout,
-    which carries the protocol. The tools are read-only, so they serve no semantic channel:
-    its store cannot be opened read-only."""
+    missing ``mcp`` extra, or the reason the runner is unusable. The runner is checked
+    before the corpus is loaded, so a core install exits before it touches any data.
+    Writes nothing to stdout, which carries the protocol. The tools are read-only, so they
+    serve no semantic channel: its store cannot be opened read-only."""
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag mcp cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    runner(build_knowledge_toolbox(load_served_bundle()))
+    runner(build_knowledge_toolbox(load_served_corpus_or_exit("mcp", store_root)))
     return 0
 
 
@@ -650,41 +742,46 @@ def require_http_token(
 
 
 def run_mcp_http_server(
-    runner: McpHttpServerRunner | InterfaceUnavailable, *, host: str, port: int, token: SecretStr
+    runner: McpHttpServerRunner | InterfaceUnavailable,
+    store_root: Path | None,
+    *,
+    host: str,
+    port: int,
+    token: SecretStr,
 ) -> int:
-    """Serve the packaged fixture's knowledge tools over Streamable HTTP with ``runner``
-    on ``host`` and ``port`` behind ``token`` until interrupted; 1 when there is no usable
+    """Serve the served corpus's knowledge tools over Streamable HTTP with ``runner`` on
+    ``host`` and ``port`` behind ``token`` until interrupted; 1 when there is no usable
     runner, with one line on stderr naming why, or when the server could not start, which
-    the server has logged."""
+    the server has logged. The corpus is loaded before a port is bound."""
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag mcp --http cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    has_served = runner(
-        build_knowledge_toolbox(load_served_bundle()), host=host, port=port, token=token
-    )
+    served_corpus = load_served_corpus_or_exit("mcp --http", store_root)
+    has_served = runner(build_knowledge_toolbox(served_corpus), host=host, port=port, token=token)
     return 0 if has_served else 1
 
 
 def run_api_server(
     runner: ApiServerRunner | InterfaceUnavailable,
     planner_settings: ModelPlannerSettings | None,
+    store_root: Path | None,
     *,
     host: str,
     port: int,
     token: SecretStr,
 ) -> int:
-    """Serve the packaged fixture's REST API with ``runner`` on ``host`` and ``port``
-    behind ``token`` until interrupted. Its verification route checks a set as ``verify``
-    does, against the planners ``planner_settings`` configure. 1 when there is no usable
-    runner, with one line on stderr naming why, or when the server could not start, which
-    the server has logged."""
+    """Serve the served corpus's REST API with ``runner`` on ``host`` and ``port`` behind
+    ``token`` until interrupted. Its verification route checks a set as ``verify`` does,
+    against the planners ``planner_settings`` configure. 1 when there is no usable runner,
+    with one line on stderr naming why, or when the server could not start, which the
+    server has logged. The corpus is loaded before a port is bound."""
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag api cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    bundle = load_served_bundle()
+    served_corpus = load_served_corpus_or_exit("api", store_root)
     has_served = runner(
-        build_knowledge_toolbox(bundle),
-        build_evidence_set_check(bundle, planner_settings),
+        build_knowledge_toolbox(served_corpus),
+        build_evidence_set_check(served_corpus, planner_settings),
         host=host,
         port=port,
         token=token,
@@ -693,14 +790,14 @@ def run_api_server(
 
 
 def build_evidence_set_check(
-    bundle: FixtureBundle, planner_settings: ModelPlannerSettings | None
+    served_corpus: ServedCorpus, planner_settings: ModelPlannerSettings | None
 ) -> Callable[[bytes], VerificationReport]:
-    """``check_evidence_set`` against ``bundle``'s deployment and the planners
+    """``check_evidence_set`` against ``served_corpus``'s deployment and the planners
     ``planner_settings`` configure: how ``verify`` and the API's verification route check
     a set."""
     return partial(
         check_evidence_set,
-        deployment=build_investigation_deployment(bundle),
+        deployment=build_investigation_deployment(served_corpus),
         accepted_planner_capabilities=list_accepted_planner_capabilities(planner_settings),
     )
 
@@ -728,16 +825,21 @@ def run_planner_evaluation_command(
     parser: argparse.ArgumentParser,
     arguments: argparse.Namespace,
     planner_settings: ModelPlannerSettings | None,
-    bundle: FixtureBundle,
+    store_root: Path | None,
 ) -> int:
-    """Run the gold cases (``run_planner_evaluation``), print the report and name the
-    result directory on stderr. A gold file that is no investigation gold file is a usage
-    error, reported without quoting it; model runs need an enabled planner that can plan,
-    so a run never reports a model evaluation it did not make. An ``--out`` inside the
-    package is a usage error: the files a run writes there would change the package the
-    report names."""
-    if arguments.out.resolve().is_relative_to(PACKAGE_DIR):
+    """Run the gold cases (``run_planner_evaluation``) over the packaged fixture, whatever
+    the settings, print the report and name the result directory on stderr. A gold file
+    that is no investigation gold file is a usage error, reported without quoting it;
+    model runs need an enabled planner that can plan, so a run never reports a model
+    evaluation it did not make. An ``--out`` inside the package is a usage error: the
+    files a run writes there would change the package the report names; so is one inside
+    the store root, whose reader would then refuse the store holding it."""
+    print(EVAL_FIXTURE_NOTICE, file=sys.stderr)
+    resolved_out = arguments.out.resolve()
+    if resolved_out.is_relative_to(PACKAGE_DIR):
         parser.error(OUT_INSIDE_THE_PACKAGE)
+    if store_root is not None and resolved_out.is_relative_to(store_root.resolve()):
+        parser.error(OUT_INSIDE_THE_STORE_ROOT)
     gold_bytes = read_input_file(parser, arguments.gold, MAX_GOLD_FILE_BYTES)
     try:
         cases = load_gold_cases(gold_bytes)
@@ -761,7 +863,7 @@ def run_planner_evaluation_command(
         report = run_planner_evaluation(
             cases,
             gold_sha256=sha256_hex(gold_bytes),
-            bundle=bundle,
+            bundle=load_packaged_fixture(),
             model_runs=model_runs,
             source_revision=read_source_revision(PACKAGE_DIR),
             package_dir=PACKAGE_DIR,
@@ -823,6 +925,49 @@ def run_legacy_migration_command(
     return 1 if report.outcome is MigrationOutcome.FAILED else 0
 
 
+def print_store_status(store_status: StoreStatus) -> None:
+    print(store_status.model_dump_json(indent=2))
+
+
+def is_store_status_ok(store_status: StoreStatus) -> bool:
+    """Whether the record is readable and the active store is ``ok``; a previous store
+    that is not ``ok`` does not count against it."""
+    if store_status.active_record is not ActiveRecordState.OK:
+        return False
+    return (
+        store_status.active_store is not None
+        and store_status.active_store.condition is ActiveStoreCondition.OK
+    )
+
+
+def run_store_command(arguments: argparse.Namespace, store_activation: StoreActivation) -> int:
+    """Run the ``store`` operation the arguments name and print its result as JSON. 1 with
+    one line on stderr naming the reason code when it fails, never a path; ``status``
+    also exits 1, after printing, unless the active store is ``ok``."""
+    store_command = arguments.store_command
+    try:
+        if store_command == "validate":
+            verified_store = store_activation.validate(arguments.name)
+            print(describe_identity(verified_store).model_dump_json(indent=2))
+            return 0
+        if store_command == "activate":
+            print_store_status(store_activation.activate(arguments.name))
+            return 0
+        if store_command == "rollback":
+            print_store_status(store_activation.roll_back())
+            return 0
+        store_status = store_activation.describe_status()
+    except StoreOperationFailed as error:
+        message = STORE_OPERATION_FAILURE_MESSAGES[error.failure]
+        print(
+            f"cve-kgrag store {store_command} failed: {error.failure.value}: {message}",
+            file=sys.stderr,
+        )
+        return 1
+    print_store_status(store_status)
+    return 0 if is_store_status_ok(store_status) else 1
+
+
 def run_schema_command(action: str, schema_dir: Path) -> int:
     if action == "export":
         write_contract_schemas(schema_dir)
@@ -836,7 +981,12 @@ def run_schema_command(action: str, schema_dir: Path) -> int:
 
 def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | None = None) -> int:
     """Run the command ``argv`` names, with the settings ``environment`` holds (the process
-    environment by default; ``cve_kgrag.settings``). Invalid settings are a usage error."""
+    environment by default; ``cve_kgrag.settings``). Invalid settings are a usage error.
+
+    A command loads only what its row of ADR 0009 §10 names, so a configured store that
+    is missing or broken fails only the commands that serve it: ``schema``, ``migrate``,
+    ``store``, ``resolve`` and ``affectedness`` load no served corpus, and ``demo`` and
+    ``eval planner`` always use the packaged fixture."""
     parser = build_parser()
     arguments = parser.parse_args(argv)
     try:
@@ -853,17 +1003,19 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         if http_token is not None:
             return run_mcp_http_server(
                 discover_mcp_http_server_runner(),
+                settings.store_root,
                 host=settings.http.host,
                 port=settings.http.mcp_port,
                 token=http_token,
             )
-        return run_mcp_server(discover_mcp_server_runner())
+        return run_mcp_server(discover_mcp_server_runner(), settings.store_root)
     if arguments.command == "api":
         api_token = require_http_token(parser, settings.http, "api")
         start_service_logging(settings, "api")
         return run_api_server(
             discover_api_server_runner(),
             settings.model_planner,
+            settings.store_root,
             host=settings.http.host,
             port=settings.http.api_port,
             token=api_token,
@@ -872,20 +1024,36 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         return run_legacy_migration_command(
             parser, arguments, discover_migration_parsers(), settings.store_root
         )
-
-    bundle = load_served_bundle()
+    if arguments.command == "store":
+        if settings.store_root is None:
+            parser.error(STORE_ROOT_REQUIRED)
+        return run_store_command(arguments, build_store_activation(settings.store_root))
     if arguments.command == "eval":
-        return run_planner_evaluation_command(parser, arguments, settings.model_planner, bundle)
+        return run_planner_evaluation_command(
+            parser, arguments, settings.model_planner, settings.store_root
+        )
+    if arguments.command == "resolve":
+        resolution_request = build_contract(parser, ConceptResolutionRequest, query=arguments.query)
+        return print_resolution(
+            ConceptResolution(resolution=build_topic_registry().resolve(resolution_request.query))
+        )
+    if arguments.command == "affectedness":
+        return run_affectedness(parser, arguments)
+    if arguments.command == "demo":
+        print(DEMO_FIXTURE_NOTICE, file=sys.stderr)
+        return run_demo(build_search_service(load_packaged_fixture()))
+
+    served_corpus = load_served_corpus_or_exit(arguments.command, settings.store_root)
     if arguments.command == "verify":
         evidence_set_bytes = read_evidence_set_file(parser, arguments.evidence_set_path)
         if settings.semantic is not None:
             logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, "verify")
-        check_set = build_evidence_set_check(bundle, settings.model_planner)
+        check_set = build_evidence_set_check(served_corpus, settings.model_planner)
         return print_verification(check_set(evidence_set_bytes))
     if arguments.command == "investigate":
         investigation_request = build_investigation_request(parser, arguments)
         investigation_service = build_investigation_service(
-            bundle,
+            served_corpus,
             semantic_settings=choose_semantic_settings(settings, arguments),
             planner_setup=discover_planner_setup(settings.model_planner),
         )
@@ -901,38 +1069,31 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             semantic=arguments.semantic,
         )
         topic_context_service = build_topic_context_service(
-            bundle, semantic_settings=choose_semantic_settings(settings, arguments)
+            served_corpus, semantic_settings=choose_semantic_settings(settings, arguments)
         )
         return print_response(topic_context_service.explore(topic_request))
     if arguments.command == "capabilities":
         deployment = build_investigation_deployment(
-            bundle, semantic_settings=choose_semantic_settings(settings, arguments)
+            served_corpus, semantic_settings=choose_semantic_settings(settings, arguments)
         )
         source_capabilities = describe_service_capabilities(
             deployment, discover_planner_setup(settings.model_planner)
         )
         return print_capabilities(KnowledgeCapabilities(source_capabilities=source_capabilities))
-    if arguments.command == "resolve":
-        resolution_request = build_contract(parser, ConceptResolutionRequest, query=arguments.query)
-        return print_resolution(
-            ConceptResolution(resolution=build_topic_registry().resolve(resolution_request.query))
-        )
-    if arguments.command == "affectedness":
-        return run_affectedness(parser, arguments, bundle)
     if arguments.command == "evidence":
         evidence_request = build_contract(
             parser, EvidenceLookupRequest, evidence_id=arguments.evidence_id
         )
         return run_evidence_lookup(
-            evidence_request.evidence_id, build_investigation_deployment(bundle)
+            evidence_request.evidence_id, build_investigation_deployment(served_corpus)
         )
-    if arguments.command == "demo":
-        return run_demo(build_search_service(bundle))
     if arguments.command == "lookup":
         lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)
-        return print_response(lookup_cve(build_search_service(bundle), lookup_request.cve_id))
+        return print_response(
+            lookup_cve(build_search_service(served_corpus), lookup_request.cve_id)
+        )
     search_request = build_search_request(parser, arguments)
-    service = build_search_service(bundle, choose_semantic_settings(settings, arguments))
+    service = build_search_service(served_corpus, choose_semantic_settings(settings, arguments))
     return print_response(service.search(search_request))
 
 

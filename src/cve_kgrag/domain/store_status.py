@@ -7,9 +7,9 @@ name it has under the root and by its digests.
 
 import re
 from enum import StrEnum
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import Field, model_validator
+from pydantic import AfterValidator, Field, model_validator
 
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.corpus_store_manifest import StoreSchemaVersion
@@ -33,6 +33,9 @@ def check_store_name(name: str) -> str:
     if not is_store_name(name):
         raise ValueError("a store name is one path component, not ACTIVE in any case")
     return name
+
+
+StoreName = Annotated[str, Field(pattern=STORE_NAME_PATTERN), AfterValidator(check_store_name)]
 
 
 class ActiveRecordState(StrEnum):
@@ -90,7 +93,7 @@ class ActiveStoreStatus(ContractModel):
     """The store ``ACTIVE`` names as active. ``identity`` is set exactly when it is
     ``ok``: only a store that verifies under the recorded digest has its digests shown."""
 
-    name: str = Field(pattern=STORE_NAME_PATTERN)
+    name: StoreName
     store_manifest_sha256: str = Field(
         pattern=SHA256_PATTERN, description="The manifest digest ACTIVE records for it."
     )
@@ -108,7 +111,7 @@ class PreviousStoreStatus(ContractModel):
     """The store ``ACTIVE`` names as previous, a rollback's target. ``identity`` is set
     exactly when it is ``ok``."""
 
-    name: str = Field(pattern=STORE_NAME_PATTERN)
+    name: StoreName
     store_manifest_sha256: str = Field(
         pattern=SHA256_PATTERN, description="The manifest digest ACTIVE records for it."
     )
@@ -204,3 +207,20 @@ class StoreUnavailableReason(StrEnum):
     ACTIVE_STORE_CHANGED = "active_store_changed"
     STORE_INVALID = "store_invalid"
     STORE_FORMAT_UNSUPPORTED = "store_format_unsupported"
+
+
+class StoreOperationFailed(Exception):
+    """A store operation failed for ``failure``; nothing under the root changed unless
+    ``failure`` is ``active_write_unconfirmed``."""
+
+    def __init__(self, failure: StoreOperationFailure) -> None:
+        super().__init__(failure.value)
+        self.failure = failure
+
+
+class StoreUnavailable(Exception):
+    """The configured store root cannot be served, for ``reason``; nothing may start."""
+
+    def __init__(self, reason: StoreUnavailableReason) -> None:
+        super().__init__(reason.value)
+        self.reason = reason

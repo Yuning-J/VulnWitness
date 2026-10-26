@@ -3,6 +3,7 @@
 import time
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
+from pathlib import Path
 
 from cve_kgrag.adapter_discovery import (
     AdapterEntryPoint,
@@ -30,6 +31,9 @@ from cve_kgrag.adapters.provenance.source_registry import (
     default_source_registry_file,
     load_source_registry,
 )
+from cve_kgrag.adapters.store.active_record_writer import OsActiveRecordFiles
+from cve_kgrag.adapters.store.active_store import load_active_store
+from cve_kgrag.adapters.store.store_activation import StoreActivation
 from cve_kgrag.adapters.structured.in_memory_filter import InMemoryStructuredIndex
 from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
 from cve_kgrag.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
@@ -72,11 +76,31 @@ MISDESCRIBED_AFFECTEDNESS = (
 )
 
 
-def load_served_bundle() -> FixtureBundle:
-    """The CVE records and evidence anchors every surface serves: the packaged synthetic
-    fixture, its checksums verified. The CLI and the MCP server build their services on
-    this one bundle, so no surface serves different records from another."""
+def load_packaged_fixture() -> FixtureBundle:
+    """The packaged synthetic fixture, its checksums verified."""
     return load_fixture_bundle(default_fixture_dir())
+
+
+def load_served_corpus(store_root: Path | None) -> ServedCorpus:
+    """The CVE records and evidence anchors every serving surface serves: the packaged
+    fixture when no store root is configured, otherwise the store its ``ACTIVE`` names.
+    A configured root that cannot be served raises ``StoreUnavailable``; there is no
+    fallback to the fixture (ADR 0009 §9). A process builds its services on this one
+    corpus, so no surface serves different records from another."""
+    if store_root is None:
+        return load_packaged_fixture()
+    return load_active_store(store_root)
+
+
+def build_trustify_port() -> TrustifyPort:
+    """The affectedness port every surface uses: the disabled adapter, until a verified
+    affectedness source exists (ADR 0003)."""
+    return DisabledTrustifyAdapter()
+
+
+def build_store_activation(store_root: Path) -> StoreActivation:
+    """The store operations over ``store_root``, on the operating system's files."""
+    return StoreActivation(store_root, OsActiveRecordFiles())
 
 
 def build_search_service(
@@ -283,7 +307,7 @@ def build_investigation_deployment(
     if fight_source is None:
         fight_source, pinned_fight_snapshot = load_packaged_fight_source(wall_clock)
     if trustify_port is None:
-        trustify_port = DisabledTrustifyAdapter()
+        trustify_port = build_trustify_port()
     if call_runner is None:
         call_runner = ThreadedCallRunner()
     affectedness_capability = describe_affectedness(trustify_port)

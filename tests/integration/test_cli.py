@@ -447,7 +447,7 @@ def test_report_other_than_verified_prints_and_exits_one(
 def test_mcp_with_an_unusable_runner_exits_one_naming_the_reason(
     capsys: pytest.CaptureFixture[str], detail: str
 ) -> None:
-    exit_code = run_mcp_server(InterfaceUnavailable(detail))
+    exit_code = run_mcp_server(InterfaceUnavailable(detail), None)
 
     captured = capsys.readouterr()
     assert exit_code == 1
@@ -460,7 +460,7 @@ def test_mcp_serves_the_packaged_fixture_toolbox_and_exits_zero_when_the_runner_
 ) -> None:
     runner = RecordingMcpServerRunner()
 
-    exit_code = run_mcp_server(runner)
+    exit_code = run_mcp_server(runner, None)
 
     assert exit_code == 0
     assert capsys.readouterr().out == ""
@@ -486,7 +486,9 @@ def test_mcp_http_without_a_token_is_a_usage_error_naming_the_variable(
 def test_mcp_http_with_an_unusable_runner_exits_one_naming_the_reason(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    exit_code = run_mcp_http_server(InterfaceUnavailable(MCP_EXTRA.missing_detail), **HTTP_LISTENER)
+    exit_code = run_mcp_http_server(
+        InterfaceUnavailable(MCP_EXTRA.missing_detail), None, **HTTP_LISTENER
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 1
@@ -499,7 +501,7 @@ def test_mcp_http_serves_the_packaged_fixture_on_the_listener_it_is_given(
 ) -> None:
     runner = RecordingMcpHttpServerRunner()
 
-    exit_code = run_mcp_http_server(runner, **HTTP_LISTENER)
+    exit_code = run_mcp_http_server(runner, None, **HTTP_LISTENER)
 
     assert exit_code == 0
     assert capsys.readouterr().out == ""
@@ -525,7 +527,7 @@ def test_api_with_an_unusable_runner_exits_one_naming_the_reason(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     exit_code = run_api_server(
-        InterfaceUnavailable(API_EXTRA.missing_detail), None, **HTTP_LISTENER
+        InterfaceUnavailable(API_EXTRA.missing_detail), None, None, **HTTP_LISTENER
     )
 
     captured = capsys.readouterr()
@@ -540,7 +542,7 @@ def test_api_serves_the_packaged_fixture_and_verifies_as_the_verify_command_does
     runner = RecordingApiServerRunner()
     genuine_set = sealed_set.model_dump_json().encode()
 
-    exit_code = run_api_server(runner, None, **HTTP_LISTENER)
+    exit_code = run_api_server(runner, None, None, **HTTP_LISTENER)
 
     assert exit_code == 0
     assert runner.listeners == [("::1", 9001, HTTP_TOKEN)]
@@ -570,13 +572,15 @@ def test_api_verifies_against_the_planners_the_settings_configure(
     sealed_bytes = capsys.readouterr().out.encode()
     runner = RecordingApiServerRunner()
 
-    run_api_server(runner, load_settings(planner_environment).model_planner, **HTTP_LISTENER)
+    run_api_server(runner, load_settings(planner_environment).model_planner, None, **HTTP_LISTENER)
 
     assert runner.evidence_set_checks[0](sealed_bytes).verdict is expected_verdict
 
 
 def test_mcp_http_whose_server_could_not_start_exits_one() -> None:
-    exit_code = run_mcp_http_server(RecordingMcpHttpServerRunner(has_served=False), **HTTP_LISTENER)
+    exit_code = run_mcp_http_server(
+        RecordingMcpHttpServerRunner(has_served=False), None, **HTTP_LISTENER
+    )
 
     assert exit_code == 1
 
