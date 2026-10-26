@@ -129,6 +129,7 @@
     },
     "limit": {
       "default": 10,
+      "description": "Candidates the response lists: the best-ranked of the top-k each channel cut on its own, never a complete list, and with no count of what lies beyond.",
       "maximum": 20,
       "minimum": 1,
       "title": "Limit",

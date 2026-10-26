@@ -42,7 +42,10 @@ from cve_kgrag.domain.investigation import (
     StopReason,
     derive_investigation_id,
 )
-from cve_kgrag.domain.investigation_validation import UNCONFIGURED_SEMANTIC_WARNING
+from cve_kgrag.domain.investigation_validation import (
+    UNCONFIGURED_SEMANTIC_WARNING,
+    validate_knowledge_evidence_set,
+)
 from cve_kgrag.domain.taxonomy import ResultStatus
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import (
@@ -51,6 +54,7 @@ from cve_kgrag.domain.topic_context import (
     TopicContextWarning,
     TopicContextWarningCode,
 )
+from cve_kgrag.domain.validation import EvidenceValidationError
 from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.builders import build_bundle_with
 from tests.support.clocks import (
@@ -921,7 +925,6 @@ def test_replay_names_each_rewritten_step_field(
         (run_five_g_aka, InvestigationWarningCode.UNRELATED_CANDIDATES_DROPPED, "1"),
         (run_truncating_the_answer, InvestigationWarningCode.ANSWER_TRUNCATED, "3"),
         (run_truncating_the_answer, InvestigationWarningCode.ANSWER_TRUNCATED, None),
-        (run_five_g_aka, InvestigationWarningCode.ANSWER_TRUNCATED, "1"),
     ],
     ids=[
         "dropped_count_raised",
@@ -929,7 +932,6 @@ def test_replay_names_each_rewritten_step_field(
         "dropped_warning_invented",
         "truncated_count_raised",
         "truncated_warning_removed",
-        "truncated_warning_invented",
     ],
 )
 def test_rewritten_drop_or_truncation_count_passes_the_audit_but_not_replay(
@@ -954,3 +956,38 @@ def test_rewritten_drop_or_truncation_count_passes_the_audit_but_not_replay(
     replay_outcome = replay_evidence_set(forged_set, build_test_deployment(fixture_bundle))
 
     assert replay_outcome == ReplayCompleted((ReplayDifference(None, "warnings"),))
+
+
+def test_truncation_invented_for_an_answer_under_the_cap_is_refused_before_replay(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+) -> None:
+    """An answer listing fewer CVEs than the cap had no CVE cut, so it can truncate only
+    the techniques its topic step left out (ADR 0009 §11a)."""
+    evidence_set = run_five_g_aka(fixture_bundle)
+    forged_set = rewrite_answer_warning(
+        evidence_set, InvestigationWarningCode.ANSWER_TRUNCATED, "1"
+    )
+
+    with pytest.raises(EvidenceValidationError, match="truncates only the techniques"):
+        validate_knowledge_evidence_set(
+            forged_set,
+            pinned_fight_snapshot,
+            packaged_evidence_catalog,
+            evidence_set.source_capabilities,
+        )
+
+
+def test_replay_derives_the_topic_step_s_cuts_again_from_the_sources(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    """The CVEs a topic step left out are not in the set; replay derives them again, so a
+    set counting them replays as sealed (ADR 0009 §11a)."""
+    evidence_set = investigate(
+        fixture_bundle, "5G-AKA", "mixed", budget={"max_results_per_call": 1}
+    )
+
+    replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(fixture_bundle))
+
+    assert replay_outcome == NO_DIFFERENCE

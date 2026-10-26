@@ -1191,7 +1191,7 @@
             }
           ],
           "default": null,
-          "description": "Whether the snapshot is complete or an excerpt."
+          "description": "The coverage type of the snapshot consulted: full for the whole catalogued upstream file, excerpt for a reviewed cut of one. It never says the response lists every match; truncation warnings say what a limit left out."
         },
         "detail": {
           "anyOf": [
@@ -1399,6 +1399,7 @@
     },
     "TopicContextWarning": {
       "additionalProperties": false,
+      "description": "What a response leaves out or could not do. ``protocol_context_truncated`` counts\nthe techniques the snapshot matched that the protocol section does not list because\nof the response's bounds; ``candidates_truncated`` the relevant CVEs topic context\nheld that the candidate section does not list only because of its limit, never a\nbackend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the\nrelevance rule removed. A cut changes no status.",
       "properties": {
         "code": {
           "$ref": "#/$defs/TopicContextWarningCode"
@@ -1421,7 +1422,9 @@
         "excluded_term",
         "additional_topic_not_explored",
         "unrelated_candidates_dropped",
-        "source_snapshot_is_excerpt"
+        "source_snapshot_is_excerpt",
+        "protocol_context_truncated",
+        "candidates_truncated"
       ],
       "title": "TopicContextWarningCode",
       "type": "string"

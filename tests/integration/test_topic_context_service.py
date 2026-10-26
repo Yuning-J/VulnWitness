@@ -10,8 +10,12 @@ from cve_kgrag.adapters.fight.pinned_yaml import UnavailableFightSource
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
 from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
-from cve_kgrag.application.topic_context import TopicContextService
-from cve_kgrag.composition import build_evidence_catalog, build_topic_context_service
+from cve_kgrag.application.topic_context import TopicContextService, TopicExploration
+from cve_kgrag.composition import (
+    build_evidence_catalog,
+    build_topic_context_service,
+    load_packaged_fight_source,
+)
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.search import ChannelOutcome, RetrievalMatch, RetrievalOutcome
 from cve_kgrag.domain.taxonomy import (
@@ -35,12 +39,14 @@ from cve_kgrag.domain.topic_context import (
     QueryScope,
     TopicContextRequest,
     TopicContextResponse,
+    TopicContextWarning,
     TopicContextWarningCode,
 )
-from cve_kgrag.domain.validation import EvidenceValidationError
+from cve_kgrag.domain.validation import EvidenceValidationError, validate_topic_context_response
 from cve_kgrag.ports.sources import FightSource
 from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.builders import build_anchor, build_bundle_with
+from tests.support.clocks import read_fixed_clock
 from tests.support.fakes import CannedRetriever, LexicalRequestRecorder
 from tests.support.services import build_fixture_service
 
@@ -229,7 +235,11 @@ def test_threat_context_item_backed_by_forged_evidence_is_rejected(
     forged_item = item.model_copy(update={"evidence_ids": (forged_anchor.evidence_id,)})
     forging_source = RecordingFightSource(
         ThreatContextOutcome(
-            status="ok", items=(forged_item,), evidence=(forged_anchor,), snapshot=FULL_SNAPSHOT
+            status="ok",
+            items=(forged_item,),
+            matched_count=1,
+            evidence=(forged_anchor,),
+            snapshot=FULL_SNAPSHOT,
         )
     )
     service = build_topic_context_service(fixture_bundle, forging_source, PINNED_FAKE_SNAPSHOT)
@@ -530,3 +540,196 @@ def test_filters_constrain_every_template_search(
 
     assert response.status is expected_status
     assert list_implementation_ids(response) == expected_cve_ids
+
+
+# --- Truncated sections say so (ADR 0009 §11a) ----------------------------------------
+
+
+def explore_five_g_aka(
+    fixture_bundle: FixtureBundle, scope: QueryScope, limit: int
+) -> TopicExploration:
+    service = build_topic_context_service(fixture_bundle)
+    return service.explore_with_omissions(
+        TopicContextRequest(query="5G-AKA", scope=scope, limit=limit)
+    )
+
+
+def describe_warnings(response: TopicContextResponse) -> list[tuple[str, str]]:
+    warning_pairs: list[tuple[str, str]] = []
+    for warning in response.warnings:
+        warning_pairs.append((warning.code.value, warning.subject))
+    return warning_pairs
+
+
+def test_sections_cut_by_their_limit_count_what_they_leave_out_and_stay_ok(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    whole_response = explore_five_g_aka(fixture_bundle, QueryScope.MIXED, 20).response
+
+    cut_exploration = explore_five_g_aka(fixture_bundle, QueryScope.MIXED, 1)
+
+    cut_response = cut_exploration.response
+    unlisted_techniques = len(whole_response.protocol_context) - 1
+    left_out_candidates = len(whole_response.implementation_candidates) - 1
+    assert (unlisted_techniques, left_out_candidates) == (4, 1)
+    assert describe_warnings(cut_response) == [
+        ("source_snapshot_is_excerpt", "mitre_fight: excerpt of 6 techniques"),
+        ("protocol_context_truncated", "4"),
+        ("candidates_truncated", "1"),
+    ]
+    assert cut_response.status is ResultStatus.OK
+    assert cut_exploration.omitted_cve_ids == tuple(list_implementation_ids(whole_response)[1:])
+
+
+def test_protocol_only_section_counts_the_excluded_candidates_its_limit_leaves_out(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    exploration = explore_five_g_aka(fixture_bundle, QueryScope.PROTOCOL_CONTEXT_ONLY, 1)
+
+    assert ("candidates_truncated", "1") in describe_warnings(exploration.response)
+    assert len(exploration.response.excluded_implementation_candidates) == 1
+    assert len(exploration.omitted_cve_ids) == 1
+
+
+def test_sections_within_their_limit_carry_no_truncation_warning(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    exploration = explore_five_g_aka(fixture_bundle, QueryScope.MIXED, 20)
+
+    warning_codes: set[str] = set()
+    for code, _ in describe_warnings(exploration.response):
+        warning_codes.add(code)
+    assert warning_codes.isdisjoint({"protocol_context_truncated", "candidates_truncated"})
+    assert exploration.omitted_cve_ids == ()
+
+
+@dataclass(frozen=True)
+class UndercountingFightSource:
+    """The packaged source, its every outcome copied unvalidated to claim no match."""
+
+    inner: FightSource
+
+    def describe(self) -> FightSnapshotInfo | None:
+        return self.inner.describe()
+
+    def search(self, terms: Sequence[str], limit: int) -> ThreatContextOutcome:
+        return self.inner.search(terms, limit).model_copy(update={"matched_count": 0})
+
+    def list_evidence(self) -> Sequence[EvidenceAnchor]:
+        return self.inner.list_evidence()
+
+    def list_techniques(self) -> Sequence[ThreatContextItem]:
+        return self.inner.list_techniques()
+
+
+def test_fight_outcome_whose_matched_count_disagrees_with_its_items_is_refused(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    packaged_source, pinned_snapshot = load_packaged_fight_source(read_fixed_clock)
+    service = build_topic_context_service(
+        fixture_bundle, UndercountingFightSource(packaged_source), pinned_snapshot
+    )
+
+    with pytest.raises(EvidenceValidationError, match="matched count disagrees"):
+        service.explore(build_request(QueryScope.PROTOCOL_CONTEXT_ONLY))
+
+
+def reseal_with_warnings(
+    response: TopicContextResponse, warnings: Sequence[TopicContextWarning]
+) -> TopicContextResponse:
+    changed = response.model_copy(update={"warnings": tuple(warnings)})
+    return changed.model_copy(update={"result_sha256": changed.compute_result_sha256()})
+
+
+def build_warning(code: TopicContextWarningCode, subject: str) -> TopicContextWarning:
+    return TopicContextWarning(code=code, subject=subject)
+
+
+EXCERPT_WARNING = build_warning(
+    TopicContextWarningCode.SOURCE_SNAPSHOT_IS_EXCERPT, "mitre_fight: excerpt of 6 techniques"
+)
+
+
+@pytest.mark.parametrize(
+    ("scope", "limit", "warnings", "violation"),
+    [
+        (
+            QueryScope.MIXED,
+            1,
+            [
+                EXCERPT_WARNING,
+                build_warning(TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED, "6"),
+            ],
+            "more techniques than the pinned snapshot holds",
+        ),
+        (
+            QueryScope.IMPLEMENTATION_ONLY,
+            1,
+            [build_warning(TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED, "1")],
+            "needs a FiGHT outcome that is ok",
+        ),
+        (
+            QueryScope.MIXED,
+            20,
+            [EXCERPT_WARNING, build_warning(TopicContextWarningCode.CANDIDATES_TRUNCATED, "01")],
+            "not a positive count",
+        ),
+        (
+            QueryScope.MIXED,
+            20,
+            [
+                EXCERPT_WARNING,
+                build_warning(TopicContextWarningCode.CANDIDATES_TRUNCATED, "1"),
+                build_warning(TopicContextWarningCode.CANDIDATES_TRUNCATED, "1"),
+            ],
+            "appears more than once",
+        ),
+        (
+            QueryScope.MIXED,
+            20,
+            [build_warning(TopicContextWarningCode.CANDIDATES_TRUNCATED, "1"), EXCERPT_WARNING],
+            "out of the warnings' order",
+        ),
+    ],
+    ids=[
+        "techniques_beyond_the_snapshot",
+        "technique_cut_without_fight",
+        "count_with_a_leading_zero",
+        "count_given_twice",
+        "out_of_order",
+    ],
+)
+def test_topic_warnings_that_break_their_structure_are_refused(
+    fixture_bundle: FixtureBundle,
+    scope: QueryScope,
+    limit: int,
+    warnings: list[TopicContextWarning],
+    violation: str,
+) -> None:
+    pinned_source, pinned_snapshot = load_packaged_fight_source(read_fixed_clock)
+    response = explore_five_g_aka(fixture_bundle, scope, limit).response
+    forged_response = reseal_with_warnings(response, warnings)
+
+    with pytest.raises(EvidenceValidationError, match=violation):
+        validate_topic_context_response(
+            forged_response, pinned_snapshot, build_evidence_catalog(fixture_bundle, pinned_source)
+        )
+
+
+def test_candidate_cut_beside_an_empty_candidate_section_is_refused(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    pinned_source, pinned_snapshot = load_packaged_fight_source(read_fixed_clock)
+    service = build_topic_context_service(fixture_bundle)
+    response = service.explore(
+        TopicContextRequest(query="5G-AKA", scope=QueryScope.MIXED, filters={"vendors": ["x"]})
+    )
+    forged_response = reseal_with_warnings(
+        response,
+        [*response.warnings, build_warning(TopicContextWarningCode.CANDIDATES_TRUNCATED, "1")],
+    )
+
+    with pytest.raises(EvidenceValidationError, match="candidate section that lists some"):
+        validate_topic_context_response(
+            forged_response, pinned_snapshot, build_evidence_catalog(fixture_bundle, pinned_source)
+        )

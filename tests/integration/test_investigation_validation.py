@@ -60,7 +60,12 @@ from cve_kgrag.domain.threat_context import (
     ObservationStatus,
     ThreatContextItem,
 )
-from cve_kgrag.domain.topic_context import KnowledgeSource, QueryScope
+from cve_kgrag.domain.topic_context import (
+    KnowledgeSource,
+    QueryScope,
+    TopicContextWarning,
+    TopicContextWarningCode,
+)
 from cve_kgrag.domain.validation import EvidenceValidationError
 from tests.support.builders import build_bundle_with
 from tests.support.clocks import LATE_START_SECONDS, LateStartClock, SteppingClock, read_fixed_clock
@@ -74,6 +79,7 @@ from tests.support.investigation import (
     build_test_investigation_service,
     build_topic_call,
     reseal_evidence_set,
+    rewrite_step,
     update_trajectory,
 )
 from tests.support.investigation_runs import (
@@ -2008,3 +2014,138 @@ def test_search_sends_searchable_text_only_with_a_term_beyond_ids_and_low_signal
     )
 
     assert is_searchable is expected_searchable
+
+
+# --- Truncation (ADR 0009 §11a) -------------------------------------------------------
+
+ONE_RESULT_BUDGET = {"budget": {"max_results_per_call": 1}}
+
+
+def run_cut_five_g_aka(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """A mixed 5G-AKA run at a cap of one: its topic step cuts one CVE and four techniques."""
+    return investigate(fixture_bundle, "5G-AKA", "mixed", **ONE_RESULT_BUDGET)
+
+
+def rewrite_answer_truncation(
+    evidence_set: KnowledgeEvidenceSet, *subjects: str
+) -> KnowledgeEvidenceSet:
+    """The set with its answer_truncated warnings replaced by one per subject."""
+    warnings: list[InvestigationWarning] = []
+    for warning in evidence_set.warnings:
+        if warning.code is not InvestigationWarningCode.ANSWER_TRUNCATED:
+            warnings.append(warning)
+    for subject in subjects:
+        warnings.append(
+            InvestigationWarning(code=InvestigationWarningCode.ANSWER_TRUNCATED, subject=subject)
+        )
+    return reseal_evidence_set(evidence_set, warnings=tuple(warnings))
+
+
+def rewrite_topic_warning(
+    evidence_set: KnowledgeEvidenceSet, code: TopicContextWarningCode, subject: str
+) -> KnowledgeEvidenceSet:
+    topic_step = evidence_set.trajectory.steps[0]
+    topic_warnings: list[TopicContextWarning] = []
+    for warning in topic_step.topic_warnings:
+        if warning.code is code:
+            warning = warning.model_copy(update={"subject": subject})
+        topic_warnings.append(warning)
+    return rewrite_step(evidence_set, topic_step.step_index, topic_warnings=tuple(topic_warnings))
+
+
+def test_set_whose_topic_step_cut_its_sections_counts_every_cut_and_validates(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+) -> None:
+    evidence_set = run_cut_five_g_aka(fixture_bundle)
+
+    validate_knowledge_evidence_set(
+        evidence_set,
+        pinned_fight_snapshot,
+        packaged_evidence_catalog,
+        evidence_set.source_capabilities,
+    )
+    answer_warnings: list[tuple[str, str]] = []
+    for warning in evidence_set.warnings:
+        answer_warnings.append((warning.code.value, warning.subject))
+    assert ("answer_truncated", "5") in answer_warnings
+    assert evidence_set.status is ResultStatus.OK
+
+
+@pytest.mark.parametrize(
+    ("forge", "violation"),
+    [
+        (
+            lambda evidence_set: rewrite_answer_truncation(evidence_set, "4"),
+            "fewer items than the topic step left out",
+        ),
+        (
+            lambda evidence_set: rewrite_answer_truncation(evidence_set, "5", "5"),
+            "answer_truncated warning appears more than once",
+        ),
+        (
+            lambda evidence_set: rewrite_answer_truncation(evidence_set, "five"),
+            "not a positive count",
+        ),
+        (
+            lambda evidence_set: rewrite_topic_warning(
+                evidence_set, TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED, "9"
+            ),
+            "more techniques than the pinned snapshot holds",
+        ),
+        (
+            lambda evidence_set: rewrite_topic_warning(
+                evidence_set, TopicContextWarningCode.CANDIDATES_TRUNCATED, "0"
+            ),
+            "not a positive count",
+        ),
+    ],
+    ids=[
+        "count_below_the_topic_cuts",
+        "count_given_twice",
+        "count_not_a_number",
+        "technique_cut_beyond_the_snapshot",
+        "candidate_cut_of_zero",
+    ],
+)
+def test_forged_truncation_is_rejected(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+    forge: Callable[[KnowledgeEvidenceSet], KnowledgeEvidenceSet],
+    violation: str,
+) -> None:
+    evidence_set = run_cut_five_g_aka(fixture_bundle)
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        validate_knowledge_evidence_set(
+            forge(evidence_set),
+            pinned_fight_snapshot,
+            packaged_evidence_catalog,
+            evidence_set.source_capabilities,
+        )
+
+    assert any(violation in found for found in raised.value.violations)
+
+
+def test_truncation_in_a_run_with_no_adopted_step_is_rejected(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+) -> None:
+    evidence_set = investigate(fixture_bundle, "cve", "implementation_only")
+    assert evidence_set.trajectory.steps == ()
+    forged_set = rewrite_answer_truncation(evidence_set, "1")
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        validate_knowledge_evidence_set(
+            forged_set,
+            pinned_fight_snapshot,
+            packaged_evidence_catalog,
+            evidence_set.source_capabilities,
+        )
+
+    assert any(
+        "needs a step the answer was assembled from" in found for found in raised.value.violations
+    )

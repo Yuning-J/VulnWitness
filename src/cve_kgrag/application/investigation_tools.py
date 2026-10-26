@@ -58,12 +58,16 @@ from cve_kgrag.topics.registry import TopicRegistry
 
 @dataclass(frozen=True)
 class ToolExecution:
-    """What one call returned: exactly one response, or the integrity violations it raised."""
+    """What one call returned: exactly one response, or the integrity violations it raised.
+    A topic call also hands over the CVE IDs its response left out at its limit, which
+    the answer counts as truncated and the sealed set does not carry; replay derives them
+    again from the sources."""
 
     search_response: SearchResponse | None
     topic_response: TopicContextResponse | None
     integrity_violations: tuple[str, ...]
     context_bytes: int
+    omitted_topic_cve_ids: tuple[str, ...] = ()
 
     def result_sha256(self) -> str | None:
         if self.search_response is not None:
@@ -92,11 +96,16 @@ class ToolExecutor:
         try:
             if isinstance(call, TopicContextCall):
                 topic = self._topic_registry.require_topic(call.topic_id)
-                topic_response = self._topic_context_service.explore(
+                topic_exploration = self._topic_context_service.explore_with_omissions(
                     build_topic_request(topic, request)
                 )
+                topic_response = topic_exploration.response
                 return ToolExecution(
-                    None, topic_response, (), measure_context_bytes(topic_response)
+                    None,
+                    topic_response,
+                    (),
+                    measure_context_bytes(topic_response),
+                    topic_exploration.omitted_cve_ids,
                 )
             search_response = self._search_service.search(build_search_request(call, request))
         except EvidenceValidationError as error:

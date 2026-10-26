@@ -200,7 +200,15 @@ class SearchRequest(ContractModel):
     filters, which only narrow the records the query itself finds."""
 
     query: QueryText
-    limit: JsonInteger = Field(default=10, ge=1, le=MAX_RESULTS_PER_CALL)
+    limit: JsonInteger = Field(
+        default=10,
+        ge=1,
+        le=MAX_RESULTS_PER_CALL,
+        description=(
+            "Candidates the response lists: the best-ranked of the top-k each channel cut "
+            "on its own, never a complete list, and with no count of what lies beyond."
+        ),
+    )
     filters: SearchFilters = Field(default_factory=SearchFilters)
     graph_expand: StrictBool = False
     semantic: StrictBool = False

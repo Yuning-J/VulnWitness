@@ -187,11 +187,15 @@ class ThreatContextOutcome(ContractModel):
 
     A successful outcome names the snapshot it searched, and every anchor it returns
     carries that snapshot's version, so results and their source identity travel
-    together and cannot disagree.
+    together and cannot disagree. ``matched_count`` is every technique of the snapshot
+    that named a term, before the search's limit cut the items: at least the items
+    listed, 0 exactly when none is, and 0 on failure (ADR 0009 §11a). The outcome is
+    internal and in no published schema.
     """
 
     status: BackendStatus
     items: tuple[ThreatContextItem, ...] = ()
+    matched_count: int = Field(default=0, ge=0)
     evidence: tuple[EvidenceAnchor, ...] = ()
     snapshot: FightSnapshotInfo | None = None
     failure: BackendFailure | None = Field(
@@ -209,6 +213,8 @@ class ThreatContextOutcome(ContractModel):
             raise ValueError("an unsuccessful source outcome cannot carry items or a snapshot")
         if not is_ok and self.failure is None:
             raise ValueError("an unsuccessful source outcome must carry its failure")
+        if self.matched_count < len(self.items) or (self.matched_count == 0) != (not self.items):
+            raise ValueError("matched_count counts at least the items listed, 0 only with none")
         if self.snapshot is not None:
             for anchor in self.evidence:
                 if anchor.source_version != self.snapshot.source_version:

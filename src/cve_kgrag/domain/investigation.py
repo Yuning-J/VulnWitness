@@ -865,6 +865,13 @@ class InvestigationWarningCode(StrEnum):
 
 
 class InvestigationWarning(ContractModel):
+    """What the run could not do or left out. ``answer_truncated`` counts, each once, the
+    items the adopted steps knew and the answer does not list: the CVEs they kept (a CVE
+    the caller named always kept), those the topic step kept and left out at its limit
+    included, less the CVEs the answer lists, plus the techniques the topic step matched
+    and did not list. ``unrelated_candidates_dropped`` counts search-step candidates the
+    relevance rule removed, never one ``answer_truncated`` counts."""
+
     code: InvestigationWarningCode
     subject: str
 

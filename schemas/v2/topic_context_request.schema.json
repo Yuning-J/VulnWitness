@@ -134,7 +134,7 @@
     },
     "limit": {
       "default": 10,
-      "description": "Items each answer section keeps, after the relevance cut.",
+      "description": "Items each answer section keeps, after the relevance cut. Relevant CVEs the searches returned beyond it are counted by a candidates_truncated warning, and FiGHT techniques the snapshot matched beyond what the section lists by a protocol_context_truncated warning.",
       "maximum": 20,
       "minimum": 1,
       "title": "Limit",
@@ -142,7 +142,7 @@
     },
     "max_results_per_search": {
       "default": 20,
-      "description": "Results any one backend search may return: each template CVE search, and the FiGHT search, which also asks for no more than limit.",
+      "description": "Results any one backend search may return: each template CVE search, and the FiGHT search, which also asks for no more than limit. Each CVE search's own top-k is uncounted, so more matches may exist unseen; the FiGHT search counts every technique it matched (protocol_context_truncated).",
       "maximum": 20,
       "minimum": 1,
       "title": "Max Results Per Search",

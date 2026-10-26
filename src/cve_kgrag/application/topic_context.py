@@ -7,9 +7,15 @@ relevance from the record's own text and only then cut to the requested limit. A
 candidate is kept when the record names the topic, or enough of its entities and
 ecosystem terms, or when the semantic channel matched it (``semantic_only``). Under
 ``protocol_context_only`` kept candidates are listed as excluded, never as the answer.
+
+A cut is never silent (ADR 0009 §11a): ``protocol_context_truncated`` counts the
+techniques the snapshot matched that the protocol section does not list, and
+``candidates_truncated`` the relevant CVEs the candidate section does not list because
+of its limit. Neither changes the status.
 """
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.domain.evidence import EvidenceAnchor
@@ -137,6 +143,19 @@ def require_sent_terms(
     return fight_outcome
 
 
+def require_matched_count(fight_outcome: ThreatContextOutcome) -> ThreatContextOutcome:
+    """Pass the FiGHT outcome through, or raise ``EvidenceValidationError`` if its matched
+    count is below the items it lists, or is 0 beside items or above 0 beside none; a
+    source can copy an outcome without validation (``model_copy``)."""
+    listed_count = len(fight_outcome.items)
+    matched_count = fight_outcome.matched_count
+    if matched_count < listed_count or (matched_count == 0) != (listed_count == 0):
+        raise EvidenceValidationError(
+            ["the FiGHT source's matched count disagrees with the techniques it listed"]
+        )
+    return fight_outcome
+
+
 def list_channel_failures(cve_searches: list[SearchResponse]) -> tuple[ChannelOutcome, ...]:
     """Each failing channel outcome of ``cve_searches``, once, in the order first seen."""
     channel_failures: list[ChannelOutcome] = []
@@ -147,6 +166,16 @@ def list_channel_failures(cve_searches: list[SearchResponse]) -> tuple[ChannelOu
             if channel_outcome not in channel_failures:
                 channel_failures.append(channel_outcome)
     return tuple(channel_failures)
+
+
+@dataclass(frozen=True)
+class TopicExploration:
+    """A sealed topic response, and the CVE IDs of the relevant candidates it does not list
+    because of its limit, in topic rank order: an investigation counts them toward
+    ``answer_truncated`` without the response carrying them."""
+
+    response: TopicContextResponse
+    omitted_cve_ids: tuple[str, ...]
 
 
 class TopicContextService:
@@ -170,6 +199,9 @@ class TopicContextService:
         self._evidence_catalog = evidence_catalog
 
     def explore(self, request: TopicContextRequest) -> TopicContextResponse:
+        return self.explore_with_omissions(request).response
+
+    def explore_with_omissions(self, request: TopicContextRequest) -> TopicExploration:
         resolution = self._topic_registry.resolve(request.query)
         warnings: list[TopicContextWarning] = []
         for excluded_term in resolution.excluded_terms:
@@ -185,7 +217,7 @@ class TopicContextService:
                     subject=resolution.normalized_query,
                 )
             )
-            return self._seal(request, resolution, (), (), [], [], warnings)
+            return TopicExploration(self._seal(request, resolution, (), (), [], [], warnings), ())
         for other_match in resolution.matches[1:]:
             warnings.append(
                 TopicContextWarning(
@@ -203,11 +235,21 @@ class TopicContextService:
         fight_evidence: tuple[EvidenceAnchor, ...] = ()
         if consults_fight(request.scope):
             fight_terms = list_topic_terms(topic)
-            fight_outcome = require_sent_terms(
-                self._fight_source.search(fight_terms, decide_fight_search_limit(request)),
-                fight_terms,
+            fight_outcome = require_matched_count(
+                require_sent_terms(
+                    self._fight_source.search(fight_terms, decide_fight_search_limit(request)),
+                    fight_terms,
+                )
             )
             source_outcomes.append(self._summarize_fight(fight_outcome, warnings))
+            unlisted_technique_count = fight_outcome.matched_count - len(fight_outcome.items)
+            if unlisted_technique_count:
+                warnings.append(
+                    TopicContextWarning(
+                        code=TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED,
+                        subject=str(unlisted_technique_count),
+                    )
+                )
             # A failed outcome carries no items or evidence (ThreatContextOutcome).
             protocol_context = fight_outcome.items
             fight_evidence = fight_outcome.evidence
@@ -235,8 +277,18 @@ class TopicContextService:
                 )
             )
         kept_candidates = topic_candidates[: request.limit]
+        omitted_cve_ids: list[str] = []
+        for omitted_candidate in topic_candidates[request.limit :]:
+            omitted_cve_ids.append(omitted_candidate.candidate.record.cve_id)
+        if omitted_cve_ids:
+            warnings.append(
+                TopicContextWarning(
+                    code=TopicContextWarningCode.CANDIDATES_TRUNCATED,
+                    subject=str(len(omitted_cve_ids)),
+                )
+            )
         evidence = self._collect_evidence(fight_evidence, cve_searches, kept_candidates)
-        return self._seal(
+        response = self._seal(
             request,
             resolution,
             protocol_context,
@@ -245,6 +297,7 @@ class TopicContextService:
             source_outcomes,
             warnings,
         )
+        return TopicExploration(response, tuple(omitted_cve_ids))
 
     def _summarize_fight(
         self, fight_outcome: ThreatContextOutcome, warnings: list[TopicContextWarning]

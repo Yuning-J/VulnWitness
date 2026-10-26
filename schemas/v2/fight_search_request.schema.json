@@ -5,6 +5,7 @@
   "properties": {
     "limit": {
       "default": 10,
+      "description": "Techniques the answer lists; a protocol_context_truncated warning counts the ones the snapshot matched beyond them.",
       "maximum": 20,
       "minimum": 1,
       "title": "Limit",

@@ -285,6 +285,7 @@ class PinnedFightYamlSource:
         return ThreatContextOutcome(
             status=BackendStatus.OK,
             items=tuple(items),
+            matched_count=len(scored_hits),
             evidence=tuple(anchors),
             snapshot=self._snapshot_info,
         )

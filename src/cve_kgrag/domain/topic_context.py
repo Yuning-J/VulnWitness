@@ -52,7 +52,12 @@ class TopicContextRequest(ContractModel):
         default=10,
         ge=1,
         le=MAX_RESULTS_PER_CALL,
-        description="Items each answer section keeps, after the relevance cut.",
+        description=(
+            "Items each answer section keeps, after the relevance cut. Relevant CVEs the "
+            "searches returned beyond it are counted by a candidates_truncated warning, "
+            "and FiGHT techniques the snapshot matched beyond what the section lists by a "
+            "protocol_context_truncated warning."
+        ),
     )
     max_results_per_search: JsonInteger = Field(
         default=MAX_RESULTS_PER_CALL,
@@ -60,7 +65,9 @@ class TopicContextRequest(ContractModel):
         le=MAX_RESULTS_PER_CALL,
         description=(
             "Results any one backend search may return: each template CVE search, and the "
-            "FiGHT search, which also asks for no more than limit."
+            "FiGHT search, which also asks for no more than limit. Each CVE search's own "
+            "top-k is uncounted, so more matches may exist unseen; the FiGHT search counts "
+            "every technique it matched (protocol_context_truncated)."
         ),
     )
     semantic: StrictBool = Field(
@@ -208,7 +215,12 @@ class SourceOutcome(ContractModel):
         default=None, description="Snapshot identity of the source consulted, when it has one."
     )
     coverage: SnapshotCoverage | None = Field(
-        default=None, description="Whether the snapshot is complete or an excerpt."
+        default=None,
+        description=(
+            "The coverage type of the snapshot consulted: full for the whole catalogued "
+            "upstream file, excerpt for a reviewed cut of one. It never says the response "
+            "lists every match; truncation warnings say what a limit left out."
+        ),
     )
 
     @model_validator(mode="after")
@@ -303,9 +315,36 @@ class TopicContextWarningCode(StrEnum):
     ADDITIONAL_TOPIC_NOT_EXPLORED = "additional_topic_not_explored"
     UNRELATED_CANDIDATES_DROPPED = "unrelated_candidates_dropped"
     SOURCE_SNAPSHOT_IS_EXCERPT = "source_snapshot_is_excerpt"
+    PROTOCOL_CONTEXT_TRUNCATED = "protocol_context_truncated"
+    CANDIDATES_TRUNCATED = "candidates_truncated"
+
+
+# The order warnings appear in; codes of one position may interleave among themselves.
+TOPIC_WARNING_ORDER = {
+    TopicContextWarningCode.EXCLUDED_TERM: 0,
+    TopicContextWarningCode.TOPIC_NOT_RESOLVED: 1,
+    TopicContextWarningCode.ADDITIONAL_TOPIC_NOT_EXPLORED: 1,
+    TopicContextWarningCode.SOURCE_SNAPSHOT_IS_EXCERPT: 2,
+    TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED: 3,
+    TopicContextWarningCode.UNRELATED_CANDIDATES_DROPPED: 4,
+    TopicContextWarningCode.CANDIDATES_TRUNCATED: 5,
+}
+# The codes whose subject is a positive decimal count, each given at most once.
+TOPIC_COUNT_WARNING_CODES = (
+    TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED,
+    TopicContextWarningCode.UNRELATED_CANDIDATES_DROPPED,
+    TopicContextWarningCode.CANDIDATES_TRUNCATED,
+)
 
 
 class TopicContextWarning(ContractModel):
+    """What a response leaves out or could not do. ``protocol_context_truncated`` counts
+    the techniques the snapshot matched that the protocol section does not list because
+    of the response's bounds; ``candidates_truncated`` the relevant CVEs topic context
+    held that the candidate section does not list only because of its limit, never a
+    backend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the
+    relevance rule removed. A cut changes no status."""
+
     code: TopicContextWarningCode
     subject: str
 

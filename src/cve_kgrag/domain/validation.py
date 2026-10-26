@@ -33,7 +33,7 @@ The rules, checked on every response before it leaves the application layer:
 """
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 
 from cve_kgrag.domain.cve import CVE_ID_PATTERN, CveRecord
 from cve_kgrag.domain.evidence import Claim, EvidenceAnchor, derive_evidence_id
@@ -56,6 +56,8 @@ from cve_kgrag.domain.threat_context import (
     format_fight_locator,
 )
 from cve_kgrag.domain.topic_context import (
+    TOPIC_COUNT_WARNING_CODES,
+    TOPIC_WARNING_ORDER,
     KnowledgeSource,
     QueryScope,
     SourceOutcome,
@@ -67,6 +69,8 @@ from cve_kgrag.domain.topic_context import (
     list_consulted_sources,
 )
 
+# A warning's count: a positive decimal number, as str(int) writes it.
+COUNT_SUBJECT_PATTERN = r"[1-9][0-9]*"
 IMPLEMENTATION = KnowledgeScope.IMPLEMENTATION_VULNERABILITY
 THREAT_CONTEXT = KnowledgeScope.PROTOCOL_THREAT_CONTEXT
 CVE_SOURCE_TYPES = frozenset({SourceType.NVD_API_2, SourceType.NVD_JSON_11, SourceType.CISA_KEV})
@@ -485,6 +489,64 @@ def find_fight_snapshot_violations(
     return violations
 
 
+def read_count_subject(subject: str) -> int | None:
+    """The count a warning's subject states, ``None`` unless it is a positive decimal."""
+    if re.fullmatch(COUNT_SUBJECT_PATTERN, subject) is None:
+        return None
+    return int(subject)
+
+
+def find_topic_warning_violations(
+    warnings: Sequence[TopicContextWarning],
+    fight_status: ResultStatus | None,
+    listed_technique_count: int,
+    listed_candidate_count: int,
+    pinned_snapshot: KnownFightSnapshot | None,
+) -> list[str]:
+    """Topic warnings' structure and their relations to what the response lists (ADR 0009
+    §11a): the warnings come in their fixed order; each count warning appears at most
+    once, with a positive decimal subject; ``protocol_context_truncated`` only beside an
+    ``ok`` FiGHT outcome (``fight_status``), the techniques listed plus its count at most
+    the pinned snapshot's technique count; ``candidates_truncated`` only beside a
+    non-empty candidate section. No count can be checked against its truth here: a
+    response does not carry the inputs that derive it, which replay re-runs."""
+    violations: list[str] = []
+    previous_position = 0
+    for warning in warnings:
+        position = TOPIC_WARNING_ORDER[warning.code]
+        if position < previous_position:
+            violations.append(f"the {warning.code} warning is out of the warnings' order")
+        previous_position = max(previous_position, position)
+    counts_by_code: dict[TopicContextWarningCode, int] = {}
+    for count_code in TOPIC_COUNT_WARNING_CODES:
+        count_warnings: list[TopicContextWarning] = []
+        for warning in warnings:
+            if warning.code is count_code:
+                count_warnings.append(warning)
+        if len(count_warnings) > 1:
+            violations.append(f"the {count_code} warning appears more than once")
+        for count_warning in count_warnings:
+            count = read_count_subject(count_warning.subject)
+            if count is None:
+                violations.append(f"the {count_code} warning's subject is not a positive count")
+            else:
+                counts_by_code[count_code] = count
+    unlisted_technique_count = counts_by_code.get(
+        TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED
+    )
+    if unlisted_technique_count is not None:
+        if fight_status is not ResultStatus.OK or pinned_snapshot is None:
+            violations.append("protocol_context_truncated needs a FiGHT outcome that is ok")
+        elif listed_technique_count + unlisted_technique_count > pinned_snapshot.technique_count:
+            violations.append(
+                "protocol_context_truncated counts more techniques than the pinned snapshot holds"
+            )
+    has_candidate_cut = TopicContextWarningCode.CANDIDATES_TRUNCATED in counts_by_code
+    if has_candidate_cut and listed_candidate_count == 0:
+        violations.append("candidates_truncated needs a candidate section that lists some")
+    return violations
+
+
 def find_topic_status_violations(
     response: TopicContextResponse, candidates: list[Candidate]
 ) -> list[str]:
@@ -577,6 +639,19 @@ def validate_topic_context_response(
 
     violations.extend(find_topic_status_violations(response, candidates))
     violations.extend(find_fight_snapshot_violations(response, pinned_fight_snapshot))
+    fight_status: ResultStatus | None = None
+    for outcome in response.source_outcomes:
+        if outcome.source is KnowledgeSource.MITRE_FIGHT:
+            fight_status = outcome.status
+    violations.extend(
+        find_topic_warning_violations(
+            response.warnings,
+            fight_status,
+            len(response.protocol_context),
+            len(candidates),
+            pinned_fight_snapshot,
+        )
+    )
     if response.result_sha256 != response.compute_result_sha256():
         violations.append("result_sha256 does not match the response content")
     if violations:

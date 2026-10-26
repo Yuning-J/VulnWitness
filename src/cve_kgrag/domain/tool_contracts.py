@@ -68,7 +68,15 @@ class FightSearchRequest(ContractModel):
     """A FiGHT search through a reviewed topic the query resolves to."""
 
     query: QueryText
-    limit: JsonInteger = Field(default=10, ge=1, le=MAX_RESULTS_PER_CALL)
+    limit: JsonInteger = Field(
+        default=10,
+        ge=1,
+        le=MAX_RESULTS_PER_CALL,
+        description=(
+            "Techniques the answer lists; a protocol_context_truncated warning counts the "
+            "ones the snapshot matched beyond them."
+        ),
+    )
 
 
 class EvidenceLookupRequest(ContractModel):

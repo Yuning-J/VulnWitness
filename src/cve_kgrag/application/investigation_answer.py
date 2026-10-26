@@ -68,6 +68,7 @@ from cve_kgrag.domain.topic_context import (
     KnowledgeSource,
     QueryScope,
     SourceOutcome,
+    TopicContextWarningCode,
     summarize_statuses,
 )
 from cve_kgrag.domain.validation import index_anchors
@@ -183,10 +184,19 @@ def list_hit_channels(candidate: Candidate) -> set[RetrievalChannel]:
     return hit_channels
 
 
+@dataclass(frozen=True)
+class CollectedSightings:
+    """Every kept CVE in first-sight order, and the CVE IDs search-step relevance dropped
+    as unrelated to the topic."""
+
+    sightings: list[CandidateSighting]
+    dropped_cve_ids: set[str]
+
+
 def collect_sightings(
     topic: ProtocolTopic | None, admitted_executions: Sequence[tuple[ToolStep, ToolExecution]]
-) -> tuple[list[CandidateSighting], int]:
-    """Every kept CVE in first-sight order, and the number dropped as unrelated to the topic."""
+) -> CollectedSightings:
+    """The sightings of the admitted steps' candidates, each CVE once."""
     sightings: dict[str, CandidateSighting] = {}
     dropped_cve_ids: set[str] = set()
     for step, execution in admitted_executions:
@@ -225,8 +235,25 @@ def collect_sightings(
                     topic_candidate.topic_rank,
                     False,
                 )
-    dropped_count = len(dropped_cve_ids - set(sightings))
-    return list(sightings.values()), dropped_count
+    return CollectedSightings(list(sightings.values()), dropped_cve_ids)
+
+
+def count_topic_cuts(
+    admitted_executions: Sequence[tuple[ToolStep, ToolExecution]],
+) -> tuple[set[str], int]:
+    """What the adopted topic step left out at its limit: the CVE IDs it kept and did not
+    list, and the techniques it matched and did not list. A run issues at most one topic
+    step, and its limit is the per-call cap the answer uses, so these are exact."""
+    omitted_cve_ids: set[str] = set()
+    unlisted_technique_count = 0
+    for _, execution in admitted_executions:
+        if execution.topic_response is None:
+            continue
+        omitted_cve_ids.update(execution.omitted_topic_cve_ids)
+        for warning in execution.topic_response.warnings:
+            if warning.code is TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED:
+                unlisted_technique_count += int(warning.subject)
+    return omitted_cve_ids, unlisted_technique_count
 
 
 def collect_protocol_context(
@@ -274,7 +301,8 @@ def assemble_answer(
     admitted_executions: Sequence[tuple[ToolStep, ToolExecution]],
     max_results: int,
 ) -> AssembledAnswer:
-    sightings, dropped_count = collect_sightings(topic, admitted_executions)
+    collected_sightings = collect_sightings(topic, admitted_executions)
+    sightings = collected_sightings.sightings
     sightings.sort(key=CandidateSighting.sort_key)
     ranked_candidates: list[InvestigationCandidate] = []
     for rank, sighting in enumerate(sightings[:max_results], start=1):
@@ -286,10 +314,16 @@ def assemble_answer(
                 found_by_steps=tuple(sighting.found_by_steps),
             )
         )
-    protocol_items = collect_protocol_context(admitted_executions)
-    truncated_count = max(0, len(sightings) - max_results)
-    truncated_count += max(0, len(protocol_items) - max_results)
-    protocol_context = tuple(protocol_items[:max_results])
+    protocol_context = tuple(collect_protocol_context(admitted_executions))
+    # |K| - |L| + F (ADR 0009 §11a): K the CVEs the adopted steps kept, the topic step's
+    # cuts included; L those the answer lists; F the techniques the topic step matched
+    # and did not list.
+    omitted_topic_cve_ids, unlisted_technique_count = count_topic_cuts(admitted_executions)
+    known_cve_ids: set[str] = set(omitted_topic_cve_ids)
+    for sighting in sightings:
+        known_cve_ids.add(sighting.candidate.record.cve_id)
+    truncated_count = len(known_cve_ids) - len(ranked_candidates) + unlisted_technique_count
+    dropped_count = len(collected_sightings.dropped_cve_ids - known_cve_ids)
 
     implementation_candidates: tuple[InvestigationCandidate, ...] = tuple(ranked_candidates)
     excluded_candidates: list[ExcludedInvestigationCandidate] = []

@@ -102,17 +102,25 @@ def build_admitted_exact_lookup_step(
 
 
 def build_admitted_topic_step(
-    fixture_bundle: FixtureBundle, step_index: int, scope: QueryScope
+    fixture_bundle: FixtureBundle, step_index: int, scope: QueryScope, limit: int = 20
 ) -> AdmittedStep:
-    """An admitted ``topic_context`` step for 5G-AKA over the packaged sources."""
-    topic_response = build_topic_context_service(fixture_bundle).explore(
-        TopicContextRequest(query="5gaka", scope=scope, limit=20)
+    """An admitted ``topic_context`` step for 5G-AKA over the packaged sources, with the
+    CVE IDs its limit left out handed over as the executor hands them."""
+    topic_exploration = build_topic_context_service(fixture_bundle).explore_with_omissions(
+        TopicContextRequest(query="5gaka", scope=scope, limit=limit)
     )
+    topic_response = topic_exploration.response
     return record_admitted_step(
         step_index,
         TopicContextCall(tool=ToolName.TOPIC_CONTEXT, topic_id="3gpp:5g-aka"),
         StepReason.REVIEWED_TOPIC,
-        ToolExecution(None, topic_response, (), measure_context_bytes(topic_response)),
+        ToolExecution(
+            None,
+            topic_response,
+            (),
+            measure_context_bytes(topic_response),
+            topic_exploration.omitted_cve_ids,
+        ),
     )
 
 
@@ -204,6 +212,42 @@ def test_answer_beyond_the_result_cap_is_cut_and_counted(search_service: SearchS
 
     assert describe_candidates(answer.implementation_candidates) == [(1, "CVE-9999-0001", (1,))]
     assert answer.truncated_count == 2
+
+
+def test_topic_step_cuts_count_toward_the_truncated_answer(
+    fixture_bundle: FixtureBundle, five_g_aka_topic: ProtocolTopic
+) -> None:
+    """|K| - |L| + F: two CVEs known, the topic step's one listed and one cut, one listed,
+    and four techniques the topic step matched and did not list (ADR 0009 §11a)."""
+    admitted_executions = [build_admitted_topic_step(fixture_bundle, 1, QueryScope.MIXED, 1)]
+
+    answer = assemble_answer(QueryScope.MIXED, five_g_aka_topic, admitted_executions, max_results=1)
+
+    assert len(answer.implementation_candidates) == 1
+    assert len(answer.protocol_context) == 1
+    assert answer.truncated_count == 2 - 1 + 4
+
+
+@pytest.mark.parametrize(("max_results", "truncated_count"), [(1, 2 - 1 + 4), (2, 2 - 2 + 4)])
+def test_cve_the_topic_step_cut_and_a_lookup_found_again_counts_once_or_not_at_all(
+    fixture_bundle: FixtureBundle,
+    search_service: SearchService,
+    five_g_aka_topic: ProtocolTopic,
+    max_results: int,
+    truncated_count: int,
+) -> None:
+    topic_step = build_admitted_topic_step(fixture_bundle, 1, QueryScope.MIXED, 1)
+    (omitted_cve_id,) = topic_step[1].omitted_topic_cve_ids
+    admitted_executions = [
+        topic_step,
+        build_admitted_exact_lookup_step(search_service, 2, omitted_cve_id),
+    ]
+
+    answer = assemble_answer(
+        QueryScope.MIXED, five_g_aka_topic, admitted_executions, max_results=max_results
+    )
+
+    assert answer.truncated_count == truncated_count
 
 
 def test_search_candidates_unrelated_to_the_resolved_topic_are_dropped_and_counted(

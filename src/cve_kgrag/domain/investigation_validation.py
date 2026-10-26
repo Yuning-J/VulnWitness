@@ -77,6 +77,8 @@ and replay runs the controller again for the request against the sources and
 compares every recorded part but the timings with the set it seals.
 """
 
+import re
+
 from cve_kgrag.domain.affectedness import ApplicabilityStatus
 from cve_kgrag.domain.budget import BudgetBreach
 from cve_kgrag.domain.evidence import Claim, EvidenceAnchor
@@ -154,12 +156,13 @@ from cve_kgrag.domain.taxonomy import (
     SourceType,
 )
 from cve_kgrag.domain.text import find_cve_ids, list_query_terms, normalize_query
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
+from cve_kgrag.domain.threat_context import FIGHT_TECHNIQUE_ID_PATTERN, KnownFightSnapshot
 from cve_kgrag.domain.topic_context import (
     SERVED_STATUSES,
     KnowledgeSource,
     QueryScope,
     SourceOutcome,
+    TopicContextWarningCode,
 )
 from cve_kgrag.domain.validation import (
     EvidenceValidationError,
@@ -170,7 +173,9 @@ from cve_kgrag.domain.validation import (
     find_served_violations,
     find_status_violations,
     find_threat_context_violations,
+    find_topic_warning_violations,
     index_anchors,
+    read_count_subject,
 )
 
 # The warning a search records for a semantic channel it ran without an adapter.
@@ -1365,6 +1370,95 @@ def find_source_capability_violations(
     return violations
 
 
+def find_step_topic_warning_violations(
+    step: ToolStep, pinned_fight_snapshot: KnownFightSnapshot | None
+) -> list[str]:
+    """The topic-response warning rules (``find_topic_warning_violations``) over what a
+    topic step records: its FiGHT outcome, and the techniques and CVEs among its answer
+    IDs."""
+    fight_status: ResultStatus | None = None
+    for outcome in step.source_outcomes:
+        if outcome.source is KnowledgeSource.MITRE_FIGHT:
+            fight_status = outcome.status
+    listed_technique_count = 0
+    listed_candidate_count = 0
+    for answer_id in step.answer_ids:
+        if re.fullmatch(FIGHT_TECHNIQUE_ID_PATTERN, answer_id):
+            listed_technique_count += 1
+        else:
+            listed_candidate_count += 1
+    violations: list[str] = []
+    for violation in find_topic_warning_violations(
+        step.topic_warnings,
+        fight_status,
+        listed_technique_count,
+        listed_candidate_count,
+        pinned_fight_snapshot,
+    ):
+        violations.append(f"step {step.step_index}: {violation}")
+    return violations
+
+
+def read_topic_warning_count(step: ToolStep, code: TopicContextWarningCode) -> int:
+    """The count a step's topic warning states, 0 without one or with a malformed one."""
+    for warning in step.topic_warnings:
+        if warning.code is code:
+            return read_count_subject(warning.subject) or 0
+    return 0
+
+
+def find_truncation_violations(
+    evidence_set: KnowledgeEvidenceSet, pinned_fight_snapshot: KnownFightSnapshot | None
+) -> list[str]:
+    """Truncation as a set can show it (ADR 0009 §11a): each step's topic warnings follow
+    the topic-response rules; ``answer_truncated`` appears at most once, with a positive
+    count, and never in a run with no adopted step; its count is at least the adopted
+    topic step's two counts together; and when the answer lists fewer CVEs than the
+    per-call cap, the topic step left no CVE out, so it equals the FiGHT count. Whether a
+    count is true is replay's to prove: the set does not carry what derives it."""
+    violations: list[str] = []
+    adopted_steps: list[ToolStep] = []
+    for step in evidence_set.trajectory.steps:
+        if step.topic_warnings:
+            violations.extend(find_step_topic_warning_violations(step, pinned_fight_snapshot))
+        is_adopted = evidence_set.stop_reason is not StopReason.INVALID_EVIDENCE
+        if is_adopted and step.admission is StepAdmission.ADMITTED:
+            adopted_steps.append(step)
+    truncation_counts: list[int] = []
+    for warning in evidence_set.warnings:
+        if warning.code is not InvestigationWarningCode.ANSWER_TRUNCATED:
+            continue
+        count = read_count_subject(warning.subject)
+        if count is None:
+            violations.append("the answer_truncated warning's subject is not a positive count")
+        else:
+            truncation_counts.append(count)
+    if len(truncation_counts) > 1:
+        violations.append("the answer_truncated warning appears more than once")
+    if truncation_counts and not adopted_steps:
+        violations.append("answer_truncated needs a step the answer was assembled from")
+    unlisted_technique_count = 0
+    left_out_candidate_count = 0
+    for step in adopted_steps:
+        unlisted_technique_count += read_topic_warning_count(
+            step, TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED
+        )
+        left_out_candidate_count += read_topic_warning_count(
+            step, TopicContextWarningCode.CANDIDATES_TRUNCATED
+        )
+    truncated_count = sum(truncation_counts)
+    if truncated_count < unlisted_technique_count + left_out_candidate_count:
+        violations.append("answer_truncated counts fewer items than the topic step left out")
+    listed_cve_count = len(list_investigation_candidates(evidence_set))
+    is_under_cap = listed_cve_count < evidence_set.request.budget.max_results_per_call
+    if is_under_cap and truncated_count != unlisted_technique_count:
+        violations.append(
+            "an answer listing fewer CVEs than the cap truncates only the techniques the topic "
+            "step left out"
+        )
+    return violations
+
+
 def validate_knowledge_evidence_set(
     evidence_set: KnowledgeEvidenceSet,
     pinned_fight_snapshot: KnownFightSnapshot | None,
@@ -1396,6 +1490,7 @@ def validate_knowledge_evidence_set(
     violations.extend(find_budget_violations(evidence_set))
     violations.extend(find_deadline_violations(evidence_set))
     violations.extend(find_investigation_fight_violations(evidence_set, pinned_fight_snapshot))
+    violations.extend(find_truncation_violations(evidence_set, pinned_fight_snapshot))
     violations.extend(
         find_source_capability_violations(evidence_set, pinned_fight_snapshot, source_capabilities)
     )
