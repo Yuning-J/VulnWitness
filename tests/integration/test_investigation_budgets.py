@@ -8,7 +8,11 @@ import pytest
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.composition import build_investigation_service, load_packaged_fight_source
+from cve_kgrag.composition import (
+    build_investigation_service,
+    build_serving_data_plane,
+    load_packaged_fight_source,
+)
 from cve_kgrag.domain.budget import BudgetBreach
 from cve_kgrag.domain.investigation import (
     CveBackendRequest,
@@ -204,10 +208,14 @@ def test_every_backend_request_stays_within_max_results_per_call(
     packaged_fight_source, pinned_fight_snapshot = load_packaged_fight_source(read_fixed_clock)
     fight_recorder = FightRequestRecorder(packaged_fight_source)
     service = build_investigation_service(
-        fixture_bundle,
-        search_service=build_fixture_service(fixture_bundle, lexical_retriever=lexical_recorder),
-        fight_source=fight_recorder,
-        pinned_fight_snapshot=pinned_fight_snapshot,
+        build_serving_data_plane(
+            fixture_bundle,
+            search_service=build_fixture_service(
+                fixture_bundle, lexical_retriever=lexical_recorder
+            ),
+            fight_source=fight_recorder,
+            pinned_fight_snapshot=pinned_fight_snapshot,
+        ),
         wall_clock=read_fixed_clock,
         monotonic_clock=SteppingClock().read,
     )

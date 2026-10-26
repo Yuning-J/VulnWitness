@@ -1016,3 +1016,11 @@ def test_graph_relation_both_records_assert_is_served(fixture_bundle: FixtureBun
             if channel_hit.channel is RetrievalChannel.GRAPH:
                 graph_hits.append(channel_hit)
     assert graph_hits
+
+
+def test_graph_expansion_is_off_unless_a_request_asks_for_it() -> None:
+    """ADR 0009 §12 pins this until the graph_expand follow-up settles expansion at scale."""
+    request_schema = SearchRequest.model_json_schema()
+
+    assert SearchRequest(query="gateway").graph_expand is False
+    assert request_schema["properties"]["graph_expand"]["default"] is False

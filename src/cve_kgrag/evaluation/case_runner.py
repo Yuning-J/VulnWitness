@@ -13,7 +13,11 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.investigate import InvestigationService
 from cve_kgrag.application.planner_setup import ModelPlanning, PlannerSetup
 from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
-from cve_kgrag.composition import DETERMINISTIC_PLANNING, build_investigation_service
+from cve_kgrag.composition import (
+    DETERMINISTIC_PLANNING,
+    build_investigation_service,
+    build_serving_data_plane,
+)
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
 from cve_kgrag.evaluation.gold_cases import FightChoice, GoldCase
 from cve_kgrag.evaluation.package_digest import fingerprint_package
@@ -114,13 +118,14 @@ class CaseRunner:
         FiGHT excerpt, composition's default, or a source that serves nothing."""
         if fight == "unavailable":
             return build_investigation_service(
-                self._bundle,
-                fight_source=UnavailableFightSource(),
+                build_serving_data_plane(self._bundle, fight_source=UnavailableFightSource()),
                 planner_setup=planner_setup,
                 call_runner=self._call_runner,
             )
         return build_investigation_service(
-            self._bundle, planner_setup=planner_setup, call_runner=self._call_runner
+            build_serving_data_plane(self._bundle),
+            planner_setup=planner_setup,
+            call_runner=self._call_runner,
         )
 
     def _investigate(self, service: InvestigationService, case: GoldCase) -> KnowledgeEvidenceSet:

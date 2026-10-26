@@ -26,7 +26,11 @@ from cve_kgrag.application.trajectory_replay import (
     ReplayTimedOut,
     replay_evidence_set,
 )
-from cve_kgrag.composition import build_evidence_catalog, build_investigation_service
+from cve_kgrag.composition import (
+    build_evidence_catalog,
+    build_investigation_service,
+    build_serving_data_plane,
+)
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.investigation import (
     InvestigationRequest,
@@ -305,7 +309,7 @@ def test_independent_services_return_byte_identical_sets(
 def test_start_time_and_speed_never_change_the_result_hash(fixture_bundle: FixtureBundle) -> None:
     request = REPLAYED_REQUESTS[1]
     later_service = build_investigation_service(
-        fixture_bundle,
+        build_serving_data_plane(fixture_bundle, clock=read_later_clock),
         wall_clock=read_later_clock,
         monotonic_clock=SteppingClock(seconds_per_read=0.25).read,
     )

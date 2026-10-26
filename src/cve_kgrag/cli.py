@@ -74,12 +74,14 @@ from cve_kgrag.application.investigation_deployment import InvestigationDeployme
 from cve_kgrag.application.knowledge_lookup import find_served_evidence, lookup_cve
 from cve_kgrag.application.planner_setup import ModelPlanning
 from cve_kgrag.application.search import SearchService
+from cve_kgrag.application.serving_data_plane import ServingDataPlane
 from cve_kgrag.composition import (
     build_investigation_deployment,
     build_investigation_service,
     build_knowledge_toolbox,
     build_nvd_normalizer,
     build_search_service,
+    build_serving_data_plane,
     build_store_activation,
     build_topic_context_service,
     build_topic_registry,
@@ -727,7 +729,8 @@ def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable, store_root: P
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag mcp cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    runner(build_knowledge_toolbox(load_served_corpus_or_exit("mcp", store_root)))
+    served_corpus = load_served_corpus_or_exit("mcp", store_root)
+    runner(build_knowledge_toolbox(build_serving_data_plane(served_corpus)))
     return 0
 
 
@@ -757,7 +760,8 @@ def run_mcp_http_server(
         print(f"cve-kgrag mcp --http cannot start: {runner.detail}", file=sys.stderr)
         return 1
     served_corpus = load_served_corpus_or_exit("mcp --http", store_root)
-    has_served = runner(build_knowledge_toolbox(served_corpus), host=host, port=port, token=token)
+    toolbox = build_knowledge_toolbox(build_serving_data_plane(served_corpus))
+    has_served = runner(toolbox, host=host, port=port, token=token)
     return 0 if has_served else 1
 
 
@@ -779,9 +783,12 @@ def run_api_server(
         print(f"cve-kgrag api cannot start: {runner.detail}", file=sys.stderr)
         return 1
     served_corpus = load_served_corpus_or_exit("api", store_root)
+    # The toolbox's deployment and the verification route's share one read-only data
+    # plane, and keep their call runners and admission apart (ADR 0009 §12).
+    data_plane = build_serving_data_plane(served_corpus)
     has_served = runner(
-        build_knowledge_toolbox(served_corpus),
-        build_evidence_set_check(served_corpus, planner_settings),
+        build_knowledge_toolbox(data_plane),
+        build_evidence_set_check(data_plane, planner_settings),
         host=host,
         port=port,
         token=token,
@@ -790,14 +797,14 @@ def run_api_server(
 
 
 def build_evidence_set_check(
-    served_corpus: ServedCorpus, planner_settings: ModelPlannerSettings | None
+    data_plane: ServingDataPlane, planner_settings: ModelPlannerSettings | None
 ) -> Callable[[bytes], VerificationReport]:
-    """``check_evidence_set`` against ``served_corpus``'s deployment and the planners
+    """``check_evidence_set`` against a deployment of ``data_plane`` and the planners
     ``planner_settings`` configure: how ``verify`` and the API's verification route check
     a set."""
     return partial(
         check_evidence_set,
-        deployment=build_investigation_deployment(served_corpus),
+        deployment=build_investigation_deployment(data_plane),
         accepted_planner_capabilities=list_accepted_planner_capabilities(planner_settings),
     )
 
@@ -1048,13 +1055,16 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         evidence_set_bytes = read_evidence_set_file(parser, arguments.evidence_set_path)
         if settings.semantic is not None:
             logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, "verify")
-        check_set = build_evidence_set_check(served_corpus, settings.model_planner)
+        check_set = build_evidence_set_check(
+            build_serving_data_plane(served_corpus), settings.model_planner
+        )
         return print_verification(check_set(evidence_set_bytes))
     if arguments.command == "investigate":
         investigation_request = build_investigation_request(parser, arguments)
         investigation_service = build_investigation_service(
-            served_corpus,
-            semantic_settings=choose_semantic_settings(settings, arguments),
+            build_serving_data_plane(
+                served_corpus, semantic_settings=choose_semantic_settings(settings, arguments)
+            ),
             planner_setup=discover_planner_setup(settings.model_planner),
         )
         return print_response(investigation_service.investigate(investigation_request))
@@ -1074,7 +1084,9 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         return print_response(topic_context_service.explore(topic_request))
     if arguments.command == "capabilities":
         deployment = build_investigation_deployment(
-            served_corpus, semantic_settings=choose_semantic_settings(settings, arguments)
+            build_serving_data_plane(
+                served_corpus, semantic_settings=choose_semantic_settings(settings, arguments)
+            )
         )
         source_capabilities = describe_service_capabilities(
             deployment, discover_planner_setup(settings.model_planner)
@@ -1085,7 +1097,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             parser, EvidenceLookupRequest, evidence_id=arguments.evidence_id
         )
         return run_evidence_lookup(
-            evidence_request.evidence_id, build_investigation_deployment(served_corpus)
+            evidence_request.evidence_id,
+            build_investigation_deployment(build_serving_data_plane(served_corpus)),
         )
     if arguments.command == "lookup":
         lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)

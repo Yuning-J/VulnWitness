@@ -44,6 +44,7 @@ from cve_kgrag.application.investigation_policy import describe_deterministic_pl
 from cve_kgrag.application.investigation_tools import ToolExecutor
 from cve_kgrag.application.planner_setup import DeterministicPlanning, PlannerSetup
 from cve_kgrag.application.search import SearchService
+from cve_kgrag.application.serving_data_plane import ServingDataPlane
 from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
 from cve_kgrag.application.topic_context import TopicContextService
 from cve_kgrag.domain.affectedness import AFFECTEDNESS_DETAILS, AffectednessFailure
@@ -291,27 +292,53 @@ def describe_semantic_capability(search_service: SearchService) -> SourceCapabil
     return SourceCapability(source="semantic_channel", state=SourceCapabilityState.NOT_CONFIGURED)
 
 
-def build_investigation_deployment(
+def build_serving_data_plane(
     served_corpus: ServedCorpus,
     *,
     search_service: SearchService | None = None,
     fight_source: FightSource | None = None,
     pinned_fight_snapshot: KnownFightSnapshot | None = None,
     semantic_settings: SemanticSettings | None = None,
+    clock: Callable[[], datetime] = utc_now,
+) -> ServingDataPlane:
+    """The read-only data plane over ``served_corpus`` that every deployment of a process
+    shares (ADR 0009 §12): the topic cards, the search service, the FiGHT source and its
+    pin, and the evidence catalog, each built once.
+
+    A caller passing ``search_service`` passes one over ``served_corpus``: the evidence
+    catalog every served anchor and record is re-checked against holds
+    ``served_corpus``'s records and evidence. ``semantic_settings`` configures only the
+    search service built here; the ``semantic_channel`` capability reports the service
+    actually used. Without ``fight_source``, FiGHT is the packaged excerpt and its catalog
+    pin, its anchors stamped by ``clock``; a caller passing its own source also passes the
+    pin it chose (``None`` for none).
+    """
+    if search_service is None:
+        search_service = build_search_service(served_corpus, semantic_settings)
+    if fight_source is None:
+        fight_source, pinned_fight_snapshot = load_packaged_fight_source(clock)
+    return ServingDataPlane(
+        served_dataset=served_corpus.describe_served_dataset(),
+        topic_registry=build_topic_registry(),
+        search_service=search_service,
+        fight_source=fight_source,
+        pinned_fight_snapshot=pinned_fight_snapshot,
+        evidence_catalog=build_evidence_catalog(served_corpus, fight_source),
+    )
+
+
+def build_investigation_deployment(
+    data_plane: ServingDataPlane,
+    *,
     trustify_port: TrustifyPort | None = None,
     wall_clock: Callable[[], datetime] = utc_now,
     monotonic_clock: Callable[[], float] = time.monotonic,
     call_runner: ThreadedCallRunner | None = None,
 ) -> InvestigationDeployment:
-    """One search service shared by the topic-context service and the tool executor, and
-    one topic-context service, the tool executor's.
+    """A deployment over ``data_plane``: one topic-context service over its search
+    service and FiGHT source, the tool executor over both, and the deployment's own call
+    runner and clocks.
 
-    A caller passing ``search_service`` passes one over ``served_corpus``: the evidence
-    catalog every served anchor and record is re-checked against holds ``served_corpus``'s
-    records and evidence. ``semantic_settings`` configures only the search service built
-    here; the ``semantic_channel`` capability reports the service actually used.
-    Without ``fight_source``, FiGHT is the packaged excerpt and its catalog pin; a
-    caller passing its own source also passes the pin it chose (``None`` for none).
     Without ``trustify_port``, affectedness is the disabled adapter's
     (``DisabledTrustifyAdapter``). The port is described once, here
     (``describe_affectedness``); a port that gives no ``AffectednessFailure`` raises
@@ -319,41 +346,36 @@ def build_investigation_deployment(
     call runner, which bounds every planner and tool call by the time the run has left; a
     caller passing one shares it, and with it the count of live calls, across deployments.
     """
-    if search_service is None:
-        search_service = build_search_service(served_corpus, semantic_settings)
-    if fight_source is None:
-        fight_source, pinned_fight_snapshot = load_packaged_fight_source(wall_clock)
     if trustify_port is None:
         trustify_port = build_trustify_port()
     if call_runner is None:
         call_runner = ThreadedCallRunner()
     affectedness_capability = describe_affectedness(trustify_port)
-    topic_registry = build_topic_registry()
-    evidence_catalog = build_evidence_catalog(served_corpus, fight_source)
     topic_context_service = TopicContextService(
-        topic_registry=topic_registry,
-        search_service=search_service,
-        fight_source=fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
-        evidence_catalog=evidence_catalog,
+        topic_registry=data_plane.topic_registry,
+        search_service=data_plane.search_service,
+        fight_source=data_plane.fight_source,
+        pinned_fight_snapshot=data_plane.pinned_fight_snapshot,
+        evidence_catalog=data_plane.evidence_catalog,
     )
-    served_dataset = served_corpus.describe_served_dataset()
     return InvestigationDeployment(
-        served_dataset=served_dataset,
-        topic_registry=topic_registry,
-        tool_executor=ToolExecutor(search_service, topic_context_service, topic_registry),
-        search_service=search_service,
+        served_dataset=data_plane.served_dataset,
+        topic_registry=data_plane.topic_registry,
+        tool_executor=ToolExecutor(
+            data_plane.search_service, topic_context_service, data_plane.topic_registry
+        ),
+        search_service=data_plane.search_service,
         topic_context_service=topic_context_service,
         trustify_port=trustify_port,
         source_capabilities=describe_source_capabilities(
-            served_dataset,
-            fight_source,
-            pinned_fight_snapshot,
-            search_service,
+            data_plane.served_dataset,
+            data_plane.fight_source,
+            data_plane.pinned_fight_snapshot,
+            data_plane.search_service,
             affectedness_capability,
         ),
-        pinned_fight_snapshot=pinned_fight_snapshot,
-        evidence_catalog=evidence_catalog,
+        pinned_fight_snapshot=data_plane.pinned_fight_snapshot,
+        evidence_catalog=data_plane.evidence_catalog,
         call_runner=call_runner,
         wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,
@@ -361,12 +383,8 @@ def build_investigation_deployment(
 
 
 def build_investigation_service(
-    served_corpus: ServedCorpus,
+    data_plane: ServingDataPlane,
     *,
-    search_service: SearchService | None = None,
-    fight_source: FightSource | None = None,
-    pinned_fight_snapshot: KnownFightSnapshot | None = None,
-    semantic_settings: SemanticSettings | None = None,
     planner_setup: PlannerSetup = DETERMINISTIC_PLANNING,
     trustify_port: TrustifyPort | None = None,
     wall_clock: Callable[[], datetime] = utc_now,
@@ -382,11 +400,7 @@ def build_investigation_service(
     the call runner. A ``trustify_port`` is described once, when the deployment is built.
     """
     deployment = build_investigation_deployment(
-        served_corpus,
-        search_service=search_service,
-        fight_source=fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
-        semantic_settings=semantic_settings,
+        data_plane,
         trustify_port=trustify_port,
         wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,
@@ -424,36 +438,27 @@ def list_accepted_planner_capabilities(
 
 
 def build_knowledge_toolbox(
-    served_corpus: ServedCorpus,
+    data_plane: ServingDataPlane,
     *,
-    search_service: SearchService | None = None,
-    fight_source: FightSource | None = None,
-    pinned_fight_snapshot: KnownFightSnapshot | None = None,
     trustify_port: TrustifyPort | None = None,
     wall_clock: Callable[[], datetime] = utc_now,
     monotonic_clock: Callable[[], float] = time.monotonic,
     tool_clock: Callable[[], float] = time.monotonic,
     limits: ToolLimits | None = None,
 ) -> KnowledgeToolbox:
-    """The knowledge tools over one deployment of ``served_corpus``
-    (``build_investigation_deployment``): its search service, its FiGHT source (the
-    packaged excerpt without ``fight_source``), its affectedness port
-    (``DisabledTrustifyAdapter`` without ``trustify_port``), no semantic channel (its
-    store cannot be opened read-only, and the tools are read-only) and the deterministic
-    planner.
+    """The knowledge tools over one deployment of ``data_plane``
+    (``build_investigation_deployment``): its search service and FiGHT source, its
+    affectedness port (``DisabledTrustifyAdapter`` without ``trustify_port``) and the
+    deterministic planner. A server passes a data plane built with no semantic channel:
+    its store cannot be opened read-only, and the tools are read-only.
 
     ``wall_clock`` and ``monotonic_clock`` are the deployment's, which every investigation
     runs on; ``tool_clock`` bounds each tool call, so reading it never moves a run's
     deadline arithmetic. Without ``limits`` every call runs under the default
-    ``ToolLimits``. A caller passing ``search_service`` passes one over
-    ``served_corpus``; one passing ``fight_source`` also passes the pin it chose for it
-    (``None`` for none).
+    ``ToolLimits``.
     """
     deployment = build_investigation_deployment(
-        served_corpus,
-        search_service=search_service,
-        fight_source=fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
+        data_plane,
         trustify_port=trustify_port,
         wall_clock=wall_clock,
         monotonic_clock=monotonic_clock,

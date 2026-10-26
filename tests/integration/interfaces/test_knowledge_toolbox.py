@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.composition import build_knowledge_toolbox
+from cve_kgrag.composition import build_knowledge_toolbox, build_serving_data_plane
 from cve_kgrag.domain.affectedness import AffectednessDetail, AffectednessFailure
 from cve_kgrag.domain.budget import MAX_WALL_TIME_SECONDS
 from cve_kgrag.domain.contract_model import ContractModel
@@ -643,7 +643,7 @@ def test_integrity_failure_returns_integrity_check_failed(fixture_bundle: Fixtur
 def test_production_toolbox_reports_affectedness_blocked_unverified(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    toolbox = build_knowledge_toolbox(fixture_bundle)
+    toolbox = build_knowledge_toolbox(build_serving_data_plane(fixture_bundle))
 
     capabilities_answer = require_answer(
         toolbox.call(KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES, None)

@@ -7,7 +7,11 @@ import pytest
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.investigate import describe_service_capabilities
 from cve_kgrag.application.planner_setup import DeterministicPlanning
-from cve_kgrag.composition import AffectednessConfigurationError, build_investigation_deployment
+from cve_kgrag.composition import (
+    AffectednessConfigurationError,
+    build_investigation_deployment,
+    build_serving_data_plane,
+)
 from cve_kgrag.domain.affectedness import AffectednessDetail, AffectednessFailure
 from cve_kgrag.domain.investigation import (
     KnowledgeEvidenceSet,
@@ -76,7 +80,9 @@ def test_port_giving_no_typed_reason_raises_configuration_error(
     )
 
     with pytest.raises(AffectednessConfigurationError):
-        build_investigation_deployment(fixture_bundle, trustify_port=trustify_port)
+        build_investigation_deployment(
+            build_serving_data_plane(fixture_bundle), trustify_port=trustify_port
+        )
 
 
 @pytest.mark.parametrize("described_failure", list(AffectednessFailure), ids=str)
@@ -87,7 +93,9 @@ def test_port_reason_publishes_only_the_server_sentence_for_it(
         failure=AffectednessFailure.SOURCE_UNAVAILABLE, described_failure=described_failure
     )
 
-    deployment = build_investigation_deployment(fixture_bundle, trustify_port=trustify_port)
+    deployment = build_investigation_deployment(
+        build_serving_data_plane(fixture_bundle), trustify_port=trustify_port
+    )
 
     affectedness_capabilities: list[SourceCapability] = []
     for capability in deployment.source_capabilities:

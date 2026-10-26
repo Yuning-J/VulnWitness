@@ -19,6 +19,7 @@ from cve_kgrag.application.planner_setup import DeterministicPlanning, PlannerSe
 from cve_kgrag.composition import (
     build_investigation_deployment,
     build_investigation_service,
+    build_serving_data_plane,
     load_packaged_fight_source,
 )
 from cve_kgrag.domain.evidence import EvidenceAnchor
@@ -162,10 +163,13 @@ def build_test_investigation_service(
     else:
         planner_setup = plan_with(model_port)
     return build_investigation_service(
-        bundle,
-        search_service=build_fixture_service(bundle, **retrievers),
-        fight_source=fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
+        build_serving_data_plane(
+            bundle,
+            search_service=build_fixture_service(bundle, **retrievers),
+            fight_source=fight_source,
+            pinned_fight_snapshot=pinned_fight_snapshot,
+            clock=read_fixed_clock,
+        ),
         planner_setup=planner_setup,
         trustify_port=trustify_port,
         wall_clock=read_fixed_clock,
@@ -201,10 +205,13 @@ def build_blocking_investigation_service(
     else:
         fight_source = BlockingFightSource(packaged_fight_source, release)
     return build_investigation_service(
-        bundle,
-        search_service=build_fixture_service(bundle, **retrievers),
-        fight_source=fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
+        build_serving_data_plane(
+            bundle,
+            search_service=build_fixture_service(bundle, **retrievers),
+            fight_source=fight_source,
+            pinned_fight_snapshot=pinned_fight_snapshot,
+            clock=read_fixed_clock,
+        ),
         wall_clock=read_fixed_clock,
         monotonic_clock=time.monotonic,
     )
@@ -226,10 +233,13 @@ def build_test_deployment(
     """
     fight_source, pinned_fight_snapshot = choose_fight_source(fight)
     return build_investigation_deployment(
-        bundle,
-        search_service=build_fixture_service(bundle, **retrievers),
-        fight_source=fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
+        build_serving_data_plane(
+            bundle,
+            search_service=build_fixture_service(bundle, **retrievers),
+            fight_source=fight_source,
+            pinned_fight_snapshot=pinned_fight_snapshot,
+            clock=read_fixed_clock,
+        ),
         trustify_port=trustify_port,
         wall_clock=read_fixed_clock,
         monotonic_clock=monotonic_clock or SteppingClock().read,

@@ -16,6 +16,7 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import (
 from cve_kgrag.composition import (
     build_evidence_catalog,
     build_investigation_service,
+    build_serving_data_plane,
     load_packaged_fight_source,
 )
 from cve_kgrag.domain.budget import BudgetBreach
@@ -1194,10 +1195,12 @@ def test_service_rejects_an_anchor_its_catalog_does_not_hold(
     )
     fight_source, pinned_fight_snapshot = load_packaged_fight_source(read_fixed_clock)
     service = build_investigation_service(
-        fixture_bundle,
-        search_service=build_fixture_service(serving_bundle),
-        fight_source=fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
+        build_serving_data_plane(
+            fixture_bundle,
+            search_service=build_fixture_service(serving_bundle),
+            fight_source=fight_source,
+            pinned_fight_snapshot=pinned_fight_snapshot,
+        ),
         wall_clock=read_fixed_clock,
         monotonic_clock=SteppingClock().read,
     )

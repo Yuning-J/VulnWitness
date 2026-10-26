@@ -8,7 +8,11 @@ from typing import Any
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.threaded_call_runner import CALL_THREAD_NAME
-from cve_kgrag.composition import build_knowledge_toolbox, load_packaged_fight_source
+from cve_kgrag.composition import (
+    build_knowledge_toolbox,
+    build_serving_data_plane,
+    load_packaged_fight_source,
+)
 from cve_kgrag.domain.affectedness import AffectednessDetail
 from cve_kgrag.domain.tool_contracts import ToolFailure
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
@@ -62,10 +66,12 @@ def build_test_toolbox(
     and equal requests seal equal sets. Each tool call is bounded on ``tool_clock``."""
     packaged_fight_source, pinned_fight_snapshot = load_packaged_fight_source(read_fixed_clock)
     return build_knowledge_toolbox(
-        bundle,
-        search_service=build_fixture_service(bundle, **retrievers),
-        fight_source=fight_source or packaged_fight_source,
-        pinned_fight_snapshot=pinned_fight_snapshot,
+        build_serving_data_plane(
+            bundle,
+            search_service=build_fixture_service(bundle, **retrievers),
+            fight_source=fight_source or packaged_fight_source,
+            pinned_fight_snapshot=pinned_fight_snapshot,
+        ),
         trustify_port=trustify_port,
         wall_clock=read_fixed_clock,
         monotonic_clock=monotonic_clock or SteppingClock().read,

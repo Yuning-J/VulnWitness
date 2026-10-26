@@ -42,6 +42,7 @@ from cve_kgrag.cli import (
 from cve_kgrag.composition import (
     build_investigation_deployment,
     build_search_service,
+    build_serving_data_plane,
     build_topic_context_service,
 )
 from cve_kgrag.domain.affectedness import AffectednessCheck, ApplicabilityStatus
@@ -1159,11 +1160,13 @@ def test_catalogued_anchor_failing_the_anchor_rules_exits_one_with_one_line_on_s
     )
     packaged_fight_source, pinned_fight_snapshot = choose_fight_source("packaged")
     deployment = build_investigation_deployment(
-        fixture_bundle,
-        fight_source=ExtraEvidenceFightSource(
-            packaged_fight_source, extra_evidence=(inferred_anchor,)
-        ),
-        pinned_fight_snapshot=pinned_fight_snapshot,
+        build_serving_data_plane(
+            fixture_bundle,
+            fight_source=ExtraEvidenceFightSource(
+                packaged_fight_source, extra_evidence=(inferred_anchor,)
+            ),
+            pinned_fight_snapshot=pinned_fight_snapshot,
+        )
     )
 
     exit_code = run_evidence_lookup(inferred_anchor.evidence_id, deployment)

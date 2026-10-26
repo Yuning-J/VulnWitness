@@ -17,13 +17,19 @@ from cve_kgrag.adapters.store.active_record import (
 )
 from cve_kgrag.adapters.store.active_record_writer import OsActiveRecordFiles
 from cve_kgrag.adapters.store.active_store import load_active_store
-from cve_kgrag.adapters.store.corpus_store import load_corpus_store
+from cve_kgrag.adapters.store.corpus_store import load_corpus_store, verify_corpus_store
 from cve_kgrag.adapters.store.store_activation import StoreActivation
-from cve_kgrag.composition import load_served_corpus
+from cve_kgrag.application.knowledge_lookup import lookup_cve
+from cve_kgrag.composition import (
+    build_investigation_deployment,
+    build_serving_data_plane,
+    load_served_corpus,
+)
 from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.store_status import StoreUnavailable, StoreUnavailableReason
-from tests.support.corpus_stores import import_store
+from cve_kgrag.domain.taxonomy import ResultStatus
+from tests.support.corpus_stores import copy_compatibility_store, import_store
 from tests.support.legacy_inputs import snapshot_tree
 
 
@@ -180,3 +186,24 @@ def test_read_only_root_serves_and_startup_writes_nothing(read_only_root: Path) 
     assert corpus_store.records
     assert snapshot_tree(read_only_root) == tree_before
     assert sorted(os.listdir(read_only_root)) == entries_before
+
+
+@pytest.mark.parametrize("source", ["imported", "compatibility"])
+def test_every_store_that_verifies_also_builds_the_serving_deployment(
+    store_root: Path, source: str
+) -> None:
+    """Activation runs only verification; this pins that what it accepts composition can
+    serve (ADR 0009 §7)."""
+    if source == "imported":
+        store_dir = import_store(store_root, "candidate", cve_numbers=(1, 2, 3))
+    else:
+        store_dir = copy_compatibility_store(store_root, "candidate")
+    verify_corpus_store(store_dir)
+    corpus_store = load_corpus_store(store_dir)
+
+    deployment = build_investigation_deployment(build_serving_data_plane(corpus_store))
+
+    for record in corpus_store.records:
+        lookup = lookup_cve(deployment.search_service, record.cve_id)
+        assert lookup.status is ResultStatus.OK
+        assert lookup.candidates[0].record == record

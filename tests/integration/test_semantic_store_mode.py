@@ -13,6 +13,7 @@ from cve_kgrag.adapters.store.corpus_store import CorpusStore, load_corpus_store
 from cve_kgrag.composition import (
     build_investigation_service,
     build_search_service,
+    build_serving_data_plane,
     describe_semantic_capability,
 )
 from cve_kgrag.domain.investigation import (
@@ -182,10 +183,12 @@ def test_store_investigation_requesting_the_channel_seals_a_set_naming_why_it_is
     corpus_store: CorpusStore, overlapping_registry: FakeAdapterRegistry
 ) -> None:
     investigation_service = build_investigation_service(
-        corpus_store,
-        search_service=build_search_service(
-            corpus_store, SEMANTIC_SETTINGS, overlapping_registry.list_adapters
-        ),
+        build_serving_data_plane(
+            corpus_store,
+            search_service=build_search_service(
+                corpus_store, SEMANTIC_SETTINGS, overlapping_registry.list_adapters
+            ),
+        )
     )
 
     evidence_set = investigation_service.investigate(

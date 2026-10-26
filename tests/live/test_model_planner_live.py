@@ -27,7 +27,7 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import default_fixture_dir, lo
 from cve_kgrag.adapters.planner.http_transport import HttpAnswer, post_json
 from cve_kgrag.adapters.planner.openai_compatible import OpenAiCompatibleModelPort
 from cve_kgrag.application.planner_setup import ModelPlanning
-from cve_kgrag.composition import build_investigation_service
+from cve_kgrag.composition import build_investigation_service, build_serving_data_plane
 from cve_kgrag.domain.investigation import InvestigationRequest
 from cve_kgrag.domain.planning import ModelReplyFailureDetail
 from cve_kgrag.domain.taxonomy import BackendStatus
@@ -86,7 +86,8 @@ def test_installed_planner_answers_a_round_and_the_set_seals_without_the_key(
     planner_setup = discover_planner_setup(configured_planner.settings)
     assert isinstance(planner_setup, ModelPlanning), "the planner adapter is not usable"
     service = build_investigation_service(
-        load_fixture_bundle(default_fixture_dir()), planner_setup=planner_setup
+        build_serving_data_plane(load_fixture_bundle(default_fixture_dir())),
+        planner_setup=planner_setup,
     )
 
     evidence_set = service.investigate(
