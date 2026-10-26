@@ -4,6 +4,7 @@ and fail with a reason code and never a path; every serving command serves the s
 commands whose row loads no served corpus run whatever state the root is in; and
 ``demo`` and ``eval planner`` stay on the packaged fixture and say so."""
 
+import hashlib
 import json
 import logging
 from collections.abc import Mapping
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from cve_kgrag.adapter_discovery import InterfaceUnavailable
+from cve_kgrag.adapters.fixture.fight_fixture import default_fight_fixture_dir
 from cve_kgrag.adapters.store.corpus_store import load_corpus_store
 from cve_kgrag.cli import main, run_mcp_server
 from cve_kgrag.domain.investigation import (
@@ -25,6 +27,7 @@ from cve_kgrag.domain.store_status import ActiveRecordState, StoreStatus
 from cve_kgrag.domain.taxonomy import BackendFailureDetail
 from cve_kgrag.domain.tool_contracts import KnowledgeCapabilities
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
+from cve_kgrag.settings import ServiceSettings, load_settings
 from tests.support.corpus_stores import import_store
 from tests.support.evaluation import SMALL_GOLD_ROWS, write_gold_file
 from tests.support.legacy_inputs import (
@@ -35,6 +38,8 @@ from tests.support.legacy_inputs import (
     write_inputs_manifest,
 )
 
+EXCERPT_BYTES = default_fight_fixture_dir().joinpath("fight-excerpt.yaml").read_bytes()
+EXCERPT_SHA256 = hashlib.sha256(EXCERPT_BYTES).hexdigest()
 STORE_MARKER = "storemarker"
 STORE_DESCRIPTION = f"SYNTHETIC: {STORE_MARKER} gateway mishandles input."
 
@@ -292,7 +297,7 @@ def test_verify_on_a_root_without_active_refuses_to_start(
 def test_mcp_serves_the_active_store(active_settings: dict[str, str], store_root: Path) -> None:
     runner = RecordingMcpServerRunner()
 
-    exit_code = run_mcp_server(runner, store_root)
+    exit_code = run_mcp_server(runner, ServiceSettings(store_root=store_root))
 
     assert exit_code == 0
     served_dataset = runner.served_toolboxes[0].describe_served_dataset()
@@ -304,7 +309,10 @@ def test_mcp_without_its_runner_exits_before_it_touches_the_root(
 ) -> None:
     store_root = Path(unservable_settings["CVE_KGRAG_STORE_ROOT"])
 
-    exit_code = run_mcp_server(InterfaceUnavailable("the 'mcp' extra is not installed"), store_root)
+    exit_code = run_mcp_server(
+        InterfaceUnavailable("the 'mcp' extra is not installed"),
+        ServiceSettings(store_root=store_root),
+    )
 
     assert exit_code == 1
     assert "store unavailable" not in capsys.readouterr().err
@@ -317,7 +325,7 @@ def test_mcp_on_a_root_without_active_refuses_to_start(
     store_root = Path(unservable_settings["CVE_KGRAG_STORE_ROOT"])
 
     with pytest.raises(SystemExit) as raised:
-        run_mcp_server(runner, store_root)
+        run_mcp_server(runner, ServiceSettings(store_root=store_root))
 
     assert raised.value.code == 2
     assert runner.served_toolboxes == []
@@ -488,3 +496,132 @@ def test_store_capabilities_report_the_semantic_channel_by_whether_it_is_request
 
     capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
     assert capabilities.source_capabilities[3] == expected_capability
+
+
+# --- The operator FiGHT snapshot ------------------------------------------------------
+
+
+@pytest.fixture
+def missing_snapshot_settings(tmp_path: Path) -> dict[str, str]:
+    return {
+        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(tmp_path / "missing-fight.yaml"),
+        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": EXCERPT_SHA256,
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["topic", "5G-AKA", "--scope", "mixed"],
+        ["investigate", "5G-AKA", "--scope", "mixed"],
+        ["capabilities"],
+        ["evidence", "ev:000000000000000000000000"],
+    ],
+    ids=["topic", "investigate", "capabilities", "evidence"],
+)
+def test_command_that_uses_fight_refuses_a_missing_configured_snapshot(
+    missing_snapshot_settings: dict[str, str],
+    arguments: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_usage_error(arguments, missing_snapshot_settings)
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert captured.err == (
+        f"cve-kgrag {arguments[0]} cannot start: FiGHT snapshot unavailable: "
+        "fight_snapshot_missing\n"
+    )
+
+
+def test_verify_refuses_a_missing_configured_snapshot(
+    missing_snapshot_settings: dict[str, str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    set_path = tmp_path / "set.json"
+    set_path.write_text("{}")
+
+    exit_code = run_usage_error(["verify", str(set_path)], missing_snapshot_settings)
+
+    assert exit_code == 2
+    assert "FiGHT snapshot unavailable: fight_snapshot_missing" in capsys.readouterr().err
+
+
+def test_mcp_refuses_a_missing_configured_snapshot_before_serving(
+    missing_snapshot_settings: dict[str, str],
+) -> None:
+    runner = RecordingMcpServerRunner()
+
+    with pytest.raises(SystemExit) as raised:
+        run_mcp_server(runner, load_settings(missing_snapshot_settings))
+
+    assert raised.value.code == 2
+    assert runner.served_toolboxes == []
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_exit_code"),
+    [
+        (["search", "gateway"], 0),
+        (["lookup", "CVE-9999-0003"], 0),
+        (["resolve", "5G-AKA"], 0),
+        (["affectedness", "CVE-9999-0001", "--purl", "pkg:pypi/demo@1.0"], 1),
+        (["demo"], 0),
+        (["schema", "check"], 0),
+    ],
+    ids=["search", "lookup", "resolve", "affectedness", "demo", "schema"],
+)
+def test_command_whose_row_loads_no_fight_runs_with_a_missing_snapshot(
+    missing_snapshot_settings: dict[str, str], arguments: list[str], expected_exit_code: int
+) -> None:
+    exit_code = main(arguments, missing_snapshot_settings)
+
+    assert exit_code == expected_exit_code
+
+
+def test_eval_planner_and_store_commands_run_with_a_missing_snapshot(
+    missing_snapshot_settings: dict[str, str], root_settings: dict[str, str], tmp_path: Path
+) -> None:
+    environment = {**missing_snapshot_settings, **root_settings}
+    gold_path = write_gold_file(tmp_path, SMALL_GOLD_ROWS)
+
+    eval_exit_code = main(
+        ["eval", "planner", "--gold", str(gold_path), "--out", str(tmp_path / "results")],
+        environment,
+    )
+    store_exit_code = main(["store", "activate", "first"], environment)
+
+    assert (eval_exit_code, store_exit_code) == (0, 0)
+
+
+def test_broken_store_is_reported_before_a_broken_snapshot(
+    unservable_settings: dict[str, str],
+    missing_snapshot_settings: dict[str, str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = run_usage_error(
+        ["capabilities"], {**unservable_settings, **missing_snapshot_settings}
+    )
+
+    assert exit_code == 2
+    assert "store unavailable: no_active_store" in capsys.readouterr().err
+
+
+def test_capabilities_name_the_configured_snapshot_s_pin(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    snapshot_path = tmp_path / "fight.yaml"
+    snapshot_path.write_bytes(EXCERPT_BYTES)
+    environment = {
+        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
+        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": EXCERPT_SHA256,
+    }
+
+    exit_code = main(["capabilities"], environment)
+
+    capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
+    fight_capability = capabilities.source_capabilities[1]
+    assert exit_code == 0
+    assert fight_capability.state is SourceCapabilityState.AVAILABLE
+    assert fight_capability.version is not None
+    assert fight_capability.version.endswith(f"+sha256:{EXCERPT_SHA256}")

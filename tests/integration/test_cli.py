@@ -91,7 +91,7 @@ from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport
 from cve_kgrag.evaluation.planner_runner import REPORT_FILE_NAME
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName
-from cve_kgrag.settings import load_settings
+from cve_kgrag.settings import ServiceSettings, load_settings
 from tests.support.evaluation import SMALL_GOLD_ROWS, build_gold_row, write_gold_file
 from tests.support.fake_chat_server import (
     FakeChatServer,
@@ -448,7 +448,7 @@ def test_report_other_than_verified_prints_and_exits_one(
 def test_mcp_with_an_unusable_runner_exits_one_naming_the_reason(
     capsys: pytest.CaptureFixture[str], detail: str
 ) -> None:
-    exit_code = run_mcp_server(InterfaceUnavailable(detail), None)
+    exit_code = run_mcp_server(InterfaceUnavailable(detail), ServiceSettings())
 
     captured = capsys.readouterr()
     assert exit_code == 1
@@ -461,7 +461,7 @@ def test_mcp_serves_the_packaged_fixture_toolbox_and_exits_zero_when_the_runner_
 ) -> None:
     runner = RecordingMcpServerRunner()
 
-    exit_code = run_mcp_server(runner, None)
+    exit_code = run_mcp_server(runner, ServiceSettings())
 
     assert exit_code == 0
     assert capsys.readouterr().out == ""
@@ -488,7 +488,7 @@ def test_mcp_http_with_an_unusable_runner_exits_one_naming_the_reason(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     exit_code = run_mcp_http_server(
-        InterfaceUnavailable(MCP_EXTRA.missing_detail), None, **HTTP_LISTENER
+        InterfaceUnavailable(MCP_EXTRA.missing_detail), ServiceSettings(), **HTTP_LISTENER
     )
 
     captured = capsys.readouterr()
@@ -502,7 +502,7 @@ def test_mcp_http_serves_the_packaged_fixture_on_the_listener_it_is_given(
 ) -> None:
     runner = RecordingMcpHttpServerRunner()
 
-    exit_code = run_mcp_http_server(runner, None, **HTTP_LISTENER)
+    exit_code = run_mcp_http_server(runner, ServiceSettings(), **HTTP_LISTENER)
 
     assert exit_code == 0
     assert capsys.readouterr().out == ""
@@ -528,7 +528,7 @@ def test_api_with_an_unusable_runner_exits_one_naming_the_reason(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     exit_code = run_api_server(
-        InterfaceUnavailable(API_EXTRA.missing_detail), None, None, **HTTP_LISTENER
+        InterfaceUnavailable(API_EXTRA.missing_detail), ServiceSettings(), **HTTP_LISTENER
     )
 
     captured = capsys.readouterr()
@@ -543,7 +543,7 @@ def test_api_serves_the_packaged_fixture_and_verifies_as_the_verify_command_does
     runner = RecordingApiServerRunner()
     genuine_set = sealed_set.model_dump_json().encode()
 
-    exit_code = run_api_server(runner, None, None, **HTTP_LISTENER)
+    exit_code = run_api_server(runner, ServiceSettings(), **HTTP_LISTENER)
 
     assert exit_code == 0
     assert runner.listeners == [("::1", 9001, HTTP_TOKEN)]
@@ -573,14 +573,14 @@ def test_api_verifies_against_the_planners_the_settings_configure(
     sealed_bytes = capsys.readouterr().out.encode()
     runner = RecordingApiServerRunner()
 
-    run_api_server(runner, load_settings(planner_environment).model_planner, None, **HTTP_LISTENER)
+    run_api_server(runner, load_settings(planner_environment), **HTTP_LISTENER)
 
     assert runner.evidence_set_checks[0](sealed_bytes).verdict is expected_verdict
 
 
 def test_mcp_http_whose_server_could_not_start_exits_one() -> None:
     exit_code = run_mcp_http_server(
-        RecordingMcpHttpServerRunner(has_served=False), None, **HTTP_LISTENER
+        RecordingMcpHttpServerRunner(has_served=False), ServiceSettings(), **HTTP_LISTENER
     )
 
     assert exit_code == 1

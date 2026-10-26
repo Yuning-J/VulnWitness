@@ -54,6 +54,7 @@ from cve_kgrag.adapter_discovery import (
     discover_migration_parsers,
     discover_planner_setup,
 )
+from cve_kgrag.adapters.fight.operator_snapshot import FightSnapshotUnavailable
 from cve_kgrag.adapters.migration.inputs_manifest import InputsManifestError, load_inputs_manifest
 from cve_kgrag.adapters.migration.legacy_migration import (
     MigrationDependencies,
@@ -87,6 +88,7 @@ from cve_kgrag.composition import (
     build_topic_registry,
     build_trustify_port,
     list_accepted_planner_capabilities,
+    load_fight_source,
     load_packaged_fixture,
     load_packaged_source_registry,
     load_served_corpus,
@@ -120,6 +122,7 @@ from cve_kgrag.domain.store_status import (
     is_store_name,
 )
 from cve_kgrag.domain.taxonomy import ResultStatus
+from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.tool_contracts import (
     ConceptResolution,
     ConceptResolutionRequest,
@@ -141,11 +144,13 @@ from cve_kgrag.evaluation.planner_runner import (
 from cve_kgrag.evaluation.result_directory import ResultDirectory
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.ports.served_corpus import ServedCorpus
+from cve_kgrag.ports.sources import FightSource
 from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
 from cve_kgrag.settings import (
     HTTP_VARIABLES,
     PLANNER_ENABLED_VARIABLE,
     SERVED_DATA_VARIABLES,
+    FightSnapshotSettings,
     HttpSettings,
     ModelPlannerSettings,
     SemanticSettings,
@@ -719,7 +724,44 @@ def load_served_corpus_or_exit(command: str, store_root: Path | None) -> ServedC
         raise SystemExit(2) from None
 
 
-def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable, store_root: Path | None) -> int:
+def load_fight_source_or_exit(
+    command: str, fight_snapshot: FightSnapshotSettings | None
+) -> tuple[FightSource, KnownFightSnapshot | None]:
+    """The FiGHT source the settings configure (``load_fight_source``). A configured
+    snapshot that cannot be served ends the run with exit 2 and one line naming the
+    reason, never a path, file content or exception text."""
+    try:
+        return load_fight_source(fight_snapshot)
+    except FightSnapshotUnavailable as error:
+        print(
+            f"cve-kgrag {command} cannot start: FiGHT snapshot unavailable: {error.failure.value}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from None
+
+
+def load_data_plane_or_exit(
+    command: str,
+    settings: ServiceSettings,
+    semantic_settings: SemanticSettings | None = None,
+) -> ServingDataPlane:
+    """The data plane a command that uses FiGHT serves from: the served corpus, then the
+    FiGHT source, so a broken store is reported before a broken snapshot (ADR 0009 §9)."""
+    served_corpus = load_served_corpus_or_exit(command, settings.store_root)
+    fight_source, pinned_fight_snapshot = load_fight_source_or_exit(
+        command, settings.fight_snapshot
+    )
+    return build_serving_data_plane(
+        served_corpus,
+        fight_source=fight_source,
+        pinned_fight_snapshot=pinned_fight_snapshot,
+        semantic_settings=semantic_settings,
+    )
+
+
+def run_mcp_server(
+    runner: McpServerRunner | InterfaceUnavailable, settings: ServiceSettings
+) -> int:
     """Serve the served corpus's knowledge tools with ``runner`` until the client closes
     stdin; 1 when there is no usable runner, with one line on stderr naming why: the
     missing ``mcp`` extra, or the reason the runner is unusable. The runner is checked
@@ -729,8 +771,7 @@ def run_mcp_server(runner: McpServerRunner | InterfaceUnavailable, store_root: P
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag mcp cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    served_corpus = load_served_corpus_or_exit("mcp", store_root)
-    runner(build_knowledge_toolbox(build_serving_data_plane(served_corpus)))
+    runner(build_knowledge_toolbox(load_data_plane_or_exit("mcp", settings)))
     return 0
 
 
@@ -746,7 +787,7 @@ def require_http_token(
 
 def run_mcp_http_server(
     runner: McpHttpServerRunner | InterfaceUnavailable,
-    store_root: Path | None,
+    settings: ServiceSettings,
     *,
     host: str,
     port: int,
@@ -755,20 +796,19 @@ def run_mcp_http_server(
     """Serve the served corpus's knowledge tools over Streamable HTTP with ``runner`` on
     ``host`` and ``port`` behind ``token`` until interrupted; 1 when there is no usable
     runner, with one line on stderr naming why, or when the server could not start, which
-    the server has logged. The corpus is loaded before a port is bound."""
+    the server has logged. The corpus and the FiGHT source are loaded before a port is
+    bound."""
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag mcp --http cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    served_corpus = load_served_corpus_or_exit("mcp --http", store_root)
-    toolbox = build_knowledge_toolbox(build_serving_data_plane(served_corpus))
+    toolbox = build_knowledge_toolbox(load_data_plane_or_exit("mcp --http", settings))
     has_served = runner(toolbox, host=host, port=port, token=token)
     return 0 if has_served else 1
 
 
 def run_api_server(
     runner: ApiServerRunner | InterfaceUnavailable,
-    planner_settings: ModelPlannerSettings | None,
-    store_root: Path | None,
+    settings: ServiceSettings,
     *,
     host: str,
     port: int,
@@ -776,19 +816,18 @@ def run_api_server(
 ) -> int:
     """Serve the served corpus's REST API with ``runner`` on ``host`` and ``port`` behind
     ``token`` until interrupted. Its verification route checks a set as ``verify`` does,
-    against the planners ``planner_settings`` configure. 1 when there is no usable runner,
-    with one line on stderr naming why, or when the server could not start, which the
-    server has logged. The corpus is loaded before a port is bound."""
+    against the planners the settings configure. 1 when there is no usable runner, with
+    one line on stderr naming why, or when the server could not start, which the server
+    has logged. The corpus and the FiGHT source are loaded before a port is bound."""
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag api cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    served_corpus = load_served_corpus_or_exit("api", store_root)
     # The toolbox's deployment and the verification route's share one read-only data
     # plane, and keep their call runners and admission apart (ADR 0009 §12).
-    data_plane = build_serving_data_plane(served_corpus)
+    data_plane = load_data_plane_or_exit("api", settings)
     has_served = runner(
         build_knowledge_toolbox(data_plane),
-        build_evidence_set_check(data_plane, planner_settings),
+        build_evidence_set_check(data_plane, settings.model_planner),
         host=host,
         port=port,
         token=token,
@@ -1010,19 +1049,18 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         if http_token is not None:
             return run_mcp_http_server(
                 discover_mcp_http_server_runner(),
-                settings.store_root,
+                settings,
                 host=settings.http.host,
                 port=settings.http.mcp_port,
                 token=http_token,
             )
-        return run_mcp_server(discover_mcp_server_runner(), settings.store_root)
+        return run_mcp_server(discover_mcp_server_runner(), settings)
     if arguments.command == "api":
         api_token = require_http_token(parser, settings.http, "api")
         start_service_logging(settings, "api")
         return run_api_server(
             discover_api_server_runner(),
-            settings.model_planner,
-            settings.store_root,
+            settings,
             host=settings.http.host,
             port=settings.http.api_port,
             token=api_token,
@@ -1050,22 +1088,32 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         print(DEMO_FIXTURE_NOTICE, file=sys.stderr)
         return run_demo(build_search_service(load_packaged_fixture()))
 
-    served_corpus = load_served_corpus_or_exit(arguments.command, settings.store_root)
+    if arguments.command == "lookup":
+        lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)
+        served_corpus = load_served_corpus_or_exit("lookup", settings.store_root)
+        return print_response(
+            lookup_cve(build_search_service(served_corpus), lookup_request.cve_id)
+        )
+    if arguments.command == "search":
+        search_request = build_search_request(parser, arguments)
+        served_corpus = load_served_corpus_or_exit("search", settings.store_root)
+        service = build_search_service(served_corpus, choose_semantic_settings(settings, arguments))
+        return print_response(service.search(search_request))
     if arguments.command == "verify":
         evidence_set_bytes = read_evidence_set_file(parser, arguments.evidence_set_path)
         if settings.semantic is not None:
             logging.getLogger(__name__).warning(SEMANTIC_NOT_SERVED, "verify")
         check_set = build_evidence_set_check(
-            build_serving_data_plane(served_corpus), settings.model_planner
+            load_data_plane_or_exit("verify", settings), settings.model_planner
         )
         return print_verification(check_set(evidence_set_bytes))
     if arguments.command == "investigate":
         investigation_request = build_investigation_request(parser, arguments)
+        data_plane = load_data_plane_or_exit(
+            "investigate", settings, choose_semantic_settings(settings, arguments)
+        )
         investigation_service = build_investigation_service(
-            build_serving_data_plane(
-                served_corpus, semantic_settings=choose_semantic_settings(settings, arguments)
-            ),
-            planner_setup=discover_planner_setup(settings.model_planner),
+            data_plane, planner_setup=discover_planner_setup(settings.model_planner)
         )
         return print_response(investigation_service.investigate(investigation_request))
     if arguments.command == "topic":
@@ -1078,36 +1126,33 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             max_results_per_search=arguments.max_results_per_search,
             semantic=arguments.semantic,
         )
+        served_corpus = load_served_corpus_or_exit("topic", settings.store_root)
+        fight_source, pinned_fight_snapshot = load_fight_source_or_exit(
+            "topic", settings.fight_snapshot
+        )
         topic_context_service = build_topic_context_service(
-            served_corpus, semantic_settings=choose_semantic_settings(settings, arguments)
+            served_corpus,
+            fight_source,
+            pinned_fight_snapshot,
+            semantic_settings=choose_semantic_settings(settings, arguments),
         )
         return print_response(topic_context_service.explore(topic_request))
     if arguments.command == "capabilities":
-        deployment = build_investigation_deployment(
-            build_serving_data_plane(
-                served_corpus, semantic_settings=choose_semantic_settings(settings, arguments)
-            )
+        data_plane = load_data_plane_or_exit(
+            "capabilities", settings, choose_semantic_settings(settings, arguments)
         )
         source_capabilities = describe_service_capabilities(
-            deployment, discover_planner_setup(settings.model_planner)
+            build_investigation_deployment(data_plane),
+            discover_planner_setup(settings.model_planner),
         )
         return print_capabilities(KnowledgeCapabilities(source_capabilities=source_capabilities))
-    if arguments.command == "evidence":
-        evidence_request = build_contract(
-            parser, EvidenceLookupRequest, evidence_id=arguments.evidence_id
-        )
-        return run_evidence_lookup(
-            evidence_request.evidence_id,
-            build_investigation_deployment(build_serving_data_plane(served_corpus)),
-        )
-    if arguments.command == "lookup":
-        lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)
-        return print_response(
-            lookup_cve(build_search_service(served_corpus), lookup_request.cve_id)
-        )
-    search_request = build_search_request(parser, arguments)
-    service = build_search_service(served_corpus, choose_semantic_settings(settings, arguments))
-    return print_response(service.search(search_request))
+    evidence_request = build_contract(
+        parser, EvidenceLookupRequest, evidence_id=arguments.evidence_id
+    )
+    return run_evidence_lookup(
+        evidence_request.evidence_id,
+        build_investigation_deployment(load_data_plane_or_exit("evidence", settings)),
+    )
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from cve_kgrag.adapter_discovery import (
     find_installed_planner,
     list_installed_adapters,
 )
+from cve_kgrag.adapters.fight.operator_snapshot import load_operator_fight_snapshot
 from cve_kgrag.adapters.fight.snapshot_catalog import (
     default_fight_snapshot_catalog_file,
     load_fight_snapshot_catalog,
@@ -68,7 +69,7 @@ from cve_kgrag.ports.affectedness import TrustifyPort
 from cve_kgrag.ports.retrieval import SemanticRetriever
 from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.ports.sources import FightSource
-from cve_kgrag.settings import ModelPlannerSettings, SemanticSettings
+from cve_kgrag.settings import FightSnapshotSettings, ModelPlannerSettings, SemanticSettings
 from cve_kgrag.topics.registry import TopicRegistry
 
 # No model planner configured: the deterministic policy plans every round.
@@ -169,6 +170,22 @@ def load_packaged_fight_source(
     snapshot_catalog = load_fight_snapshot_catalog(default_fight_snapshot_catalog_file())
     packaged_source = load_fight_fixture(default_fight_fixture_dir(), snapshot_catalog, clock)
     return packaged_source, snapshot_catalog.find(packaged_source.describe().snapshot_sha256)
+
+
+def load_fight_source(
+    fight_snapshot: FightSnapshotSettings | None, clock: Callable[[], datetime] = utc_now
+) -> tuple[FightSource, KnownFightSnapshot | None]:
+    """The FiGHT source the settings configure, and its entry in the packaged reviewed
+    catalog: the operator snapshot when one is pinned, the packaged excerpt otherwise. A
+    configured snapshot that cannot be served raises ``FightSnapshotUnavailable``; there is
+    no fallback to the excerpt (ADR 0009 §11)."""
+    if fight_snapshot is None:
+        return load_packaged_fight_source(clock)
+    snapshot_catalog = load_fight_snapshot_catalog(default_fight_snapshot_catalog_file())
+    operator_source = load_operator_fight_snapshot(
+        fight_snapshot.path, fight_snapshot.sha256, snapshot_catalog, clock
+    )
+    return operator_source, snapshot_catalog.find(fight_snapshot.sha256)
 
 
 def build_evidence_catalog(
