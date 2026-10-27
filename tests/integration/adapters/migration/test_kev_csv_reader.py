@@ -1,6 +1,6 @@
 """``read_kev_catalog`` on KEV CSV files under ``tmp_path`` (ADR 0008 §6): a valid catalog
-is read whole, in any column order, with or without the three optional columns, values
-kept exactly as parsed; equal repeated rows are counted and unequal ones refused; and
+is read whole, in any column order, with or without each optional column, values kept
+exactly as parsed; equal repeated rows are counted and unequal ones refused; and
 every fault in the header, a row, a value, the encoding, the container or the size makes
 the whole input invalid with its fixed reason code."""
 
@@ -37,7 +37,7 @@ REQUIRED_COLUMNS = [
     "requiredAction",
     "dueDate",
 ]
-OPTIONAL_COLUMNS = ["notes", "knownRansomwareCampaignUse", "cwes"]
+OPTIONAL_COLUMNS = ["notes", "knownRansomwareCampaignUse", "cwes", "forensicTriage"]
 UTF8_BOM = b"\xef\xbb\xbf"
 
 FileWriter = Callable[[Path], Path]
@@ -117,8 +117,20 @@ def test_column_order_does_not_change_the_catalog(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "absent_columns",
-    [("notes",), ("knownRansomwareCampaignUse",), ("cwes",), tuple(OPTIONAL_COLUMNS)],
-    ids=["without_notes", "without_ransomware_use", "without_cwes", "without_all_three"],
+    [
+        ("notes",),
+        ("knownRansomwareCampaignUse",),
+        ("cwes",),
+        ("forensicTriage",),
+        tuple(OPTIONAL_COLUMNS),
+    ],
+    ids=[
+        "without_notes",
+        "without_ransomware_use",
+        "without_cwes",
+        "without_forensic_triage",
+        "without_any_optional_column",
+    ],
 )
 def test_catalog_without_optional_columns_is_read_without_those_keys(
     tmp_path: Path, absent_columns: tuple[str, ...]
@@ -134,7 +146,9 @@ def test_catalog_without_optional_columns_is_read_without_those_keys(
     assert catalog.entries == {build_cve_id(1): expected_entry}
 
 
-def test_every_column_but_cve_id_and_date_added_may_be_empty(tmp_path: Path) -> None:
+def test_every_column_but_cve_id_date_added_and_forensic_triage_may_be_empty(
+    tmp_path: Path,
+) -> None:
     sparse_row = build_kev_row(
         1,
         vendorProject="",
@@ -383,6 +397,38 @@ def test_ransomware_use_other_than_known_or_unknown_is_invalid(
     assert failure_code is MigrationFailureCode.KEV_INVALID_ROW
 
 
+@pytest.mark.parametrize("forensic_triage", ["Yes", "No"], ids=["yes", "no"])
+def test_forensic_triage_yes_or_no_is_kept_as_written(tmp_path: Path, forensic_triage: str) -> None:
+    path = write_kev_csv(tmp_path / "kev.csv", [build_kev_row(1, forensicTriage=forensic_triage)])
+
+    catalog = read_catalog_at(path)
+
+    assert catalog.entries[build_cve_id(1)]["forensicTriage"] == forensic_triage
+
+
+@pytest.mark.parametrize(
+    "forensic_triage",
+    ["", "yes", "NO", " Yes", "No ", "Unknown", "Y"],
+    ids=[
+        "empty",
+        "lower_case",
+        "upper_case",
+        "leading_space",
+        "trailing_space",
+        "unknown",
+        "abbreviation",
+    ],
+)
+def test_forensic_triage_other_than_exactly_yes_or_no_is_invalid(
+    tmp_path: Path, forensic_triage: str
+) -> None:
+    path = write_kev_csv(tmp_path / "kev.csv", [build_kev_row(1, forensicTriage=forensic_triage)])
+
+    failure_code = read_failure_code(path)
+
+    assert failure_code is MigrationFailureCode.KEV_INVALID_ROW
+
+
 @pytest.mark.parametrize(
     ("repeated_rows", "expected_duplicates"),
     [(2, 1), (3, 2)],
@@ -411,12 +457,14 @@ def test_identical_repeated_rows_are_kept_once_and_counted(
         build_kev_row(1, dueDate=""),
         build_kev_row(1, knownRansomwareCampaignUse="known"),
         build_kev_row(1, vendorProject="Democorp "),
+        build_kev_row(1, forensicTriage="Yes"),
     ],
     ids=[
         "different_notes",
         "due_date_dropped",
         "ransomware_use_in_another_case",
         "trailing_space_only",
+        "forensic_triage_only",
     ],
 )
 def test_repeated_rows_that_differ_in_any_value_are_conflicting(

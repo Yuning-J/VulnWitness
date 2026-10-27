@@ -3,7 +3,8 @@
 KEV is a small authoritative catalog that states a vulnerability is exploited, so any
 fault in it makes the whole input invalid rather than dropping a row: an unknown,
 missing, repeated or empty column, a row of another width, a blank line, a required
-value missing or malformed, or one CVE in rows that disagree. Values are kept exactly as
+value missing or malformed, a ``forensicTriage`` other than ``Yes`` or ``No``, or one CVE
+in rows that disagree. Values are kept exactly as
 the CSV module parses them, every present column included, so a row's anchor hashes
 everything the catalog said.
 """
@@ -33,10 +34,13 @@ KEV_REQUIRED_COLUMNS = frozenset(
     }
 )
 # Columns CISA added after the catalog began; older snapshots lack them.
-KEV_OPTIONAL_COLUMNS = frozenset({"notes", "knownRansomwareCampaignUse", "cwes"})
+KEV_OPTIONAL_COLUMNS = frozenset({"notes", "knownRansomwareCampaignUse", "cwes", "forensicTriage"})
 KEV_COLUMNS = KEV_REQUIRED_COLUMNS | KEV_OPTIONAL_COLUMNS
 ISO_DATE_PATTERN = r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
 RANSOMWARE_VALUES = frozenset({"known", "unknown"})
+# CISA's schema gives forensicTriage exactly two meanings, so any other spelling is a
+# change upstream to review, not a value to accept.
+FORENSIC_TRIAGE_VALUES = frozenset({"Yes", "No"})
 
 
 @dataclass(frozen=True)
@@ -79,6 +83,7 @@ def read_kev_row(header: list[str], row: list[str]) -> dict[str, str]:
         and is_calendar_date(entry["dateAdded"])
         and (entry["dueDate"] == "" or is_calendar_date(entry["dueDate"]))
         and entry.get("knownRansomwareCampaignUse", "").casefold() in RANSOMWARE_VALUES | {""}
+        and ("forensicTriage" not in entry or entry["forensicTriage"] in FORENSIC_TRIAGE_VALUES)
     )
     if not is_valid:
         raise MigrationFailed(MigrationFailureCode.KEV_INVALID_ROW)

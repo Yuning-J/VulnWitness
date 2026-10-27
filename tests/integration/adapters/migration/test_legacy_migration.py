@@ -1496,7 +1496,7 @@ def write_kev_catalog_bytes(inputs_dir: Path, catalog_bytes: bytes) -> Path:
 KEV_HEADER = ",".join(KEV_COLUMNS).encode()
 VALID_KEV_LINE = (
     b"CVE-9999-0001,Democorp,Gateway,Democorp Gateway Input Flaw,2099-01-05,"
-    b"SYNTHETIC: exploited input flaw.,Apply the vendor update.,2099-01-26,Unknown,,"
+    b"SYNTHETIC: exploited input flaw.,Apply the vendor update.,2099-01-26,Unknown,,,No"
 )
 
 

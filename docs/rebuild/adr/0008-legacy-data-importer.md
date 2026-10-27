@@ -233,13 +233,19 @@ KEV enrichment runs after §5, on the final NVD records only.
 - **Columns.** The column set is fixed and its order free. Always present: `cveID`,
   `vendorProject`, `product`, `vulnerabilityName`, `dateAdded`, `shortDescription`,
   `requiredAction`, `dueDate`. May be absent, in snapshots older than CISA's addition of
-  them: `notes`, `knownRansomwareCampaignUse`, `cwes` (when each was added cannot be
-  checked offline, so all three are optional). A missing required column, an
+  them: `notes`, `knownRansomwareCampaignUse`, `cwes`, `forensicTriage` (when each was
+  added cannot be checked offline, so all four are optional; CISA's schema lists none of
+  them as required). A missing required column, an
   unknown, repeated or empty column name, a row whose width differs from the header, or
   a blank line makes the input invalid.
 - **Values.** `cveID` (a CVE ID) and `dateAdded` (`YYYY-MM-DD`) are required; `dueDate`
   (`YYYY-MM-DD`) and `knownRansomwareCampaignUse` (`Known` or `Unknown`, either case)
-  may be empty and must be valid when not; every other column may be empty. Every
+  may be empty and must be valid when not. `forensicTriage`, when its column is present,
+  is exactly `Yes` or `No` in every row: case-sensitive, untrimmed, never empty. CISA's
+  schema defines only those two meanings (whether BOD 26-04 requires forensic triage), so
+  any other value is an upstream change to review before importing; the column is kept
+  in the row and its anchor but not mapped into `KevEntry`, since no investigation reads
+  it. Every other column may be empty. Every
   present column takes part in row comparison and in the anchor's content hash. Values
   are compared exactly as parsed, without trimming.
 - **Reading.** UTF-8 with one leading BOM accepted (`utf-8-sig`), the `csv` module's

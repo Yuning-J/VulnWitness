@@ -46,6 +46,7 @@ KEV_COLUMNS = [
     "knownRansomwareCampaignUse",
     "notes",
     "cwes",
+    "forensicTriage",
 ]
 
 
@@ -190,6 +191,7 @@ def build_kev_row(number: int, **columns: str) -> dict[str, str]:
         "knownRansomwareCampaignUse": "Unknown",
         "notes": "",
         "cwes": "",
+        "forensicTriage": "No",
     }
     row.update(columns)
     return row
