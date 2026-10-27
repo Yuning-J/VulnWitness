@@ -33,11 +33,33 @@ A store has three identities, which the commands show:
   `cve_search` capability version, `corpus-store-v1@sha256:<digest>`, and an evidence set
   verifies against any store holding byte-for-byte the same records and anchors.
 
+## Fetch the inputs
+
+Raw feeds, the input manifest, stores and evaluation results are data under NVD's and
+CISA's terms, and evaluation results hold queries and model text: keep all of them
+outside every repository, for example under `~/data/cve-kgrag/` (`feeds/`, `stores/`,
+`runs/`), and never commit or push them. The repository's `.gitignore` catches a copy
+made inside the checkout by mistake.
+
+```bash
+scripts/operator/fetch_feeds.sh ~/data/cve-kgrag/feeds/2026-10-27
+```
+
+The script downloads every NVD 2.0 year feed from 2002 to the current year, the
+`modified` feed and the current KEV catalog from their official URLs into a new
+directory, pausing between NVD requests and retrying failed transfers with backoff. It
+checks each NVD feed against the SHA-256 its `.meta` file states for the decompressed
+JSON, then writes `provenance.tsv` (each file's URL, retrieval time, file and payload
+SHA-256 and size) and `inputs.yaml`, the input manifest for the import below. Both
+appear only once every file has arrived and verified; a run that stops leaves them as
+`.partial` files, and is repeated into a new directory. A full fetch downloads
+about 270 MB.
+
 ## Import a store
 
 Write an input manifest declaring each raw NVD feed and the CISA KEV catalog with the
-time it was obtained (ADR 0008), then import into a new directory directly under the
-root:
+time it was obtained (ADR 0008), or use the one `fetch_feeds.sh` wrote, then import into
+a new directory directly under the root:
 
 ```bash
 export CVE_KGRAG_STORE_ROOT=/srv/cve-kgrag/stores

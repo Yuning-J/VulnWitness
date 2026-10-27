@@ -29,3 +29,13 @@ build/
 
 # Planner evaluation results: the evidence sets hold queries and model plan text
 eval-results/
+
+# Real data never enters the repository: raw NVD feeds, KEV catalogs and corpus stores
+# live outside it (docs/runbook.md). These patterns catch a copy made here by mistake;
+# they are anchored at the root so tests/contract/data/ stays tracked.
+/data/
+/stores/
+nvdcve-*.json
+nvdcve-*.json.gz
+nvdcve-*.json.zip
+known_exploited_vulnerabilities*.csv
