@@ -122,9 +122,20 @@ Recorded when M6 closed; none blocks M7b unless it says so.
   topic context, whose cuts are now reported.
 - The corpus content digest in the planner evaluation's identity (M7b), so reports from
   two datasets never compare as equal.
-- A real-feed check of the importer's 512 MiB per-file cap and of serving memory, which
-  are measured on synthetic records only; `gc.freeze()` if the operator lane shows
-  collection stalls.
+- The importer's 512 MiB per-file cap against the current year's feed. On 2026-10-27 the
+  2026 feed decompressed to 493,417,964 bytes (92% of the cap) and grows until the year
+  ends, so a full import will fail once it passes the cap; raise the cap, measured
+  against staging and import memory, before then.
+- Serving cost on real data. The 2026-10-27 store (396,211 records)
+  takes time and memory to load (`load_served_corpus`), and uses
+  memory for the API's two deployments over one data plane, measured with
+  `scripts/operator/measure_serving.py` ; both differ from the
+  250,000-record synthetic figures. M7b loads once per evaluation and does not wait on
+  it; `gc.freeze()` if the operator lane shows collection stalls.
+- 18 NVD records are excluded at import because a vulnerable CPE names no concrete
+  vendor or product (`cpe:2.3:h:qualcomm:-:-:…`, `cpe:2.3:o:-:-:-:…`). An alternative
+  is keeping the record and dropping only that CPE match; decide it if a gold case turns
+  out to need one of them.
 - `graph_expand` at scale, acceptance work on a real NVD store: record the relation
   degree distribution (CWE, vendor, product, CPE, purl) and, for typical and
   high-degree seeds, latency, peak memory and candidate count, each with the store's
