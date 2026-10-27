@@ -46,6 +46,9 @@ pytestmark = pytest.mark.anyio
 
 INVESTIGATION = {"query": "5gaka", "scope": "mixed"}
 SEARCH_QUERIES = ("ausf crash", "5G-AKA resynchronization", "democorp gateway", "CVE-9999-0003")
+# Threads calling at once; the toolbox under test admits as many, so no call is refused
+# as busy however the threads interleave.
+CONCURRENT_CALLERS = 8
 
 
 class GatedCheck:
@@ -182,14 +185,16 @@ def search_result_sha256(toolbox: KnowledgeToolbox, query: str) -> str:
 def test_concurrent_searches_and_replays_answer_as_serial_runs_do(
     data_plane: ServingDataPlane,
 ) -> None:
-    toolbox = build_knowledge_toolbox(data_plane)
+    toolbox = build_knowledge_toolbox(
+        data_plane, limits=ToolLimits(max_calls_in_flight=CONCURRENT_CALLERS)
+    )
     check = build_evidence_set_check(data_plane, None)
     sealed_set = seal_investigation(data_plane)
     serial_hashes: list[str] = []
     for query in SEARCH_QUERIES:
         serial_hashes.append(search_result_sha256(toolbox, query))
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=CONCURRENT_CALLERS) as executor:
         search_futures = []
         for query in SEARCH_QUERIES * 4:
             search_futures.append(
