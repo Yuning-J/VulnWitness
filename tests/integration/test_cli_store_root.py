@@ -669,3 +669,35 @@ def test_eval_planner_prints_the_report_it_prints_without_a_root(
     )
 
     assert capsys.readouterr().out == report_without_root
+
+
+def test_migrate_with_a_store_root_that_loops_prints_its_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    looped_root = tmp_path / "looped-root"
+    looped_root.symlink_to(looped_root)
+    inputs_dir = tmp_path / "migrate-inputs"
+    inputs_dir.mkdir()
+    write_gzip_feed(inputs_dir / "nvdcve-2.0-2099.json.gz", build_v2_feed([build_v2_entry(7)]))
+    manifest_path = write_inputs_manifest(
+        inputs_dir, [build_declaration("nvdcve-2.0-2099.json.gz")]
+    )
+    target_parent = tmp_path / "outside"
+    target_parent.mkdir()
+
+    exit_code = main(
+        [
+            "migrate",
+            "legacy",
+            "--inputs",
+            str(manifest_path),
+            "--target",
+            str(target_parent / "store"),
+            "--dry-run",
+        ],
+        {"CVE_KGRAG_STORE_ROOT": str(looped_root)},
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert report["outcome"] == "dry_run"

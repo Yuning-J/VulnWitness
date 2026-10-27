@@ -12,7 +12,11 @@ from pathlib import Path
 
 from cve_kgrag.adapters.migration.input_files import InputFile, inspect_input_file
 from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.adapters.store.store_root import StoreRootUnusableError, check_store_root
+from cve_kgrag.adapters.store.store_root import (
+    StoreRootUnusableError,
+    check_store_root,
+    lies_in_store_root,
+)
 from cve_kgrag.domain.corpus_store_manifest import (
     STORE_FORMAT_VERSION,
     NvdArtifact,
@@ -228,9 +232,10 @@ def check_target_in_store_root(target: Path, store_root: Path | None) -> None:
     """A target the store root holds is a store directly under it with a valid name, so
     a migration never writes into an existing store, and a root that serving would
     refuse is refused here too, before anything is written (ADR 0009 §4). The resolved
-    target is compared with the resolved root by file identity; a target outside the
-    root is not checked against it. Raises ``MigrationFailed``."""
-    if store_root is None or not lies_within(target, store_root.resolve()):
+    target is compared with the root by file identity, never by resolving the root's
+    path, so a root that cannot be found, a symbolic-link loop included, holds no target;
+    a target outside the root is not checked against it. Raises ``MigrationFailed``."""
+    if store_root is None or not lies_in_store_root(target, store_root):
         return
     try:
         check_store_root(store_root)

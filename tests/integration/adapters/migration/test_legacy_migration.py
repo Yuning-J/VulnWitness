@@ -1958,6 +1958,35 @@ def test_target_outside_the_store_root_is_not_checked_against_it(
     assert report.outcome is MigrationOutcome.IMPORTED
 
 
+@pytest.mark.parametrize("is_dry_run", [False, True], ids=["real_run", "dry_run"])
+def test_store_root_that_is_a_symbolic_link_loop_holds_no_target_outside_it(
+    layout: ImportLayout, tmp_path: Path, is_dry_run: bool
+) -> None:
+    looped_root = tmp_path / "looped-root"
+    looped_root.symlink_to(looped_root)
+    manifest_path = write_standard_import(layout.inputs_dir)
+
+    report = run_test_migration(
+        manifest_path, layout.target, is_dry_run=is_dry_run, store_root=looped_root
+    )
+
+    expected_outcome = MigrationOutcome.DRY_RUN if is_dry_run else MigrationOutcome.IMPORTED
+    assert report.outcome is expected_outcome
+
+
+def test_target_reached_through_a_symbolic_link_loop_fails_as_target_unusable(
+    layout: ImportLayout, tmp_path: Path
+) -> None:
+    looped_root = tmp_path / "looped-root"
+    looped_root.symlink_to(looped_root)
+    manifest_path = write_standard_import(layout.inputs_dir)
+
+    report = run_test_migration(manifest_path, looped_root / "store", store_root=looped_root)
+
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.TARGET_UNUSABLE
+
+
 def test_dangling_symbolic_link_at_the_target_is_never_followed(layout: ImportLayout) -> None:
     link_destination = layout.stores_dir / "link-destination"
     layout.target.symlink_to(link_destination)
