@@ -9,6 +9,9 @@ import pytest
 from cve_kgrag.evaluation.gold_rules import (
     CVE_PREDICATES,
     MAX_RULE_DEPTH,
+    MAX_RULE_NODES,
+    MAX_RULE_PARTS,
+    MAX_RULE_VALUES,
     TECHNIQUE_PREDICATES,
     CveSubject,
     GoldRuleError,
@@ -29,6 +32,33 @@ def describe(text: str, lang: str = "en") -> list[dict[str, str]]:
 
 def build_affected(vendor: str, product: str) -> dict[str, str]:
     return {"vendor": vendor, "product": product, "status": "affected"}
+
+
+def list_terms(term_count: int) -> list[str]:
+    terms: list[str] = []
+    for term_number in range(term_count):
+        terms.append(f"term{term_number}")
+    return terms
+
+
+def join_parts(part_count: int) -> dict[str, Any]:
+    """An any_of joining ``part_count`` predicates."""
+    parts: list[dict[str, Any]] = []
+    for part_number in range(part_count):
+        parts.append({"description_any": [f"term{part_number}"]})
+    return {"any_of": parts}
+
+
+def build_tree(node_count: int) -> dict[str, Any]:
+    """An any_of of all_of groups, each within the part bound, holding ``node_count``
+    rules in all."""
+    groups: list[dict[str, Any]] = []
+    predicates_left = node_count - 1
+    while predicates_left > 0:
+        group_size = min(MAX_RULE_PARTS, predicates_left - 1)
+        groups.append(join_parts(group_size))
+        predicates_left -= group_size + 1
+    return {"any_of": groups}
 
 
 def nest(depth: int) -> dict[str, Any]:
@@ -68,6 +98,9 @@ def nest(depth: int) -> dict[str, Any]:
         {"cve_ids": {"ids": ["FGT1234"], "reasons": {"FGT1234": "a"}}},
         {"cve_ids": {"ids": ["CVE-2024-0001"], "reasons": {"CVE-2024-0001": "a"}, "note": "x"}},
         nest(MAX_RULE_DEPTH + 1),
+        join_parts(MAX_RULE_PARTS + 1),
+        build_tree(MAX_RULE_NODES + 1),
+        {"description_any": list_terms(MAX_RULE_VALUES + 1)},
     ],
     ids=[
         "not_a_mapping",
@@ -92,6 +125,9 @@ def nest(depth: int) -> dict[str, Any]:
         "technique_id_in_a_cve_list",
         "extra_key_in_an_id_list",
         "nested_too_deep",
+        "combinator_with_too_many_parts",
+        "tree_with_too_many_rules",
+        "predicate_with_too_many_values",
     ],
 )
 def test_cve_rule_outside_the_grammar_is_refused(node: object) -> None:
@@ -113,10 +149,15 @@ def test_technique_rule_outside_the_grammar_is_refused(node: object) -> None:
         parse_rule(node, TECHNIQUE_PREDICATES)
 
 
-def test_rule_at_the_depth_limit_is_read() -> None:
-    rule = parse_rule(nest(MAX_RULE_DEPTH), CVE_PREDICATES)
+@pytest.mark.parametrize(
+    "node",
+    [nest(MAX_RULE_DEPTH), join_parts(MAX_RULE_PARTS), build_tree(MAX_RULE_NODES)],
+    ids=["depth", "parts", "rules_in_a_tree"],
+)
+def test_rule_at_each_bound_is_read(node: dict[str, Any]) -> None:
+    rule = parse_rule(node, CVE_PREDICATES)
 
-    assert rule.matches(build_subject(descriptions=describe("x")))
+    assert rule.matches(build_subject(descriptions=describe("x term0")))
 
 
 @pytest.mark.parametrize(

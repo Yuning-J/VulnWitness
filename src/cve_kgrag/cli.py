@@ -967,12 +967,14 @@ def run_planner_evaluation_command(
 
 
 def list_differing_cases(derived_bytes: bytes, recorded_bytes: bytes) -> list[str] | None:
-    """The IDs of the cases whose sets differ between the two files, or ``None`` when the
-    recorded file is not a sets file or its corpus or snapshot differ."""
+    """The IDs of the gold file's cases whose sets the recorded file states otherwise, or
+    ``None`` when the recorded file is not a sets file of the same corpus and snapshot.
+    The recorded file is outside input, so only IDs the gold file validated are returned,
+    never a key of the recorded file."""
+    derived_sets = json.loads(derived_bytes)
     try:
-        derived_sets = json.loads(derived_bytes)
         recorded_sets = json.loads(recorded_bytes)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return None
     if not isinstance(recorded_sets, dict) or not isinstance(recorded_sets.get("cases"), dict):
         return None
@@ -980,8 +982,8 @@ def list_differing_cases(derived_bytes: bytes, recorded_bytes: bytes) -> list[st
         if derived_sets[key] != recorded_sets.get(key):
             return None
     differing_cases: list[str] = []
-    for case_id in sorted(set(derived_sets["cases"]) | set(recorded_sets["cases"])):
-        if derived_sets["cases"].get(case_id) != recorded_sets["cases"].get(case_id):
+    for case_id, case_sets in derived_sets["cases"].items():
+        if recorded_sets["cases"].get(case_id) != case_sets:
             differing_cases.append(case_id)
     return differing_cases
 
@@ -1035,10 +1037,15 @@ def run_gold_sets_command(
             "corpus and FiGHT snapshot",
             file=sys.stderr,
         )
+    elif differing_cases:
+        print(
+            f"cve-kgrag eval gold-sets: the recorded sets differ for {', '.join(differing_cases)}",
+            file=sys.stderr,
+        )
     else:
         print(
-            "cve-kgrag eval gold-sets: the recorded sets differ for "
-            f"{', '.join(differing_cases) or 'no case, only in layout'}",
+            "cve-kgrag eval gold-sets: the recorded file differs only in cases the gold file "
+            "does not hold, or in layout",
             file=sys.stderr,
         )
     return 1

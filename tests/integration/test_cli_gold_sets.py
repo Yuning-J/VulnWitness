@@ -160,6 +160,49 @@ def test_check_of_a_file_that_is_not_a_sets_file_fails(
     assert "is not the sets of this gold file" in capsys.readouterr().err
 
 
+def test_check_never_echoes_a_case_only_the_recorded_file_holds(
+    tmp_path: Path,
+    settings: dict[str, str],
+    corpus_content_sha256: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    gold_path = write_gold_file(tmp_path, corpus_content_sha256)
+    sets_path = derive_sets_file(tmp_path, gold_path, settings, capsys)
+    sets_document = json.loads(sets_path.read_text())
+    sets_document["cases"]["\x1b[31mforged\x1b[0m"] = {}
+    sets_path.write_text(json.dumps(sets_document, indent=2, sort_keys=True) + "\n")
+
+    exit_code = main(
+        ["eval", "gold-sets", "--gold", str(gold_path), "--check", str(sets_path)], settings
+    )
+
+    captured_err = capsys.readouterr().err
+    assert exit_code == 1
+    assert "differs only in cases the gold file does not hold" in captured_err
+    assert "\x1b" not in captured_err
+    assert "forged" not in captured_err
+
+
+def test_check_of_deeply_nested_json_fails_without_a_traceback(
+    tmp_path: Path,
+    settings: dict[str, str],
+    corpus_content_sha256: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    gold_path = write_gold_file(tmp_path, corpus_content_sha256)
+    sets_path = tmp_path / "sets.json"
+    sets_path.write_bytes(b"[" * 20_000 + b"]" * 20_000)
+
+    exit_code = main(
+        ["eval", "gold-sets", "--gold", str(gold_path), "--check", str(sets_path)], settings
+    )
+
+    captured_err = capsys.readouterr().err
+    assert exit_code == 1
+    assert "is not the sets of this gold file" in captured_err
+    assert "Traceback" not in captured_err
+
+
 @pytest.mark.parametrize(
     ("fight_snapshot_sha256", "corpus_matches", "expected_problem"),
     [

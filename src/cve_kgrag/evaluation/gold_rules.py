@@ -17,8 +17,13 @@ from typing import Generic, Protocol, TypeVar
 from cve_kgrag.domain.cve import CVE_ID_PATTERN, MAX_CVE_ID_CHARS, CveRecord
 from cve_kgrag.domain.threat_context import FIGHT_TECHNIQUE_ID_PATTERN
 
+# Bounds on one rule tree, so a gold file cannot make matching every record of a store
+# arbitrarily slow: its depth, the rules one combinator joins, its rules in all, and the
+# values one predicate lists.
 MAX_RULE_DEPTH = 8
-MAX_RULE_VALUES = 200
+MAX_RULE_PARTS = 20
+MAX_RULE_NODES = 50
+MAX_RULE_VALUES = 50
 MAX_RULE_VALUE_CHARS = 300
 
 # The narrative fields of a FiGHT technique. FiGHT names telecom functions mostly in
@@ -289,22 +294,44 @@ TECHNIQUE_PREDICATES: dict[str, PredicateBuilder[TechniqueSubject]] = {
 }
 
 
+@dataclass
+class RuleNodeCount:
+    """The rules one tree has read so far; refuses the one past ``MAX_RULE_NODES``."""
+
+    count: int = 0
+
+    def add_node(self) -> None:
+        self.count += 1
+        if self.count > MAX_RULE_NODES:
+            raise GoldRuleError(f"a rule tree holds more than {MAX_RULE_NODES} rules")
+
+
 def parse_rule(
-    node: object, predicates: Mapping[str, PredicateBuilder[SubjectT]], depth: int = 1
+    node: object, predicates: Mapping[str, PredicateBuilder[SubjectT]]
 ) -> Rule[SubjectT]:
     """The rule ``node`` states, over the subjects ``predicates`` read. Raises
-    ``GoldRuleError`` for anything else."""
+    ``GoldRuleError`` for anything else, or a tree over the bounds above."""
+    return parse_rule_node(node, predicates, 1, RuleNodeCount())
+
+
+def parse_rule_node(
+    node: object,
+    predicates: Mapping[str, PredicateBuilder[SubjectT]],
+    depth: int,
+    node_count: RuleNodeCount,
+) -> Rule[SubjectT]:
     if depth > MAX_RULE_DEPTH:
         raise GoldRuleError(f"a rule nests deeper than {MAX_RULE_DEPTH} levels")
+    node_count.add_node()
     if not isinstance(node, dict) or len(node) != 1:
         raise GoldRuleError("a rule is not a mapping with exactly one key")
     ((kind, argument),) = node.items()
     if kind in ("all_of", "any_of", "none_of"):
-        if not isinstance(argument, list) or not argument:
-            raise GoldRuleError(f"{kind} needs a non-empty list of rules")
+        if not isinstance(argument, list) or not 1 <= len(argument) <= MAX_RULE_PARTS:
+            raise GoldRuleError(f"{kind} needs a list of 1 to {MAX_RULE_PARTS} rules")
         parts: list[Rule[SubjectT]] = []
         for part in argument:
-            parts.append(parse_rule(part, predicates, depth + 1))
+            parts.append(parse_rule_node(part, predicates, depth + 1, node_count))
         if kind == "all_of":
             return AllOf(tuple(parts))
         if kind == "any_of":

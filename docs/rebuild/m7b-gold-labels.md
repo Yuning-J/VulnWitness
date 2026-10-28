@@ -11,8 +11,9 @@ The assistant drafts each case and its proposed label; the owner confirms or cha
 case by case. Each case's CVE sets come from rules a script evaluates over the store's
 records, never from what the search service or a model returns. Cases are chosen as an
 analyst would ask them, before any of them is run through the system, so that the drafter
-cannot pick questions the current implementation answers well. No model takes part in
-drafting or labelling.
+cannot pick questions the current implementation answers well. The planner model under
+evaluation takes no part; the assistant drafts and the owner alone confirms or changes each
+label.
 
 1. The owner calibrates this rubric on the examples below.
 2. The assistant drafts the remaining cases; the owner confirms each one.
@@ -65,6 +66,10 @@ A rule is data the rule engine evaluates over the store's records (and, for tech
 over the FiGHT snapshot). A prose description alone is never a rule. The engine derives
 `allowed` as relevant minus required and refuses a case whose `required` is not a subset
 of its relevant set, or whose `irrelevant` set overlaps it.
+
+A rule tree nests at most 8 levels, joins at most 20 rules in one combinator, holds at
+most 50 rules in all, and lists at most 50 values in one predicate, so a gold file cannot
+make matching every record of a store arbitrarily slow.
 
 A relevant rule may be broad. A required rule is narrow:
 
