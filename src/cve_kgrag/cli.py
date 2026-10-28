@@ -88,6 +88,7 @@ from cve_kgrag.composition import (
     build_store_activation,
     build_topic_registry,
     build_trustify_port,
+    derive_gold_sets,
     list_accepted_planner_capabilities,
     load_fight_source,
     load_packaged_fixture,
@@ -134,6 +135,7 @@ from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, Topi
 from cve_kgrag.domain.validation import EvidenceValidationError
 from cve_kgrag.evaluation.case_runner import EvaluationStopped, ModelRuns
 from cve_kgrag.evaluation.gold_cases import MAX_GOLD_FILE_BYTES, GoldFileError, load_gold_cases
+from cve_kgrag.evaluation.labelled_cases import load_gold_file
 from cve_kgrag.evaluation.planner_report import format_report
 from cve_kgrag.evaluation.planner_runner import (
     MAX_MODEL_RUNS,
@@ -211,7 +213,21 @@ OUT_INSIDE_THE_PACKAGE = "--out must not lie inside the installed cve_kgrag pack
 # A result directory inside a store makes the reader refuse that store.
 OUT_INSIDE_THE_STORE_ROOT = "--out must not lie inside the store root"
 STORE_ROOT_VARIABLE = find_section_variable(SERVED_DATA_VARIABLES, "store_root")
+FIGHT_SNAPSHOT_PATH_VARIABLE = find_section_variable(SERVED_DATA_VARIABLES, "fight_snapshot_path")
+FIGHT_SNAPSHOT_SHA256_VARIABLE = find_section_variable(
+    SERVED_DATA_VARIABLES, "fight_snapshot_sha256"
+)
 STORE_ROOT_REQUIRED = f"invalid settings: {STORE_ROOT_VARIABLE}: required by store"
+GOLD_SETS_NEED_A_STORE_ROOT = (
+    f"invalid settings: {STORE_ROOT_VARIABLE}: required by eval gold-sets, which reads the "
+    "active store"
+)
+GOLD_SETS_NEED_A_FIGHT_SNAPSHOT = (
+    "invalid settings: eval gold-sets reads the operator FiGHT snapshot, which "
+    f"{FIGHT_SNAPSHOT_PATH_VARIABLE} and {FIGHT_SNAPSHOT_SHA256_VARIABLE} configure"
+)
+# A sets file names a few thousand IDs; one far larger is not one this command wrote.
+MAX_GOLD_SETS_FILE_BYTES = 4 * 1024 * 1024
 # Written once per run of the commands fixed to the fixture, whatever the settings: their
 # gold cases and demo queries name fixture CVEs (ADR 0009 §10).
 DEMO_FIXTURE_NOTICE = "cve-kgrag demo uses the packaged synthetic fixture, not the store root"
@@ -398,6 +414,27 @@ def build_parser() -> argparse.ArgumentParser:
             "runs per case with the model planner, which calls its endpoint; 0, the "
             "default, runs the deterministic baseline alone and calls no endpoint"
         ),
+    )
+
+    gold_sets_parser = eval_commands.add_parser(
+        "gold-sets",
+        help=(
+            "derive each M7b gold case's sets from its rules over the active store and the "
+            "operator FiGHT snapshot, and print them as JSON; with --check, compare them "
+            "with a recorded sets file instead"
+        ),
+    )
+    gold_sets_parser.add_argument(
+        "--gold",
+        required=True,
+        type=Path,
+        help="an M7b gold file, such as eval/gold/m7b_cases.yaml",
+    )
+    gold_sets_parser.add_argument(
+        "--check",
+        type=Path,
+        metavar="SETS_FILE",
+        help="a recorded sets file, such as eval/gold/m7b_sets.json, to compare with",
     )
 
     migrate_parser = commands.add_parser(
@@ -929,6 +966,84 @@ def run_planner_evaluation_command(
     return 0
 
 
+def list_differing_cases(derived_bytes: bytes, recorded_bytes: bytes) -> list[str] | None:
+    """The IDs of the cases whose sets differ between the two files, or ``None`` when the
+    recorded file is not a sets file or its corpus or snapshot differ."""
+    try:
+        derived_sets = json.loads(derived_bytes)
+        recorded_sets = json.loads(recorded_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(recorded_sets, dict) or not isinstance(recorded_sets.get("cases"), dict):
+        return None
+    for key in ("corpus_content_sha256", "fight_snapshot_sha256"):
+        if derived_sets[key] != recorded_sets.get(key):
+            return None
+    differing_cases: list[str] = []
+    for case_id in sorted(set(derived_sets["cases"]) | set(recorded_sets["cases"])):
+        if derived_sets["cases"].get(case_id) != recorded_sets["cases"].get(case_id):
+            differing_cases.append(case_id)
+    return differing_cases
+
+
+def run_gold_sets_command(
+    parser: argparse.ArgumentParser, arguments: argparse.Namespace, settings: ServiceSettings
+) -> int:
+    """Derive the gold file's sets (``derive_gold_sets``) and print them, or, with
+    ``--check``, compare them with the recorded sets file: exit 0 when the bytes are
+    equal, 1 naming the cases that differ. Missing settings, a gold file this command does
+    not read and a source that cannot be read end the run with exit 2; a gold file whose
+    labels the sources do not support, with exit 1."""
+    if settings.store_root is None:
+        parser.error(GOLD_SETS_NEED_A_STORE_ROOT)
+    if settings.fight_snapshot is None:
+        parser.error(GOLD_SETS_NEED_A_FIGHT_SNAPSHOT)
+    gold_bytes = read_input_file(parser, arguments.gold, MAX_GOLD_FILE_BYTES)
+    try:
+        gold_file = load_gold_file(gold_bytes)
+    except GoldFileError as error:
+        parser.error(f"invalid gold file: {error}")
+    try:
+        derived_bytes = derive_gold_sets(gold_file, settings.store_root, settings.fight_snapshot)
+    except StoreUnavailable as error:
+        print(
+            f"cve-kgrag eval gold-sets cannot start: store unavailable: {error.reason.value}",
+            file=sys.stderr,
+        )
+        return 2
+    except FightSnapshotUnavailable as error:
+        print(
+            "cve-kgrag eval gold-sets cannot start: FiGHT snapshot unavailable: "
+            f"{error.failure.value}",
+            file=sys.stderr,
+        )
+        return 2
+    except GoldFileError as error:
+        print(f"cve-kgrag eval gold-sets: {error}", file=sys.stderr)
+        return 1
+    if arguments.check is None:
+        sys.stdout.write(derived_bytes.decode())
+        return 0
+    recorded_bytes = read_input_file(parser, arguments.check, MAX_GOLD_SETS_FILE_BYTES)
+    if recorded_bytes == derived_bytes:
+        print("cve-kgrag eval gold-sets: the recorded sets match", file=sys.stderr)
+        return 0
+    differing_cases = list_differing_cases(derived_bytes, recorded_bytes)
+    if differing_cases is None:
+        print(
+            "cve-kgrag eval gold-sets: the recorded file is not the sets of this gold file, "
+            "corpus and FiGHT snapshot",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "cve-kgrag eval gold-sets: the recorded sets differ for "
+            f"{', '.join(differing_cases) or 'no case, only in layout'}",
+            file=sys.stderr,
+        )
+    return 1
+
+
 def run_legacy_migration_command(
     parser: argparse.ArgumentParser,
     arguments: argparse.Namespace,
@@ -1071,6 +1186,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         if settings.store_root is None:
             parser.error(STORE_ROOT_REQUIRED)
         return run_store_command(arguments, build_store_activation(settings.store_root))
+    if arguments.command == "eval" and arguments.eval_command == "gold-sets":
+        return run_gold_sets_command(parser, arguments, settings)
     if arguments.command == "eval":
         return run_planner_evaluation_command(
             parser, arguments, settings.model_planner, settings.store_root

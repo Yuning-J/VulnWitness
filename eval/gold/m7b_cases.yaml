@@ -1,0 +1,491 @@
+# M7b gold cases (docs/rebuild/m7b-gold-labels.md): hand-labelled questions over one corpus
+# store and the full FiGHT 3.1.0 snapshot. Each case's sets are derived by its rules, never
+# written by hand: `cve-kgrag eval gold-sets --gold eval/gold/m7b_cases.yaml` prints them,
+# and `--check eval/gold/m7b_sets.json` compares them with the recorded file. The file holds
+# queries, rules, CVE and technique IDs and labels only, never NVD or KEV text.
+corpus_content_sha256: "0dc90836bb0f02f748ef0bd758909711557cb85413110c58a14d5a4d55c15f3a"
+fight_snapshot_sha256: "59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8"
+cases:
+  - id: open5gs-amf
+    split: baseline
+    goal: Which known vulnerabilities affect the AMF of Open5GS?
+    request: {query: "Open5GS AMF vulnerabilities", scope: implementation_only}
+    needs: [implementation_cves]
+    rules:
+      cves:
+        relevant:
+          any_of:
+            - cpe: ["open5gs:open5gs"]
+            - description_any: ["Open5GS"]
+        required:
+          all_of:
+            - any_of:
+                - cpe: ["open5gs:open5gs"]
+                - description_any: ["Open5GS"]
+            - description_any: ["AMF", "Access and Mobility Management Function"]
+        irrelevant:
+          all_of:
+            - description_any: ["AMF", "Access and Mobility Management Function"]
+            - any_of:
+                - cpe_vendor: ["free5gc", "openairinterface", "magma", "linuxfoundation", "onfproject", "nextepc"]
+                - description_any: ["free5GC", "OpenAirInterface", "OAI", "Magma", "SD-Core", "NextEPC"]
+            - none_of:
+                - cpe: ["open5gs:open5gs"]
+                - description_any: ["Open5GS"]
+    label:
+      sufficiency: sufficient
+      reason: Open5GS CVEs naming the AMF exist in the store.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-27
+
+  - id: 5g-aka-threats
+    split: baseline
+    goal: What threats does FiGHT describe against 5G AKA authentication?
+    request: {query: "5G AKA threats", scope: protocol_context_only}
+    needs: [protocol_context]
+    rules:
+      techniques:
+        relevant:
+          technique_any: ["5G AKA", "5G-AKA", "AUSF", "SEAF", "K_SEAF", "authentication vector", "SUCI", "SUPI", "UDM"]
+        required:
+          technique_ids:
+            ids: ["FGT1499.503", "FGT5044", "FGT1036.501"]
+            reasons:
+              FGT1499.503: its procedures manipulate the AKA exchange through a controlled AMF/SEAF, AUSF or UDM
+              FGT5044: forces the home network to derive and send a victim's keys during roaming authentication
+              FGT1036.501: spoofs a PLMN ID to obtain authentication vectors from the home network
+    label:
+      sufficiency: sufficient
+      reason: The full FiGHT snapshot holds techniques that attack the 5G AKA exchange itself.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-27
+
+  - id: gtp-mobile-core
+    split: baseline
+    goal: What threats and known implementation vulnerabilities concern GTP in mobile core networks?
+    request: {query: "GTP vulnerabilities in the mobile core", scope: mixed}
+    needs: [implementation_cves, protocol_context]
+    rules:
+      cves:
+        relevant:
+          all_of:
+            - description_any: ["GTP", "GTP-U", "GTP-C", "GTPv1", "GTPv2", "GTPv2-C", "GPRS Tunnelling Protocol", "GPRS Tunneling Protocol"]
+            - none_of:
+                - cpe: ["wireshark:wireshark", "tcpdump:tcpdump", "kognetiks:kognetiks_chatbot"]
+                - description_any: ["dissector"]
+        required:
+          all_of:
+            - description_any: ["GTP", "GTP-U", "GTP-C", "GTPv1", "GTPv2", "GTPv2-C", "GPRS Tunnelling Protocol", "GPRS Tunneling Protocol"]
+            - description_any: ["UPF", "SGW", "PGW", "S-GW", "P-GW", "SGW-U", "PGW-U", "GGSN", "SGSN", "SMF", "MME", "user plane", "packet core", "5GC", "EPC"]
+            - none_of:
+                - cpe: ["wireshark:wireshark", "tcpdump:tcpdump", "kognetiks:kognetiks_chatbot"]
+                - description_any: ["dissector"]
+        irrelevant:
+          all_of:
+            - description_any: ["GTP", "GTP-U", "GTP-C", "GTPv1", "GTPv2", "GTPv2-C", "GPRS Tunnelling Protocol", "GPRS Tunneling Protocol"]
+            - any_of:
+                - cpe: ["wireshark:wireshark", "tcpdump:tcpdump", "kognetiks:kognetiks_chatbot"]
+                - description_any: ["dissector"]
+      techniques:
+        relevant:
+          technique_any: ["GTP", "GTP-U", "GTP-C", "GTPv1", "GTPv2", "GPRS Tunnelling Protocol", "GPRS Tunneling Protocol"]
+        required:
+          technique_ids:
+            ids: ["FGT1498.503", "FGT1499.504", "FGT1499.505", "FGT1572.501", "FGT1572.502", "FGT1599.505", "FGT5031", "FGT5042"]
+            reasons:
+              FGT1498.503: crafted GTP-U messages crash or slow the UPF
+              FGT1499.504: crafted GTP-U packets over an established tunnel crash or slow a UE
+              FGT1499.505: crafted GTP-U packets to the UPF make a server crash or slow a UE
+              FGT1572.501: crafted GTP-U packets to the UPF/PGW-U open an illicit session with a UE
+              FGT1572.502: GTP-U carries an adversary's command-and-control tunnel
+              FGT1599.505: a malicious GTP-U payload evades UPF/PGW-U routing controls
+              FGT5031: discovering a valid GTP-U TEID enables further attacks
+              FGT5042: GTP echo requests bypass a telecom signaling firewall
+    label:
+      sufficiency: sufficient
+      reason: Mobile-core GTP CVEs and GTP techniques both exist; no reviewed topic card covers GTP.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-27
+
+  - id: kamailio-version-affected
+    split: baseline
+    goal: Is Kamailio 5.8.2 affected by known vulnerabilities?
+    request: {query: "Is Kamailio 5.8.2 affected by known vulnerabilities", scope: implementation_only}
+    needs: [implementation_cves, affectedness]
+    rules:
+      cves:
+        relevant:
+          any_of:
+            - cpe: ["kamailio:kamailio"]
+            - description_any: ["Kamailio"]
+        required:
+          any_of:
+            - cpe: ["kamailio:kamailio"]
+            - description_any: ["Kamailio"]
+        irrelevant:
+          all_of:
+            - cpe: ["opensips:opensips", "digium:asterisk", "sangoma:asterisk"]
+            - none_of:
+                - description_any: ["Kamailio"]
+    label:
+      sufficiency: partial
+      reason: Kamailio CVEs exist, but no verified affectedness source can say whether 5.8.2 is affected; applicability must be unknown.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-27
+
+  - id: ueransim
+    split: baseline
+    goal: Which known vulnerabilities affect UERANSIM?
+    request: {query: "UERANSIM vulnerabilities", scope: implementation_only}
+    needs: [implementation_cves]
+    rules:
+      cves:
+        relevant:
+          any_of:
+            - cpe: ["aligungr:ueransim"]
+            - description_any: ["UERANSIM"]
+        required:
+          any_of:
+            - cpe: ["aligungr:ueransim"]
+            - description_any: ["UERANSIM"]
+    label:
+      sufficiency: sufficient
+      reason: Four CVEs describe flaws in UERANSIM's own code (none has a CPE yet).
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-27
+
+  - id: srsran-negative
+    split: baseline
+    goal: Which known vulnerabilities affect srsRAN?
+    request: {query: "srsRAN vulnerabilities", scope: implementation_only}
+    needs: [implementation_cves]
+    rules:
+      cves:
+        relevant:
+          any_of:
+            - cpe_vendor: ["softwareradiosystems"]
+            - description_any: ["srsRAN", "srsLTE"]
+        required:
+          any_of:
+            - cpe_vendor: ["softwareradiosystems"]
+            - description_any: ["srsRAN", "srsLTE"]
+        wide_check:
+          any_of:
+            - cpe_vendor: ["softwareradiosystems", "srsran", "srslte"]
+            - description_any: ["srsRAN", "srsLTE", "srsENB", "srsEPC", "srsUE", "srsRAN_Project", "srsRAN_4G", "Software Radio Systems"]
+            - reference_contains: ["github.com/srsran", "github.com/srslte", "srsran.com", "softwareradiosystems.com"]
+    label:
+      sufficiency: insufficient
+      reason: The wide check finds no record naming srsRAN, srsLTE, their components, vendor or repositories.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-27
+
+  - id: free5gc
+    split: baseline
+    goal: Which known vulnerabilities affect free5GC?
+    request: {query: "free5GC vulnerabilities", scope: implementation_only}
+    needs: [implementation_cves]
+    rules:
+      cves:
+        relevant:
+          any_of:
+            - cpe_vendor: ["free5gc"]
+            - description_any: ["free5GC"]
+        required:
+          any_of:
+            - cpe_vendor: ["free5gc"]
+            - description_any: ["free5GC"]
+        irrelevant:
+          all_of:
+            - any_of:
+                - cpe: ["open5gs:open5gs"]
+                - description_any: ["Open5GS"]
+            - none_of:
+                - cpe_vendor: ["free5gc"]
+                - description_any: ["free5GC"]
+    label:
+      sufficiency: sufficient
+      reason: free5GC CVEs exist in the store.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: oai-cn5g
+    split: baseline
+    goal: Which known vulnerabilities affect the OpenAirInterface 5G core network?
+    request: {query: "OpenAirInterface 5G core network vulnerabilities", scope: implementation_only}
+    needs: [implementation_cves]
+    rules:
+      cves:
+        relevant:
+          any_of:
+            - cpe_vendor: ["openairinterface"]
+            - description_any: ["OpenAirInterface"]
+        required:
+          all_of:
+            - any_of:
+                - cpe_vendor: ["openairinterface"]
+                - description_any: ["OpenAirInterface"]
+            - any_of:
+                - cpe: ["openairinterface:oai-cn5g-amf", "openairinterface:oai-cn5g-smf", "openairinterface:oai-cn5g-upf", "openairinterface:oai-cn5g-ausf", "openairinterface:oai-cn5g-udm", "openairinterface:oai-cn5g-udr", "openairinterface:oai-cn5g-nrf"]
+                - description_any: ["AMF", "SMF", "UPF", "AUSF", "UDM", "UDR", "NRF", "CN5G", "core network", "5GC", "5G core"]
+    label:
+      sufficiency: sufficient
+      reason: OpenAirInterface core network function CVEs exist in the store.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: asterisk-pjsip
+    split: holdout
+    goal: Which known vulnerabilities affect the PJSIP channel driver and modules of Asterisk?
+    request: {query: "Asterisk PJSIP vulnerabilities", scope: implementation_only}
+    needs: [implementation_cves]
+    rules:
+      cves:
+        relevant:
+          any_of:
+            - cpe: ["digium:asterisk", "digium:certified_asterisk", "sangoma:asterisk", "sangoma:certified_asterisk"]
+            - description_any: ["Asterisk"]
+        required:
+          all_of:
+            - any_of:
+                - cpe: ["digium:asterisk", "digium:certified_asterisk", "sangoma:asterisk", "sangoma:certified_asterisk"]
+                - description_any: ["Asterisk"]
+            - description_any: ["PJSIP", "res_pjsip", "chan_pjsip"]
+        irrelevant:
+          all_of:
+            - cpe: ["kamailio:kamailio", "opensips:opensips"]
+            - none_of:
+                - description_any: ["Asterisk"]
+    label:
+      sufficiency: sufficient
+      reason: Asterisk CVEs naming its PJSIP stack exist in the store.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: suci-deconcealment
+    split: baseline
+    goal: Which known implementation vulnerabilities concern SUCI de-concealment in the UDM or SIDF?
+    request: {query: "SUCI de-concealment vulnerabilities in UDM", scope: implementation_only}
+    needs: [implementation_cves]
+    rules:
+      cves:
+        relevant:
+          description_any: ["SUCI", "Subscription Concealed Identifier"]
+        required:
+          all_of:
+            - description_any: ["SUCI", "Subscription Concealed Identifier"]
+            - description_any: ["UDM", "SIDF", "de-conceal", "deconceal", "de-concealment", "deconcealment", "Unified Data Management"]
+    label:
+      sufficiency: sufficient
+      reason: CVEs on SUCI handling in a UDM or SIDF exist in the store.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: named-cve-mixed
+    split: baseline
+    goal: What is CVE-2024-37877?
+    request: {query: "CVE-2024-37877", scope: mixed}
+    needs: [named_cve]
+    rules:
+      cves:
+        relevant:
+          cve_ids: {ids: ["CVE-2024-37877"], reasons: {CVE-2024-37877: the CVE the query names}}
+        required:
+          cve_ids: {ids: ["CVE-2024-37877"], reasons: {CVE-2024-37877: the CVE the query names}}
+    label:
+      sufficiency: sufficient
+      reason: The named CVE's record is in the store.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: rejected-cve-id
+    split: holdout
+    goal: What is CVE-2024-0069?
+    request: {query: "CVE-2024-0069", scope: implementation_only}
+    needs: [named_cve]
+    rules:
+      cves:
+        relevant:
+          cve_ids: {ids: ["CVE-2024-0069"], reasons: {CVE-2024-0069: the CVE the query names}}
+        required:
+          cve_ids: {ids: ["CVE-2024-0069"], reasons: {CVE-2024-0069: the CVE the query names}}
+        wide_check:
+          cve_ids:
+            ids: ["CVE-2024-0069"]
+            reasons:
+              CVE-2024-0069: "NVD rejected this ID, so the importer keeps no record"
+    label:
+      sufficiency: insufficient
+      reason: NVD rejected CVE-2024-0069; the store holds no record of it.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: open5gs-named-affected
+    split: baseline
+    goal: Is Open5GS 2.7.2 affected by a named Open5GS CVE?
+    request: {query: "Is Open5GS 2.7.2 affected by CVE-2026-8746", scope: implementation_only}
+    needs: [named_cve, affectedness]
+    rules:
+      cves:
+        relevant:
+          cve_ids: {ids: ["CVE-2026-8746"], reasons: {CVE-2026-8746: the CVE the query names}}
+        required:
+          cve_ids: {ids: ["CVE-2026-8746"], reasons: {CVE-2026-8746: the CVE the query names}}
+    label:
+      sufficiency: partial
+      reason: The named CVE's record exists, but no verified affectedness source can say whether 2.7.2 is affected; applicability must be unknown.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: nas-threats
+    split: holdout
+    goal: What threats does FiGHT describe against NAS signalling between the UE and the AMF?
+    request: {query: "NAS signalling attacks", scope: protocol_context_only}
+    needs: [protocol_context]
+    rules:
+      techniques:
+        relevant:
+          technique_any: ["NAS", "Non-Access Stratum", "Security Mode Command"]
+        required:
+          technique_ids:
+            ids: ["FGT5012.006", "FGT1498.503", "FGT1642.502", "FGT1642.503", "FGT5009.001", "FGT1600.501"]
+            reasons:
+              FGT5012.006: modified NAS signalling geolocates a UE
+              FGT1498.503: crafted NAS messages crash or slow the AMF
+              FGT1642.502: crafted NAS messages in the middle make a UE's registration fail
+              FGT1642.503: crafted NAS messages in the middle make the AMF reject a registration
+              FGT5009.001: spoofed signalling enables NULL integrity for NAS over the radio interface
+              FGT1600.501: altered signalling enables NULL encryption for NAS over the radio interface
+    label:
+      sufficiency: sufficient
+      reason: FiGHT describes NAS attacks; no reviewed topic card covers NAS.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: diameter-core
+    split: holdout
+    goal: What threats and known implementation vulnerabilities concern Diameter signalling in the mobile core?
+    request: {query: "Diameter signalling vulnerabilities in the mobile core", scope: mixed}
+    needs: [implementation_cves, protocol_context]
+    rules:
+      cves:
+        relevant:
+          all_of:
+            - description_any: ["Diameter"]
+            - none_of:
+                - cpe: ["wireshark:wireshark"]
+                - description_any: ["dissector"]
+        required:
+          all_of:
+            - description_any: ["Diameter"]
+            - description_any: ["HSS", "MME", "PCRF", "PCEF", "DRA", "DEA", "S6a", "Gx", "Gy", "Rx", "roaming", "freeDiameter", "EPC", "LTE", "IMS", "Home Subscriber Server", "Signaling Router", "Signalling Router", "Routing Agent", "Edge Agent", "Credit-Control", "Open5GS", "Kamailio"]
+            - none_of:
+                - cpe: ["wireshark:wireshark"]
+                - description_any: ["dissector"]
+        irrelevant:
+          all_of:
+            - description_any: ["Diameter"]
+            - any_of:
+                - cpe: ["wireshark:wireshark"]
+                - description_any: ["dissector"]
+      techniques:
+        relevant:
+          technique_any: ["Diameter", "S6a", "HSS"]
+        required:
+          technique_ids:
+            ids: ["FGT5019.005", "FGT5012.008"]
+            reasons:
+              FGT5019.005: an unsolicited SS7/Diameter message makes the core network reveal a UE's IMSI/SUPI
+              FGT5012.008: an unsolicited SS7/Diameter message makes the core network reveal a UE's location
+    label:
+      sufficiency: sufficient
+      reason: Diameter CVEs in mobile-core nodes and FiGHT Diameter techniques both exist; no reviewed topic card covers Diameter.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: sip-ims-threats
+    split: baseline
+    goal: What threats does FiGHT describe against SIP signalling in the IMS?
+    request: {query: "SIP signalling attacks in IMS", scope: protocol_context_only}
+    needs: [protocol_context]
+    rules:
+      techniques:
+        irrelevant:
+          technique_ids:
+            ids: ["FGT1203.501", "FGT1572.502", "FGT1587.004", "FGT1599", "FGT5001", "FGT5012.008", "FGT5019.005", "FGT5028", "FGT5042"]
+            reasons:
+              FGT1203.501: names an IMS service only as one source of data sent to a UE
+              FGT1572.502: names the IMS only in passing in a GTP-U tunnelling technique
+              FGT1587.004: names IMS messages only as input to a baseband XML parser
+              FGT1599: lists SIP only among firewall types
+              FGT5001: names the IMS only as the IP-SM-GW in an SMS collection technique
+              FGT5012.008: names P-CSCF only to describe Diameter interfaces
+              FGT5019.005: names P-CSCF only to describe Diameter interfaces
+              FGT5028: lists I-CSCF and S-CSCF only among service consumers
+              FGT5042: names the IMS only as where a user plane function sits
+        wide_check:
+          technique_any: ["SIP", "Session Initiation Protocol", "CSCF", "IMS", "IP Multimedia", "VoLTE", "VoNR"]
+    label:
+      sufficiency: insufficient
+      reason: FiGHT mentions the IMS only in passing and describes no SIP signalling attack.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28
+
+  - id: 5g-aka-implementations
+    split: baseline
+    goal: What threats and known implementation vulnerabilities concern 5G AKA in 5G core implementations?
+    request: {query: "5G AKA vulnerabilities in 5G core implementations", scope: mixed}
+    needs: [implementation_cves, protocol_context]
+    rules:
+      cves:
+        relevant:
+          all_of:
+            - description_any: ["5G AKA", "5G-AKA", "Auth5gAka", "AUSF", "Nausf", "SEAF", "K_SEAF", "Authentication Server Function"]
+            - none_of:
+                - cpe: ["seafile:seafile_server"]
+        required:
+          cve_ids:
+            ids: ["CVE-2026-30075", "CVE-2026-55785", "CVE-2024-56921"]
+            reasons:
+              CVE-2026-30075: an oversized Authentication Response, passed by the AMF to the AUSF for verification, crashes the AUSF
+              CVE-2026-55785: the AUSF's 5G AKA confirmation compares RES* with XRES* unsafely
+              CVE-2024-56921: "the linked Open5GS reproduction shows an authType of 5G_AKA; a stale AUSF authentication response crashes the AMF during registration"
+        irrelevant:
+          any_of:
+            - all_of:
+                - description_any: ["EAP-AKA", "EAP-AKA'", "EPS AKA", "UMTS AKA"]
+                - none_of:
+                    - description_any: ["5G AKA", "5G-AKA", "Auth5gAka", "AUSF", "Nausf", "SEAF", "K_SEAF", "Authentication Server Function"]
+            - cpe: ["seafile:seafile_server"]
+      techniques:
+        relevant:
+          technique_any: ["5G AKA", "5G-AKA", "AUSF", "SEAF", "K_SEAF", "authentication vector", "SUCI", "SUPI", "UDM"]
+        required:
+          technique_ids:
+            ids: ["FGT1499.503", "FGT5044", "FGT1036.501"]
+            reasons:
+              FGT1499.503: its procedures manipulate the AKA exchange through a controlled AMF/SEAF, AUSF or UDM
+              FGT5044: forces the home network to derive and send a victim's keys during roaming authentication
+              FGT1036.501: spoofs a PLMN ID to obtain authentication vectors from the home network
+    label:
+      sufficiency: sufficient
+      reason: 5G core CVEs on 5G AKA functions and FiGHT 5G AKA techniques both exist; 5G AKA is the one topic with a card.
+    drafted_by: assistant
+    confirmed_by: owner
+    confirmed_on: 2026-10-28

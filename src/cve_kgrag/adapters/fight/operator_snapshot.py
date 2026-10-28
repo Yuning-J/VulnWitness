@@ -68,6 +68,23 @@ def read_snapshot_bytes(path: Path, open_file: Callable[[Path], IO[bytes]]) -> b
     return snapshot_bytes
 
 
+def read_operator_fight_snapshot(
+    path: Path,
+    expected_sha256: str,
+    snapshot_catalog: FightSnapshotCatalog,
+    open_file: Callable[[Path], IO[bytes]] = open_regular_file,
+) -> bytes:
+    """The bytes of the snapshot at ``path``, only when they hash to ``expected_sha256``
+    and the catalog lists that hash. Raises ``FightSnapshotUnavailable``."""
+    snapshot_bytes = read_snapshot_bytes(path, open_file)
+    snapshot_sha256 = sha256_hex(snapshot_bytes)
+    if snapshot_sha256 != expected_sha256:
+        raise FightSnapshotUnavailable(FightSnapshotFailure.HASH_MISMATCH)
+    if snapshot_catalog.find(snapshot_sha256) is None:
+        raise FightSnapshotUnavailable(FightSnapshotFailure.NOT_CATALOGUED)
+    return snapshot_bytes
+
+
 def load_operator_fight_snapshot(
     path: Path,
     expected_sha256: str,
@@ -75,15 +92,12 @@ def load_operator_fight_snapshot(
     clock: Callable[[], datetime],
     open_file: Callable[[Path], IO[bytes]] = open_regular_file,
 ) -> PinnedFightYamlSource:
-    """The snapshot at ``path``, served only when it hashes to ``expected_sha256`` and
-    the catalog lists that hash. Raises ``FightSnapshotUnavailable``."""
-    snapshot_bytes = read_snapshot_bytes(path, open_file)
-    snapshot_sha256 = sha256_hex(snapshot_bytes)
-    if snapshot_sha256 != expected_sha256:
-        raise FightSnapshotUnavailable(FightSnapshotFailure.HASH_MISMATCH)
-    if snapshot_catalog.find(snapshot_sha256) is None:
-        raise FightSnapshotUnavailable(FightSnapshotFailure.NOT_CATALOGUED)
+    """The snapshot at ``path`` (``read_operator_fight_snapshot``), served as a FiGHT
+    source. Raises ``FightSnapshotUnavailable``."""
+    snapshot_bytes = read_operator_fight_snapshot(
+        path, expected_sha256, snapshot_catalog, open_file
+    )
     try:
-        return PinnedFightYamlSource(snapshot_bytes, snapshot_sha256, snapshot_catalog, clock)
+        return PinnedFightYamlSource(snapshot_bytes, expected_sha256, snapshot_catalog, clock)
     except FightSnapshotError:
         raise FightSnapshotUnavailable(FightSnapshotFailure.INVALID) from None

@@ -7,6 +7,7 @@ or file content, and never falls back to the packaged fixture: an operator who
 configured real data must not be served synthetic data instead.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 
 from cve_kgrag.adapters.store.active_record import (
@@ -14,7 +15,7 @@ from cve_kgrag.adapters.store.active_record import (
     read_active_record,
 )
 from cve_kgrag.adapters.store.corpus_store import CorpusStore, load_corpus_store
-from cve_kgrag.adapters.store.store_check import check_store
+from cve_kgrag.adapters.store.store_check import ReadStoreT, check_store
 from cve_kgrag.adapters.store.store_root import StoreRootUnusableError, check_store_root
 from cve_kgrag.domain.store_status import (
     STARTUP_REASONS,
@@ -26,6 +27,12 @@ from cve_kgrag.domain.store_status import (
 def load_active_store(store_root: Path) -> CorpusStore:
     """The store ``ACTIVE`` names, loaded and verified under the manifest digest it
     records. Raises ``StoreUnavailable``."""
+    return read_active_store(store_root, load_corpus_store)
+
+
+def read_active_store(store_root: Path, read_store: Callable[[Path], ReadStoreT]) -> ReadStoreT:
+    """The store ``ACTIVE`` names, read with ``read_store`` under the manifest digest it
+    records, after the same checks as at startup. Raises ``StoreUnavailable``."""
     try:
         check_store_root(store_root)
     except StoreRootUnusableError:
@@ -40,7 +47,7 @@ def load_active_store(store_root: Path) -> CorpusStore:
         store_root,
         active_record.active.name,
         active_record.active.store_manifest_sha256,
-        load_corpus_store,
+        read_store,
     )
     if active_check.read_store is None:
         raise StoreUnavailable(STARTUP_REASONS[active_check.condition])

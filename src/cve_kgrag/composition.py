@@ -3,6 +3,7 @@
 import time
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 from cve_kgrag.adapter_discovery import (
@@ -12,7 +13,10 @@ from cve_kgrag.adapter_discovery import (
     find_installed_planner,
     list_installed_adapters,
 )
-from cve_kgrag.adapters.fight.operator_snapshot import load_operator_fight_snapshot
+from cve_kgrag.adapters.fight.operator_snapshot import (
+    load_operator_fight_snapshot,
+    read_operator_fight_snapshot,
+)
 from cve_kgrag.adapters.fight.snapshot_catalog import (
     default_fight_snapshot_catalog_file,
     load_fight_snapshot_catalog,
@@ -33,7 +37,8 @@ from cve_kgrag.adapters.provenance.source_registry import (
     load_source_registry,
 )
 from cve_kgrag.adapters.store.active_record_writer import OsActiveRecordFiles
-from cve_kgrag.adapters.store.active_store import load_active_store
+from cve_kgrag.adapters.store.active_store import load_active_store, read_active_store
+from cve_kgrag.adapters.store.corpus_store import ignore_model, verify_store_files
 from cve_kgrag.adapters.store.store_activation import StoreActivation
 from cve_kgrag.adapters.structured.in_memory_filter import InMemoryStructuredIndex
 from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
@@ -63,6 +68,14 @@ from cve_kgrag.domain.search import SemanticUnavailableDetail
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import KnowledgeSource
+from cve_kgrag.evaluation.gold_cases import GoldFileError
+from cve_kgrag.evaluation.gold_rules import GoldRuleError
+from cve_kgrag.evaluation.gold_sets import (
+    GoldSetCollector,
+    format_gold_sets,
+    read_technique_subjects,
+)
+from cve_kgrag.evaluation.labelled_cases import GoldFile
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.ports.affectedness import TrustifyPort
@@ -105,6 +118,37 @@ def build_trustify_port() -> TrustifyPort:
 def build_store_activation(store_root: Path) -> StoreActivation:
     """The store operations over ``store_root``, on the operating system's files."""
     return StoreActivation(store_root, OsActiveRecordFiles())
+
+
+def derive_gold_sets(
+    gold_file: GoldFile, store_root: Path, fight_snapshot: FightSnapshotSettings
+) -> bytes:
+    """The sets file of ``gold_file`` (``format_gold_sets``), derived from the store
+    ``ACTIVE`` names, read record by record so it is never held in memory, and from the
+    operator FiGHT snapshot. Raises ``FightSnapshotUnavailable`` or ``StoreUnavailable``
+    for a source that cannot be read, and ``GoldFileError`` when the snapshot or the
+    store's corpus is not the one the labels were confirmed against, or a case's sets do
+    not support its label."""
+    if fight_snapshot.sha256 != gold_file.fight_snapshot_sha256:
+        raise GoldFileError("the FiGHT snapshot is not the one the gold file was labelled against")
+    snapshot_catalog = load_fight_snapshot_catalog(default_fight_snapshot_catalog_file())
+    snapshot_bytes = read_operator_fight_snapshot(
+        fight_snapshot.path, fight_snapshot.sha256, snapshot_catalog
+    )
+    try:
+        techniques = read_technique_subjects(snapshot_bytes)
+    except GoldRuleError as error:
+        raise GoldFileError(str(error)) from None
+    collector = GoldSetCollector(gold_file)
+    verified_store = read_active_store(
+        store_root,
+        partial(verify_store_files, keep_anchor=ignore_model, keep_record=collector.keep_record),
+    )
+    if verified_store.corpus_content_sha256 != gold_file.corpus_content_sha256:
+        raise GoldFileError(
+            "the active store's corpus is not the one the gold file was labelled against"
+        )
+    return format_gold_sets(gold_file, collector.derive(techniques))
 
 
 def build_search_service(
