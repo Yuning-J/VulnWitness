@@ -47,9 +47,10 @@ Each case records:
 - `rules`: the rules that derive its sets (below);
 - `sets`, derived by the rules over the store:
   - `required`: the gold-relevant pool a sufficient answer draws on. With 20 items or fewer,
-    a sufficient answer holds all of them; with more, it holds any 20 (the answer keeps at
-    most `max_results_per_call`, 20, per section), and an item left out beyond that cap is
-    not a miss;
+    a sufficient answer holds all of them; with more, it holds any 20 (the server keeps at
+    most 20 per answer section), and an item left out beyond that cap is not a miss. The 20
+    is the server's cap, not a request's `max_results_per_call`: a request that asks for
+    fewer results does not lower the bar;
   - `allowed`: relevant to the goal, may be returned, never required;
   - `irrelevant`: explicitly wrong for the goal, such as the same component in another
     product; returning one is counted;

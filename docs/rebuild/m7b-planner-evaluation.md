@@ -124,8 +124,9 @@ IDs of `protocol_context`. Items the answer truncated do not count. For each cat
 case needs, against that category's sets (`cves` for `named_cve` and
 `implementation_cves`, `techniques` for `protocol_context`):
 
-- **coverage@20**: required items listed over min(|required|, 20); `null` when required
-  is empty;
+- **coverage@20**: required items listed over min(|required|, 20), where 20 is the
+  server's cap on an answer section, whatever `max_results_per_call` the request set;
+  `null` when required is empty;
 - **covered**: required is non-empty and the coverage is 1;
 - **irrelevant items** and **unjudged items** listed (unjudged: in none of required,
   allowed or irrelevant).

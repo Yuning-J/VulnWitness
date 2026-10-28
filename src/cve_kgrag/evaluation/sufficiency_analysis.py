@@ -14,6 +14,7 @@ from cve_kgrag.domain.investigation import (
     KnowledgeEvidenceSet,
     StopReason,
 )
+from cve_kgrag.domain.search import MAX_RESULTS_PER_CALL
 from cve_kgrag.domain.taxonomy import ResultStatus
 from cve_kgrag.domain.topic_context import KnowledgeSource
 from cve_kgrag.evaluation.gold_sets import DerivedSets
@@ -86,15 +87,16 @@ def list_answer_ids(evidence_set: KnowledgeEvidenceSet, subject_kind: SubjectKin
     return listed_ids
 
 
-def judge_category(
-    derived_sets: DerivedSets, listed_ids: set[str], answer_cap: int
-) -> CategoryJudgement:
+def judge_category(derived_sets: DerivedSets, listed_ids: set[str]) -> CategoryJudgement:
+    """Coverage@20 is over min(|required|, ``MAX_RESULTS_PER_CALL``), the server's cap on
+    one answer section, never a request's lower budget: a request that asks for fewer
+    results does not lower the bar a sufficient answer must clear."""
     required = set(derived_sets.required)
     judged_ids = required | set(derived_sets.allowed) | set(derived_sets.irrelevant)
     listed_required = len(listed_ids & required)
     coverage: float | None = None
     if required:
-        coverage = round(listed_required / min(len(required), answer_cap), RATE_DECIMALS)
+        coverage = round(listed_required / min(len(required), MAX_RESULTS_PER_CALL), RATE_DECIMALS)
     return CategoryJudgement(
         coverage=coverage,
         covered=coverage == 1,
@@ -142,9 +144,7 @@ def judge_run(
         if not derived_sets.required:
             gold_gaps.append(category)
         categories[category] = judge_category(
-            derived_sets,
-            list_answer_ids(evidence_set, subject_kind),
-            case.request.budget.max_results_per_call,
+            derived_sets, list_answer_ids(evidence_set, subject_kind)
         )
     every_category_covered = not gold_gaps and all(
         judgement.covered for judgement in categories.values()

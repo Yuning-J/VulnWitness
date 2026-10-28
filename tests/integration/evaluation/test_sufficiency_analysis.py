@@ -63,42 +63,57 @@ def mixed_set(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
     return run_deterministically(fixture_bundle, "5gaka", "mixed")
 
 
+def list_absent_ids(id_count: int) -> tuple[str, ...]:
+    """CVE IDs the fixture does not hold, so no answer lists them."""
+    absent_ids: list[str] = []
+    for number in range(id_count):
+        absent_ids.append(f"CVE-9998-{number:04d}")
+    return tuple(absent_ids)
+
+
 @pytest.mark.parametrize(
-    ("required", "answer_cap", "expected_coverage", "expected_judged"),
+    ("required", "expected_coverage", "expected_judged"),
     [
-        (("CVE-9999-0001", "CVE-9999-0002"), 20, 1.0, JudgedSufficiency.SUFFICIENT),
-        (
-            ("CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0099"),
-            20,
-            0.6667,
-            JudgedSufficiency.PARTIAL,
-        ),
-        (("CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0099"), 2, 1.0, JudgedSufficiency.SUFFICIENT),
-        (("CVE-9999-0098", "CVE-9999-0099"), 20, 0.0, JudgedSufficiency.INSUFFICIENT),
+        (("CVE-9999-0001", "CVE-9999-0002"), 1.0, JudgedSufficiency.SUFFICIENT),
+        (("CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0099"), 0.6667, JudgedSufficiency.PARTIAL),
+        (("CVE-9999-0001", "CVE-9999-0002", *list_absent_ids(23)), 0.1, JudgedSufficiency.PARTIAL),
+        (("CVE-9999-0098", "CVE-9999-0099"), 0.0, JudgedSufficiency.INSUFFICIENT),
     ],
-    ids=["all_listed", "one_missing", "missing_beyond_the_cap", "none_listed"],
+    ids=["all_listed", "one_missing", "more_than_twenty_required", "none_listed"],
 )
-def test_coverage_counts_listed_required_items_over_the_capped_required_set(
+def test_coverage_counts_listed_required_items_over_at_most_twenty(
     gateway_set: KnowledgeEvidenceSet,
     required: tuple[str, ...],
-    answer_cap: int,
     expected_coverage: float,
     expected_judged: JudgedSufficiency,
 ) -> None:
-    case = build_case(
-        request={
-            "query": "democorp gateway vulnerabilities",
-            "scope": "implementation_only",
-            "budget": {"max_results_per_call": answer_cap},
-        }
-    )
-
-    judgement = judge_run(case, {SubjectKind.CVES: build_sets(required)}, gateway_set)
+    judgement = judge_run(build_case(), {SubjectKind.CVES: build_sets(required)}, gateway_set)
 
     category_judgement = judgement.categories[EvidenceCategory.IMPLEMENTATION_CVES]
     assert category_judgement.coverage == expected_coverage
     assert category_judgement.covered is (expected_coverage == 1.0)
     assert judgement.judged is expected_judged
+
+
+def test_lower_request_budget_does_not_lower_the_coverage_bar(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    budget = {"max_results_per_call": 2}
+    low_budget_set = run_deterministically(
+        fixture_bundle, GATEWAY_QUERY, "implementation_only", budget=budget
+    )
+    case = build_case(
+        request={"query": GATEWAY_QUERY, "scope": "implementation_only", "budget": budget}
+    )
+    required = ("CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0007")
+
+    judgement = judge_run(case, {SubjectKind.CVES: build_sets(required)}, low_budget_set)
+
+    assert len(low_budget_set.implementation_candidates) == 2
+    assert low_budget_set.stop_reason is StopReason.SUFFICIENT
+    assert judgement.categories[EvidenceCategory.IMPLEMENTATION_CVES].coverage == 0.6667
+    assert judgement.judged is JudgedSufficiency.PARTIAL
+    assert judgement.wrong_stop
 
 
 @pytest.mark.parametrize(
