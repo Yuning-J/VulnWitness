@@ -108,9 +108,10 @@ are listed for the owner, never scored.
 
 - `eval/gold/m7b_cases.yaml`, written by hand: the `corpus_content_sha256` and the FiGHT
   snapshot SHA-256 the labels were confirmed against, then the cases.
-- `eval/gold/m7b_sets.json`, generated, never edited: those two digests and each case's
-  `required`, `allowed`, `irrelevant` and, when the case has one, `wide_check`, per subject
-  kind, as JSON with sorted keys.
+- `eval/gold/m7b_sets.json`, generated, never edited: `gold_file_sha256`, the SHA-256 of
+  the gold file it was derived from, those two digests, and each case's `required`,
+  `allowed`, `irrelevant` and, when the case has one, `wide_check`, per subject kind, as
+  JSON with sorted keys.
 
 `cve-kgrag eval gold-sets --gold eval/gold/m7b_cases.yaml` derives the sets from the
 store `ACTIVE` names under `CVE_KGRAG_STORE_ROOT`, read record by record (the stored records

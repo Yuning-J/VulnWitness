@@ -65,10 +65,11 @@ if [ -e "$work_dir/absent-target" ]; then
 fi
 
 uv pip install -p "$core_python" pytest jsonschema
-# The importer's tests, and the store, store-root and gold-set CLI tests that build their
-# stores with it, need the migration extra, as the interface tests need theirs.
+# The importer's tests, and the store, store-root, gold-set and labelled-evaluation CLI
+# tests that build their stores with it, need the migration extra, as the interface tests
+# need theirs.
 "$core_python" -m pytest -q tests/unit tests/contract tests/integration \
   --ignore=tests/integration/interfaces/mcp --ignore=tests/integration/interfaces/http \
   --ignore=tests/integration/interfaces/rest --ignore=tests/integration/adapters/migration \
   --ignore=tests/integration/adapters/store --ignore=tests/integration/test_cli_store_root.py \
-  --ignore=tests/integration/test_cli_gold_sets.py
+  --ignore=tests/integration/test_cli_gold_sets.py --ignore=tests/integration/test_cli_labelled_eval.py

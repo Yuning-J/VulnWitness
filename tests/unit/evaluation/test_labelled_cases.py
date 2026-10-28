@@ -1,4 +1,4 @@
-"""Loading an M7b gold file (``load_gold_file``): a file in the rubric's shape is read with
+"""Loading an M7b gold file (``read_gold_file``): a file in the rubric's shape is read with
 its rules parsed, and every other file is refused by case position, never by quoting it."""
 
 from typing import Any
@@ -11,9 +11,8 @@ from cve_kgrag.evaluation.labelled_cases import (
     SetName,
     Split,
     Sufficiency,
-    load_gold_file,
 )
-from tests.support.gold_files import build_case_row, encode_gold_file
+from tests.support.gold_files import build_case_row, encode_gold_file, load_labelled_gold_file
 
 PROTOCOL_RULES = {
     "techniques": {
@@ -37,7 +36,7 @@ def test_gold_file_is_read_with_each_case_and_its_rules() -> None:
         ]
     )
 
-    gold_file = load_gold_file(gold_bytes)
+    gold_file = load_labelled_gold_file(gold_bytes)
 
     implementation_case, protocol_case = gold_file.cases
     assert implementation_case.case_id == "democorp-gateway"
@@ -79,6 +78,30 @@ def without(row: dict[str, Any], key: str) -> dict[str, Any]:
             [build_case_row(rules={"cves": {"relevant": {"technique_any": ["AUSF"]}}})],
             "case 1: a rule uses a predicate",
         ),
+        (
+            [build_case_row(), build_case_row(id="same-request")],
+            "case 2 repeats an earlier case's request",
+        ),
+        (
+            [build_case_row(needs=["named_cve", "implementation_cves"])],
+            "case 1: needs both named_cve and implementation_cves",
+        ),
+        (
+            [
+                build_case_row(
+                    rules={"cves": {"relevant": {"description_any": ["x"]}}, "Not An ID": {}}
+                )
+            ],
+            "1 unexpected field",
+        ),
+        (
+            [
+                build_case_row(
+                    rules={"cves": {"relevant": {"description_any": ["x"]}, "Not An ID": {}}}
+                )
+            ],
+            "1 unexpected field",
+        ),
     ],
     ids=[
         "repeated_case_id",
@@ -92,13 +115,17 @@ def without(row: dict[str, Any], key: str) -> dict[str, Any]:
         "need_without_rules",
         "required_without_relevant",
         "technique_predicate_in_cve_rules",
+        "repeated_request",
+        "both_cve_categories",
+        "unknown_subject_kind_is_not_echoed",
+        "unknown_set_name_is_not_echoed",
     ],
 )
 def test_gold_file_outside_the_rubric_is_refused_by_position(
     case_rows: list[dict[str, Any]], expected_problem: str
 ) -> None:
     with pytest.raises(GoldFileError) as refused:
-        load_gold_file(encode_gold_file(case_rows))
+        load_labelled_gold_file(encode_gold_file(case_rows))
 
     assert expected_problem in str(refused.value)
     assert "Not An ID" not in str(refused.value)
@@ -111,4 +138,4 @@ def test_gold_file_outside_the_rubric_is_refused_by_position(
 )
 def test_file_that_is_not_a_gold_file_is_refused(gold_bytes: bytes) -> None:
     with pytest.raises(GoldFileError):
-        load_gold_file(gold_bytes)
+        load_labelled_gold_file(gold_bytes)

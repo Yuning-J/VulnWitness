@@ -9,6 +9,10 @@ named by ``case_sha256`` and each plan by a fingerprint of its call keys.
 Every rate is a ``Proportion``: the count, its denominator and the rate rounded to
 ``RATE_DECIMALS`` places, ``null`` when the denominator is zero, so a reader can always
 check what a rate was measured over.
+
+An evaluation of M7b's labelled cases adds the ``sufficiency`` section, which also names
+each case by the ``case_id`` of the committed gold file
+(``docs/rebuild/m7b-planner-evaluation.md``).
 """
 
 import json
@@ -21,6 +25,7 @@ from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.investigation import PlannerOutcome, StopReason
 from cve_kgrag.domain.planning import SHA256_HEX_PATTERN
 from cve_kgrag.domain.taxonomy import ResultStatus
+from cve_kgrag.evaluation.labelled_cases import EvidenceCategory, Split, Sufficiency
 
 EVALUATION_FORMAT_VERSION: Literal[1] = 1
 RATE_DECIMALS = 4
@@ -42,6 +47,30 @@ def measure_proportion(count: int, of: int) -> Proportion:
     return Proportion(count=count, of=of, rate=rate)
 
 
+class FightProfile(StrEnum):
+    """Which FiGHT source the cases ran on: each M7a case's own choice between the
+    packaged excerpt and none, or the operator snapshot for every M7b case."""
+
+    PER_CASE = "per_case"
+    OPERATOR_SNAPSHOT = "operator_snapshot"
+
+
+class DatasetIdentity(ContractModel):
+    """The data the cases ran on; reports over different data never compare."""
+
+    cve_search_version: str = Field(
+        min_length=1, description="The served dataset's cve_search capability version."
+    )
+    fight_profile: FightProfile
+    fight_snapshot_sha256: str | None = Field(
+        pattern=SHA256_HEX_PATTERN, description="The operator snapshot; null per case."
+    )
+    sets_sha256: str | None = Field(
+        pattern=SHA256_HEX_PATTERN,
+        description="SHA-256 of the gold sets file's bytes; null for M7a's gold file.",
+    )
+
+
 class EvaluationIdentity(ContractModel):
     """What a report measured, so two reports can be told apart before they are compared."""
 
@@ -59,6 +88,7 @@ class EvaluationIdentity(ContractModel):
     gold_sha256: str = Field(
         pattern=SHA256_HEX_PATTERN, description="SHA-256 of the gold file's bytes."
     )
+    dataset: DatasetIdentity
     deterministic_planner_sha256: str = Field(pattern=SHA256_HEX_PATTERN)
     model_planner_sha256: str | None = Field(
         pattern=SHA256_HEX_PATTERN, description="Null when no model run was made."
@@ -231,10 +261,101 @@ class ModelSection(ContractModel):
     cases: tuple[ModelCase, ...]
 
 
+class JudgedSufficiency(StrEnum):
+    SUFFICIENT = "sufficient"
+    PARTIAL = "partial"
+    INSUFFICIENT = "insufficient"
+
+
+class CaseCategoryFigures(ContractModel):
+    """One needed evidence category over a case's runs."""
+
+    coverage: RateSpread = Field(
+        description="Coverage@20 over the runs; measured is 0 when required is empty."
+    )
+    covered: Proportion = Field(description="Runs that covered it, over the measured runs.")
+    irrelevant_items: int = Field(ge=0)
+    unjudged_items: int = Field(ge=0)
+
+
+class RunJudgementCounts(ContractModel):
+    wrong_stop: int = Field(ge=0)
+    premature_no_evidence: int = Field(ge=0)
+    unflagged_gap: int = Field(ge=0)
+    affectedness_violation: int = Field(ge=0)
+
+
+class SufficiencyCase(ContractModel):
+    case_sha256: str = Field(pattern=SHA256_HEX_PATTERN)
+    case_id: str = Field(description="The case's ID in the committed gold file.")
+    split: Split
+    label: Sufficiency
+    runs: int = Field(ge=1)
+    judged: dict[JudgedSufficiency, int]
+    categories: dict[EvidenceCategory, CaseCategoryFigures] = Field(
+        description="Each needed category that can have evidence: affectedness has none."
+    )
+    run_judgements: RunJudgementCounts
+
+
+class CategoryQuality(ContractModel):
+    """One evidence category over the runs of a split's non-uncertain cases needing it."""
+
+    category_runs: int = Field(ge=0)
+    coverage: RateSpread = Field(
+        description="Coverage@20 over the category-runs whose required set is non-empty."
+    )
+    covered: Proportion = Field(description="Over the same category-runs as coverage.")
+    irrelevant_items: int = Field(ge=0)
+    unjudged_items: int = Field(ge=0)
+    runs_with_irrelevant: Proportion = Field(description="Over every category-run.")
+
+
+class SplitEvidenceQuality(ContractModel):
+    named_cve: CategoryQuality
+    implementation_cves: CategoryQuality
+    protocol_context: CategoryQuality
+    implementation_family: CategoryQuality = Field(
+        description="named_cve and implementation_cves together, beside them."
+    )
+
+
+class RunQuality(ContractModel):
+    """A split's runs, each counted once whatever categories it needs."""
+
+    runs: int = Field(ge=0)
+    uncertain_runs: int = Field(ge=0)
+    judged: dict[JudgedSufficiency, int] = Field(
+        description="Runs of non-uncertain cases by judged sufficiency."
+    )
+    wrong_stop: Proportion = Field(description="Over runs of non-uncertain cases.")
+    premature_no_evidence: Proportion = Field(
+        description="Over runs of cases labelled sufficient or partial."
+    )
+    unflagged_gap: Proportion = Field(description="Over runs of cases labelled partial.")
+    affectedness_violation: Proportion = Field(description="Over every run.")
+
+
+class SufficiencyPart(ContractModel):
+    cases: tuple[SufficiencyCase, ...]
+    evidence_quality: dict[Split, SplitEvidenceQuality]
+    run_quality: dict[Split, RunQuality]
+
+
+class SufficiencySection(ContractModel):
+    """The runs scored against the labelled cases; deterministic and model runs apart."""
+
+    deterministic: SufficiencyPart
+    model: SufficiencyPart | None = Field(description="Null when no model run was made.")
+
+
 class PlannerEvaluationReport(ContractModel):
     identity: EvaluationIdentity
     deterministic: DeterministicSection
     model: ModelSection | None = Field(description="Null when no model run was made.")
+    sufficiency: SufficiencySection | None = Field(
+        description="Null for a gold file of investigation trajectories, which has no labels."
+    )
 
 
 def format_report(report: PlannerEvaluationReport) -> bytes:

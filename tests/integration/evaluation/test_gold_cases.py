@@ -16,9 +16,9 @@ from cve_kgrag.evaluation.gold_cases import (
     MAX_GOLD_FILE_BYTES,
     GoldCase,
     GoldFileError,
-    load_gold_cases,
 )
 from tests.support.evaluation import build_gold_row, encode_gold
+from tests.support.gold_files import load_trajectory_cases
 from tests.support.investigation import GOLD_FILE
 
 GOLD_MARKER = "gold-marker-91c2"
@@ -41,7 +41,7 @@ def list_case_hashes(cases: Sequence[GoldCase]) -> list[str]:
 def test_investigation_gold_file_loads_every_case_with_its_fight_source() -> None:
     gold_rows = yaml.safe_load(GOLD_FILE.read_text(encoding="utf-8"))["trajectories"]
 
-    cases = load_gold_cases(GOLD_FILE.read_bytes())
+    cases = load_trajectory_cases(GOLD_FILE.read_bytes())
 
     assert len(cases) == len(gold_rows)
     for case, row in zip(cases, gold_rows, strict=True):
@@ -53,9 +53,11 @@ def test_investigation_gold_file_loads_every_case_with_its_fight_source() -> Non
 def test_case_hash_names_the_request_and_fight_source_not_the_row_id() -> None:
     renamed_row = {"id": "another-name", **build_gold_row("5G-AKA")}
 
-    (case,) = load_gold_cases(encode_gold([build_gold_row("5G-AKA")]))
-    (renamed_case,) = load_gold_cases(encode_gold([renamed_row]))
-    (unavailable_case,) = load_gold_cases(encode_gold([build_gold_row("5G-AKA", "unavailable")]))
+    (case,) = load_trajectory_cases(encode_gold([build_gold_row("5G-AKA")]))
+    (renamed_case,) = load_trajectory_cases(encode_gold([renamed_row]))
+    (unavailable_case,) = load_trajectory_cases(
+        encode_gold([build_gold_row("5G-AKA", "unavailable")])
+    )
 
     assert case.case_sha256 == renamed_case.case_sha256
     assert case.case_sha256 != unavailable_case.case_sha256
@@ -150,7 +152,7 @@ def test_file_that_is_no_investigation_gold_file_is_refused_without_quoting_it(
     gold_bytes: bytes, expected_message: str
 ) -> None:
     with pytest.raises(GoldFileError) as raised:
-        load_gold_cases(gold_bytes)
+        load_trajectory_cases(gold_bytes)
 
     assert str(raised.value) == expected_message
     assert GOLD_MARKER not in str(raised.value)
@@ -161,7 +163,7 @@ def test_request_with_many_problems_is_refused_with_a_bounded_message() -> None:
     gold_row = build_gold_row("5G-AKA", filters={"vendors": [1] * 50_000})
 
     with pytest.raises(GoldFileError) as raised:
-        load_gold_cases(encode_gold([gold_row]))
+        load_trajectory_cases(encode_gold([gold_row]))
 
     assert str(raised.value).startswith("case 1: request: filters.vendors")
     assert len(str(raised.value)) <= MAX_REPORTED_VIOLATIONS * (MAX_VIOLATION_CHARS + 2) + 64

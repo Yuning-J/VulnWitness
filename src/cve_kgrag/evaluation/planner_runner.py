@@ -10,11 +10,12 @@ written only when every run saw that package (``CaseRunner``).
 
 import re
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.investigation_policy import describe_deterministic_planner
+from cve_kgrag.application.serving_data_plane import ServingDataPlane
 from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
 from cve_kgrag.domain.hashing import canonical_sha256
 from cve_kgrag.domain.search import SCHEMA_VERSION
@@ -24,15 +25,19 @@ from cve_kgrag.evaluation.case_runner import (
     ModelRuns,
     read_package_digest,
 )
-from cve_kgrag.evaluation.gold_cases import GoldCase
+from cve_kgrag.evaluation.gold_cases import FightChoice, GoldCase
+from cve_kgrag.evaluation.gold_sets import DerivedSets
+from cve_kgrag.evaluation.labelled_cases import GoldFile, SubjectKind
 from cve_kgrag.evaluation.planner_analysis import CaseRuns, analyze_planner_runs
 from cve_kgrag.evaluation.planner_report import (
     GIT_COMMIT_PATTERN,
+    DatasetIdentity,
     EvaluationIdentity,
     PlannerEvaluationReport,
     format_report,
 )
 from cve_kgrag.evaluation.result_directory import ResultDirectory
+from cve_kgrag.evaluation.sufficiency_analysis import analyze_sufficiency
 
 MAX_MODEL_RUNS = 20
 UNAVAILABLE_REVISION = "unavailable"
@@ -77,19 +82,31 @@ def read_source_revision(package_dir: Path) -> str:
     return commit
 
 
+@dataclass(frozen=True)
+class LabelledCases:
+    """What an M7b evaluation scores its runs against: the gold file's labelled cases
+    and each case's recorded sets."""
+
+    gold_file: GoldFile
+    gold_sets: dict[str, dict[SubjectKind, DerivedSets]]
+
+
 def run_planner_evaluation(
     cases: Sequence[GoldCase],
     *,
     gold_sha256: str,
-    bundle: FixtureBundle,
+    data_planes: Mapping[FightChoice, ServingDataPlane],
+    dataset: DatasetIdentity,
+    labelled_cases: LabelledCases | None,
     model_runs: ModelRuns | None,
     source_revision: str,
     package_dir: Path,
     result_directory: ResultDirectory,
     idle_wait_seconds: float = IDLE_WAIT_SECONDS,
 ) -> PlannerEvaluationReport:
-    """Run every case (``CaseRunner.run_case``), then write and return the report on the
-    sets.
+    """Run every case (``CaseRunner.run_case``) over ``data_planes``, then write and return
+    the report on the sets, scored against ``labelled_cases`` when the gold file labels
+    them.
 
     Without ``model_runs`` only the deterministic baseline runs. The report's identity is
     built first, so a run that could not be reported never starts, and names the package
@@ -108,6 +125,7 @@ def run_planner_evaluation(
         source_revision=source_revision,
         package_sha256=read_package_digest(package_dir),
         gold_sha256=gold_sha256,
+        dataset=dataset,
         deterministic_planner_sha256=canonical_sha256(
             describe_deterministic_planner().model_dump(mode="json")
         ),
@@ -115,7 +133,7 @@ def run_planner_evaluation(
         model_runs_per_case=0 if model_runs is None else model_runs.runs_per_case,
     )
     case_runner = CaseRunner(
-        bundle,
+        data_planes,
         ThreadedCallRunner(),
         result_directory,
         package_dir,
@@ -126,6 +144,11 @@ def run_planner_evaluation(
     for case in cases:
         case_runs.append(case_runner.run_case(case, model_runs))
     case_runner.check_package()
-    report = analyze_planner_runs(identity, case_runs)
+    sufficiency = None
+    if labelled_cases is not None:
+        sufficiency = analyze_sufficiency(
+            labelled_cases.gold_file, labelled_cases.gold_sets, case_runs, model_runs is not None
+        )
+    report = analyze_planner_runs(identity, case_runs, sufficiency)
     result_directory.write(REPORT_FILE_NAME, format_report(report))
     return report

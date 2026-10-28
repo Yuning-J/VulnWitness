@@ -365,8 +365,9 @@ def test_eval_planner_runs_on_the_fixture_with_a_root_without_active(
 
     assert exit_code == 0
     assert capsys.readouterr().err.startswith(
-        "cve-kgrag eval planner uses the packaged synthetic fixture, not the store root, and "
-        "the FiGHT source each gold case names, not a configured snapshot\n"
+        "cve-kgrag eval planner runs investigation trajectories on the packaged synthetic "
+        "fixture, not the store root, and the FiGHT source each gold case names, not a "
+        "configured snapshot\n"
     )
 
 

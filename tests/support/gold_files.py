@@ -1,10 +1,14 @@
-"""M7b gold files for the gold-set tests: case rows the overrides adjust, encoded as YAML
-over a named corpus and FiGHT snapshot."""
+"""Gold files for the evaluation tests: M7b case rows the overrides adjust, encoded as YAML
+over a named corpus and FiGHT snapshot, and both formats read as the command reads them."""
 
 from typing import Any
 
 import yaml
 
+from cve_kgrag.domain.hashing import sha256_hex
+from cve_kgrag.evaluation.gold_cases import GoldCase, read_gold_cases
+from cve_kgrag.evaluation.gold_formats import read_gold_document
+from cve_kgrag.evaluation.labelled_cases import GoldFile, read_gold_file
 from tests.support.fight_excerpt import EXCERPT_SHA256
 
 UNKNOWN_CORPUS_SHA256 = "0" * 64
@@ -46,3 +50,13 @@ def encode_gold_file(
         },
         sort_keys=False,
     ).encode()
+
+
+def load_trajectory_cases(gold_bytes: bytes) -> tuple[GoldCase, ...]:
+    """M7a's cases, read as ``eval planner`` reads them."""
+    return read_gold_cases(read_gold_document(gold_bytes))
+
+
+def load_labelled_gold_file(gold_bytes: bytes) -> GoldFile:
+    """M7b's labelled cases, read as ``eval planner`` and ``eval gold-sets`` read them."""
+    return read_gold_file(read_gold_document(gold_bytes), sha256_hex(gold_bytes))

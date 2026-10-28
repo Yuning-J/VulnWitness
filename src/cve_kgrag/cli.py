@@ -37,6 +37,7 @@ import os
 import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any, TypeVar
@@ -99,6 +100,7 @@ from cve_kgrag.composition import (
 from cve_kgrag.distribution import read_installed_version
 from cve_kgrag.domain.affectedness import AffectednessRequest, ApplicabilityStatus
 from cve_kgrag.domain.contract_model import ContractModel, list_validation_problems
+from cve_kgrag.domain.corpus_store_manifest import name_corpus_store_version
 from cve_kgrag.domain.cve import CVE_ID_PATTERN
 from cve_kgrag.domain.evidence_set_verification_report import (
     VerificationReport,
@@ -133,13 +135,35 @@ from cve_kgrag.domain.tool_contracts import (
 )
 from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, TopicContextResponse
 from cve_kgrag.domain.validation import EvidenceValidationError
-from cve_kgrag.evaluation.case_runner import EvaluationStopped, ModelRuns
-from cve_kgrag.evaluation.gold_cases import MAX_GOLD_FILE_BYTES, GoldFileError, load_gold_cases
-from cve_kgrag.evaluation.labelled_cases import load_gold_file
-from cve_kgrag.evaluation.planner_report import format_report
+from cve_kgrag.evaluation.case_runner import (
+    EvaluationStopped,
+    ModelRuns,
+    build_fixture_data_planes,
+    describe_fixture_dataset,
+)
+from cve_kgrag.evaluation.gold_cases import (
+    MAX_GOLD_FILE_BYTES,
+    FightChoice,
+    GoldCase,
+    GoldFileError,
+    read_gold_cases,
+)
+from cve_kgrag.evaluation.gold_formats import (
+    GoldFormat,
+    classify_gold_document,
+    read_gold_document,
+)
+from cve_kgrag.evaluation.gold_sets import (
+    MAX_GOLD_SETS_FILE_BYTES,
+    RecordedSets,
+    read_recorded_sets,
+)
+from cve_kgrag.evaluation.labelled_cases import GoldFile, read_gold_file
+from cve_kgrag.evaluation.planner_report import DatasetIdentity, FightProfile, format_report
 from cve_kgrag.evaluation.planner_runner import (
     MAX_MODEL_RUNS,
     REPORT_FILE_NAME,
+    LabelledCases,
     read_source_revision,
     run_planner_evaluation,
 )
@@ -218,6 +242,19 @@ FIGHT_SNAPSHOT_SHA256_VARIABLE = find_section_variable(
     SERVED_DATA_VARIABLES, "fight_snapshot_sha256"
 )
 STORE_ROOT_REQUIRED = f"invalid settings: {STORE_ROOT_VARIABLE}: required by store"
+SETS_WITHOUT_LABELLED_CASES = "--sets is for a gold file of labelled cases (M7b)"
+LABELLED_CASES_WITHOUT_SETS = (
+    "a gold file of labelled cases needs --sets, the sets file derived from it"
+)
+EVAL_NEEDS_A_STORE_ROOT = (
+    f"invalid settings: {STORE_ROOT_VARIABLE}: required by eval planner for labelled "
+    "cases, which run on the active store"
+)
+EVAL_NEEDS_A_FIGHT_SNAPSHOT = (
+    "invalid settings: eval planner runs labelled cases on the operator FiGHT snapshot, "
+    f"which {FIGHT_SNAPSHOT_PATH_VARIABLE} and {FIGHT_SNAPSHOT_SHA256_VARIABLE} configure"
+)
+GOLD_SETS_NEED_LABELLED_CASES = "eval gold-sets reads a gold file of labelled cases (M7b)"
 GOLD_SETS_NEED_A_STORE_ROOT = (
     f"invalid settings: {STORE_ROOT_VARIABLE}: required by eval gold-sets, which reads the "
     "active store"
@@ -226,14 +263,13 @@ GOLD_SETS_NEED_A_FIGHT_SNAPSHOT = (
     "invalid settings: eval gold-sets reads the operator FiGHT snapshot, which "
     f"{FIGHT_SNAPSHOT_PATH_VARIABLE} and {FIGHT_SNAPSHOT_SHA256_VARIABLE} configure"
 )
-# A sets file names a few thousand IDs; one far larger is not one this command wrote.
-MAX_GOLD_SETS_FILE_BYTES = 4 * 1024 * 1024
 # Written once per run of the commands fixed to the fixture, whatever the settings: their
 # gold cases and demo queries name fixture CVEs (ADR 0009 §10).
 DEMO_FIXTURE_NOTICE = "cve-kgrag demo uses the packaged synthetic fixture, not the store root"
 EVAL_FIXTURE_NOTICE = (
-    "cve-kgrag eval planner uses the packaged synthetic fixture, not the store root, and "
-    "the FiGHT source each gold case names, not a configured snapshot"
+    "cve-kgrag eval planner runs investigation trajectories on the packaged synthetic "
+    "fixture, not the store root, and the FiGHT source each gold case names, not a "
+    "configured snapshot"
 )
 UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
 UNSERVED_EVIDENCE_MESSAGE = (
@@ -402,6 +438,15 @@ def build_parser() -> argparse.ArgumentParser:
             "the directory, such as eval-results, to create a new owner-only planner-* "
             "result directory in; its evidence sets hold the queries and the model's plan "
             "text, so never commit them"
+        ),
+    )
+    planner_eval_parser.add_argument(
+        "--sets",
+        type=Path,
+        metavar="SETS_FILE",
+        help=(
+            "the sets file eval gold-sets wrote for a gold file of labelled cases, such as "
+            "eval/gold/m7b_sets.json; required with one, refused otherwise"
         ),
     )
     planner_eval_parser.add_argument(
@@ -904,49 +949,189 @@ def choose_semantic_settings(
     return None
 
 
-def run_planner_evaluation_command(
+@dataclass(frozen=True)
+class EvaluationInputs:
+    """What one planner evaluation runs: its cases, the data plane of each FiGHT choice,
+    the dataset they name, and the labelled cases and sets an M7b evaluation scores."""
+
+    cases: tuple[GoldCase, ...]
+    data_planes: Mapping[FightChoice, ServingDataPlane]
+    dataset: DatasetIdentity
+    labelled_cases: LabelledCases | None
+
+
+def read_classified_gold(
+    parser: argparse.ArgumentParser, gold_path: Path
+) -> tuple[bytes, object, GoldFormat]:
+    """The gold file's bytes, parsed once by the strict loader, and its format. A file
+    over the cap, one the strict loader refuses or one of neither format is a usage
+    error, reported without quoting it."""
+    gold_bytes = read_input_file(parser, gold_path, MAX_GOLD_FILE_BYTES)
+    try:
+        gold_document = read_gold_document(gold_bytes)
+        return gold_bytes, gold_document, classify_gold_document(gold_document)
+    except GoldFileError as error:
+        parser.error(f"invalid gold file: {error}")
+
+
+def read_trajectory_inputs(
+    parser: argparse.ArgumentParser, arguments: argparse.Namespace, gold_document: object
+) -> EvaluationInputs:
+    """M7a's cases over the packaged fixture, whatever the settings; ``--sets`` is a
+    usage error, since trajectories carry no sets."""
+    if arguments.sets is not None:
+        parser.error(SETS_WITHOUT_LABELLED_CASES)
+    print(EVAL_FIXTURE_NOTICE, file=sys.stderr)
+    try:
+        cases = read_gold_cases(gold_document)
+    except GoldFileError as error:
+        parser.error(f"invalid gold file: {error}")
+    data_planes = build_fixture_data_planes(load_packaged_fixture())
+    return EvaluationInputs(
+        cases, data_planes, describe_fixture_dataset(data_planes), labelled_cases=None
+    )
+
+
+def find_stated_digest_mismatch(
+    gold_file: GoldFile, recorded_sets: RecordedSets, fight_snapshot: FightSnapshotSettings
+) -> str | None:
+    """Which digest the gold file, the sets file and the configured snapshot state
+    differently, or ``None`` when they agree."""
+    if recorded_sets.gold_file_sha256 != gold_file.gold_file_sha256:
+        return "the sets file was derived from another gold file"
+    if recorded_sets.corpus_content_sha256 != gold_file.corpus_content_sha256:
+        return "the sets file names another corpus than the gold file"
+    if recorded_sets.fight_snapshot_sha256 != gold_file.fight_snapshot_sha256:
+        return "the sets file names another FiGHT snapshot than the gold file"
+    if fight_snapshot.sha256 != gold_file.fight_snapshot_sha256:
+        return "the configured FiGHT snapshot is not the one the gold file was labelled against"
+    return None
+
+
+def find_loaded_digest_mismatch(gold_file: GoldFile, data_plane: ServingDataPlane) -> str | None:
+    """Whether the loaded store and snapshot are the ones the gold file names."""
+    corpus_version = name_corpus_store_version(gold_file.corpus_content_sha256)
+    if data_plane.served_dataset.cve_search_version != corpus_version:
+        return "the active store's corpus is not the one the gold file was labelled against"
+    pinned_snapshot = data_plane.pinned_fight_snapshot
+    if (
+        pinned_snapshot is None
+        or pinned_snapshot.snapshot_sha256 != gold_file.fight_snapshot_sha256
+    ):
+        return "the loaded FiGHT snapshot is not the one the gold file was labelled against"
+    return None
+
+
+def read_labelled_inputs(
+    parser: argparse.ArgumentParser,
+    arguments: argparse.Namespace,
+    gold_bytes: bytes,
+    gold_document: object,
+    settings: ServiceSettings,
+) -> EvaluationInputs | int:
+    """M7b's cases over the active store and the operator snapshot, after the checks of
+    the M7b design: the files' stated digests first, then the store and snapshot loaded
+    once each, then the loaded digests. Missing settings and an unservable source are
+    usage errors (exit 2); a sets file that is not one, or a digest that disagrees, is
+    the exit code 1, with one line in the server's words."""
+    if arguments.sets is None:
+        parser.error(LABELLED_CASES_WITHOUT_SETS)
+    if settings.store_root is None:
+        parser.error(EVAL_NEEDS_A_STORE_ROOT)
+    if settings.fight_snapshot is None:
+        parser.error(EVAL_NEEDS_A_FIGHT_SNAPSHOT)
+    try:
+        gold_file = read_gold_file(gold_document, sha256_hex(gold_bytes))
+    except GoldFileError as error:
+        parser.error(f"invalid gold file: {error}")
+    sets_bytes = read_input_file(parser, arguments.sets, MAX_GOLD_SETS_FILE_BYTES)
+    try:
+        recorded_sets = read_recorded_sets(sets_bytes, gold_file)
+    except GoldFileError as error:
+        print(f"cve-kgrag eval planner: {error}", file=sys.stderr)
+        return 1
+    mismatch = find_stated_digest_mismatch(gold_file, recorded_sets, settings.fight_snapshot)
+    if mismatch is not None:
+        print(f"cve-kgrag eval planner: {mismatch}", file=sys.stderr)
+        return 1
+    data_plane = load_data_plane_or_exit("eval planner", settings)
+    mismatch = find_loaded_digest_mismatch(gold_file, data_plane)
+    if mismatch is not None:
+        print(f"cve-kgrag eval planner: {mismatch}", file=sys.stderr)
+        return 1
+    cases: list[GoldCase] = []
+    for case in gold_file.cases:
+        cases.append(GoldCase(case_sha256=case.case_sha256, request=case.request, fight="operator"))
+    dataset = DatasetIdentity(
+        cve_search_version=data_plane.served_dataset.cve_search_version,
+        fight_profile=FightProfile.OPERATOR_SNAPSHOT,
+        fight_snapshot_sha256=gold_file.fight_snapshot_sha256,
+        sets_sha256=sha256_hex(sets_bytes),
+    )
+    return EvaluationInputs(
+        tuple(cases),
+        {"operator": data_plane},
+        dataset,
+        LabelledCases(gold_file=gold_file, gold_sets=recorded_sets.cases),
+    )
+
+
+def discover_model_runs(
     parser: argparse.ArgumentParser,
     arguments: argparse.Namespace,
     planner_settings: ModelPlannerSettings | None,
-    store_root: Path | None,
+) -> ModelRuns | int | None:
+    """The model runs ``--model-runs`` asks for, with an enabled planner that can plan,
+    so a run never reports a model evaluation it did not make; exit code 1 when the
+    planner cannot plan."""
+    if arguments.model_runs == 0:
+        return None
+    if planner_settings is None:
+        parser.error(MODEL_RUNS_WITHOUT_A_PLANNER)
+    planner_setup = discover_planner_setup(planner_settings)
+    if not isinstance(planner_setup, ModelPlanning):
+        print(
+            f"cve-kgrag eval planner cannot make model runs: {planner_setup.unavailable_detail}",
+            file=sys.stderr,
+        )
+        return 1
+    return ModelRuns(planner_setup, arguments.model_runs)
+
+
+def run_planner_evaluation_command(
+    parser: argparse.ArgumentParser, arguments: argparse.Namespace, settings: ServiceSettings
 ) -> int:
-    """Run the gold cases (``run_planner_evaluation``) over the packaged fixture, whatever
-    the settings, print the report and name the result directory on stderr. A gold file
-    that is no investigation gold file is a usage error, reported without quoting it;
-    model runs need an enabled planner that can plan, so a run never reports a model
-    evaluation it did not make. An ``--out`` inside the package is a usage error: the
-    files a run writes there would change the package the report names; so is one inside
-    the store root, whose reader would then refuse the store holding it."""
-    print(EVAL_FIXTURE_NOTICE, file=sys.stderr)
+    """Run the gold cases (``run_planner_evaluation``), print the report and name the
+    result directory on stderr. The gold file's format decides the data: M7a's
+    trajectories run over the packaged fixture, M7b's labelled cases over the active store
+    and the operator snapshot, scored against ``--sets`` (``read_labelled_inputs``). An
+    ``--out`` inside the package is a usage error: the files a run writes there would
+    change the package the report names; so is one inside the store root, whose reader
+    would then refuse the store holding it."""
     resolved_out = arguments.out.resolve()
     if resolved_out.is_relative_to(PACKAGE_DIR):
         parser.error(OUT_INSIDE_THE_PACKAGE)
-    if store_root is not None and lies_in_store_root(resolved_out, store_root):
+    if settings.store_root is not None and lies_in_store_root(resolved_out, settings.store_root):
         parser.error(OUT_INSIDE_THE_STORE_ROOT)
-    gold_bytes = read_input_file(parser, arguments.gold, MAX_GOLD_FILE_BYTES)
-    try:
-        cases = load_gold_cases(gold_bytes)
-    except GoldFileError as error:
-        parser.error(f"invalid gold file: {error}")
-    model_runs: ModelRuns | None = None
-    if arguments.model_runs > 0:
-        if planner_settings is None:
-            parser.error(MODEL_RUNS_WITHOUT_A_PLANNER)
-        planner_setup = discover_planner_setup(planner_settings)
-        if not isinstance(planner_setup, ModelPlanning):
-            print(
-                "cve-kgrag eval planner cannot make model runs: "
-                f"{planner_setup.unavailable_detail}",
-                file=sys.stderr,
-            )
-            return 1
-        model_runs = ModelRuns(planner_setup, arguments.model_runs)
+    gold_bytes, gold_document, gold_format = read_classified_gold(parser, arguments.gold)
+    model_runs = discover_model_runs(parser, arguments, settings.model_planner)
+    if isinstance(model_runs, int):
+        return model_runs
+    inputs: EvaluationInputs | int
+    if gold_format is GoldFormat.TRAJECTORIES:
+        inputs = read_trajectory_inputs(parser, arguments, gold_document)
+    else:
+        inputs = read_labelled_inputs(parser, arguments, gold_bytes, gold_document, settings)
+    if isinstance(inputs, int):
+        return inputs
     try:
         result_directory = ResultDirectory.create(arguments.out)
         report = run_planner_evaluation(
-            cases,
+            inputs.cases,
             gold_sha256=sha256_hex(gold_bytes),
-            bundle=load_packaged_fixture(),
+            data_planes=inputs.data_planes,
+            dataset=inputs.dataset,
+            labelled_cases=inputs.labelled_cases,
             model_runs=model_runs,
             source_revision=read_source_revision(PACKAGE_DIR),
             package_dir=PACKAGE_DIR,
@@ -1000,9 +1185,11 @@ def run_gold_sets_command(
         parser.error(GOLD_SETS_NEED_A_STORE_ROOT)
     if settings.fight_snapshot is None:
         parser.error(GOLD_SETS_NEED_A_FIGHT_SNAPSHOT)
-    gold_bytes = read_input_file(parser, arguments.gold, MAX_GOLD_FILE_BYTES)
+    gold_bytes, gold_document, gold_format = read_classified_gold(parser, arguments.gold)
+    if gold_format is not GoldFormat.LABELLED_CASES:
+        parser.error(GOLD_SETS_NEED_LABELLED_CASES)
     try:
-        gold_file = load_gold_file(gold_bytes)
+        gold_file = read_gold_file(gold_document, sha256_hex(gold_bytes))
     except GoldFileError as error:
         parser.error(f"invalid gold file: {error}")
     try:
@@ -1196,9 +1383,7 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     if arguments.command == "eval" and arguments.eval_command == "gold-sets":
         return run_gold_sets_command(parser, arguments, settings)
     if arguments.command == "eval":
-        return run_planner_evaluation_command(
-            parser, arguments, settings.model_planner, settings.store_root
-        )
+        return run_planner_evaluation_command(parser, arguments, settings)
     if arguments.command == "resolve":
         resolution_request = build_contract(parser, ConceptResolutionRequest, query=arguments.query)
         return print_resolution(

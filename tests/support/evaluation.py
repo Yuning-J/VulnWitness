@@ -11,7 +11,7 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
 from cve_kgrag.domain.planning import ModelReply, PlanningInput
 from cve_kgrag.domain.search import SCHEMA_VERSION
-from cve_kgrag.evaluation.planner_report import EvaluationIdentity
+from cve_kgrag.evaluation.planner_report import DatasetIdentity, EvaluationIdentity, FightProfile
 from tests.support.clocks import SteppingClock
 from tests.support.investigation import (
     build_investigation_request,
@@ -45,6 +45,12 @@ def build_identity(model_runs_per_case: int) -> EvaluationIdentity:
         source_revision="unavailable",
         package_sha256="e" * 64,
         gold_sha256="a" * 64,
+        dataset=DatasetIdentity(
+            cve_search_version="fixture-test",
+            fight_profile=FightProfile.PER_CASE,
+            fight_snapshot_sha256=None,
+            sets_sha256=None,
+        ),
         deterministic_planner_sha256="b" * 64,
         model_planner_sha256="c" * 64 if model_runs_per_case else None,
         model_runs_per_case=model_runs_per_case,

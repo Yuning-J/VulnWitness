@@ -5,6 +5,7 @@ never holds more abandoned calls than one investigation may leave (ADR 0005 §2)
 while the package's files are still those the report names.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from cve_kgrag.adapters.fight.pinned_yaml import UnavailableFightSource
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.investigate import InvestigationService
 from cve_kgrag.application.planner_setup import ModelPlanning, PlannerSetup
+from cve_kgrag.application.serving_data_plane import ServingDataPlane
 from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
 from cve_kgrag.composition import (
     DETERMINISTIC_PLANNING,
@@ -22,6 +24,7 @@ from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
 from cve_kgrag.evaluation.gold_cases import FightChoice, GoldCase
 from cve_kgrag.evaluation.package_digest import fingerprint_package
 from cve_kgrag.evaluation.planner_analysis import CaseRuns
+from cve_kgrag.evaluation.planner_report import DatasetIdentity, FightProfile
 from cve_kgrag.evaluation.result_directory import ResultDirectory
 
 # How long a run waits for the calls earlier runs abandoned to return. Waiting longer
@@ -49,6 +52,29 @@ class ModelRuns:
     runs_per_case: int
 
 
+def build_fixture_data_planes(bundle: FixtureBundle) -> dict[FightChoice, ServingDataPlane]:
+    """The two data planes an M7a case can choose between, each built once over the
+    fixture: the packaged FiGHT excerpt, composition's default, or a source that serves
+    nothing."""
+    return {
+        "packaged": build_serving_data_plane(bundle),
+        "unavailable": build_serving_data_plane(bundle, fight_source=UnavailableFightSource()),
+    }
+
+
+def describe_fixture_dataset(
+    data_planes: Mapping[FightChoice, ServingDataPlane],
+) -> DatasetIdentity:
+    """The dataset M7a's cases run on: the fixture's records, each case choosing its
+    FiGHT source."""
+    return DatasetIdentity(
+        cve_search_version=data_planes["packaged"].served_dataset.cve_search_version,
+        fight_profile=FightProfile.PER_CASE,
+        fight_snapshot_sha256=None,
+        sets_sha256=None,
+    )
+
+
 def read_package_digest(package_dir: Path) -> str:
     """``fingerprint_package``, or ``EvaluationStopped`` when a file cannot be read."""
     try:
@@ -62,20 +88,21 @@ def encode_evidence_set(evidence_set: KnowledgeEvidenceSet) -> bytes:
 
 
 class CaseRunner:
-    """Runs cases over ``bundle`` on ``call_runner``, writing each set to
-    ``result_directory`` as it seals, while the package at ``package_dir`` keeps the digest
-    ``package_sha256``."""
+    """Runs cases on ``call_runner`` over the data plane ``data_planes`` holds for each
+    case's FiGHT choice, writing each set to ``result_directory`` as it seals, while the
+    package at ``package_dir`` keeps the digest ``package_sha256``. The data planes are
+    read-only and built once, so every run of every case shares them."""
 
     def __init__(
         self,
-        bundle: FixtureBundle,
+        data_planes: Mapping[FightChoice, ServingDataPlane],
         call_runner: ThreadedCallRunner,
         result_directory: ResultDirectory,
         package_dir: Path,
         package_sha256: str,
         idle_wait_seconds: float,
     ) -> None:
-        self._bundle = bundle
+        self._data_planes = data_planes
         self._call_runner = call_runner
         self._result_directory = result_directory
         self._package_dir = package_dir
@@ -114,16 +141,10 @@ class CaseRunner:
     def _build_service(
         self, fight: FightChoice, planner_setup: PlannerSetup
     ) -> InvestigationService:
-        """The production service for a case on the shared call runner: the packaged
-        FiGHT excerpt, composition's default, or a source that serves nothing."""
-        if fight == "unavailable":
-            return build_investigation_service(
-                build_serving_data_plane(self._bundle, fight_source=UnavailableFightSource()),
-                planner_setup=planner_setup,
-                call_runner=self._call_runner,
-            )
+        """The production service for a case on the shared call runner, over the data
+        plane of the case's FiGHT choice."""
         return build_investigation_service(
-            build_serving_data_plane(self._bundle),
+            self._data_planes[fight],
             planner_setup=planner_setup,
             call_runner=self._call_runner,
         )

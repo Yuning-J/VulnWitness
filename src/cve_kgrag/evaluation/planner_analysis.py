@@ -43,6 +43,7 @@ from cve_kgrag.evaluation.planner_report import (
     RoundOutcomeMetrics,
     RoundPlanSummary,
     RunSummary,
+    SufficiencySection,
     ToolCallComparison,
     measure_proportion,
 )
@@ -400,10 +401,13 @@ def build_model_section(case_runs: Sequence[CaseRuns]) -> ModelSection:
 
 
 def analyze_planner_runs(
-    identity: EvaluationIdentity, case_runs: Sequence[CaseRuns]
+    identity: EvaluationIdentity,
+    case_runs: Sequence[CaseRuns],
+    sufficiency: SufficiencySection | None = None,
 ) -> PlannerEvaluationReport:
-    """The report on ``case_runs``, measured under ``identity``; without model runs
-    (``model_runs_per_case`` 0) it has no model section."""
+    """The report on ``case_runs``, measured under ``identity``, with ``sufficiency`` when
+    the cases were labelled; without model runs (``model_runs_per_case`` 0) it has no
+    model section."""
     deterministic_sets: list[KnowledgeEvidenceSet] = []
     deterministic_cases: list[DeterministicCase] = []
     for case in case_runs:
@@ -424,4 +428,5 @@ def analyze_planner_runs(
             cases=tuple(deterministic_cases),
         ),
         model=model_section,
+        sufficiency=sufficiency,
     )

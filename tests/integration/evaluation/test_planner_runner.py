@@ -5,6 +5,7 @@ package."""
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -13,8 +14,13 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.planner_setup import ModelPlanning
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
 from cve_kgrag.domain.search import SCHEMA_VERSION
-from cve_kgrag.evaluation.case_runner import PACKAGE_CHANGED, EvaluationStopped, ModelRuns
-from cve_kgrag.evaluation.gold_cases import load_gold_cases
+from cve_kgrag.evaluation.case_runner import (
+    PACKAGE_CHANGED,
+    EvaluationStopped,
+    ModelRuns,
+    build_fixture_data_planes,
+    describe_fixture_dataset,
+)
 from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport, format_report
 from cve_kgrag.evaluation.planner_runner import (
     REPORT_FILE_NAME,
@@ -30,6 +36,7 @@ from tests.support.evaluation import (
     encode_gold,
     list_entry_names,
 )
+from tests.support.gold_files import load_trajectory_cases
 from tests.support.planners import (
     SCRIPTED_PLANNER,
     UNAVAILABLE_REPLY,
@@ -44,16 +51,26 @@ def read_written_set(result_directory: ResultDirectory, relative_path: str) -> K
     )
 
 
+def fixture_inputs(fixture_bundle: FixtureBundle) -> dict[str, Any]:
+    """The data planes, dataset and absent labels an M7a evaluation runs with."""
+    data_planes = build_fixture_data_planes(fixture_bundle)
+    return {
+        "data_planes": data_planes,
+        "dataset": describe_fixture_dataset(data_planes),
+        "labelled_cases": None,
+    }
+
+
 def test_deterministic_evaluation_writes_each_case_s_set_and_the_report_it_returns(
     tmp_path: Path, fixture_bundle: FixtureBundle
 ) -> None:
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
+    cases = load_trajectory_cases(encode_gold(SMALL_GOLD_ROWS))
     result_directory = ResultDirectory.create(tmp_path)
 
     report = run_planner_evaluation(
         cases,
         gold_sha256="d" * 64,
-        bundle=fixture_bundle,
+        **fixture_inputs(fixture_bundle),
         model_runs=None,
         source_revision="unavailable",
         package_dir=build_package_dir(tmp_path),
@@ -76,13 +93,13 @@ def test_deterministic_evaluation_writes_each_case_s_set_and_the_report_it_retur
 def test_case_with_fight_unavailable_runs_on_a_deployment_serving_no_snapshot(
     tmp_path: Path, fixture_bundle: FixtureBundle
 ) -> None:
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
+    cases = load_trajectory_cases(encode_gold(SMALL_GOLD_ROWS))
     result_directory = ResultDirectory.create(tmp_path)
 
     run_planner_evaluation(
         cases,
         gold_sha256="d" * 64,
-        bundle=fixture_bundle,
+        **fixture_inputs(fixture_bundle),
         model_runs=None,
         source_revision="unavailable",
         package_dir=build_package_dir(tmp_path),
@@ -101,14 +118,14 @@ def test_case_with_fight_unavailable_runs_on_a_deployment_serving_no_snapshot(
 def test_model_evaluation_runs_each_case_the_given_number_of_times(
     tmp_path: Path, fixture_bundle: FixtureBundle
 ) -> None:
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
+    cases = load_trajectory_cases(encode_gold(SMALL_GOLD_ROWS))
     result_directory = ResultDirectory.create(tmp_path)
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY] * 6)
 
     report = run_planner_evaluation(
         cases,
         gold_sha256="d" * 64,
-        bundle=fixture_bundle,
+        **fixture_inputs(fixture_bundle),
         model_runs=ModelRuns(plan_with(model_port), 3),
         source_revision="unavailable",
         package_dir=build_package_dir(tmp_path),
@@ -131,11 +148,11 @@ def evaluate_one_model_run(
     tmp_path: Path, fixture_bundle: FixtureBundle, model_planning: ModelPlanning
 ) -> PlannerEvaluationReport:
     """The report of one model run of the small gold file's first case."""
-    (case,) = load_gold_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
+    (case,) = load_trajectory_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
     return run_planner_evaluation(
         (case,),
         gold_sha256="d" * 64,
-        bundle=fixture_bundle,
+        **fixture_inputs(fixture_bundle),
         model_runs=ModelRuns(model_planning, 1),
         source_revision="unavailable",
         package_dir=build_package_dir(tmp_path),
@@ -178,12 +195,12 @@ def test_report_identity_names_each_planner_by_its_own_hash(
 def test_every_revision_the_runner_reads_is_one_the_report_accepts(
     tmp_path: Path, fixture_bundle: FixtureBundle, source_revision: str
 ) -> None:
-    (case,) = load_gold_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
+    (case,) = load_trajectory_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
 
     report = run_planner_evaluation(
         (case,),
         gold_sha256="d" * 64,
-        bundle=fixture_bundle,
+        **fixture_inputs(fixture_bundle),
         model_runs=None,
         source_revision=source_revision,
         package_dir=build_package_dir(tmp_path),
@@ -196,14 +213,14 @@ def test_every_revision_the_runner_reads_is_one_the_report_accepts(
 def test_revision_the_report_rejects_stops_the_run_before_any_case_runs(
     tmp_path: Path, fixture_bundle: FixtureBundle
 ) -> None:
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS))
+    cases = load_trajectory_cases(encode_gold(SMALL_GOLD_ROWS))
     result_directory = ResultDirectory.create(tmp_path)
 
     with pytest.raises(ValidationError):
         run_planner_evaluation(
             cases,
             gold_sha256="d" * 64,
-            bundle=fixture_bundle,
+            **fixture_inputs(fixture_bundle),
             model_runs=None,
             source_revision="not-a-revision",
             package_dir=build_package_dir(tmp_path),
@@ -218,7 +235,7 @@ def test_package_changed_by_the_last_run_stops_the_evaluation_before_its_report(
 ) -> None:
     package_dir = build_package_dir(tmp_path)
     # One case: the edit lands in the last run, so only the check after it can see it.
-    cases = load_gold_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
+    cases = load_trajectory_cases(encode_gold(SMALL_GOLD_ROWS[:1]))
     result_directory = ResultDirectory.create(tmp_path / EVAL_RESULTS)
     model_port = PackageEditingModelPort(package_dir / "knowledge" / "card.yaml")
 
@@ -226,7 +243,7 @@ def test_package_changed_by_the_last_run_stops_the_evaluation_before_its_report(
         run_planner_evaluation(
             cases,
             gold_sha256="d" * 64,
-            bundle=fixture_bundle,
+            **fixture_inputs(fixture_bundle),
             model_runs=ModelRuns(plan_with(model_port), 1),
             source_revision="unavailable",
             package_dir=package_dir,

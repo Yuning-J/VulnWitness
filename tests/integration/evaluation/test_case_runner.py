@@ -15,9 +15,10 @@ from cve_kgrag.evaluation.case_runner import (
     CaseRunner,
     EvaluationStopped,
     ModelRuns,
+    build_fixture_data_planes,
     read_package_digest,
 )
-from cve_kgrag.evaluation.gold_cases import GoldCase, load_gold_cases
+from cve_kgrag.evaluation.gold_cases import GoldCase
 from cve_kgrag.evaluation.package_digest import fingerprint_package
 from cve_kgrag.evaluation.result_directory import ResultDirectory
 from tests.support.evaluation import (
@@ -28,6 +29,7 @@ from tests.support.evaluation import (
     encode_gold,
     list_entry_names,
 )
+from tests.support.gold_files import load_trajectory_cases
 from tests.support.planners import BlockingModelPort, plan_with
 
 # Long enough for a call that has returned to be counted done, short enough for a test.
@@ -39,7 +41,7 @@ def build_case_runner(
 ) -> tuple[CaseRunner, ResultDirectory]:
     result_directory = ResultDirectory.create(tmp_path / EVAL_RESULTS)
     case_runner = CaseRunner(
-        fixture_bundle,
+        build_fixture_data_planes(fixture_bundle),
         ThreadedCallRunner(),
         result_directory,
         package_dir,
@@ -52,7 +54,7 @@ def build_case_runner(
 def load_one_second_case(fight: str) -> GoldCase:
     """The 5G-AKA case with a one-second wall time, so a blocked planner is abandoned
     within a third of a second."""
-    (case,) = load_gold_cases(
+    (case,) = load_trajectory_cases(
         encode_gold([build_gold_row("5G-AKA", fight, budget={"max_wall_time_seconds": 1})])
     )
     return case

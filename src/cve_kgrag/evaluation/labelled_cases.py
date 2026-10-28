@@ -10,15 +10,13 @@ from datetime import date
 from enum import StrEnum
 from typing import Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from cve_kgrag.adapters.strict_yaml import load_strict_yaml
 from cve_kgrag.domain.contract_model import list_validation_problems
 from cve_kgrag.domain.evidence import SHA256_PATTERN
 from cve_kgrag.domain.evidence_set_verification_report import bound_violations
 from cve_kgrag.domain.investigation import InvestigationRequest
-from cve_kgrag.evaluation.gold_cases import MAX_GOLD_CASES, MAX_GOLD_FILE_BYTES, GoldFileError
+from cve_kgrag.evaluation.gold_cases import MAX_GOLD_CASES, GoldFileError, compute_case_sha256
 from cve_kgrag.evaluation.gold_rules import (
     CVE_PREDICATES,
     TECHNIQUE_PREDICATES,
@@ -81,8 +79,43 @@ class LabelRow(BaseModel):
     reason: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
 
 
+class SetRulesRow(BaseModel):
+    """One subject kind's rules, by the set each derives; a rule stays raw until
+    ``parse_rule`` reads it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    relevant: object = None
+    required: object = None
+    irrelevant: object = None
+    wide_check: object = None
+
+    def list_set_rules(self) -> dict[SetName, object]:
+        set_rules: dict[SetName, object] = {}
+        for set_name in SetName:
+            node = getattr(self, set_name.value)
+            if node is not None:
+                set_rules[set_name] = node
+        return set_rules
+
+
+class RulesRow(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    cves: SetRulesRow | None = None
+    techniques: SetRulesRow | None = None
+
+    def list_subject_kinds(self) -> set[SubjectKind]:
+        subject_kinds: set[SubjectKind] = set()
+        if self.cves is not None:
+            subject_kinds.add(SubjectKind.CVES)
+        if self.techniques is not None:
+            subject_kinds.add(SubjectKind.TECHNIQUES)
+        return subject_kinds
+
+
 class CaseRow(BaseModel):
-    """One case as the file states it; its rules stay raw until ``parse_rule`` reads them."""
+    """One case as the file states it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
@@ -91,7 +124,7 @@ class CaseRow(BaseModel):
     goal: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
     request: InvestigationRequest
     needs: tuple[EvidenceCategory, ...] = Field(min_length=1)
-    rules: dict[SubjectKind, dict[SetName, object]]
+    rules: RulesRow
     label: LabelRow
     drafted_by: Literal["assistant"]
     confirmed_by: Literal["owner"]
@@ -109,9 +142,11 @@ class GoldFileRow(BaseModel):
 @dataclass(frozen=True)
 class LabelledCase:
     """A case's identity, request, needed categories, label and parsed rules: for each
-    subject kind it has rules for, a rule per set it names."""
+    subject kind it has rules for, a rule per set it names. ``case_sha256`` names it in the
+    report's behaviour sections, as an M7a case is named, with the operator FiGHT source."""
 
     case_id: str
+    case_sha256: str
     split: Split
     request: InvestigationRequest
     needs: tuple[EvidenceCategory, ...]
@@ -122,6 +157,11 @@ class LabelledCase:
 
 @dataclass(frozen=True)
 class GoldFile:
+    """The labelled cases, the corpus and FiGHT snapshot their labels were confirmed
+    against, and ``gold_file_sha256``, the SHA-256 of the file's bytes, which the sets file
+    derived from it records."""
+
+    gold_file_sha256: str
     corpus_content_sha256: str
     fight_snapshot_sha256: str
     cases: tuple[LabelledCase, ...]
@@ -132,32 +172,45 @@ def check_set_names(set_rules: dict[SetName, object], position: int) -> None:
         raise GoldFileError(f"case {position}: a required rule needs a relevant rule")
 
 
-def read_case(case_row: CaseRow, position: int) -> LabelledCase:
+def check_needs(case_row: CaseRow, position: int) -> None:
+    """Each category once, at most one CVE category, so a run's CVE figures go to exactly
+    one, and rules for the subject kind of each category that has evidence."""
     if len(set(case_row.needs)) != len(case_row.needs):
         raise GoldFileError(f"case {position}: needs lists a category twice")
+    cve_categories = {EvidenceCategory.NAMED_CVE, EvidenceCategory.IMPLEMENTATION_CVES}
+    if cve_categories <= set(case_row.needs):
+        raise GoldFileError(f"case {position}: needs both named_cve and implementation_cves")
+    subject_kinds = case_row.rules.list_subject_kinds()
     for category in case_row.needs:
         subject_kind = CATEGORY_SUBJECTS[category]
-        if subject_kind is not None and subject_kind not in case_row.rules:
+        if subject_kind is not None and subject_kind not in subject_kinds:
             raise GoldFileError(
                 f"case {position}: needs {category.value} but has no {subject_kind.value} rules"
             )
+
+
+def read_case(case_row: CaseRow, position: int) -> LabelledCase:
+    check_needs(case_row, position)
     cve_rules: dict[SetName, Rule[CveSubject]] | None = None
     technique_rules: dict[SetName, Rule[TechniqueSubject]] | None = None
     try:
-        if SubjectKind.CVES in case_row.rules:
-            check_set_names(case_row.rules[SubjectKind.CVES], position)
+        if case_row.rules.cves is not None:
+            cve_set_rules = case_row.rules.cves.list_set_rules()
+            check_set_names(cve_set_rules, position)
             cve_rules = {}
-            for set_name, node in case_row.rules[SubjectKind.CVES].items():
+            for set_name, node in cve_set_rules.items():
                 cve_rules[set_name] = parse_rule(node, CVE_PREDICATES)
-        if SubjectKind.TECHNIQUES in case_row.rules:
-            check_set_names(case_row.rules[SubjectKind.TECHNIQUES], position)
+        if case_row.rules.techniques is not None:
+            technique_set_rules = case_row.rules.techniques.list_set_rules()
+            check_set_names(technique_set_rules, position)
             technique_rules = {}
-            for set_name, node in case_row.rules[SubjectKind.TECHNIQUES].items():
+            for set_name, node in technique_set_rules.items():
                 technique_rules[set_name] = parse_rule(node, TECHNIQUE_PREDICATES)
     except GoldRuleError as error:
         raise GoldFileError(f"case {position}: {error}") from None
     return LabelledCase(
         case_id=case_row.id,
+        case_sha256=compute_case_sha256(case_row.request, "operator"),
         split=case_row.split,
         request=case_row.request,
         needs=case_row.needs,
@@ -167,16 +220,11 @@ def read_case(case_row: CaseRow, position: int) -> LabelledCase:
     )
 
 
-def load_gold_file(gold_bytes: bytes) -> GoldFile:
-    """The labelled cases of an M7b gold file. Raises ``GoldFileError`` for a file over
-    ``MAX_GOLD_FILE_BYTES``, one a strict loader refuses, a row that breaks the shape, a
-    rule the engine does not read, or two cases with one ID."""
-    if len(gold_bytes) > MAX_GOLD_FILE_BYTES:
-        raise GoldFileError(f"the gold file is larger than {MAX_GOLD_FILE_BYTES} bytes")
-    try:
-        gold_document = load_strict_yaml(gold_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, yaml.YAMLError):
-        raise GoldFileError("the gold file is not UTF-8 YAML a strict loader accepts") from None
+def read_gold_file(gold_document: object, gold_file_sha256: str) -> GoldFile:
+    """The labelled cases of an M7b gold file, as ``read_gold_document`` parsed it from
+    the bytes whose SHA-256 is ``gold_file_sha256``. Raises ``GoldFileError`` for a row
+    that breaks the shape, a rule the engine does not read, or two cases with one ID or
+    one ``case_sha256``."""
     try:
         gold_row = GoldFileRow.model_validate(gold_document)
     except ValidationError as error:
@@ -184,12 +232,18 @@ def load_gold_file(gold_bytes: bytes) -> GoldFile:
         raise GoldFileError(f"the gold file breaks its shape: {problems}") from None
     cases: list[LabelledCase] = []
     case_ids: set[str] = set()
+    case_hashes: set[str] = set()
     for position, case_row in enumerate(gold_row.cases, start=1):
         if case_row.id in case_ids:
             raise GoldFileError(f"case {position} repeats an earlier case's ID")
+        case = read_case(case_row, position)
+        if case.case_sha256 in case_hashes:
+            raise GoldFileError(f"case {position} repeats an earlier case's request")
         case_ids.add(case_row.id)
-        cases.append(read_case(case_row, position))
+        case_hashes.add(case.case_sha256)
+        cases.append(case)
     return GoldFile(
+        gold_file_sha256=gold_file_sha256,
         corpus_content_sha256=gold_row.corpus_content_sha256,
         fight_snapshot_sha256=gold_row.fight_snapshot_sha256,
         cases=tuple(cases),

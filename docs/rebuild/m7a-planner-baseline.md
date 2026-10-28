@@ -76,10 +76,13 @@ hash of its request and FiGHT source; a plan by the hash of its call keys
 The report is the evaluation's own format (`evaluation_format_version: 1`), not part of
 the v2 knowledge contract, so it is not under `schemas/v2`. It is JSON with sorted keys,
 and the analysis is a pure function of the sets: equal sets give byte-equal reports.
+Format 1 gained the dataset identity and the M7b `sufficiency` section before its first
+live use; [`m7b-planner-evaluation.md`](m7b-planner-evaluation.md) describes them.
 
 `identity` says what was measured: the evidence-set schema version, the package digest,
-the source revision, the gold file's SHA-256, the hashes of the deterministic and model
-planner identities, and the model runs per case. The identity is built before any case
+the source revision, the gold file's SHA-256, the dataset (`dataset`: for this gold file,
+the fixture's `cve_search_version` and `fight_profile: per_case`), the hashes of the
+deterministic and model planner identities, and the model runs per case. The identity is built before any case
 runs. Two reports compare only when their identities are equal.
 
 - `package_sha256` names what ran: the digest of every file of the installed package
