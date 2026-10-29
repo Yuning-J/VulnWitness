@@ -129,11 +129,12 @@ Recorded when M6 closed; none blocks M7b unless it says so.
   memory for the API's two deployments over one data plane, measured with
   `scripts/operator/measure_serving.py` ; both differ from the
   250,000-record synthetic figures. M7b loads once per evaluation and does not wait on
-  it. Lexical search over that store can stall in a full collection when a
-  query's terms match hundreds of thousands of records
-  ([`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md#causes)); making lexical
-  search fast with byte-equal results is the first item of that record's
-  [work order](m7b-results-2026-10-28.md#what-follows).
+  it. Lexical search is an inverted index that builds a match object only for the
+  results it returns. Over that store it builds, and 1,056 searches (the M7b
+  run's queries and 300 sampled ones, at three limits and filters each) completed
+  without collection stalls, so the stalls in
+  [`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md#causes) do not recur and
+  `gc.freeze()` is not needed.
 - 18 NVD records are excluded at import because a vulnerable CPE names no concrete
   vendor or product (`cpe:2.3:h:qualcomm:-:-:…`, `cpe:2.3:o:-:-:-:…`). An alternative
   is keeping the record and dropping only that CPE match; decide it if a gold case turns

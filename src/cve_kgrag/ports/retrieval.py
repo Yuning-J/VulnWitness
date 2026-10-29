@@ -15,7 +15,10 @@ class LexicalRetriever(Protocol):
     def search(
         self, query_text: str, limit: int, allowed_cve_ids: Set[str] | None
     ) -> RetrievalOutcome:
-        """Up to ``limit`` matches, best first; ties ordered by ascending CVE ID."""
+        """Up to ``limit`` matches, best first; ties ordered by ascending CVE ID.
+
+        ``limit`` is at least 1: the search request bounds it before any retriever runs.
+        """
         ...
 
 
