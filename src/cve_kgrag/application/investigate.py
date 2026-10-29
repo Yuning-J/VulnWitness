@@ -9,7 +9,8 @@ checked before every planner and tool call, so every path ends at
 ``validate -> return``. Every planner and tool call runs under the call runner, which
 gives control back at the deadline even when the call has not returned, and no other
 adapter method runs during a request: the planner's identity is built by discovery
-before the service is. So a blocking adapter cannot hold the run past its wall-time cap.
+before the service is. So a blocking adapter cannot hold the run past its wall-time cap,
+unless it holds the interpreter lock; ``threaded_call_runner`` says when that happens.
 
 An optional model planner only proposes a ``QueryPlan``. Its reply passes the same
 gate as the deterministic plan; a rejected or failed reply falls back to the

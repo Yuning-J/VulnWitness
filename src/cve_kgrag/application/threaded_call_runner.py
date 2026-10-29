@@ -7,7 +7,9 @@ returns then is dropped. The thread is a daemon, so an abandoned call never keep
 the interpreter from exiting. The calls run here are read-only searches and plan
 proposals, so an abandoned call changes nothing the run reads afterwards. Network
 adapters still have to honour the timeout they are given, or each abandoned call
-keeps a thread and a connection until the remote side gives up.
+keeps a thread and a connection until the remote side gives up. The waiting thread needs
+the interpreter lock to return, so a call that holds it, such as a full garbage
+collection triggered inside an in-process search, delays the deadline until it lets go.
 
 A runner counts its live calls: those that have not returned, whether their caller is
 still waiting or abandoned them. A runner built with ``max_live_calls`` starts no call

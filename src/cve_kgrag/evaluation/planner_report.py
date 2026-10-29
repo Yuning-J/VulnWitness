@@ -27,7 +27,7 @@ from cve_kgrag.domain.planning import SHA256_HEX_PATTERN
 from cve_kgrag.domain.taxonomy import ResultStatus
 from cve_kgrag.evaluation.labelled_cases import EvidenceCategory, Split, Sufficiency
 
-EVALUATION_FORMAT_VERSION: Literal[1] = 1
+EVALUATION_FORMAT_VERSION: Literal[2] = 2
 RATE_DECIMALS = 4
 # A git commit ID, SHA-1 or SHA-256.
 GIT_COMMIT_PATTERN = r"[0-9a-f]{40}(?:[0-9a-f]{24})?"
@@ -74,7 +74,7 @@ class DatasetIdentity(ContractModel):
 class EvaluationIdentity(ContractModel):
     """What a report measured, so two reports can be told apart before they are compared."""
 
-    evaluation_format_version: Literal[1] = EVALUATION_FORMAT_VERSION
+    evaluation_format_version: Literal[2] = EVALUATION_FORMAT_VERSION
     evidence_set_schema_version: str
     source_revision: str = Field(
         pattern=SOURCE_REVISION_PATTERN,
@@ -228,8 +228,14 @@ class ModelCase(ContractModel):
         ge=1, description="Distinct fingerprints of the runs' accepted plans, round by round."
     )
     run_plans: dict[str, int] = Field(description="How many runs gave each of those fingerprints.")
-    distinct_results: int = Field(ge=1, description="Distinct status and stop reason pairs.")
-    matches_deterministic_result: Proportion
+    distinct_endings: int = Field(ge=1, description="Distinct status and stop reason pairs.")
+    matches_deterministic_ending: Proportion = Field(
+        description="Runs that ended with the deterministic run's status and stop reason."
+    )
+    matches_deterministic_answers: Proportion = Field(
+        description="Runs whose answer sections list the deterministic run's CVE and FiGHT "
+        "technique IDs, in any order."
+    )
     executed_model_step: Proportion = Field(
         description="Runs that executed at least one step the model planned."
     )

@@ -93,7 +93,9 @@ version control.
 With `CVE_KGRAG_STORE_ROOT` set, `store validate`, `store activate`, `store rollback` and
 `store status` manage the stores under it, and every surface that serves CVE records
 serves the store `ACTIVE` names, or refuses to start; it never falls back to the
-fixture. `demo` and `eval planner` always use the fixture. The
+fixture. `demo` always uses the fixture; `eval planner` uses it for an M7a gold file, and
+the active store with the operator FiGHT snapshot for an M7b gold file
+([`m7b-planner-evaluation.md`](docs/rebuild/m7b-planner-evaluation.md)). The
 [operator runbook](docs/runbook.md) covers importing, activating, serving, rolling back
 and the full FiGHT snapshot
 ([ADR 0009](docs/rebuild/adr/0009-store-activation-and-serving.md)).

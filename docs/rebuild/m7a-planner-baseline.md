@@ -73,11 +73,11 @@ hash of its request and FiGHT source; a plan by the hash of its call keys
 
 ## The report
 
-The report is the evaluation's own format (`evaluation_format_version: 1`), not part of
+The report is the evaluation's own format (`evaluation_format_version: 2`), not part of
 the v2 knowledge contract, so it is not under `schemas/v2`. It is JSON with sorted keys,
 and the analysis is a pure function of the sets: equal sets give byte-equal reports.
-Format 1 gained the dataset identity and the M7b `sufficiency` section before its first
-live use; [`m7b-planner-evaluation.md`](m7b-planner-evaluation.md) describes them.
+[`m7b-planner-evaluation.md`](m7b-planner-evaluation.md) describes the dataset identity
+and the M7b `sufficiency` section.
 
 `identity` says what was measured: the evidence-set schema version, the package digest,
 the source revision, the gold file's SHA-256, the dataset (`dataset`: for this gold file,
@@ -166,9 +166,11 @@ but the report states them. Each entry of `cases` reports, over that case's mode
 
 - `distinct_run_plans`: distinct fingerprints of the runs' plans, round by round, and
   `run_plans`: how many runs gave each fingerprint;
-- `distinct_results`: distinct status and stop reason pairs;
-- `matches_deterministic_result`: runs that ended with the deterministic run's status and
-  stop reason;
+- `distinct_endings`: distinct status and stop reason pairs;
+- `matches_deterministic_ending`: runs that ended with the deterministic run's status and
+  stop reason. An equal ending says nothing about the evidence returned;
+- `matches_deterministic_answers`: runs whose answer sections list the same CVE IDs and
+  the same FiGHT technique IDs as the deterministic run's, in any order;
 - `executed_model_step`;
 - `gate_acceptance` over every round of the case's runs, and `run_gate_acceptance`: the
   mean, minimum and maximum of each run's own gate acceptance;
@@ -189,8 +191,8 @@ runs end as the gold labels say. By status: 8 `ok`, 5 `no_match`, 3 `partial`, 1
 
 ## Live runs
 
-Model runs call the configured endpoint and are made by hand, by the owner, in their own
-terminal. They are never part of CI. The command is in [`PLAN.md`](PLAN.md#live-lane-opt-in).
+Model runs call the configured endpoint and are started by hand, with the key in the
+launching environment. They are never part of CI. The command is in [`PLAN.md`](PLAN.md#live-lane-opt-in).
 Five runs per case over the 18 gold cases make at most 180 planner calls (one per round,
 at most two rounds per run). Share the printed report; keep the result directory local.
 

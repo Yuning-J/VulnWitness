@@ -27,6 +27,7 @@ from cve_kgrag.domain.planning import (
     compute_call_key,
 )
 from cve_kgrag.domain.taxonomy import ResultStatus
+from cve_kgrag.evaluation.labelled_cases import SubjectKind
 from cve_kgrag.evaluation.planner_report import (
     RATE_DECIMALS,
     DeterministicCase,
@@ -65,6 +66,28 @@ class CaseRuns:
     case_sha256: str
     deterministic_set: KnowledgeEvidenceSet
     model_sets: tuple[KnowledgeEvidenceSet, ...]
+
+
+def list_answer_ids(evidence_set: KnowledgeEvidenceSet, subject_kind: SubjectKind) -> set[str]:
+    listed_ids: set[str] = set()
+    if subject_kind is SubjectKind.CVES:
+        for candidate in evidence_set.implementation_candidates:
+            listed_ids.add(candidate.candidate.record.cve_id)
+    else:
+        for threat_context_item in evidence_set.protocol_context:
+            listed_ids.add(threat_context_item.technique_id)
+    return listed_ids
+
+
+def has_same_answers(
+    evidence_set: KnowledgeEvidenceSet, other_evidence_set: KnowledgeEvidenceSet
+) -> bool:
+    """Whether both sets list the same IDs in each answer section, in any order."""
+    return all(
+        list_answer_ids(evidence_set, subject_kind)
+        == list_answer_ids(other_evidence_set, subject_kind)
+        for subject_kind in SubjectKind
+    )
 
 
 def fingerprint_plan(calls: Sequence[ToolCall]) -> str:
@@ -317,7 +340,8 @@ def compare_tool_calls(
 def summarize_model_case(case: CaseRuns) -> ModelCase:
     run_endings: set[tuple[ResultStatus, StopReason]] = set()
     deterministic_ending = (case.deterministic_set.status, case.deterministic_set.stop_reason)
-    matching_runs = 0
+    runs_matching_ending = 0
+    runs_matching_answers = 0
     runs_with_model_step = 0
     run_acceptance_rates: list[float | None] = []
     tool_calls: list[int] = []
@@ -325,7 +349,9 @@ def summarize_model_case(case: CaseRuns) -> ModelCase:
         run_ending = (model_set.status, model_set.stop_reason)
         run_endings.add(run_ending)
         if run_ending == deterministic_ending:
-            matching_runs += 1
+            runs_matching_ending += 1
+        if has_same_answers(model_set, case.deterministic_set):
+            runs_matching_answers += 1
         if has_model_step(model_set):
             runs_with_model_step += 1
         run_acceptance = measure_rounds(model_set.trajectory.rounds).gate_acceptance
@@ -338,8 +364,9 @@ def summarize_model_case(case: CaseRuns) -> ModelCase:
         runs=run_count,
         distinct_run_plans=len(run_plans),
         run_plans=run_plans,
-        distinct_results=len(run_endings),
-        matches_deterministic_result=measure_proportion(matching_runs, run_count),
+        distinct_endings=len(run_endings),
+        matches_deterministic_ending=measure_proportion(runs_matching_ending, run_count),
+        matches_deterministic_answers=measure_proportion(runs_matching_answers, run_count),
         executed_model_step=measure_proportion(runs_with_model_step, run_count),
         gate_acceptance=measure_rounds(list_rounds(case.model_sets, None)).gate_acceptance,
         run_gate_acceptance=spread_rates(run_acceptance_rates),

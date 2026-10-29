@@ -388,10 +388,10 @@ def test_each_case_reports_its_stability_and_the_cases_spread_their_acceptance(
     )
 
     switching, half_accepted, unavailable = model_section.cases
-    assert (switching.runs, switching.distinct_run_plans, switching.distinct_results) == (2, 2, 1)
+    assert (switching.runs, switching.distinct_run_plans, switching.distinct_endings) == (2, 2, 1)
     assert sorted(switching.run_plans.values()) == [1, 1]
     assert switching.switches_planner is True
-    assert switching.matches_deterministic_result == Proportion(count=2, of=2, rate=1.0)
+    assert switching.matches_deterministic_ending == Proportion(count=2, of=2, rate=1.0)
     assert switching.executed_model_step == Proportion(count=1, of=2, rate=0.5)
     assert switching.gate_acceptance == Proportion(count=1, of=1, rate=1.0)
     assert half_accepted.gate_acceptance == Proportion(count=1, of=2, rate=0.5)
@@ -456,7 +456,7 @@ def test_plan_switch_in_round_two_counts_as_switching_planner(
     assert model_case.switches_planner is True
 
 
-def test_run_ending_for_another_reason_does_not_match_the_deterministic_result(
+def test_run_ending_for_another_reason_does_not_match_the_deterministic_ending(
     fixture_bundle: FixtureBundle,
 ) -> None:
     deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
@@ -469,8 +469,30 @@ def test_run_ending_for_another_reason_does_not_match_the_deterministic_result(
         analyze(build_case(deterministic_set, accepted_set, same_status_other_stop_set))
     ).cases
 
-    assert model_case.matches_deterministic_result == Proportion(count=1, of=2, rate=0.5)
-    assert model_case.distinct_results == 2
+    assert model_case.matches_deterministic_ending == Proportion(count=1, of=2, rate=0.5)
+    assert model_case.distinct_endings == 2
+
+
+@pytest.mark.parametrize("answer_section", ["implementation_candidates", "protocol_context"])
+def test_reordered_answers_match_and_other_answer_ids_do_not_match_the_deterministic_answers(
+    fixture_bundle: FixtureBundle, answer_section: str
+) -> None:
+    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "mixed")
+    answers = getattr(deterministic_set, answer_section)
+    assert len(answers) >= 2
+    reordered_set = reseal_evidence_set(deterministic_set, **{answer_section: answers[::-1]})
+    # As many answers as the deterministic run, one ID repeated in place of another.
+    replaced_set = reseal_evidence_set(
+        deterministic_set, **{answer_section: (*answers[1:], answers[1])}
+    )
+    dropped_set = reseal_evidence_set(deterministic_set, **{answer_section: answers[1:]})
+
+    (model_case,) = require_model_section(
+        analyze(build_case(deterministic_set, reordered_set, replaced_set, dropped_set))
+    ).cases
+
+    assert model_case.matches_deterministic_ending == Proportion(count=3, of=3, rate=1.0)
+    assert model_case.matches_deterministic_answers == Proportion(count=1, of=3, rate=0.3333)
 
 
 def test_accepted_model_plan_that_executed_nothing_is_no_executed_model_step(

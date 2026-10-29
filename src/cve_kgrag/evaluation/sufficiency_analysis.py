@@ -27,7 +27,7 @@ from cve_kgrag.evaluation.labelled_cases import (
     SubjectKind,
     Sufficiency,
 )
-from cve_kgrag.evaluation.planner_analysis import CaseRuns, spread_rates
+from cve_kgrag.evaluation.planner_analysis import CaseRuns, list_answer_ids, spread_rates
 from cve_kgrag.evaluation.planner_report import (
     RATE_DECIMALS,
     CaseCategoryFigures,
@@ -74,17 +74,6 @@ class RunJudgement:
 class JudgedCase:
     case: LabelledCase
     judgements: tuple[RunJudgement, ...]
-
-
-def list_answer_ids(evidence_set: KnowledgeEvidenceSet, subject_kind: SubjectKind) -> set[str]:
-    listed_ids: set[str] = set()
-    if subject_kind is SubjectKind.CVES:
-        for candidate in evidence_set.implementation_candidates:
-            listed_ids.add(candidate.candidate.record.cve_id)
-    else:
-        for threat_context_item in evidence_set.protocol_context:
-            listed_ids.add(threat_context_item.technique_id)
-    return listed_ids
 
 
 def judge_category(derived_sets: DerivedSets, listed_ids: set[str]) -> CategoryJudgement:

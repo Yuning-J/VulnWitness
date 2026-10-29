@@ -100,7 +100,7 @@ A case needs at most one CVE category: the gold loader refuses one that needs bo
 
 ## Identity
 
-`identity` gains `dataset`:
+`identity` holds `dataset`:
 
 - M7b: `cve_search_version` (`corpus-store-v1@sha256:<corpus_content_sha256>`),
   `fight_snapshot_sha256`, and `sets_sha256`, the SHA-256 of the sets file's bytes;
@@ -108,8 +108,8 @@ A case needs at most one CVE category: the gold loader refuses one that needs bo
   cases choose between the packaged excerpt and no FiGHT source.
 
 Two reports compare only when their identities are equal, so protocol figures over
-different FiGHT snapshots never compare. `evaluation_format_version` stays 1: no live
-report has been made in format 1, so it is completed before its first use, not replaced.
+different FiGHT snapshots never compare, and neither do reports of different
+`evaluation_format_version`.
 
 ## The `sufficiency` section
 
@@ -197,11 +197,12 @@ text, model reply, endpoint or path, so its aggregate figures may be committed u
 M7b data rules. Per-run detail is not repeated in a further file: the evidence sets in the
 local result directory are the record every figure is recomputed from.
 
-## Changes to M7a
+## Relation to M7a
 
-The M7a design record gains two small notes: `identity.dataset`, and that format 1 was
-completed with the M7b sections before its first live use, with a link here. M7a's runs,
-cases and behaviour figures are unchanged; its report differs only by `dataset`.
+[`m7a-planner-baseline.md`](m7a-planner-baseline.md) documents the report both
+evaluations write and links here for `identity.dataset` and the `sufficiency` section. An
+M7a evaluation runs the same cases and behaviour figures; its `dataset` is the fixture's
+`cve_search_version` with `fight_profile: per_case`, and it has no `sufficiency` section.
 
 ## Tests
 

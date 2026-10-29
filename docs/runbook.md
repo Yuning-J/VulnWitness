@@ -141,8 +141,11 @@ exit 2 and the line `cve-kgrag <command> cannot start: store unavailable: <reaso
 before a server binds a port. The reasons are `store_root_unusable`, `no_active_store`,
 `active_unreadable`, `active_store_missing`, `active_store_changed`, `store_invalid` and
 `store_format_unsupported`; `store status` says more. `resolve`, `affectedness`,
-`migrate`, `store` and `schema` load no served store; `demo` and `eval planner` always
-use the packaged fixture and say so on standard error.
+`migrate`, `store` and `schema` load no served store; `demo` always uses the packaged
+fixture, and so does `eval planner` for an M7a gold file, each saying so on standard
+error. `eval planner` with an M7b gold file runs on the active store and the operator
+FiGHT snapshot
+([`m7b-planner-evaluation.md`](rebuild/m7b-planner-evaluation.md#the-command)).
 
 A server loads its store before it answers: health probes see connection refused while
 it loads, and an MCP client on stdio waits for its initialize answer through the load.

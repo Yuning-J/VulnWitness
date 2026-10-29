@@ -13,8 +13,8 @@ milestone once its exit criterion is met and the offline lane is green.
 | M4 | Bounded investigation state machine, deterministic policy m4.1, model-planner port with plan gate and deterministic fallback, budgets, replayable trajectory, gold trajectories, hard wall time via abandoning call runner, per-request result cap, catalog re-check of served content, trajectory cross-validation (network LLM adapter follows separately) | done |
 | M5 | Trustify port + disabled adapter (real adapter BLOCKED_UNVERIFIED, ADR 0003), read-only stdio MCP server with eight bounded tools, evidence-set verification (`cve-kgrag verify`), server-owned text at the MCP boundary (typed affectedness and backend failures, vouched match explanations), search-tool boundary below; contracts `2.0.0-dev.16` | done |
 | M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, loopback, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; WP4 offline CI; WP5 full CLI and the verification report contract, with bounded violations in the server's own words; WP6 HTTP guard, HTTP settings and MCP over Streamable HTTP; WP7 v2 REST API with set verification over HTTP; WP9 read-only legacy-data importer, ADR 0008; WP10 store activation and serving, the operator FiGHT snapshot, visible truncation and the M6 exit audit, ADR 0009; contracts `2.0.0-dev.26`); exit audit in [`m6-exit-audit.md`](m6-exit-audit.md) | done |
-| M7a | Planner behaviour baseline before WP9: `cve-kgrag eval planner`, a pure analyzer over the evidence sets' trajectories (outcomes, fallbacks, divergence from the policy's plans, run stability), the deterministic baseline on the M4 gold file; no agent, vocabulary, round or contract change; [`m7a-planner-baseline.md`](m7a-planner-baseline.md) | done offline; live model runs are the owner's |
-| M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | not started |
+| M7a | Planner behaviour baseline before WP9: `cve-kgrag eval planner`, a pure analyzer over the evidence sets' trajectories (outcomes, fallbacks, divergence from the policy's plans, run stability), the deterministic baseline on the M4 gold file; no agent, vocabulary, round or contract change; [`m7a-planner-baseline.md`](m7a-planner-baseline.md) | done offline; live model runs are started by hand, outside CI |
+| M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | in progress: gold cases and the M7b evaluation done; the first model run, its causes and the planned work order in [`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md) |
 
 ## M5 acceptance: the search-tool boundary
 
@@ -120,8 +120,6 @@ Recorded when M6 closed; none blocks M7b unless it says so.
 - The `search_cves` filtered seam; hot reload of an activated store; removing old
   stores; a matched count for `search` responses; revisiting the 20-technique cap on
   topic context, whose cuts are now reported.
-- The corpus content digest in the planner evaluation's identity (M7b), so reports from
-  two datasets never compare as equal.
 - The importer's 512 MiB per-file cap against the current year's feed. On 2026-10-27 the
   2026 feed decompressed to 493,417,964 bytes (92% of the cap) and grows until the year
   ends, so a full import will fail once it passes the cap; raise the cap, measured
@@ -131,7 +129,11 @@ Recorded when M6 closed; none blocks M7b unless it says so.
   memory for the API's two deployments over one data plane, measured with
   `scripts/operator/measure_serving.py` ; both differ from the
   250,000-record synthetic figures. M7b loads once per evaluation and does not wait on
-  it; `gc.freeze()` if the operator lane shows collection stalls.
+  it. Lexical search over that store can stall in a full collection when a
+  query's terms match hundreds of thousands of records
+  ([`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md#causes)); making lexical
+  search fast with byte-equal results is the first item of that record's
+  [work order](m7b-results-2026-10-28.md#what-follows).
 - 18 NVD records are excluded at import because a vulnerable CPE names no concrete
   vendor or product (`cpe:2.3:h:qualcomm:-:-:…`, `cpe:2.3:o:-:-:-:…`). An alternative
   is keeping the record and dropping only that CPE match; decide it if a gold case turns
