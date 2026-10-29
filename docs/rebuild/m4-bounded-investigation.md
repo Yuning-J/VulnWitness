@@ -384,7 +384,9 @@ controller defect and raises instead of returning. It checks:
   `rejected_invalid_evidence` step records none); once a lookup's exact-ID channel
   ran, it warns `unknown_cve_id` for exactly the IDs it looked up that the catalog
   lacks, in lookup order, and `excluded_by_filters` only for an ID it looked up
-  that the catalog holds and it did not return; and the semantic channel runs in a
+  that the catalog holds and it did not return; a `cve_search` step warns
+  `term_not_indexed` only for a search term its lexical channel was sent; and the
+  semantic channel runs in a
   `cve_search` step under a semantic request beside the lexical channel, and in no
   other step;
 - relevance assessed for every candidate once a topic resolved, except a CVE

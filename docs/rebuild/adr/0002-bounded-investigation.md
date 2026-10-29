@@ -353,7 +353,8 @@ run planned, round 2 only after it refined, and always after a refinement under 
 model planner allowed two rounds, so a round can be neither invented nor erased.
 A step's observations are tied to its call: a step that got a response records
 one outcome per source it consulted, a lookup's `unknown_cve_id` and
-`excluded_by_filters` warnings must agree with the evidence catalog, and only a CVE
+`excluded_by_filters` warnings must agree with the evidence catalog, a search warns
+`term_not_indexed` only for one of its own search terms, and only a CVE
 search under a semantic request runs the semantic channel. The byte cap is a pure
 decision over recorded sizes, so a step is discarded over `max_context_bytes`
 exactly when it would push the admitted bytes past the cap. A topic step's template

@@ -38,7 +38,7 @@ rows:
   - id: search_cve_2022_log4j
     tool: search_vulnerabilities
     request: {query: "CVE 2022 log4j"}
-    expected: {status: no_match, channels: [lexical], candidates: [], warnings: []}
+    expected: {status: no_match, channels: [lexical], candidates: [], warnings: [[term_not_indexed, "2022"], [term_not_indexed, "log4j"]]}
   - id: search_id_then_cve
     tool: search_vulnerabilities
     request: {query: "CVE-9999-0003 cve"}
@@ -52,11 +52,11 @@ rows:
   - id: measure_vulnerabilities
     tool: search_vulnerabilities
     request: {query: "vulnerabilities"}
-    expected: {status: no_match, channels: [lexical], candidates: [], warnings: []}
+    expected: {status: no_match, channels: [lexical], candidates: [], warnings: [[term_not_indexed, "vulnerabilities"]]}
   - id: measure_vuln
     tool: search_vulnerabilities
     request: {query: "vuln"}
-    expected: {status: no_match, channels: [lexical], candidates: [], warnings: []}
+    expected: {status: no_match, channels: [lexical], candidates: [], warnings: [[term_not_indexed, "vuln"]]}
   - id: measure_ausf_vulnerability
     tool: search_vulnerabilities
     request: {query: "ausf vulnerability"}

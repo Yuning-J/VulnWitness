@@ -64,6 +64,13 @@ def test_search_with_unindexed_term_returns_no_matches() -> None:
     assert INDEX.search("bluetooth", limit=10, allowed_cve_ids=None).matches == ()
 
 
+def test_search_names_query_terms_no_record_holds_beside_its_matches() -> None:
+    outcome = INDEX.search("sql zzqx", limit=10, allowed_cve_ids=None)
+
+    assert list_cve_ids(outcome.matches) == ["CVE-9999-0001", "CVE-9999-0002"]
+    assert outcome.unindexed_terms == ("zzqx",)
+
+
 def test_search_respects_limit() -> None:
     assert len(INDEX.search("democorp", limit=2, allowed_cve_ids=None).matches) == 2
 

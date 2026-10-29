@@ -207,8 +207,26 @@ def build_retrieval_match(cve_id: str = "CVE-9999-0001", score: float = 1.0) -> 
             },
             "more than once",
         ),
+        (
+            {
+                "status": BackendStatus.ERROR,
+                "failure": BackendFailure.SEARCH_FAILED,
+                "unindexed_terms": ["srsran"],
+            },
+            "cannot name unindexed terms",
+        ),
+        ({"status": BackendStatus.OK, "unindexed_terms": ["zz", "aa"]}, "once each, sorted"),
+        ({"status": BackendStatus.OK, "unindexed_terms": ["aa", "aa"]}, "once each, sorted"),
     ],
-    ids=["ok_with_failure", "failure_with_matches", "failure_without_reason", "duplicate_match"],
+    ids=[
+        "ok_with_failure",
+        "failure_with_matches",
+        "failure_without_reason",
+        "duplicate_match",
+        "failure_with_unindexed_terms",
+        "unsorted_unindexed_terms",
+        "repeated_unindexed_term",
+    ],
 )
 def test_inconsistent_backend_outcome_is_rejected(
     outcome_fields: dict[str, object], violation: str

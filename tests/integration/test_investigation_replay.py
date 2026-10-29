@@ -581,6 +581,7 @@ def test_replay_whose_first_round_now_answers_runs_no_refinement_round(
         (
             ReplayDifference(1, "status"),
             ReplayDifference(1, "source_outcomes"),
+            ReplayDifference(1, "search_warnings"),
             ReplayDifference(1, "answer_ids"),
             ReplayDifference(1, "evidence_ids"),
             ReplayDifference(1, "result_sha256"),
@@ -617,6 +618,7 @@ def test_replay_that_stops_before_the_recorded_deadline_point_names_the_breach(
         (
             ReplayDifference(1, "status"),
             ReplayDifference(1, "source_outcomes"),
+            ReplayDifference(1, "search_warnings"),
             ReplayDifference(1, "answer_ids"),
             ReplayDifference(1, "evidence_ids"),
             ReplayDifference(1, "result_sha256"),
@@ -655,6 +657,7 @@ def test_replay_that_no_longer_asks_for_a_recorded_reply_names_the_rounds(
         (
             ReplayDifference(1, "status"),
             ReplayDifference(1, "source_outcomes"),
+            ReplayDifference(1, "search_warnings"),
             ReplayDifference(1, "answer_ids"),
             ReplayDifference(1, "evidence_ids"),
             ReplayDifference(1, "result_sha256"),
@@ -691,6 +694,7 @@ def test_replay_that_asks_for_a_reply_the_record_lacks_names_the_rounds(
         (
             ReplayDifference(1, "status"),
             ReplayDifference(1, "source_outcomes"),
+            ReplayDifference(1, "search_warnings"),
             ReplayDifference(1, "answer_ids"),
             ReplayDifference(1, "evidence_ids"),
             ReplayDifference(1, "result_sha256"),

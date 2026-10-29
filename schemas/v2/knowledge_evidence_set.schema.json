@@ -2371,6 +2371,7 @@
         "unknown_cve_id",
         "excluded_by_filters",
         "no_searchable_terms",
+        "term_not_indexed",
         "backend_unavailable",
         "backend_incomplete",
         "backend_error"
@@ -4264,8 +4265,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.26",
-      "default": "2.0.0-dev.26",
+      "const": "2.0.0-dev.27",
+      "default": "2.0.0-dev.27",
       "title": "Schema Version",
       "type": "string"
     },

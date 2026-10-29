@@ -24,6 +24,7 @@ from cve_kgrag.adapters.store.active_record import (
 from cve_kgrag.adapters.store.active_record_writer import OsActiveRecordFiles, hold_store_lock
 from cve_kgrag.adapters.store.corpus_store import verify_corpus_store
 from cve_kgrag.adapters.store.store_activation import StoreActivation
+from cve_kgrag.domain.search import SCHEMA_VERSION
 from cve_kgrag.domain.store_status import (
     ActiveRecordState,
     ActiveStoreCondition,
@@ -114,7 +115,7 @@ def test_activation_reports_the_identity_its_verification_found(
     assert identity.cve_search_version == (
         f"corpus-store-v1@sha256:{verified_store.corpus_content_sha256}"
     )
-    assert identity.created_under_schema_version == "2.0.0-dev.26"
+    assert identity.created_under_schema_version == SCHEMA_VERSION
 
 
 def test_activating_another_store_keeps_the_active_one_as_previous(

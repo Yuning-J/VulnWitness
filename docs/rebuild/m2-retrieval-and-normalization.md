@@ -25,6 +25,12 @@ deterministic; semantic retrieval is an explicit optional capability.
   CVE IDs, including a whitespace-only one and a bare `cve` or `CVEs`, is answered
   `no_match` with a `no_searchable_terms` warning, whatever channels and filters were
   requested: it calls no lexical, semantic or graph channel.
+- The lexical channel (BM25) ranks every record holding a search term. Each search term
+  no record holds is named in a `term_not_indexed` warning, so `srsRAN vulnerabilities`
+  says that no record names `srsran` beside the records it ranks for
+  `vulnerabilities`. Whether such matches answer the question is left to the
+  investigation's assessment, not to retrieval
+  ([`m7b-work-packages.md`](m7b-work-packages.md#a2--terms-no-record-holds)).
 - Filters only constrain. The structured channel runs first; its matching set is
   passed into the exact-ID, lexical, semantic and graph channels. Each applies its
   `limit` to records that satisfy the filters, or reports `unavailable` when it

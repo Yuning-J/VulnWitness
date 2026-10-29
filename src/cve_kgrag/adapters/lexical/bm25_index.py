@@ -5,6 +5,9 @@ numbers, so a term costs one ``TermPostings`` and three arrays however many reco
 it. A search adds up scores in a dict of numbers for the records holding a query term and
 builds match objects only for the ``limit`` best, so a term found in most records costs
 arithmetic, not an object per record that lives until the ranking ends.
+
+An outcome names the query terms no record holds, so a search for a product the index
+does not know says so instead of answering only with its other words' matches.
 """
 
 import heapq
@@ -141,7 +144,18 @@ class Bm25LexicalIndex:
             matches.append(
                 self._build_match(record_position, record_scores[record_position], query_terms)
             )
-        return RetrievalOutcome(status=BackendStatus.OK, matches=tuple(matches))
+        return RetrievalOutcome(
+            status=BackendStatus.OK,
+            matches=tuple(matches),
+            unindexed_terms=self._list_unindexed_terms(query_terms),
+        )
+
+    def _list_unindexed_terms(self, query_terms: list[str]) -> tuple[str, ...]:
+        unindexed_terms: list[str] = []
+        for term in query_terms:
+            if term not in self._postings:
+                unindexed_terms.append(term)
+        return tuple(unindexed_terms)
 
     def _add_posting(
         self, term: str, record_position: int, term_count: int, field_mask: int

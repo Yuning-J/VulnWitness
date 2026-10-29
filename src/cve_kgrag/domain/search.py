@@ -32,7 +32,7 @@ from cve_kgrag.domain.taxonomy import (
 
 # v2 is pre-release until the M7 review freezes it; every bump is a reviewed
 # change to the committed snapshots under schemas/v2/.
-SCHEMA_VERSION = "2.0.0-dev.26"
+SCHEMA_VERSION = "2.0.0-dev.27"
 # The matched term a structured match names for the KEV filter.
 KEV_MATCH_TERM = "listed"
 MAX_QUERY_CHARS = 512
@@ -278,6 +278,11 @@ class RetrievalOutcome(ContractModel):
     failure: BackendFailure | None = Field(
         default=None, description="Why the backend gave no answer; set exactly when it failed."
     )
+    unindexed_terms: tuple[str, ...] = Field(
+        default=(),
+        description="Query terms no indexed record holds, in sorted order; set only by the "
+        "lexical channel.",
+    )
 
     @model_validator(mode="after")
     def check_status_payload(self) -> "RetrievalOutcome":
@@ -287,6 +292,10 @@ class RetrievalOutcome(ContractModel):
             raise ValueError("an unsuccessful backend outcome cannot carry matches")
         if self.status is not BackendStatus.OK and self.failure is None:
             raise ValueError("an unsuccessful backend outcome must carry its failure")
+        if self.status is not BackendStatus.OK and self.unindexed_terms:
+            raise ValueError("an unsuccessful backend outcome cannot name unindexed terms")
+        if list(self.unindexed_terms) != sorted(set(self.unindexed_terms)):
+            raise ValueError("a backend outcome names its unindexed terms once each, sorted")
         matched_cve_ids: set[str] = set()
         for match in self.matches:
             if match.cve_id in matched_cve_ids:
@@ -385,6 +394,7 @@ class SearchWarningCode(StrEnum):
     UNKNOWN_CVE_ID = "unknown_cve_id"
     EXCLUDED_BY_FILTERS = "excluded_by_filters"
     NO_SEARCHABLE_TERMS = "no_searchable_terms"
+    TERM_NOT_INDEXED = "term_not_indexed"
     BACKEND_UNAVAILABLE = "backend_unavailable"
     BACKEND_INCOMPLETE = "backend_incomplete"
     BACKEND_ERROR = "backend_error"

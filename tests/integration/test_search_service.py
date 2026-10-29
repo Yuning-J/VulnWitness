@@ -23,6 +23,7 @@ from cve_kgrag.domain.search import (
     SearchFilters,
     SearchRequest,
     SearchResponse,
+    SearchWarning,
     SearchWarningCode,
 )
 from cve_kgrag.domain.taxonomy import (
@@ -89,6 +90,15 @@ def test_unknown_terms_return_no_match_and_no_evidence(search_service: SearchSer
     assert response.status is ResultStatus.NO_MATCH
     assert response.candidates == ()
     assert response.evidence == ()
+
+
+def test_search_term_no_record_holds_is_named_in_a_warning(search_service: SearchService) -> None:
+    response = search_service.search(SearchRequest(query="ausf zzqx"))
+
+    assert response.status is ResultStatus.OK
+    assert response.warnings == (
+        SearchWarning(code=SearchWarningCode.TERM_NOT_INDEXED, subject="zzqx"),
+    )
 
 
 def test_stopword_only_query_warns_no_searchable_terms(search_service: SearchService) -> None:
@@ -989,6 +999,15 @@ UNVOUCHED_EXPLANATIONS = [
         },
         SearchRequest(query="ausf crash"),
         id="unvalidated_unknown_field",
+    ),
+    pytest.param(
+        {
+            "lexical_retriever": CannedRetriever(
+                RetrievalOutcome(status=BackendStatus.OK, unindexed_terms=(ADAPTER_PROSE,))
+            )
+        },
+        SearchRequest(query="ausf crash"),
+        id="lexical_unindexed_term_never_sent",
     ),
 ]
 

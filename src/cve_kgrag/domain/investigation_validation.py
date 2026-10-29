@@ -13,7 +13,8 @@ Beyond the anchor, record, threat-context and claim rules of ``validation``:
   answer ID it records has an anchor among them;
 - a step that got a response records one outcome per source it consulted; a lookup
   warns ``unknown_cve_id`` for exactly the IDs it looked up that the catalog lacks
-  and ``excluded_by_filters`` only for ones it holds and did not return; and only a
+  and ``excluded_by_filters`` only for ones it holds and did not return; a search warns
+  ``term_not_indexed`` only for a search term its lexical channel was sent; and only a
   CVE search under a semantic request runs the semantic channel, always beside the
   lexical one;
 - relevance is assessed for every candidate once a topic resolved, except a CVE the
@@ -446,14 +447,20 @@ def find_step_outcome_violations(step: ToolStep) -> list[str]:
     return []
 
 
-def find_lookup_warning_violations(step: ToolStep, evidence_catalog: EvidenceCatalog) -> list[str]:
+def find_search_warning_violations(step: ToolStep, evidence_catalog: EvidenceCatalog) -> list[str]:
     """Once its exact-ID channel ran, a search warns ``unknown_cve_id`` for exactly the IDs
     it looked up that the catalog does not hold, in lookup order; it warns
     ``excluded_by_filters`` only for an ID it looked up that the catalog holds and it did
-    not return."""
+    not return, and ``term_not_indexed`` only for one of the search terms its lexical
+    channel was sent. A term the warning leaves out, or one a record does hold, shows only on
+    replay."""
     looked_up_ids: list[str] = []
     if isinstance(step.call, CveExactLookupCall | CveSearchCall):
         looked_up_ids = find_cve_ids(format_cve_tool_query(step.call))
+    search_terms: list[str] = []
+    if isinstance(step.call, CveSearchCall):
+        search_terms = list_query_terms(step.call.query)
+    ran_lexical = RetrievalChannel.LEXICAL in step.channels_executed
     unknown_ids: list[str] = []
     for looked_up_id in looked_up_ids:
         if evidence_catalog.get_cve(looked_up_id) is None:
@@ -482,6 +489,12 @@ def find_lookup_warning_violations(step: ToolStep, evidence_catalog: EvidenceCat
                     f"{warning_label}: warns of an ID excluded by the filters that is not one "
                     "the step looked up, the catalog holds and the step did not return"
                 )
+        is_unindexed_warning = search_warning.code is SearchWarningCode.TERM_NOT_INDEXED
+        if is_unindexed_warning and (subject not in search_terms or not ran_lexical):
+            violations.append(
+                f"{warning_label}: warns of an unindexed term that is not one of the search "
+                "terms its lexical channel was sent"
+            )
     ran_exact_id = RetrievalChannel.EXACT_ID in step.channels_executed
     if ran_exact_id and warned_unknown_ids != unknown_ids:
         violations.append(
@@ -514,7 +527,7 @@ def find_step_observation_violations(
     violations: list[str] = []
     for step in evidence_set.trajectory.steps:
         violations.extend(find_step_outcome_violations(step))
-        violations.extend(find_lookup_warning_violations(step, evidence_catalog))
+        violations.extend(find_search_warning_violations(step, evidence_catalog))
         violations.extend(find_semantic_channel_violations(step, evidence_set.request))
     return violations
 

@@ -128,6 +128,10 @@ class SearchService:
                 RetrievalChannel.LEXICAL,
                 self._require_admissible(lexical_outcome, allowed_cve_ids, search_terms),
             )
+            # A search term no record holds matches nothing and lets no generic term
+            # answer in its place, so the response names it.
+            for unindexed_term in lexical_outcome.unindexed_terms:
+                channel_log.warn(SearchWarningCode.TERM_NOT_INDEXED, unindexed_term)
         elif not requested_cve_ids:
             channel_log.warn(SearchWarningCode.NO_SEARCHABLE_TERMS, normalized_query)
         if request.semantic and has_search_terms:
@@ -155,7 +159,8 @@ class SearchService:
     ) -> RetrievalOutcome:
         """Pass the outcome of a channel other than the graph through, or raise if a match
         is unstored, outside the filters, names a term outside ``vouched_terms`` (what the
-        search sent the channel) or carries graph paths.
+        search sent the channel) or carries graph paths, or if the outcome names an
+        unindexed term outside ``vouched_terms``.
 
         Every match is checked, not only those that survive the limit, so an integrity
         violation never depends on rank. A violation names the record only, never the
@@ -167,6 +172,11 @@ class SearchService:
                     [f"a retriever other than the graph gave {match.cve_id} graph paths"]
                 )
             self._require_match_admissible(match, allowed_cve_ids, vouched_terms)
+        for unindexed_term in outcome.unindexed_terms:
+            if unindexed_term not in vouched_terms:
+                raise EvidenceValidationError(
+                    ["a retriever named an unindexed term the search did not send"]
+                )
         return outcome
 
     def _require_admissible_graph(

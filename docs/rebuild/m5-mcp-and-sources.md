@@ -39,7 +39,8 @@ The query's search terms, `list_query_terms(query)`, are the tokens of that text
 rule applies to queries only: `tokenize` builds the lexical index from every
 description word, `cve` included. `vulnerability`, `vulnerabilities` and `vuln` stay
 search words; whether they join the set is decided on the M5 and M7 gold queries and
-evaluation data.
+evaluation data. Over the 2026-10-27 NVD store `vulnerability` occurs in 193,984 of the
+396,211 records, `vulnerabilities` in 12,185 and `vuln` in 245.
 
 **Readers.** No component keeps its own word list; each calls one of the two functions.
 
@@ -61,7 +62,7 @@ the text channels' hits.
 |---|---|---|
 | `cve`, `CVE`, `CVEs` | no lexical, semantic or graph call; `no_match` with `no_searchable_terms` | intent `unsearchable`, no call, `no_evidence` (`no_searchable_terms`) |
 | `cve ausf crash` | lexical and semantic read `ausf crash` | `cve_search("ausf crash")`, answer CVE-9999-0003 |
-| `CVE 2022 log4j` | lexical and semantic read `2022 log4j` | `cve_search("2022 log4j")`, `no_evidence` |
+| `CVE 2022 log4j` | lexical and semantic read `2022 log4j`; `term_not_indexed` for `2022` and `log4j` | `cve_search("2022 log4j")`, `no_evidence` |
 | `CVE-9999-0003 cve` | exact lookup, and graph expansion from its hit; no lexical or semantic call | exact lookup only, no search terms |
 | `cves of ausf` | lexical and semantic read `of ausf` | `cve_search("ausf")` |
 | `CVE of 2021-44228`, `nvdcve in 2021 and 2022`, `nvdcve cves 2021 44228` | no lexical, semantic or graph call; `no_match` with `no_searchable_terms` | intent `unsearchable`, no call, `no_evidence` (`no_searchable_terms`) |
@@ -336,11 +337,13 @@ regenerate the file.
 
 - `search_vulnerabilities` rows pin the low-signal rule: `cve` and `CVEs` answer
   `no_match` with `no_searchable_terms`, a severity filter creates no candidate,
-  `cve ausf crash` finds CVE-9999-0003, `CVE 2022 log4j` finds nothing and
-  `CVE-9999-0003 cve` runs the exact lookup only.
+  `cve ausf crash` finds CVE-9999-0003, `CVE 2022 log4j` finds nothing and warns
+  `term_not_indexed` for `2022` and `log4j`, and `CVE-9999-0003 cve` runs the exact
+  lookup only.
 - The measurement rows record how the fixture answers `vulnerability`,
   `vulnerabilities`, `vuln` and `ausf vulnerability` without changing the rule;
-  `vulnerability` finds CVE-9999-0008 and `vulnerabilities` and `vuln` find nothing.
+  `vulnerability` finds CVE-9999-0008, and `vulnerabilities` and `vuln` find nothing,
+  each warned `term_not_indexed`.
   They feed the M7 decision on whether these words join the low-signal set.
 - The other rows cover a known and an unknown CVE ID, `5gaka` and a bare `aka` for
   concept resolution and FiGHT search, the affectedness check, an unknown evidence ID,

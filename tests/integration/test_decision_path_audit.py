@@ -51,6 +51,7 @@ from tests.support.investigation import (
     build_investigation_request,
     build_search_call,
     reseal_evidence_set,
+    rewrite_step,
     rewrite_the_ranking,
     update_trajectory,
     verify_as_sealed,
@@ -300,9 +301,12 @@ def look_up_another_id_on_fallback(evidence_set: KnowledgeEvidenceSet) -> Knowle
 
 def search_5g_aka_in_round_one(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
     """Round 1's search becomes ``cve_search("5g aka")``, a call the gate accepts, with its
-    call key, accepted plan and backend request to match: on a fallback it replaces the
-    policy's search, and on an accepted model plan it swaps that plan for another."""
-    return replace_call(evidence_set, 1, build_search_call("5g aka"))
+    call key, accepted plan, backend request and search warnings to match: on a fallback it
+    replaces the policy's search, and on an accepted model plan it swaps that plan for
+    another."""
+    return rewrite_step(
+        replace_call(evidence_set, 1, build_search_call("5g aka")), 1, search_warnings=()
+    )
 
 
 def blame_the_source_cap(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
@@ -402,6 +406,32 @@ def warn_unknown(evidence_set: KnowledgeEvidenceSet, cve_id: str) -> KnowledgeEv
     unknown_warning = SearchWarning(code=SearchWarningCode.UNKNOWN_CVE_ID, subject=cve_id)
     steps[0] = steps[0].model_copy(update={"search_warnings": (unknown_warning,)})
     return update_trajectory(evidence_set, steps=tuple(steps))
+
+
+def warn_unindexed(
+    evidence_set: KnowledgeEvidenceSet, term: str, **step_changes: Any
+) -> KnowledgeEvidenceSet:
+    """Step 1 also warns that ``term`` matched no record, with ``step_changes`` applied."""
+    first_step = evidence_set.trajectory.steps[0]
+    unindexed_warning = SearchWarning(code=SearchWarningCode.TERM_NOT_INDEXED, subject=term)
+    return rewrite_step(
+        evidence_set,
+        1,
+        search_warnings=(*first_step.search_warnings, unindexed_warning),
+        **step_changes,
+    )
+
+
+def warn_an_unsearched_term_unindexed(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """Step 1 warns that ``srsran``, a word its search never sent, matched no record."""
+    return warn_unindexed(evidence_set, "srsran")
+
+
+def warn_unindexed_without_the_lexical_channel(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    """Step 1 warns its own search term ``crash`` unindexed, but records no lexical run."""
+    return warn_unindexed(evidence_set, "crash", channels_executed=())
 
 
 def report_the_found_id_unknown(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
@@ -777,6 +807,18 @@ def test_reviewer_forgery_is_rejected_after_reseal(
             "up that the catalog lacks",
         ),
         (
+            run_excluded_term_with_free_text,
+            warn_an_unsearched_term_unindexed,
+            "warns of an unindexed term that is not one of the search terms its lexical "
+            "channel was sent",
+        ),
+        (
+            run_excluded_term_with_free_text,
+            warn_unindexed_without_the_lexical_channel,
+            "warns of an unindexed term that is not one of the search terms its lexical "
+            "channel was sent",
+        ),
+        (
             run_five_g_aka_mixed,
             replace_a_template_search,
             "step 1 records other backend requests than its call sends under the request and "
@@ -858,6 +900,8 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         "byte_breach_named_wall_time",
         "round_cap_breach_named_tool_calls",
         "found_id_reported_unknown",
+        "unsearched_term_reported_unindexed",
+        "unindexed_term_without_a_lexical_run",
         "template_search_replaced",
         "excluded_term_warning_dropped",
         "topic_not_resolved_warning_dropped",
