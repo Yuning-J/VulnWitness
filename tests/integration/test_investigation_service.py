@@ -21,6 +21,7 @@ from cve_kgrag.domain.investigation import (
     PlannerOutcome,
     SourceCapabilityState,
     StepAdmission,
+    StepReason,
     StopReason,
 )
 from cve_kgrag.domain.planning import QueryIntent
@@ -44,6 +45,7 @@ from tests.support.investigation import (
     build_investigation_request,
     build_test_investigation_service,
     list_implementation_ids,
+    list_step_reasons,
     list_step_tools,
     list_transitions,
     list_warning_codes,
@@ -203,25 +205,41 @@ def test_semantic_search_without_an_adapter_reports_a_partial_answer(
 @pytest.mark.parametrize(
     ("query", "scope", "expected_ids"),
     [
-        ("CVE-9999-0007 5gaka", "implementation_only", ["CVE-9999-0007"]),
-        ("CVE-9999-0007 5gaka", "mixed", ["CVE-9999-0007"]),
-        ("CVE-9999-0001 5G-AKA", "implementation_only", ["CVE-9999-0001"]),
+        (
+            "CVE-9999-0007 5gaka",
+            "implementation_only",
+            ["CVE-9999-0007", "CVE-9999-0003", "CVE-9999-0004"],
+        ),
+        (
+            "CVE-9999-0007 5gaka",
+            "mixed",
+            ["CVE-9999-0007", "CVE-9999-0003", "CVE-9999-0004"],
+        ),
+        (
+            "CVE-9999-0001 5G-AKA",
+            "implementation_only",
+            ["CVE-9999-0001", "CVE-9999-0003", "CVE-9999-0004"],
+        ),
         (
             "CVE-9999-0004 CVE-9999-0007 5gaka",
             "implementation_only",
-            ["CVE-9999-0007", "CVE-9999-0004"],
+            ["CVE-9999-0007", "CVE-9999-0004", "CVE-9999-0003"],
         ),
     ],
     ids=["unrelated_id_implementation", "unrelated_id_mixed", "hyphenated_alias", "two_ids"],
 )
-def test_cve_named_by_id_is_answered_even_when_unrelated_to_a_named_topic(
+def test_cve_named_by_id_is_answered_first_and_the_named_topic_is_then_called_for_its_cves(
     fixture_bundle: FixtureBundle, query: str, scope: str, expected_ids: list[str]
 ) -> None:
     service = build_test_investigation_service(fixture_bundle)
 
     evidence_set = service.investigate(build_investigation_request(query, scope))
 
-    assert list_step_tools(evidence_set) == ["cve_exact_lookup"]
+    assert list_step_tools(evidence_set) == ["cve_exact_lookup", "topic_context"]
+    assert list_step_reasons(evidence_set) == [
+        StepReason.QUERY_CVE_IDS,
+        StepReason.TOPIC_FOR_OPEN_NEED,
+    ]
     assert (evidence_set.stop_reason, evidence_set.status) == (
         StopReason.SUFFICIENT,
         ResultStatus.OK,
@@ -382,19 +400,26 @@ def test_malformed_id_is_neither_looked_up_nor_searched(
         "near_id_beside_terms",
     ],
 )
-@pytest.mark.parametrize("scope", ["implementation_only", "mixed"])
+@pytest.mark.parametrize(
+    ("scope", "expected_stop"),
+    [
+        ("implementation_only", StopReason.SUFFICIENT),
+        ("mixed", StopReason.NEEDS_UNMET),
+    ],
+    ids=["implementation_only", "mixed_without_a_topic_for_protocol_context"],
+)
 def test_query_words_beside_an_id_likeness_are_searched_without_it(
-    fixture_bundle: FixtureBundle, query: str, scope: str
+    fixture_bundle: FixtureBundle, query: str, scope: str, expected_stop: StopReason
 ) -> None:
     service = build_test_investigation_service(fixture_bundle)
 
     evidence_set = service.investigate(build_investigation_request(query, scope))
 
     assert evidence_set.interpretation.search_terms == ("ausf", "crash")
-    assert list_step_tools(evidence_set)[0] == "cve_search"
+    assert list_step_tools(evidence_set) == ["cve_search"]
     assert evidence_set.trajectory.steps[0].backend_requests[0].query == "ausf crash"
     assert list_implementation_ids(evidence_set) == ["CVE-9999-0003"]
-    assert evidence_set.stop_reason is StopReason.SUFFICIENT
+    assert evidence_set.stop_reason is expected_stop
 
 
 @pytest.mark.parametrize(

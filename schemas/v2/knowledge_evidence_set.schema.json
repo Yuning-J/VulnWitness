@@ -424,6 +424,14 @@
           "$ref": "#/$defs/DecisionBasis",
           "description": "The observation the final stop was decided on."
         },
+        "needs": {
+          "description": "What the request asks for, derived from the request and its interpretation, never from labelled cases, each with the outcome the admitted steps and the answer give; sufficient only when every need is found.",
+          "items": {
+            "$ref": "#/$defs/EvidenceNeed"
+          },
+          "title": "Needs",
+          "type": "array"
+        },
         "refinement_applied": {
           "title": "Refinement Applied",
           "type": "boolean"
@@ -441,7 +449,8 @@
         "answer_sources",
         "source_outcomes",
         "refinement_applied",
-        "basis"
+        "basis",
+        "needs"
       ],
       "title": "CoverageAssessment",
       "type": "object"
@@ -764,10 +773,10 @@
         "answer_source_failed",
         "affectedness_unavailable",
         "answer_found",
-        "no_answer_refinable",
+        "needs_open",
         "no_refinement_available",
         "round_cap_reached",
-        "no_answer_after_refinement",
+        "needs_open_after_refinement",
         "answer_validated"
       ],
       "title": "DecisionBasis",
@@ -945,6 +954,47 @@
       "title": "EvidenceAnchor",
       "type": "object"
     },
+    "EvidenceNeed": {
+      "additionalProperties": false,
+      "description": "One kind of evidence the request asks for, and whether the run met it.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/EvidenceNeedKind"
+        },
+        "outcome": {
+          "$ref": "#/$defs/NeedOutcome"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The CVE ID for named_cve, the product for affectedness, none for the other kinds.",
+          "title": "Subject"
+        }
+      },
+      "required": [
+        "kind",
+        "subject",
+        "outcome"
+      ],
+      "title": "EvidenceNeed",
+      "type": "object"
+    },
+    "EvidenceNeedKind": {
+      "enum": [
+        "named_cve",
+        "implementation_cves",
+        "protocol_context",
+        "affectedness"
+      ],
+      "title": "EvidenceNeedKind",
+      "type": "string"
+    },
     "ExcludedInvestigationCandidate": {
       "additionalProperties": false,
       "properties": {
@@ -1067,6 +1117,14 @@
     "Interpretation": {
       "additionalProperties": false,
       "properties": {
+        "affectedness_mentions": {
+          "description": "Each product and version the query asks affectedness of, as 'word version': a whole vendor or product name a stored record carries as affected or of unknown status, followed by a dotted version, in a query holding an affectedness word.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Affectedness Mentions",
+          "type": "array"
+        },
         "cve_ids": {
           "items": {
             "maxLength": 32,
@@ -1100,7 +1158,8 @@
         "normalized_query",
         "cve_ids",
         "search_terms",
-        "resolution"
+        "resolution",
+        "affectedness_mentions"
       ],
       "title": "Interpretation",
       "type": "object"
@@ -1572,6 +1631,16 @@
       "title": "ModelReplyFailureDetail",
       "type": "string"
     },
+    "NeedOutcome": {
+      "enum": [
+        "found",
+        "not_found",
+        "source_unavailable",
+        "unsupported"
+      ],
+      "title": "NeedOutcome",
+      "type": "string"
+    },
     "ObservationStatus": {
       "description": "FiGHT's own maturity label, normalized; ``source_status`` keeps the original text.",
       "enum": [
@@ -1669,7 +1738,8 @@
           "enum": [
             "vendor",
             "product",
-            "purl"
+            "purl",
+            "product_version"
           ],
           "title": "Product Kind",
           "type": "string"
@@ -3115,9 +3185,10 @@
         "query_cve_ids",
         "query_terms",
         "reviewed_topic",
-        "residual_terms_after_unknown_ids",
         "topic_after_unknown_ids",
         "topic_after_literal_miss",
+        "topic_for_open_need",
+        "query_terms_for_open_need",
         "model_proposal"
       ],
       "title": "StepReason",
@@ -3158,7 +3229,8 @@
         "budget_exhausted",
         "source_unavailable",
         "policy_blocked",
-        "invalid_evidence"
+        "invalid_evidence",
+        "needs_unmet"
       ],
       "title": "StopReason",
       "type": "string"
@@ -4118,6 +4190,24 @@
     {
       "if": {
         "properties": {
+          "stop_reason": {
+            "const": "needs_unmet"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "enum": [
+              "partial"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
           "request": {
             "properties": {
               "scope": {
@@ -4265,8 +4355,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.27",
-      "default": "2.0.0-dev.27",
+      "const": "2.0.0-dev.28",
+      "default": "2.0.0-dev.28",
       "title": "Schema Version",
       "type": "string"
     },

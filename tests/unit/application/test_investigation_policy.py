@@ -1,4 +1,4 @@
-"""The deterministic policy m4.1: interpretation, stops, round-1 plans, refinement and cost."""
+"""The deterministic policy m7b.1: interpretation, stops, round-1 plans, refinement and cost."""
 
 from typing import Any
 
@@ -13,8 +13,12 @@ from cve_kgrag.application.investigation_policy import (
     plan_first_round,
     plan_refinement,
 )
+from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
+    EvidenceNeed,
+    Interpretation,
+    InvestigationRequest,
     StepReason,
     StopReason,
     ToolStep,
@@ -33,6 +37,7 @@ from tests.support.investigation import (
     TWENTY_ONE_IDS,
     build_exact_lookup_call,
     build_investigation_request,
+    build_productless_catalog,
     build_search_call,
     build_topic_call,
 )
@@ -43,6 +48,14 @@ def describe_planned_steps(planned_steps: list[PlannedStep]) -> list[tuple[ToolC
     for planned_step in planned_steps:
         described_steps.append((planned_step.call, planned_step.reason))
     return described_steps
+
+
+def judge_round_one(
+    request: InvestigationRequest, interpretation: Interpretation, round_one_steps: list[ToolStep]
+) -> tuple[EvidenceNeed, ...]:
+    """The needs round 1 left, judged from its recorded steps alone (the answer lists
+    what they returned, and these steps returned nothing)."""
+    return judge_needs(request, interpretation, round_one_steps, (), ())
 
 
 @pytest.mark.parametrize(
@@ -106,7 +119,9 @@ def test_query_is_interpreted_into_intent_ids_and_searchable_terms(
     expected_cve_ids: tuple[str, ...],
     expected_terms: tuple[str, ...],
 ) -> None:
-    interpretation = interpret_request(build_investigation_request(query, "mixed"), topic_registry)
+    interpretation = interpret_request(
+        build_investigation_request(query, "mixed"), topic_registry, build_productless_catalog()
+    )
 
     assert interpretation.intent is expected_intent
     assert interpretation.cve_ids == expected_cve_ids
@@ -118,7 +133,9 @@ def test_overlong_normalized_token_is_dropped_rather_than_searched(
 ) -> None:
     # NFKC turns each ligature into three letters: one 1536-character token.
     interpretation = interpret_request(
-        build_investigation_request("ﬃ" * 512, "implementation_only"), topic_registry
+        build_investigation_request("ﬃ" * 512, "implementation_only"),
+        topic_registry,
+        build_productless_catalog(),
     )
 
     assert interpretation.search_terms == ()
@@ -190,7 +207,7 @@ def test_interpretation_stop_is_decided_before_any_call(
     expected_stop: tuple[StopReason, DecisionBasis] | None,
 ) -> None:
     request = build_investigation_request(query, scope, filters=filters)
-    interpretation = interpret_request(request, topic_registry)
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
 
     stop = find_interpretation_stop(request, interpretation)
 
@@ -237,7 +254,7 @@ def test_round_one_plans_one_call_by_intent_and_scope(
     expected_steps: list[tuple[ToolCall, StepReason]],
 ) -> None:
     request = build_investigation_request(query, scope)
-    interpretation = interpret_request(request, topic_registry)
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
 
     planned_steps = plan_first_round(request, interpretation)
 
@@ -264,22 +281,13 @@ def build_unknown_id_lookup(*cve_ids: str, warning_code: SearchWarningCode) -> T
             SearchWarningCode.UNKNOWN_CVE_ID,
             [(build_topic_call(), StepReason.TOPIC_AFTER_UNKNOWN_IDS)],
         ),
-        (
-            "CVE-9999-4242 AUSF resynchronization crash",
-            SearchWarningCode.UNKNOWN_CVE_ID,
-            [
-                (
-                    build_search_call("ausf resynchronization crash"),
-                    StepReason.RESIDUAL_TERMS_AFTER_UNKNOWN_IDS,
-                )
-            ],
-        ),
+        ("CVE-9999-4242 AUSF resynchronization crash", SearchWarningCode.UNKNOWN_CVE_ID, []),
         ("CVE-9999-4242", SearchWarningCode.UNKNOWN_CVE_ID, []),
         ("CVE-9999-0003 AUSF crash", SearchWarningCode.EXCLUDED_BY_FILTERS, []),
     ],
     ids=[
         "unknown_id_with_topic_explores_topic",
-        "unknown_id_with_terms_searches_residual_terms",
+        "unknown_id_with_plain_text_has_no_refinement",
         "unknown_id_alone_has_no_refinement",
         "id_excluded_by_filters_is_known_so_no_refinement",
     ],
@@ -290,12 +298,13 @@ def test_r1_refines_only_when_every_requested_id_is_unknown(
     warning_code: SearchWarningCode,
     expected_steps: list[tuple[ToolCall, StepReason]],
 ) -> None:
-    interpretation = interpret_request(
-        build_investigation_request(query, "implementation_only"), topic_registry
-    )
+    request = build_investigation_request(query, "implementation_only")
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
     round_one_step = build_unknown_id_lookup(*interpretation.cve_ids, warning_code=warning_code)
 
-    planned_steps = plan_refinement(interpretation, [round_one_step])
+    planned_steps = plan_refinement(
+        interpretation, [round_one_step], judge_round_one(request, interpretation, [round_one_step])
+    )
 
     assert describe_planned_steps(planned_steps) == expected_steps
 
@@ -303,28 +312,36 @@ def test_r1_refines_only_when_every_requested_id_is_unknown(
 def test_r1_does_not_refine_when_only_some_requested_ids_are_unknown(
     topic_registry: TopicRegistry,
 ) -> None:
-    interpretation = interpret_request(
-        build_investigation_request("CVE-9999-0003 CVE-9999-4242 crash", "implementation_only"),
-        topic_registry,
+    request = build_investigation_request(
+        "CVE-9999-0003 CVE-9999-4242 crash", "implementation_only"
     )
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
     round_one_step = build_recorded_step(
         call=build_exact_lookup_call("CVE-9999-0003", "CVE-9999-4242"),
         reason="query_cve_ids",
         search_warnings=[{"code": "unknown_cve_id", "subject": "CVE-9999-4242"}],
     )
 
-    assert plan_refinement(interpretation, [round_one_step]) == []
+    assert (
+        plan_refinement(
+            interpretation,
+            [round_one_step],
+            judge_round_one(request, interpretation, [round_one_step]),
+        )
+        == []
+    )
 
 
 def test_r2_explores_the_topic_after_a_literal_search_for_it(
     topic_registry: TopicRegistry,
 ) -> None:
-    interpretation = interpret_request(
-        build_investigation_request("5gaka", "implementation_only"), topic_registry
-    )
+    request = build_investigation_request("5gaka", "implementation_only")
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
     round_one_step = build_recorded_step(call=build_search_call("5gaka"))
 
-    planned_steps = plan_refinement(interpretation, [round_one_step])
+    planned_steps = plan_refinement(
+        interpretation, [round_one_step], judge_round_one(request, interpretation, [round_one_step])
+    )
 
     assert describe_planned_steps(planned_steps) == [
         (build_topic_call(), StepReason.TOPIC_AFTER_LITERAL_MISS)
@@ -334,9 +351,8 @@ def test_r2_explores_the_topic_after_a_literal_search_for_it(
 def test_refinement_is_not_planned_when_round_one_already_issued_its_call(
     topic_registry: TopicRegistry,
 ) -> None:
-    interpretation = interpret_request(
-        build_investigation_request("5gaka", "implementation_only"), topic_registry
-    )
+    request = build_investigation_request("5gaka", "implementation_only")
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
     literal_search = build_search_call("5gaka")
     topic_call = build_topic_call()
     round_one_steps = [
@@ -350,21 +366,48 @@ def test_refinement_is_not_planned_when_round_one_already_issued_its_call(
         ),
     ]
 
-    assert plan_refinement(interpretation, round_one_steps) == []
+    assert (
+        plan_refinement(
+            interpretation,
+            round_one_steps,
+            judge_round_one(request, interpretation, round_one_steps),
+        )
+        == []
+    )
 
 
-@pytest.mark.parametrize(
-    ("query", "round_one_call"),
-    [("crash", build_search_call("crash")), ("5gaka", build_topic_call())],
-    ids=["free_text_search", "topic_already_explored"],
-)
-def test_no_rule_fires_without_unknown_ids_or_a_literal_topic_search(
-    topic_registry: TopicRegistry, query: str, round_one_call: ToolCall
+def test_no_rule_fires_once_round_one_searched_every_term(
+    topic_registry: TopicRegistry,
 ) -> None:
-    interpretation = interpret_request(build_investigation_request(query, "mixed"), topic_registry)
-    round_one_step = build_recorded_step(call=round_one_call)
+    request = build_investigation_request("crash", "mixed")
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
+    round_one_step = build_recorded_step(call=build_search_call("crash"))
 
-    assert plan_refinement(interpretation, [round_one_step]) == []
+    assert (
+        plan_refinement(
+            interpretation,
+            [round_one_step],
+            judge_round_one(request, interpretation, [round_one_step]),
+        )
+        == []
+    )
+
+
+def test_r3_searches_the_query_terms_when_the_explored_topic_answered_nothing(
+    topic_registry: TopicRegistry,
+) -> None:
+    request = build_investigation_request("5gaka", "mixed")
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
+    topic_call = build_topic_call()
+    round_one_step = build_recorded_step(call=topic_call, call_key=compute_call_key(topic_call))
+
+    planned_steps = plan_refinement(
+        interpretation, [round_one_step], judge_round_one(request, interpretation, [round_one_step])
+    )
+
+    assert describe_planned_steps(planned_steps) == [
+        (build_search_call("5gaka"), StepReason.QUERY_TERMS_FOR_OPEN_NEED)
+    ]
 
 
 @pytest.mark.parametrize(
@@ -392,7 +435,7 @@ def test_allowed_terms_are_the_query_terms_plus_the_resolved_card_terms(
     topic_registry: TopicRegistry,
 ) -> None:
     interpretation = interpret_request(
-        build_investigation_request("5gaka", "mixed"), topic_registry
+        build_investigation_request("5gaka", "mixed"), topic_registry, build_productless_catalog()
     )
     registered_topic = topic_registry.get_topic(FIVE_G_AKA_TOPIC_ID)
     assert registered_topic is not None

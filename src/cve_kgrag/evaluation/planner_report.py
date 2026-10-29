@@ -27,7 +27,7 @@ from cve_kgrag.domain.planning import SHA256_HEX_PATTERN
 from cve_kgrag.domain.taxonomy import ResultStatus
 from cve_kgrag.evaluation.labelled_cases import EvidenceCategory, Split, Sufficiency
 
-EVALUATION_FORMAT_VERSION: Literal[2] = 2
+EVALUATION_FORMAT_VERSION: Literal[3] = 3
 RATE_DECIMALS = 4
 # A git commit ID, SHA-1 or SHA-256.
 GIT_COMMIT_PATTERN = r"[0-9a-f]{40}(?:[0-9a-f]{24})?"
@@ -74,7 +74,7 @@ class DatasetIdentity(ContractModel):
 class EvaluationIdentity(ContractModel):
     """What a report measured, so two reports can be told apart before they are compared."""
 
-    evaluation_format_version: Literal[2] = EVALUATION_FORMAT_VERSION
+    evaluation_format_version: Literal[3] = EVALUATION_FORMAT_VERSION
     evidence_set_schema_version: str
     source_revision: str = Field(
         pattern=SOURCE_REVISION_PATTERN,
@@ -289,6 +289,8 @@ class RunJudgementCounts(ContractModel):
     premature_no_evidence: int = Field(ge=0)
     unflagged_gap: int = Field(ge=0)
     affectedness_violation: int = Field(ge=0)
+    false_gap: int = Field(ge=0)
+    need_agreement: int = Field(ge=0)
 
 
 class SufficiencyCase(ContractModel):
@@ -340,6 +342,14 @@ class RunQuality(ContractModel):
     )
     unflagged_gap: Proportion = Field(description="Over runs of cases labelled partial.")
     affectedness_violation: Proportion = Field(description="Over every run.")
+    false_gap: Proportion = Field(
+        description="Runs judged sufficient that did not stop sufficient, over runs of "
+        "non-uncertain cases judged sufficient."
+    )
+    need_agreement: Proportion = Field(
+        description="Runs whose need kinds are the labelled case's, over runs of "
+        "non-uncertain cases."
+    )
 
 
 class SufficiencyPart(ContractModel):

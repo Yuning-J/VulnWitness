@@ -180,8 +180,9 @@ truncated do not count):
 - **Premature no-evidence**: the run stopped with `no_evidence` while the case label is
   `sufficient` or `partial`.
 - **Unflagged gap**: the case is `partial` and the answer does not signal the missing
-  category: `applicability_unknown` for `affectedness`; `topic_not_resolved`,
-  `topic_pending_review` or a FiGHT source outcome other than ok for `protocol_context`.
+  category: the run records no need of that kind with an outcome other than `found`
+  (`coverage.needs`, [`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md);
+  [`m7b-planner-evaluation.md`](m7b-planner-evaluation.md#what-a-run-is-judged-on)).
 - **Affectedness violation**: any applicability other than `unknown`.
 
 Implementation figures (`named_cve`, `implementation_cves`) and protocol figures

@@ -216,6 +216,7 @@ def test_investigation_id_differs_when_any_request_field_differs(
         (StopReason.INVALID_EVIDENCE, False, [ResultStatus.OK], ResultStatus.BACKEND_ERROR),
         (StopReason.BUDGET_EXHAUSTED, False, [], ResultStatus.PARTIAL),
         (StopReason.BUDGET_EXHAUSTED, True, [ResultStatus.OK], ResultStatus.PARTIAL),
+        (StopReason.NEEDS_UNMET, True, [ResultStatus.OK], ResultStatus.PARTIAL),
         (StopReason.SUFFICIENT, True, [ResultStatus.OK], ResultStatus.OK),
         (StopReason.NO_EVIDENCE, False, [ResultStatus.NO_MATCH], ResultStatus.NO_MATCH),
         (StopReason.NO_EVIDENCE, False, [], ResultStatus.NO_MATCH),
@@ -243,6 +244,7 @@ def test_investigation_id_differs_when_any_request_field_differs(
         "invalid_evidence",
         "budget_without_answer",
         "budget_with_answer",
+        "needs_unmet_with_answer",
         "sufficient",
         "no_evidence",
         "no_evidence_before_any_call",
@@ -263,33 +265,50 @@ def test_status_follows_the_stop_reason_and_the_answer_sources(
 
 
 @pytest.mark.parametrize(
-    ("scope", "filters", "expected_sources"),
+    ("scope", "filters", "affectedness_mentions", "expected_sources"),
     [
-        (QueryScope.IMPLEMENTATION_ONLY, SearchFilters(), (KnowledgeSource.CVE_SEARCH,)),
+        (QueryScope.IMPLEMENTATION_ONLY, SearchFilters(), (), (KnowledgeSource.CVE_SEARCH,)),
         (
             QueryScope.MIXED,
             SearchFilters(),
+            (),
             (KnowledgeSource.CVE_SEARCH, KnowledgeSource.MITRE_FIGHT),
         ),
-        (QueryScope.PROTOCOL_CONTEXT_ONLY, SearchFilters(), (KnowledgeSource.MITRE_FIGHT,)),
+        (QueryScope.PROTOCOL_CONTEXT_ONLY, SearchFilters(), (), (KnowledgeSource.MITRE_FIGHT,)),
         (
             QueryScope.IMPLEMENTATION_ONLY,
             SearchFilters(products=["f5gc"]),
+            (),
             (KnowledgeSource.CVE_SEARCH, KnowledgeSource.AFFECTEDNESS),
         ),
         (
             QueryScope.MIXED,
             SearchFilters(purls=["pkg:generic/fictional5g/f5gc"]),
+            (),
             (KnowledgeSource.CVE_SEARCH, KnowledgeSource.MITRE_FIGHT, KnowledgeSource.AFFECTEDNESS),
         ),
         (
             QueryScope.IMPLEMENTATION_ONLY,
             SearchFilters(severities=["HIGH"]),
+            (),
             (KnowledgeSource.CVE_SEARCH,),
+        ),
+        (
+            QueryScope.MIXED,
+            SearchFilters(),
+            ("f5gc 1.2.0",),
+            (KnowledgeSource.CVE_SEARCH, KnowledgeSource.MITRE_FIGHT, KnowledgeSource.AFFECTEDNESS),
         ),
         (
             QueryScope.PROTOCOL_CONTEXT_ONLY,
             SearchFilters(vendors=["fictional5g"]),
+            (),
+            (KnowledgeSource.MITRE_FIGHT,),
+        ),
+        (
+            QueryScope.PROTOCOL_CONTEXT_ONLY,
+            SearchFilters(),
+            ("f5gc 1.2.0",),
             (KnowledgeSource.MITRE_FIGHT,),
         ),
     ],
@@ -300,13 +319,20 @@ def test_status_follows_the_stop_reason_and_the_answer_sources(
         "implementation_with_product",
         "mixed_with_purl",
         "severity_is_not_product_context",
+        "affectedness_mention_is_product_context",
         "protocol_never_answers_affectedness",
+        "protocol_never_answers_affectedness_mention",
     ],
 )
 def test_answer_sources_add_affectedness_only_for_product_context_outside_protocol_scope(
-    scope: QueryScope, filters: SearchFilters, expected_sources: tuple[KnowledgeSource, ...]
+    scope: QueryScope,
+    filters: SearchFilters,
+    affectedness_mentions: tuple[str, ...],
+    expected_sources: tuple[KnowledgeSource, ...],
 ) -> None:
-    assert list_answer_sources(scope, filters) == expected_sources
+    answer_sources = list_answer_sources(scope, filters, affectedness_mentions)
+
+    assert answer_sources == expected_sources
 
 
 def test_affectedness_detail_is_the_unavailable_affectedness_capability_s() -> None:

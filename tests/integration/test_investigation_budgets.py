@@ -22,6 +22,7 @@ from cve_kgrag.domain.investigation import (
     StepAdmission,
     StopReason,
 )
+from cve_kgrag.domain.search import RetrievalOutcome
 from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus
 from cve_kgrag.domain.text import normalize_query
 from tests.support.clocks import ONE_SECOND_RUN_REAL_SECONDS, SteppingClock, read_fixed_clock
@@ -295,7 +296,11 @@ def test_slow_refinement_landing_past_the_deadline_discards_only_that_round(
         ({"lexical_retriever": CannedRetriever(build_failure(BackendStatus.ERROR))}, "5gaka", 1),
         ({"lexical_retriever": InventingRetriever()}, "crash", 1),
         ({}, "zzqx", 1),
-        ({}, "CVE-9999-4242 zzqx", 2),
+        (
+            {"lexical_retriever": CannedRetriever(RetrievalOutcome(status=BackendStatus.OK))},
+            "CVE-9999-4242 5gaka",
+            5,
+        ),
     ],
     ids=["failed_source", "invalid_evidence", "no_match", "no_match_after_refinement"],
 )
@@ -337,10 +342,10 @@ def test_deadline_reached_before_the_refinement_round_issues_no_further_call(
 def test_deadline_reached_before_the_round_two_planner_call_skips_the_planner(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    model_port = ScriptedModelPort([build_plan_reply({"tool": "cve_search", "query": "zzqx"})] * 2)
+    model_port = ScriptedModelPort([build_plan_reply({"tool": "cve_search", "query": "5gaka"})] * 2)
     service = build_deadline_nearing_service(fixture_bundle, model_port)
 
-    evidence_set = service.investigate(build_investigation_request("zzqx", "implementation_only"))
+    evidence_set = service.investigate(build_investigation_request("5gaka", "implementation_only"))
 
     skipped_round = evidence_set.trajectory.rounds[1]
     assert len(model_port.timeouts) == 1

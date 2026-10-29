@@ -61,7 +61,7 @@ from cve_kgrag.domain.topic_context import (
 
 INVESTIGATION_ID_PATTERN = r"^inv:[0-9a-f]{24}$"
 MAX_TRANSITIONS = 16
-ProductKind = Literal["vendor", "product", "purl"]
+ProductKind = Literal["vendor", "product", "purl", "product_version"]
 
 
 class StopReason(StrEnum):
@@ -71,6 +71,7 @@ class StopReason(StrEnum):
     SOURCE_UNAVAILABLE = "source_unavailable"
     POLICY_BLOCKED = "policy_blocked"
     INVALID_EVIDENCE = "invalid_evidence"
+    NEEDS_UNMET = "needs_unmet"
 
 
 class InvestigationState(StrEnum):
@@ -102,10 +103,10 @@ class DecisionBasis(StrEnum):
     ANSWER_SOURCE_FAILED = "answer_source_failed"
     AFFECTEDNESS_UNAVAILABLE = "affectedness_unavailable"
     ANSWER_FOUND = "answer_found"
-    NO_ANSWER_REFINABLE = "no_answer_refinable"
+    NEEDS_OPEN = "needs_open"
     NO_REFINEMENT_AVAILABLE = "no_refinement_available"
     ROUND_CAP_REACHED = "round_cap_reached"
-    NO_ANSWER_AFTER_REFINEMENT = "no_answer_after_refinement"
+    NEEDS_OPEN_AFTER_REFINEMENT = "needs_open_after_refinement"
     ANSWER_VALIDATED = "answer_validated"
 
 
@@ -160,15 +161,23 @@ class Interpretation(ContractModel):
         )
     )
     resolution: TopicResolution
+    affectedness_mentions: tuple[str, ...] = Field(
+        description=(
+            "Each product and version the query asks affectedness of, as 'word version': a "
+            "whole vendor or product name a stored record carries as affected or of unknown "
+            "status, followed by a dotted version, in a query holding an affectedness word."
+        )
+    )
 
 
 class StepReason(StrEnum):
     QUERY_CVE_IDS = "query_cve_ids"
     QUERY_TERMS = "query_terms"
     REVIEWED_TOPIC = "reviewed_topic"
-    RESIDUAL_TERMS_AFTER_UNKNOWN_IDS = "residual_terms_after_unknown_ids"
     TOPIC_AFTER_UNKNOWN_IDS = "topic_after_unknown_ids"
     TOPIC_AFTER_LITERAL_MISS = "topic_after_literal_miss"
+    TOPIC_FOR_OPEN_NEED = "topic_for_open_need"
+    QUERY_TERMS_FOR_OPEN_NEED = "query_terms_for_open_need"
     MODEL_PROPOSAL = "model_proposal"
 
 
@@ -178,9 +187,10 @@ POLICY_STEP_TOOL_AND_ROUND: dict[StepReason, tuple[ToolName, int]] = {
     StepReason.QUERY_CVE_IDS: (ToolName.CVE_EXACT_LOOKUP, 1),
     StepReason.QUERY_TERMS: (ToolName.CVE_SEARCH, 1),
     StepReason.REVIEWED_TOPIC: (ToolName.TOPIC_CONTEXT, 1),
-    StepReason.RESIDUAL_TERMS_AFTER_UNKNOWN_IDS: (ToolName.CVE_SEARCH, 2),
     StepReason.TOPIC_AFTER_UNKNOWN_IDS: (ToolName.TOPIC_CONTEXT, 2),
     StepReason.TOPIC_AFTER_LITERAL_MISS: (ToolName.TOPIC_CONTEXT, 2),
+    StepReason.TOPIC_FOR_OPEN_NEED: (ToolName.TOPIC_CONTEXT, 2),
+    StepReason.QUERY_TERMS_FOR_OPEN_NEED: (ToolName.CVE_SEARCH, 2),
 }
 
 
@@ -843,6 +853,32 @@ class ExcludedInvestigationCandidate(ContractModel):
     reason: str = Field(min_length=1)
 
 
+class EvidenceNeedKind(StrEnum):
+    NAMED_CVE = "named_cve"
+    IMPLEMENTATION_CVES = "implementation_cves"
+    PROTOCOL_CONTEXT = "protocol_context"
+    AFFECTEDNESS = "affectedness"
+
+
+class NeedOutcome(StrEnum):
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    SOURCE_UNAVAILABLE = "source_unavailable"
+    UNSUPPORTED = "unsupported"
+
+
+class EvidenceNeed(ContractModel):
+    """One kind of evidence the request asks for, and whether the run met it."""
+
+    kind: EvidenceNeedKind
+    subject: str | None = Field(
+        description=(
+            "The CVE ID for named_cve, the product for affectedness, none for the other kinds."
+        )
+    )
+    outcome: NeedOutcome
+
+
 class CoverageAssessment(ContractModel):
     answer_sources: tuple[KnowledgeSource, ...]
     source_outcomes: tuple[SourceOutcome, ...] = Field(
@@ -850,6 +886,13 @@ class CoverageAssessment(ContractModel):
     )
     refinement_applied: bool
     basis: DecisionBasis = Field(description="The observation the final stop was decided on.")
+    needs: tuple[EvidenceNeed, ...] = Field(
+        description=(
+            "What the request asks for, derived from the request and its interpretation, never "
+            "from labelled cases, each with the outcome the admitted steps and the answer give; "
+            "sufficient only when every need is found."
+        )
+    )
 
 
 class InvestigationWarningCode(StrEnum):
@@ -890,6 +933,7 @@ STATUSES_BY_STOP_REASON: dict[StopReason, frozenset[ResultStatus]] = {
     StopReason.BUDGET_EXHAUSTED: frozenset({ResultStatus.PARTIAL}),
     StopReason.POLICY_BLOCKED: frozenset({ResultStatus.POLICY_BLOCKED}),
     StopReason.INVALID_EVIDENCE: frozenset({ResultStatus.BACKEND_ERROR}),
+    StopReason.NEEDS_UNMET: frozenset({ResultStatus.PARTIAL}),
 }
 
 
@@ -1020,8 +1064,11 @@ def has_product_context(filters: SearchFilters) -> bool:
     return bool(filters.vendors or filters.products or filters.purls)
 
 
-def list_named_products(filters: SearchFilters) -> list[tuple[ProductKind, str]]:
-    """The product context: each named vendor, product and purl, in that order."""
+def list_named_products(
+    filters: SearchFilters, affectedness_mentions: Sequence[str]
+) -> list[tuple[ProductKind, str]]:
+    """The product context: each named vendor, product and purl, in that order, then each
+    product version the query asks affectedness of."""
     named_products: list[tuple[ProductKind, str]] = []
     for vendor in filters.vendors:
         named_products.append(("vendor", vendor))
@@ -1029,17 +1076,23 @@ def list_named_products(filters: SearchFilters) -> list[tuple[ProductKind, str]]
         named_products.append(("product", product))
     for purl in filters.purls:
         named_products.append(("purl", purl))
+    for affectedness_mention in affectedness_mentions:
+        named_products.append(("product_version", affectedness_mention))
     return named_products
 
 
-def list_answer_sources(scope: QueryScope, filters: SearchFilters) -> tuple[KnowledgeSource, ...]:
+def list_answer_sources(
+    scope: QueryScope, filters: SearchFilters, affectedness_mentions: Sequence[str]
+) -> tuple[KnowledgeSource, ...]:
     """Sources whose results form the answer, in enum order.
 
-    Product context makes affectedness an answer source, except under
-    ``protocol_context_only``, which never answers about products.
+    Product context, from filters or a product version the query asks affectedness of,
+    makes affectedness an answer source, except under ``protocol_context_only``, which
+    never answers about products.
     """
     scope_sources = set(ANSWER_SOURCES_BY_SCOPE[scope])
-    if has_product_context(filters) and scope is not QueryScope.PROTOCOL_CONTEXT_ONLY:
+    has_products = has_product_context(filters) or bool(affectedness_mentions)
+    if has_products and scope is not QueryScope.PROTOCOL_CONTEXT_ONLY:
         scope_sources.add(KnowledgeSource.AFFECTEDNESS)
     answer_sources: list[KnowledgeSource] = []
     for source in KnowledgeSource:
@@ -1062,6 +1115,6 @@ def decide_investigation_status(
         return ResultStatus.POLICY_BLOCKED
     if stop_reason is StopReason.INVALID_EVIDENCE:
         return ResultStatus.BACKEND_ERROR
-    if stop_reason is StopReason.BUDGET_EXHAUSTED:
+    if stop_reason in (StopReason.BUDGET_EXHAUSTED, StopReason.NEEDS_UNMET):
         return ResultStatus.PARTIAL
     return summarize_statuses(answer_statuses, has_answer)

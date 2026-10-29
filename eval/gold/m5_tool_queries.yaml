@@ -124,7 +124,7 @@ rows:
     expected:
       stop_reason: source_unavailable
       status: partial
-      validate_basis: no_answer_after_refinement
+      validate_basis: needs_open_after_refinement
       applicability: [{product: "open5gs", status: unknown}]
   - id: investigate_impl_5gaka_f5gc
     tool: investigate_telecom_topic

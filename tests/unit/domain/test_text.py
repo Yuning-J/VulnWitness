@@ -7,8 +7,10 @@ import pytest
 
 from cve_kgrag.domain.text import (
     DEFAULT_IGNORABLE_RANGES,
+    asks_affectedness,
     extract_search_text,
     find_cve_ids,
+    find_version_mentions,
     list_query_terms,
     mentions_cve_id_token,
     normalize_query,
@@ -555,3 +557,47 @@ def test_visible_separators_keep_words_apart_from_a_low_signal_word(
 
 def test_possessive_low_signal_word_still_marks_the_numbers_after_it_as_an_id() -> None:
     assert list_query_terms("CVE's 2021-44228") == []
+
+
+@pytest.mark.parametrize(
+    ("normalized_query", "expected_mentions"),
+    [
+        ("is kamailio 5.8.2 affected", [("kamailio", "5.8.2")]),
+        ("is open5gs v2.7.2 affected by cve-2026-8746.", [("open5gs", "v2.7.2")]),
+        ("open5gs 2.7 and free5gc 3.4.1", [("open5gs", "2.7"), ("free5gc", "3.4.1")]),
+        ("server at 10.0.0.1", []),
+        ("openairinterface 5g core", []),
+        ("kamailio version 5.8.2", [("version", "5.8.2")]),
+        ("is acme-f5gc 1.2.3 affected", []),
+        ("linux_kernel 5.10.1", []),
+    ],
+    ids=[
+        "three_part_version",
+        "v_prefix_before_a_full_stop",
+        "two_mentions",
+        "ipv4_address_is_no_version",
+        "undotted_number_is_no_version",
+        "only_the_word_right_before_counts",
+        "hyphenated_name",
+        "underscored_name",
+    ],
+)
+def test_find_version_mentions_reads_each_word_followed_by_a_dotted_version(
+    normalized_query: str, expected_mentions: list[tuple[str, str]]
+) -> None:
+    assert find_version_mentions(normalized_query) == expected_mentions
+
+
+@pytest.mark.parametrize(
+    ("normalized_query", "expected"),
+    [
+        ("is kamailio 5.8.2 affected", True),
+        ("which versions are vulnerable", True),
+        ("kamailio 5.8.2 vulnerabilities", False),
+    ],
+    ids=["affected", "vulnerable", "vulnerabilities_asks_nothing_of_a_version"],
+)
+def test_asks_affectedness_only_for_words_that_ask_whether_a_product_is_affected(
+    normalized_query: str, expected: bool
+) -> None:
+    assert asks_affectedness(normalized_query) is expected

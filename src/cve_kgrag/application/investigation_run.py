@@ -7,6 +7,7 @@ from cve_kgrag.application.budget_ledger import BudgetLedger
 from cve_kgrag.application.investigation_tools import ToolExecution
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
+    EvidenceNeed,
     Interpretation,
     InvestigationRequest,
     InvestigationState,
@@ -35,6 +36,9 @@ class InvestigationRun:
     planner_durations_ms: list[int] = field(default_factory=list)
     # Warnings raised while planning and retrieving, in the order they arose.
     warnings: list[InvestigationWarning] = field(default_factory=list)
+    # The latest assessment's needs and whether its answer held an item; refine reads them.
+    needs: tuple[EvidenceNeed, ...] = ()
+    has_answer: bool = False
 
     def move(self, to_state: InvestigationState, basis: DecisionBasis) -> None:
         """Record a transition; whether it is legal is the final validator's decision."""

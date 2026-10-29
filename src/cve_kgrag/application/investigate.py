@@ -39,8 +39,8 @@ from cve_kgrag.application.investigation_decisions import (
     Stop,
     choose_round_plan,
     decide_assessment,
+    decide_open_stop,
     decide_refinement_stop,
-    decide_stop_without_answer,
     plan_deadline_round,
 )
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
@@ -74,6 +74,7 @@ from cve_kgrag.application.planner_setup import (
 )
 from cve_kgrag.application.threaded_call_runner import CallTimedOut
 from cve_kgrag.domain.budget import PLANNER_SHARE_OF_WALL_TIME, BudgetBreach
+from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.hashing import UNSEALED_SHA256
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
@@ -286,7 +287,7 @@ class InvestigationService:
         return self._source_capabilities
 
     def investigate(self, request: InvestigationRequest) -> KnowledgeEvidenceSet:
-        interpretation = interpret_request(request, self._topic_registry)
+        interpretation = interpret_request(request, self._topic_registry, self._evidence_catalog)
         run = InvestigationRun(
             request=request,
             interpretation=interpretation,
@@ -309,14 +310,16 @@ class InvestigationService:
         stop = self._assess(run)
         if stop is not None:
             return stop
-        run.move(InvestigationState.REFINE, DecisionBasis.NO_ANSWER_REFINABLE)
+        run.move(InvestigationState.REFINE, DecisionBasis.NEEDS_OPEN)
         stop = self._refine(run)
         if stop is not None:
             return stop
         stop = self._assess(run)
         if stop is not None:
             return stop
-        return decide_stop_without_answer(run.request, DecisionBasis.NO_ANSWER_AFTER_REFINEMENT)
+        return decide_open_stop(
+            run.needs, run.has_answer, DecisionBasis.NEEDS_OPEN_AFTER_REFINEMENT
+        )
 
     def _run_round(
         self,
@@ -504,21 +507,35 @@ class InvestigationService:
         return executed_step_indices
 
     def _assess(self, run: InvestigationRun) -> Stop | None:
-        """The stop the observations so far justify, or ``None`` when nothing answered yet."""
+        """The stop the observations so far justify, or ``None`` when a need is still open;
+        the needs and whether the answer holds an item are kept for refine."""
         answer = assemble_answer(
             run.request.scope,
             run.topic,
             list_admitted_executions(run.steps, run.executions),
             run.request.budget.max_results_per_call,
         )
+        run.needs = judge_needs(
+            run.request,
+            run.interpretation,
+            run.steps,
+            answer.implementation_candidates,
+            answer.protocol_context,
+        )
+        run.has_answer = answer.has_answer()
         return decide_assessment(
-            run.request, run.steps, run.ledger.breach is not None, answer.has_answer()
+            run.request,
+            run.interpretation,
+            run.steps,
+            run.ledger.breach is not None,
+            run.needs,
+            run.has_answer,
         )
 
     def _refine(self, run: InvestigationRun) -> Stop | None:
         """Run the refinement round; ``None`` once it ran and needs assessing."""
-        refinement_steps = plan_refinement(run.interpretation, run.list_round_steps(1))
-        stop = decide_refinement_stop(run.request, refinement_steps, self._model_port is not None)
+        refinement_steps = plan_refinement(run.interpretation, run.list_round_steps(1), run.needs)
+        stop = decide_refinement_stop(run.request, refinement_steps, run.needs, run.has_answer)
         if stop == ROUND_CAP_STOP:
             run.ledger.record_breach(BudgetBreach.ROUNDS)
         if stop is not None:
@@ -531,6 +548,7 @@ class InvestigationService:
         request = run.request
         returned_answer = assemble_returned_answer(
             request,
+            run.interpretation,
             run.topic,
             run.steps,
             run.executions,
@@ -594,5 +612,5 @@ class InvestigationService:
             self._evidence_catalog,
             self._source_capabilities,
         )
-        audit_decision_path(evidence_set, self._topic_registry)
+        audit_decision_path(evidence_set, self._topic_registry, self._evidence_catalog)
         return evidence_set

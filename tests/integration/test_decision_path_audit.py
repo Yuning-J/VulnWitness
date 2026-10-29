@@ -16,9 +16,12 @@ from cve_kgrag.domain.investigation import (
     BackendRequest,
     CveBackendRequest,
     DecisionBasis,
+    EvidenceNeed,
+    EvidenceNeedKind,
     InvestigationWarning,
     InvestigationWarningCode,
     KnowledgeEvidenceSet,
+    NeedOutcome,
     PlannerOutcome,
     StateTransition,
     StepReason,
@@ -49,6 +52,7 @@ from tests.support.investigation import (
     RANKING_VIOLATION,
     build_exact_lookup_call,
     build_investigation_request,
+    build_productless_catalog,
     build_search_call,
     reseal_evidence_set,
     rewrite_step,
@@ -66,6 +70,7 @@ from tests.support.investigation_runs import (
     run_model_accepted,
     run_model_low_signal_search,
     run_model_rejected,
+    run_model_skipped_at_deadline,
     run_over_the_byte_cap,
     run_policy_plan_over_budget,
     run_refinement,
@@ -97,16 +102,27 @@ def run_refinement_under_one_round(fixture_bundle: FixtureBundle) -> KnowledgeEv
     return investigate(fixture_bundle, "5gaka", "implementation_only", budget={"max_rounds": 1})
 
 
-def run_residual_terms(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """An unknown ID, so round 2 searches the query's remaining terms (R1)."""
-    return investigate(
-        fixture_bundle, "CVE-9999-4242 AUSF resynchronization crash", "implementation_only"
+def run_search_of_every_term_after_a_dropped_word(
+    fixture_bundle: FixtureBundle,
+) -> KnowledgeEvidenceSet:
+    """The model's round 1 searches one of three words; round 2 falls back to the policy's
+    search of all of them (R3)."""
+    return investigate_with_model_replies(
+        fixture_bundle,
+        build_investigation_request("sql injection gateway", "implementation_only"),
+        build_plan_reply({"tool": "cve_search", "query": "gateway"}),
+        UNAVAILABLE_REPLY,
     )
 
 
 def run_unknown_id_without_answer(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """An unknown ID, then a residual-term search that finds nothing either."""
-    return investigate(fixture_bundle, "CVE-9999-4242 zzqx", "mixed")
+    """An unknown ID, then a topic exploration whose searches the filters leave empty."""
+    return investigate(
+        fixture_bundle,
+        "CVE-9999-4242 5gaka",
+        "implementation_only",
+        filters=LOW_SEVERITY_FILTERS,
+    )
 
 
 def run_excluded_term_only(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
@@ -283,9 +299,9 @@ def blame_the_filters(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSe
     )
 
 
-def search_other_residual_terms(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
-    """Round 2 searches fewer of the query's terms than R1 gives."""
-    return replace_call(evidence_set, 2, build_search_call("ausf crash"))
+def search_fewer_terms_in_round_two(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """Round 2 searches fewer of the query's terms than R3 gives."""
+    return replace_call(evidence_set, 2, build_search_call("sql injection"))
 
 
 def give_the_refinement_another_reason(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
@@ -448,7 +464,7 @@ def report_a_filtered_known_id_unknown(
     request = build_investigation_request(
         "CVE-9999-0003 ausf", "implementation_only", filters=LOW_SEVERITY_FILTERS
     )
-    interpretation = interpret_request(request, build_topic_registry())
+    interpretation = interpret_request(request, build_topic_registry(), build_productless_catalog())
     forged_set = warn_unknown(
         replace_call(evidence_set, 1, build_exact_lookup_call("CVE-9999-0003")), "CVE-9999-0003"
     )
@@ -467,7 +483,7 @@ def name_a_second_cve_id(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenc
     it leaves CVE-9999-0004 unlooked-up; the request, interpretation and ID are that
     query's."""
     request = build_investigation_request("CVE-9999-0003 CVE-9999-0004", "implementation_only")
-    interpretation = interpret_request(request, build_topic_registry())
+    interpretation = interpret_request(request, build_topic_registry(), build_productless_catalog())
     return reseal_evidence_set(
         evidence_set,
         request=request,
@@ -732,8 +748,8 @@ def test_reviewer_forgery_is_rejected_after_reseal(
             "decisions give interpret -> validate (cve_ids_outside_scope)",
         ),
         (
-            run_residual_terms,
-            search_other_residual_terms,
+            run_search_of_every_term_after_a_dropped_word,
+            search_fewer_terms_in_round_two,
             "round 2 accepts another plan than the controller's decisions choose",
         ),
         (
@@ -776,7 +792,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_refinement,
             credit_round_one_with_an_answer,
-            "transition 4 is assess -> refine (no_answer_refinable), but the controller's "
+            "transition 4 is assess -> refine (needs_open), but the controller's "
             "decisions give assess -> validate (answer_found)",
         ),
         (
@@ -787,7 +803,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_unknown_id_without_answer,
             claim_no_refinement_after_round_two,
-            "decisions give assess -> validate (no_answer_after_refinement)",
+            "decisions give assess -> validate (needs_open_after_refinement)",
         ),
         (
             run_over_the_byte_cap,
@@ -872,7 +888,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_five_g_aka,
             name_another_policy_version,
-            "the planner names a policy other than m4.1, the one whose decisions the audit "
+            "the planner names a policy other than m7b.1, the one whose decisions the audit "
             "re-derives",
         ),
     ],
@@ -938,6 +954,34 @@ def test_forged_decision_is_rejected_after_reseal(
     assert any(expected_violation in violation for violation in raised.value.violations)
 
 
+def run_mixed_free_text(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """Free text under ``mixed`` with no topic: implementation CVEs found, protocol context
+    unsupported, so the run stops ``needs_unmet``."""
+    return investigate(fixture_bundle, "sql injection gateway", "mixed")
+
+
+def claim_protocol_context_searchable(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The unsupported protocol need is relabelled ``not_found``, as if a tool could still
+    serve it; the stop, which needs an unmet need either way, is left as recorded."""
+    needs: list[EvidenceNeed] = []
+    for need in evidence_set.coverage.needs:
+        recorded_need = need
+        if need.kind is EvidenceNeedKind.PROTOCOL_CONTEXT:
+            recorded_need = need.model_copy(update={"outcome": NeedOutcome.NOT_FOUND})
+        needs.append(recorded_need)
+    coverage = evidence_set.coverage.model_copy(update={"needs": tuple(needs)})
+    return reseal_evidence_set(evidence_set, coverage=coverage)
+
+
+def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """Round 2, which the deadline stopped before its planner ran, is dropped from the
+    record, so the run appears to have stopped at refine without planning it."""
+    budget_used = evidence_set.trajectory.budget_used.model_copy(update={"rounds": 1})
+    return update_trajectory(
+        evidence_set, rounds=evidence_set.trajectory.rounds[:1], budget_used=budget_used
+    )
+
+
 @pytest.mark.parametrize(
     ("run", "forgery", "expected_violation"),
     [
@@ -970,6 +1014,17 @@ def test_forged_decision_is_rejected_after_reseal(
             "round 1 is model_accepted, but the controller's decisions over its recorded reply "
             "give model_rejected",
         ),
+        (
+            run_model_skipped_at_deadline,
+            erase_the_skipped_round_two,
+            "the controller's decisions plan round 2, but the run records no such round",
+        ),
+        (
+            run_mixed_free_text,
+            claim_protocol_context_searchable,
+            "coverage.needs are not the needs the request gives, judged over the admitted "
+            "steps and the answer",
+        ),
     ],
     ids=[
         "rejected_reply_relabelled_accepted",
@@ -977,6 +1032,8 @@ def test_forged_decision_is_rejected_after_reseal(
         "accepted_plan_swapped_for_another_gate_valid_plan",
         "rejection_codes_rewritten",
         "accepted_plan_omitting_a_named_cve_id",
+        "planned_round_two_erased",
+        "need_outcome_rewritten",
     ],
 )
 def test_planner_record_the_validator_accepts_is_rejected_by_the_audit(
@@ -999,6 +1056,6 @@ def test_planner_record_the_validator_accepts_is_rejected_by_the_audit(
     )
 
     with pytest.raises(EvidenceValidationError) as raised:
-        audit_decision_path(forged_set, topic_registry)
+        audit_decision_path(forged_set, topic_registry, packaged_evidence_catalog)
 
     assert expected_violation in raised.value.violations

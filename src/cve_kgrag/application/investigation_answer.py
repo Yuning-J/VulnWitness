@@ -29,11 +29,13 @@ from cve_kgrag.application.investigation_tools import ToolExecution
 from cve_kgrag.application.topic_context import PROTOCOL_EXCLUSION_REASON, TIER_ORDER
 from cve_kgrag.domain.affectedness import AffectednessDetail, ApplicabilityStatus
 from cve_kgrag.domain.evidence import Claim, EvidenceAnchor
+from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.investigation import (
     ApplicabilityBasis,
     CoverageAssessment,
     DecisionBasis,
     ExcludedInvestigationCandidate,
+    Interpretation,
     InvestigationCandidate,
     InvestigationRequest,
     InvestigationWarning,
@@ -423,10 +425,13 @@ def aggregate_source_outcomes(
     return tuple(source_outcomes)
 
 
-def list_product_applicability(filters: SearchFilters) -> tuple[ProductApplicability, ...]:
-    """One ``unknown`` entry per named vendor, product and purl, in that order."""
+def list_product_applicability(
+    filters: SearchFilters, affectedness_mentions: Sequence[str]
+) -> tuple[ProductApplicability, ...]:
+    """One ``unknown`` entry per named vendor, product and purl, in that order, then per
+    product version the query asks affectedness of."""
     applicability: list[ProductApplicability] = []
-    for product_kind, product in list_named_products(filters):
+    for product_kind, product in list_named_products(filters, affectedness_mentions):
         applicability.append(
             ProductApplicability(
                 product_kind=product_kind,
@@ -518,6 +523,7 @@ def list_answer_warnings(
 
 def assemble_returned_answer(
     request: InvestigationRequest,
+    interpretation: Interpretation,
     topic: ProtocolTopic | None,
     steps: Sequence[ToolStep],
     executions: Sequence[ToolExecution],
@@ -527,8 +533,8 @@ def assemble_returned_answer(
 ) -> ReturnedAnswer:
     """What a run that stopped for ``stop_reason`` on ``basis`` returns from its steps and
     their executions (one per step, in order). An ``invalid_evidence`` run returns nothing
-    any step retrieved. ``affectedness_detail`` is the deployment's reason affectedness is
-    unavailable (``aggregate_source_outcomes``)."""
+    any step retrieved, and its needs are judged as if no step ran. ``affectedness_detail``
+    is the deployment's reason affectedness is unavailable (``aggregate_source_outcomes``)."""
     is_invalid = stop_reason is StopReason.INVALID_EVIDENCE
     admitted_executions: list[tuple[ToolStep, ToolExecution]] = []
     if not is_invalid:
@@ -539,7 +545,9 @@ def assemble_returned_answer(
     admitted_steps: list[ToolStep] = []
     for step, _ in admitted_executions:
         admitted_steps.append(step)
-    answer_sources = list_answer_sources(request.scope, request.filters)
+    answer_sources = list_answer_sources(
+        request.scope, request.filters, interpretation.affectedness_mentions
+    )
     source_outcomes = aggregate_source_outcomes(
         answer_sources,
         admitted_steps,
@@ -553,7 +561,9 @@ def assemble_returned_answer(
         outcome_statuses.append(source_outcome.status)
     product_applicability: tuple[ProductApplicability, ...] = ()
     if request.scope is not QueryScope.PROTOCOL_CONTEXT_ONLY and not is_invalid:
-        product_applicability = list_product_applicability(request.filters)
+        product_applicability = list_product_applicability(
+            request.filters, interpretation.affectedness_mentions
+        )
     return ReturnedAnswer(
         answer=answer,
         product_applicability=product_applicability,
@@ -563,6 +573,13 @@ def assemble_returned_answer(
             source_outcomes=source_outcomes,
             refinement_applied=any(step.round_number == 2 for step in steps),
             basis=basis,
+            needs=judge_needs(
+                request,
+                interpretation,
+                admitted_steps,
+                answer.implementation_candidates,
+                answer.protocol_context,
+            ),
         ),
         status=decide_investigation_status(stop_reason, answer.has_answer(), outcome_statuses),
         warnings=list_answer_warnings(answer, product_applicability),

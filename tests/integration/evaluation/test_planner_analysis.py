@@ -629,6 +629,8 @@ def test_equal_sets_give_byte_equal_reports_however_they_were_loaded(
 
 
 def test_report_holds_no_query_plan_text_or_planner_name(fixture_bundle: FixtureBundle) -> None:
+    # The marker term is indexed by no record, so the policy refines with the topic call
+    # and each model run is asked for a round-2 plan too.
     query = f"5G-AKA {QUERY_MARKER}"
     deterministic_set = run_deterministically(fixture_bundle, query, "implementation_only")
     model_sets = (
@@ -637,12 +639,14 @@ def test_report_holds_no_query_plan_text_or_planner_name(fixture_bundle: Fixture
             query,
             "implementation_only",
             build_text_reply(f"{PLAN_MARKER} not json"),
+            build_text_reply(f"{PLAN_MARKER} not json"),
         ),
         run_with_replies(
             fixture_bundle,
             query,
             "implementation_only",
             build_plan_reply({"tool": "cve_search", "query": f"5g aka {QUERY_MARKER}"}),
+            build_plan_reply(TOPIC_5G_AKA),
         ),
     )
 

@@ -438,7 +438,7 @@ def test_each_named_product_is_unknown_in_vendor_product_purl_order() -> None:
         purls=["pkg:generic/fictional5g/f5gc"], products=["f5gc"], vendors=["fictional5g"]
     )
 
-    applicability = list_product_applicability(filters)
+    applicability = list_product_applicability(filters, ())
 
     described_products: list[tuple[str, str, str]] = []
     for product_applicability in applicability:

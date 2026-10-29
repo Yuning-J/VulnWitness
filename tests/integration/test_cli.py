@@ -1461,7 +1461,9 @@ def test_eval_planner_model_runs_plan_through_the_installed_adapter_and_report_n
 ) -> None:
     """The plan carries a field the plan shape rejects, so every round falls back; its text
     and the queries stay in the sets the run wrote and never reach the report, nor do the
-    endpoint, the model's name or the key."""
+    endpoint, the model's name or the key. The marker query's search warns its unindexed
+    marker term, so the policy refines it with the topic call and each of its runs asks
+    the model again in round 2; the ID case finishes in round 1."""
     plan_text = json.dumps({"steps": [SEARCH_5G_AKA], "note": EVAL_MARKER})
     server = fake_chat_servers.start(ScriptedAnswer(body=build_completion_body(plan_text)))
     environment = build_planner_environment(server)
@@ -1481,7 +1483,8 @@ def test_eval_planner_model_runs_plan_through_the_installed_adapter_and_report_n
     assert report.model is not None
     assert report.model.runs == 4
     assert report.model.round_one.outcomes[PlannerOutcome.MODEL_REJECTED] == 4
-    assert len(server.received_requests) == 4
+    assert report.model.round_two.outcomes[PlannerOutcome.MODEL_REJECTED] == 2
+    assert len(server.received_requests) == 6
     assert len(model_set_paths) == 4
     model_set_texts = ""
     for model_set_path in model_set_paths:

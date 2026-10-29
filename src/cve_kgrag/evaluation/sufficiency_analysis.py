@@ -10,13 +10,12 @@ from dataclasses import dataclass
 
 from cve_kgrag.domain.affectedness import ApplicabilityStatus
 from cve_kgrag.domain.investigation import (
-    InvestigationWarningCode,
+    EvidenceNeedKind,
     KnowledgeEvidenceSet,
+    NeedOutcome,
     StopReason,
 )
 from cve_kgrag.domain.search import MAX_RESULTS_PER_CALL
-from cve_kgrag.domain.taxonomy import ResultStatus
-from cve_kgrag.domain.topic_context import KnowledgeSource
 from cve_kgrag.evaluation.gold_sets import DerivedSets
 from cve_kgrag.evaluation.labelled_cases import (
     CATEGORY_SUBJECTS,
@@ -42,10 +41,13 @@ from cve_kgrag.evaluation.planner_report import (
     measure_proportion,
 )
 
-# Signals that an answer names its protocol-context gap.
-PROTOCOL_GAP_WARNINGS = frozenset(
-    {InvestigationWarningCode.TOPIC_NOT_RESOLVED, InvestigationWarningCode.TOPIC_PENDING_REVIEW}
-)
+# The run's need that answers for each labelled evidence category.
+NEED_KIND_BY_CATEGORY = {
+    EvidenceCategory.NAMED_CVE: EvidenceNeedKind.NAMED_CVE,
+    EvidenceCategory.IMPLEMENTATION_CVES: EvidenceNeedKind.IMPLEMENTATION_CVES,
+    EvidenceCategory.PROTOCOL_CONTEXT: EvidenceNeedKind.PROTOCOL_CONTEXT,
+    EvidenceCategory.AFFECTEDNESS: EvidenceNeedKind.AFFECTEDNESS,
+}
 IMPLEMENTATION_FAMILY = (EvidenceCategory.NAMED_CVE, EvidenceCategory.IMPLEMENTATION_CVES)
 
 
@@ -68,6 +70,8 @@ class RunJudgement:
     premature_no_evidence: bool
     unflagged_gap: bool
     affectedness_violation: bool
+    false_gap: bool
+    need_agreement: bool
 
 
 @dataclass(frozen=True)
@@ -96,23 +100,25 @@ def judge_category(derived_sets: DerivedSets, listed_ids: set[str]) -> CategoryJ
 
 
 def signals_gap(category: EvidenceCategory, evidence_set: KnowledgeEvidenceSet) -> bool:
-    """Whether the answer names a gap in ``category``: ``applicability_unknown`` for
-    affectedness; an unresolved or unreviewed topic, or a FiGHT source outcome other than
-    ok, for protocol context. No signal is defined for a CVE category."""
-    warning_codes: set[InvestigationWarningCode] = set()
-    for warning in evidence_set.warnings:
-        warning_codes.add(warning.code)
-    if category is EvidenceCategory.AFFECTEDNESS:
-        return InvestigationWarningCode.APPLICABILITY_UNKNOWN in warning_codes
-    if category is EvidenceCategory.PROTOCOL_CONTEXT:
-        if not PROTOCOL_GAP_WARNINGS.isdisjoint(warning_codes):
-            return True
-        return any(
-            source_outcome.source is KnowledgeSource.MITRE_FIGHT
-            and source_outcome.status is not ResultStatus.OK
-            for source_outcome in evidence_set.coverage.source_outcomes
-        )
-    return False
+    """Whether the answer names a gap in ``category``: the run records a need of that kind
+    it did not find."""
+    need_kind = NEED_KIND_BY_CATEGORY[category]
+    return any(
+        need.kind is need_kind and need.outcome is not NeedOutcome.FOUND
+        for need in evidence_set.coverage.needs
+    )
+
+
+def has_label_needs(case: LabelledCase, evidence_set: KnowledgeEvidenceSet) -> bool:
+    """Whether the run's need kinds are the labelled case's: a diagnostic of how the
+    runtime reads the question, never an input to it."""
+    run_need_kinds: set[EvidenceNeedKind] = set()
+    for need in evidence_set.coverage.needs:
+        run_need_kinds.add(need.kind)
+    label_need_kinds: set[EvidenceNeedKind] = set()
+    for category in case.needs:
+        label_need_kinds.add(NEED_KIND_BY_CATEGORY[category])
+    return run_need_kinds == label_need_kinds
 
 
 def judge_run(
@@ -158,6 +164,9 @@ def judge_run(
             applicability.status is not ApplicabilityStatus.UNKNOWN
             for applicability in evidence_set.product_applicability
         ),
+        false_gap=judged is JudgedSufficiency.SUFFICIENT
+        and evidence_set.stop_reason is not StopReason.SUFFICIENT,
+        need_agreement=has_label_needs(case, evidence_set),
     )
 
 
@@ -195,6 +204,8 @@ def summarize_case(judged_case: JudgedCase) -> SufficiencyCase:
             affectedness_violation=sum(
                 judgement.affectedness_violation for judgement in judgements
             ),
+            false_gap=sum(judgement.false_gap for judgement in judgements),
+            need_agreement=sum(judgement.need_agreement for judgement in judgements),
         ),
     )
 
@@ -268,6 +279,7 @@ def measure_run_quality(judged_cases: Sequence[JudgedCase]) -> RunQuality:
     labelled_runs: list[RunJudgement] = []
     evidence_label_runs: list[RunJudgement] = []
     partial_label_runs: list[RunJudgement] = []
+    judged_sufficient_runs: list[RunJudgement] = []
     for judged_case in judged_cases:
         label = judged_case.case.sufficiency
         every_run.extend(judged_case.judgements)
@@ -277,6 +289,10 @@ def measure_run_quality(judged_cases: Sequence[JudgedCase]) -> RunQuality:
             evidence_label_runs.extend(judged_case.judgements)
         if label is Sufficiency.PARTIAL:
             partial_label_runs.extend(judged_case.judgements)
+        if label is not Sufficiency.UNCERTAIN:
+            for judgement in judged_case.judgements:
+                if judgement.judged is JudgedSufficiency.SUFFICIENT:
+                    judged_sufficient_runs.append(judgement)
     return RunQuality(
         runs=len(every_run),
         uncertain_runs=len(every_run) - len(labelled_runs),
@@ -294,6 +310,13 @@ def measure_run_quality(judged_cases: Sequence[JudgedCase]) -> RunQuality:
         ),
         affectedness_violation=measure_proportion(
             sum(judgement.affectedness_violation for judgement in every_run), len(every_run)
+        ),
+        false_gap=measure_proportion(
+            sum(judgement.false_gap for judgement in judged_sufficient_runs),
+            len(judged_sufficient_runs),
+        ),
+        need_agreement=measure_proportion(
+            sum(judgement.need_agreement for judgement in labelled_runs), len(labelled_runs)
         ),
     )
 

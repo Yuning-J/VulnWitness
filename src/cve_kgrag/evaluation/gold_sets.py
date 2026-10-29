@@ -120,13 +120,6 @@ def check_label(case: LabelledCase, case_sets: dict[SubjectKind, DerivedSets]) -
             f"case {case.case_id}: partial needs one needed category with required items "
             "and one without"
         )
-    if case.sufficiency is Sufficiency.PARTIAL:
-        for category, category_has_required in zip(case.needs, has_required, strict=True):
-            if CATEGORY_SUBJECTS[category] is SubjectKind.CVES and not category_has_required:
-                raise GoldFileError(
-                    f"case {case.case_id}: partial, but its missing category "
-                    f"{category.value} has no signal an answer could give"
-                )
     if case.sufficiency is Sufficiency.INSUFFICIENT:
         if any(has_required):
             raise GoldFileError(f"case {case.case_id}: insufficient, but has required items")

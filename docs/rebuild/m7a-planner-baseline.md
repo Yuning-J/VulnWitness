@@ -73,7 +73,7 @@ hash of its request and FiGHT source; a plan by the hash of its call keys
 
 ## The report
 
-The report is the evaluation's own format (`evaluation_format_version: 2`), not part of
+The report is the evaluation's own format (`evaluation_format_version: 3`), not part of
 the v2 knowledge contract, so it is not under `schemas/v2`. It is JSON with sorted keys,
 and the analysis is a pure function of the sets: equal sets give byte-equal reports.
 [`m7b-planner-evaluation.md`](m7b-planner-evaluation.md) describes the dataset identity
@@ -135,8 +135,7 @@ without a plan), then the fallback plan's when the gate rejected that too. A rou
 records both in one list, so the two cannot be counted apart without a contract change.
 
 A fallback that executed nothing, because the gate rejected the policy's own plan as over
-budget or the policy had no refinement, counts in `fallback_attempt` but not in
-`fallback_executed`.
+budget, counts in `fallback_attempt` but not in `fallback_executed`.
 
 ### Divergence from the policy
 
@@ -148,11 +147,9 @@ and the planner was shown the same observations of them. Otherwise it is counted
 `not_comparable` by reason: `deterministic_run_lacks_round`, `round_one_calls_differ`
 or `round_one_observations_differ`. Round 1 is always comparable when both runs have it.
 
-One gold case skews the round-2 figures. `unknown_id_alone` (`CVE-9999-4242`,
-`implementation_only`) reaches a model round 2 in which no offered call can pass the gate,
-so that round is rejected whatever the model replies. Read gate quality from `round_one`,
-or discount that case's round 2. The fix, consulting no model in such a round, is a
-[`PLAN.md`](PLAN.md#follow-up-model-planner-adapter) follow-up.
+Round 2 is planned, and the model consulted for it, only when the policy has a refinement
+for an open need ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)), so every round-2
+figure counts rounds in which some call could pass the gate.
 
 ### Runs and cases
 

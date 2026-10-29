@@ -20,7 +20,9 @@ Beyond the anchor, record, threat-context and claim rules of ``validation``:
 - relevance is assessed for every candidate once a topic resolved, except a CVE the
   caller named by ID, which is kept whether or not it relates to the topic;
 - each named product has an ``unknown`` applicability entry and its warning;
-- the status follows from the stop reason and the answer sources' outcomes;
+- the status follows from the stop reason and the answer sources' outcomes, a
+  ``sufficient`` run has every need found, and a ``needs_unmet`` run has an answer and an
+  unmet need other than affectedness;
 - the trajectory is a legal walk of the state machine with at most one refinement,
   and no step runs after one that was not admitted;
 - each step's ``call_key`` is recomputed from its call, and its sources are those
@@ -36,8 +38,8 @@ Beyond the anchor, record, threat-context and claim rules of ``validation``:
   ``model_timed_out``) with the hash recomputed from it, and the rounds, planner
   calls, planner durations and ``plan_accepted`` transitions are counted from them;
 - rounds follow the state machine: round 1 is recorded exactly when the run moved
-  interpret -> plan, and round 2 only after assess -> refine, which under a model
-  planner allowed two rounds always records round 2; a deterministic round that
+  interpret -> plan, and round 2 only after assess -> refine (whether refine plans it is
+  the decision-path audit's to re-derive); a deterministic round that
   runs no plan was rejected (stopping ``policy_blocked`` or ``budget_exhausted``)
   or reached the deadline;
 - the budget usage matches the steps and never exceeds the request's caps, and
@@ -84,6 +86,7 @@ from cve_kgrag.domain.affectedness import ApplicabilityStatus
 from cve_kgrag.domain.budget import BudgetBreach
 from cve_kgrag.domain.evidence import Claim, EvidenceAnchor
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
+from cve_kgrag.domain.evidence_needs import has_unmet_need_beyond_affectedness
 from cve_kgrag.domain.investigation import (
     ALLOWED_TRANSITIONS,
     CAPABILITY_STATES_BY_SUBJECT,
@@ -108,6 +111,7 @@ from cve_kgrag.domain.investigation import (
     InvestigationState,
     InvestigationWarningCode,
     KnowledgeEvidenceSet,
+    NeedOutcome,
     PlannerOutcome,
     RoundRecord,
     SourceCapability,
@@ -533,7 +537,8 @@ def find_step_observation_violations(
 
 
 def find_applicability_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
-    """One ``unknown`` entry and one warning per named vendor, product and purl, in order."""
+    """One ``unknown`` entry and one warning per named vendor, product and purl, and per
+    product version the query asks affectedness of, in order."""
     violations: list[str] = []
     filters = evidence_set.request.filters
     is_assessed = (
@@ -542,7 +547,9 @@ def find_applicability_violations(evidence_set: KnowledgeEvidenceSet) -> list[st
     )
     expected_products: list[tuple[str, str]] = []
     if is_assessed:
-        expected_products.extend(list_named_products(filters))
+        expected_products.extend(
+            list_named_products(filters, evidence_set.interpretation.affectedness_mentions)
+        )
     assessed_products: list[tuple[str, str]] = []
     for applicability_index, applicability in enumerate(evidence_set.product_applicability):
         assessed_products.append((applicability.product_kind, applicability.product))
@@ -571,7 +578,11 @@ def find_stop_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     status = evidence_set.status
     has_answer = evidence_set.has_answer()
     coverage = evidence_set.coverage
-    answer_sources = list_answer_sources(evidence_set.request.scope, evidence_set.request.filters)
+    answer_sources = list_answer_sources(
+        evidence_set.request.scope,
+        evidence_set.request.filters,
+        evidence_set.interpretation.affectedness_mentions,
+    )
     if coverage.answer_sources != answer_sources:
         violations.append("coverage.answer_sources do not match the request")
     outcome_statuses: list[ResultStatus] = []
@@ -610,6 +621,15 @@ def find_stop_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
             )
     if stop_reason is StopReason.NO_EVIDENCE and (has_answer or has_failure):
         violations.append("no_evidence holds no answer and no failed source")
+    # A breach, invalid evidence or a failed source stops a run before its needs are
+    # weighed, so only these two stops say what the needs were.
+    is_every_need_met = all(need.outcome is NeedOutcome.FOUND for need in coverage.needs)
+    if stop_reason is StopReason.SUFFICIENT and not is_every_need_met:
+        violations.append("sufficient needs every need found")
+    if stop_reason is StopReason.NEEDS_UNMET and not (
+        has_answer and has_unmet_need_beyond_affectedness(coverage.needs)
+    ):
+        violations.append("needs_unmet needs an answer and an unmet need other than affectedness")
     is_breached = evidence_set.trajectory.budget_used.breach is not None
     if (stop_reason is StopReason.BUDGET_EXHAUSTED) != is_breached:
         violations.append("budget_exhausted is the stop reason exactly when a cap was breached")
@@ -880,8 +900,7 @@ def find_round_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
 
 def find_round_transition_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     """Rounds follow the state machine: round 1 is planned on interpret -> plan, round 2 on
-    assess -> refine. A model planner allowed two rounds is consulted again whenever the
-    run refines, so that refinement records round 2."""
+    assess -> refine."""
     violations: list[str] = []
     trajectory = evidence_set.trajectory
     has_interpret_plan = False
@@ -899,13 +918,6 @@ def find_round_transition_violations(evidence_set: KnowledgeEvidenceSet) -> list
         violations.append("round 1 is recorded exactly when the run moves interpret -> plan")
     if 2 in recorded_round_numbers and not has_assess_refine:
         violations.append("round 2 is recorded without an assess -> refine")
-    consults_model_on_refine = (
-        trajectory.planner.kind is PlannerKind.MODEL and evidence_set.request.budget.max_rounds >= 2
-    )
-    if consults_model_on_refine and has_assess_refine and 2 not in recorded_round_numbers:
-        violations.append(
-            "the run refines under a model planner allowed two rounds, but records no round 2"
-        )
     return violations
 
 

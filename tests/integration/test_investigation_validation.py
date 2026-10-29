@@ -33,6 +33,7 @@ from cve_kgrag.domain.investigation import (
     InvestigationWarning,
     InvestigationWarningCode,
     KnowledgeEvidenceSet,
+    NeedOutcome,
     PlannerOutcome,
     ProductApplicability,
     RoundRecord,
@@ -88,7 +89,6 @@ from tests.support.investigation_runs import (
     run_exact_id,
     run_five_g_aka,
     run_model_accepted,
-    run_model_refinement_unavailable,
     run_model_rejected,
     run_model_reply_after_deadline,
     run_model_skipped_at_deadline,
@@ -566,6 +566,25 @@ def misstate_the_coverage_basis(
     return update_coverage(evidence_set, basis=DecisionBasis.STEPS_FINISHED)
 
 
+def mark_a_found_need_unmet(
+    evidence_set: KnowledgeEvidenceSet, fixture_bundle: FixtureBundle
+) -> KnowledgeEvidenceSet:
+    """The run still stops sufficient, but its one need now reads not found."""
+    unmet_need = evidence_set.coverage.needs[0].model_copy(
+        update={"outcome": NeedOutcome.NOT_FOUND}
+    )
+    return update_coverage(evidence_set, needs=(unmet_need,))
+
+
+def relabel_a_met_run_needs_unmet(
+    evidence_set: KnowledgeEvidenceSet, fixture_bundle: FixtureBundle
+) -> KnowledgeEvidenceSet:
+    """A run whose every need was found claims to stop with needs unmet."""
+    return reseal_evidence_set(
+        evidence_set, stop_reason=StopReason.NEEDS_UNMET, status=ResultStatus.PARTIAL
+    )
+
+
 def report_a_status_the_outcomes_do_not_decide(
     evidence_set: KnowledgeEvidenceSet, fixture_bundle: FixtureBundle
 ) -> KnowledgeEvidenceSet:
@@ -882,6 +901,12 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
         (EXACT_ID, add_an_outcome_for_a_non_answer_source, "which is not an answer source"),
         (EXACT_ID, repeat_an_outcome, "names a source more than once"),
         (EXACT_ID, misstate_the_coverage_basis, "coverage.basis must be the basis"),
+        (EXACT_ID, mark_a_found_need_unmet, "sufficient needs every need found"),
+        (
+            EXACT_ID,
+            relabel_a_met_run_needs_unmet,
+            "needs_unmet needs an answer and an unmet need other than affectedness",
+        ),
         (OPEN5GS, report_a_status_the_outcomes_do_not_decide, "should be partial"),
         (EXACT_ID, drop_the_first_transition, "transitions must start at interpret"),
         (EXACT_ID, drop_a_middle_transition, "does not follow on"),
@@ -984,6 +1009,8 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
         "outcome_for_a_non_answer_source",
         "repeated_outcome",
         "misstated_coverage_basis",
+        "sufficient_with_an_unmet_need",
+        "needs_unmet_with_every_need_met",
         "status_not_decided_by_outcomes",
         "transitions_not_starting_at_interpret",
         "transition_not_following_on",
@@ -1531,7 +1558,7 @@ def retrieve_round_two_without_accepting_its_plan(
     transitions: list[StateTransition] = []
     for transition in evidence_set.trajectory.transitions:
         if transition.from_state is InvestigationState.REFINE:
-            transition = transition.model_copy(update={"basis": DecisionBasis.NO_ANSWER_REFINABLE})
+            transition = transition.model_copy(update={"basis": DecisionBasis.NEEDS_OPEN})
         transitions.append(transition)
     return update_trajectory(evidence_set, transitions=tuple(transitions))
 
@@ -1580,20 +1607,6 @@ def add_a_round_to_a_run_that_never_planned(
 ) -> KnowledgeEvidenceSet:
     invented_id_rejection = PlanRejection(code=PlanRejectionCode.INVENTED_CVE_ID)
     return add_rounds(evidence_set, build_planless_round(1, invented_id_rejection))
-
-
-def erase_the_consulted_round_two(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
-    """The reviewer's forgery: the round 2 model consultation disappears from the rounds, the
-    usage and the planner timings."""
-    trajectory = evidence_set.trajectory
-    budget_used = trajectory.budget_used.model_copy(update={"rounds": 1, "planner_calls": 1})
-    timings = evidence_set.timings.model_copy(
-        update={"planner_durations_ms": evidence_set.timings.planner_durations_ms[:1]}
-    )
-    forged_set = update_trajectory(
-        evidence_set, rounds=trajectory.rounds[:1], budget_used=budget_used
-    )
-    return reseal_evidence_set(forged_set, timings=timings)
 
 
 def append_to_the_accepted_plan(
@@ -1784,11 +1797,6 @@ def drop_round_one_rejections(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEv
             "round 1 is recorded exactly when the run moves interpret -> plan",
         ),
         (
-            run_model_refinement_unavailable,
-            erase_the_consulted_round_two,
-            "the run refines under a model planner allowed two rounds, but records no round 2",
-        ),
-        (
             run_exact_id,
             plan_a_search_that_never_ran,
             "round 1 leaves calls of its accepted plan unrun, though every step was admitted",
@@ -1868,7 +1876,6 @@ def drop_round_one_rejections(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEv
         "phantom_round_two_without_refine",
         "phantom_round_two_with_a_policy_rejection",
         "round_without_interpret_plan",
-        "erased_model_round_two",
         "unrun_search_in_a_completed_round",
         "unrun_topic_in_a_completed_round",
         "call_accepted_twice",

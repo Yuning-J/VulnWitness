@@ -196,20 +196,6 @@ def test_label_the_sets_support_is_accepted(case_row: dict[str, Any]) -> None:
             ),
             "its wide check found items not marked irrelevant",
         ),
-        (
-            build_case_row(
-                needs=["implementation_cves", "protocol_context"],
-                rules={
-                    "cves": {"relevant": NO_MATCH_RULE, "required": NO_MATCH_RULE},
-                    "techniques": {
-                        "relevant": {"technique_any": ["keys"]},
-                        "required": {"technique_any": ["keys"]},
-                    },
-                },
-                label={"sufficiency": "partial", "reason": "x"},
-            ),
-            "its missing category implementation_cves has no signal",
-        ),
     ],
     ids=[
         "sufficient_with_no_required_items",
@@ -219,7 +205,6 @@ def test_label_the_sets_support_is_accepted(case_row: dict[str, Any]) -> None:
         "insufficient_with_required_items",
         "insufficient_without_a_wide_check",
         "insufficient_with_unreviewed_wide_hits",
-        "partial_missing_a_cve_category",
     ],
 )
 def test_label_the_sets_do_not_support_is_refused(

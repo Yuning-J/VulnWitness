@@ -141,19 +141,22 @@ whole run:
   or `partial`;
 - **unflagged gap**: the label is `partial` and the answer gives no signal for a needed
   category the gold sets hold no evidence for (`affectedness` always, or a category whose
-  required set is empty): `applicability_unknown` for `affectedness`;
-  `topic_not_resolved`, `topic_pending_review` or a FiGHT source outcome other than `ok`
-  for `protocol_context`. A CVE category with an empty required set has no defined
-  signal, so `eval gold-sets` refuses a `partial` case with one; a run that misses
-  evidence the gold sets do hold is measured by coverage and wrong stop, not here;
-- **affectedness violation**: a product applicability other than `unknown`.
+  required set is empty). The signal is the run's own need of that kind
+  (`coverage.needs`, [`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)) with an
+  outcome other than `found`; a run that misses evidence the gold sets do hold is
+  measured by coverage and wrong stop, not here;
+- **affectedness violation**: a product applicability other than `unknown`;
+- **false gap**: the run is judged `sufficient` but did not stop `sufficient`, the
+  counterweight to wrong stop;
+- **need agreement**: the kinds of the run's needs are the case's `needs`, a diagnostic
+  of how the runtime reads the question that never feeds it.
 
 ### `cases`
 
 One entry per case: `case_sha256`, `case_id`, `split`, `label`, `runs`, the judged
 sufficiency counts, a `RateSpread` of coverage@20 per needed category over the case's
 runs, the irrelevant and unjudged item counts per category, and the counts of each of
-the four run judgements.
+the six run judgements.
 
 ### `evidence_quality`
 
@@ -185,6 +188,8 @@ By split only, counting each run once whatever categories it needs:
 | `premature_no_evidence` | premature no-evidence | runs of `sufficient` or `partial` cases |
 | `unflagged_gap` | unflagged gaps | runs of `partial` cases |
 | `affectedness_violation` | affectedness violations | every run, `uncertain` included |
+| `false_gap` | false gaps | runs of non-`uncertain` cases judged `sufficient` |
+| `need_agreement` | need agreement | runs of non-`uncertain` cases |
 
 Each rate is a `Proportion`. An `uncertain` case is run and its runs are counted, but it
 enters no figure that depends on its label; affectedness is an invariant and is counted

@@ -349,8 +349,8 @@ outcomes match the planner kind, rejections and the recorded reply match the
 outcome, the reply's hash is recomputed from the reply,
 and the round, planner-call, planner-duration and `plan_accepted` counts come
 from the rounds. Rounds are tied to the state machine: round 1 exactly when the
-run planned, round 2 only after it refined, and always after a refinement under a
-model planner allowed two rounds, so a round can be neither invented nor erased.
+run planned and round 2 only after it refined, and the decision-path audit re-derives
+whether refine planned round 2, so a round can be neither invented nor erased.
 A step's observations are tied to its call: a step that got a response records
 one outcome per source it consulted, a lookup's `unknown_cve_id` and
 `excluded_by_filters` warnings must agree with the evidence catalog, a search warns

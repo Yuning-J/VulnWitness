@@ -3,7 +3,7 @@
 Schema version `2.0.0-dev.11`. Adds an investigation service that interprets a
 question, chooses allowlisted tools, observes what they return, refines at most
 once, and returns a validated `KnowledgeEvidenceSet` with a replayable
-trajectory. The deterministic policy `m4.1` is the production planner; a model
+trajectory. The deterministic policy `m7b.1` is the production planner; a model
 planner is optional and untrusted. Design rationale: ADR 0002.
 
 ## Contracts
@@ -20,7 +20,8 @@ planner is optional and untrusted. Design rationale: ADR 0002.
   `implementation_only` or `mixed`.
 - `filters` is a `SearchFilters` that constrains every CVE tool call, including
   each template search a `topic_context` call fans out to (FiGHT is never
-  filtered). Its vendors, products and purls are the product context.
+  filtered). Its vendors, products and purls are the product context, with each
+  product version the query asks affectedness of.
 - A tool call is one of `cve_exact_lookup(cve_ids)`, `cve_search(query)` or
   `topic_context(topic_id)`. Scope, filters, limits, the semantic flag, URLs,
   claims and evidence are not part of a call, so a closed model rejects a plan
@@ -32,7 +33,8 @@ planner is optional and untrusted. Design rationale: ADR 0002.
   vulnerability; it does not establish a protocol-design flaw.") or
   `fight:<technique>` ("MITRE FiGHT lists … as … protocol threat context; it is
   not formal proof."). Claims carry no source prose and no planner text.
-- `product_applicability` has one entry per named vendor, product and purl, always
+- `product_applicability` has one entry per named vendor, product and purl, then one
+  `product_version` entry per product version the query asks affectedness of, always
   `unknown`: no verified affectedness source is available (ADR 0003), and neither a
   CVE match nor threat context establishes affectedness. Its `basis` is the one
   sentence `ApplicabilityBasis` holds, which says exactly that.
@@ -137,7 +139,7 @@ than one lookup can return is blocked rather than cut short:
 | intent `unsearchable` | `no_evidence` | `no_searchable_terms` |
 | `protocol_context_only` with intent `free_text` | `no_evidence` | `protocol_scope_needs_topic` |
 
-## Policy m4.1
+## Policy m7b.1
 
 Round 1 plans one call:
 
@@ -151,14 +153,21 @@ An exact ID is never expanded into a topic or a semantic search. Under
 `implementation_only` a topic is searched literally first, because one search
 costs 1 and the topic's fan-out costs 4.
 
-Refinement, at most one rule:
+Refinement, at most one rule, for a need round 1 left open (evidence needs:
+[`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)):
 
-- **R1, unknown IDs.** Round 1 was an exact lookup and every requested ID drew an
+- **R1, unknown IDs.** Round 1 was an exact lookup, every requested ID drew an
   `unknown_cve_id` warning (an ID excluded by the filters is known, so it never
-  counts). Explore the resolved topic (`topic_after_unknown_ids`); otherwise search
-  the remaining terms (`residual_terms_after_unknown_ids`); otherwise nothing.
-- **R2, literal miss.** The intent is `topic` and round 1 searched literally.
-  Explore the topic (`topic_after_literal_miss`).
+  counts), and a resolved topic leaves an implementation or protocol need open.
+  Explore the topic (`topic_after_unknown_ids`). An unknown ID beside plain text
+  needs only that CVE, which no search can meet, so nothing is refined.
+- **R2, topic not explored.** A topic resolved, its call has not run, and the
+  implementation or protocol need is open. Explore the topic
+  (`topic_after_literal_miss` when the intent is `topic` and round 1 searched
+  literally, `topic_for_open_need` otherwise).
+- **R3, terms not searched.** The implementation need is open, round 1's admitted
+  searches did not send every search term, and no unexplained term is unindexed.
+  Search all of them (`query_terms_for_open_need`).
 
 The policy never invents an ID or a term, and `plan_refinement` drops a
 refinement whose call round 1 already ran (a model's round-1 plan may have run it).
@@ -181,8 +190,8 @@ order a model's plan lists its steps in.
 round 2 is reachable only through the single `assess → refine` edge. Each stop below
 is decided by a pure function of the recorded observations in
 `application/investigation_decisions.py` (`decide_assessment`,
-`decide_refinement_stop`, `decide_rejected_plan_stop`,
-`decide_stop_without_answer`), and the gate's context for a plan is built from the
+`decide_refinement_stop`, `decide_rejected_plan_stop`, `decide_open_stop`) over
+the needs `judge_needs` gives, and the gate's context for a plan is built from the
 steps issued before it (`build_plan_context` in `application/plan_gate.py`); the
 decision-path audit (below) calls the same functions.
 
@@ -198,19 +207,21 @@ decision-path audit (below) calls the same functions.
 | assess | 1. a step's evidence failed integrity | validate | `evidence_invalid` | `invalid_evidence` |
 | assess | 2. a cap was breached | validate | `budget_breached` | `budget_exhausted` |
 | assess | 3. an answer source returned neither `ok` nor `no_match` | validate | `answer_source_failed` | `source_unavailable` |
-| assess | 4. an answer, and affectedness is required | validate | `affectedness_unavailable` | `source_unavailable` |
-| assess | 5. an answer | validate | `answer_found` | `sufficient` |
-| assess | 6. no answer after round 1 | refine | `no_answer_refinable` | – |
-| assess | 7. no answer after round 2 | validate | `no_answer_after_refinement` | `no_evidence`, or `source_unavailable` when affectedness is required |
-| refine | `max_rounds` is 1 and the policy would refine | validate | `round_cap_reached` | `budget_exhausted` |
+| assess | 4. every need found | validate | `answer_found` | `sufficient` |
+| assess | 5. an answer whose only unmet needs are affectedness | validate | `affectedness_unavailable` | `source_unavailable` |
+| assess | 6. a need open after round 1 | refine | `needs_open` | – |
+| assess | 7. a need open after round 2 | validate | `needs_open_after_refinement` | `needs_unmet` with an answer; else `no_evidence`, or `source_unavailable` when affectedness is needed |
 | refine | no refinement plan | validate | `no_refinement_available` | as rule 7 |
+| refine | `max_rounds` is 1 and the policy would refine | validate | `round_cap_reached` | `budget_exhausted` |
 | refine | the deadline passed before planning the refinement | validate | `budget_breached` | `budget_exhausted` |
 | refine | the plan is over budget | validate | `plan_over_budget` | `budget_exhausted` |
 | refine | a plan was accepted | retrieve | `plan_accepted` | – |
 | validate | the sealed set passed validation and the decision-path audit | return | `answer_validated` | – |
 
-Affectedness is required when the request names a product outside
-`protocol_context_only`. Rule 3 makes an unavailable source an honest typed stop
+Affectedness is needed when the request names a product, by filter or as a product
+version the query asks affectedness of, outside `protocol_context_only`. Round 2 is
+planned, and a configured model consulted for it, only when the policy has a
+refinement. Rule 3 makes an unavailable source an honest typed stop
 without retrying it: a failed call's key is already issued and is never reissued.
 
 ## Model planner
@@ -287,7 +298,7 @@ and every trajectory's planner, and the port has no method but `propose_plan`. A
 planner's identity (`ModelPlannerIdentity`) names its model, adapter, adapter version
 and endpoint fingerprint and no policy version, and a
 deterministic planner's (`DeterministicPlannerIdentity`) names the policy version,
-`m4.1`, and no model; neither shape has the other's field, so a set handed back with
+`m7b.1`, and no model; neither shape has the other's field, so a set handed back with
 one fails to parse. The service consults the model exactly when a port is
 configured, so `ModelPlanning` pairs the port with a `ModelPlannerIdentity` and
 never with the policy's. The planner chooses
@@ -356,6 +367,7 @@ while its call runs, or at its finish). A measured run ignores it
 | `budget_exhausted` | `partial`, even when no call ran |
 | `policy_blocked` | `policy_blocked` |
 | `invalid_evidence` | `backend_error` |
+| `needs_unmet` | `partial` |
 
 `coverage.source_outcomes` holds one outcome per answer source a step consulted,
 plus `affectedness: source_unavailable`, with the `affectedness` capability's detail,
@@ -391,15 +403,14 @@ controller defect and raises instead of returning. It checks:
   other step;
 - relevance assessed for every candidate once a topic resolved, except a CVE
   named by ID; one `unknown` applicability entry and warning per named product;
-- the status against the stop reason, and `coverage.refinement_applied` true
-  exactly when a round-2 step ran;
+- the status against the stop reason, a `sufficient` run with every need found and
+  a `needs_unmet` run with an answer and an unmet need other than affectedness, and
+  `coverage.refinement_applied` true exactly when a round-2 step ran;
 - a legal walk of the state machine with at most one refinement, and no step after
   one that was not admitted; each step's call key recomputed from its call with
   the controller's `compute_call_key`, and unique;
 - rounds tied to the state machine: round 1 recorded exactly when the run moved
-  interpret -> plan, round 2 only after assess -> refine, and under a model
-  planner allowed two rounds, a refinement always records round 2 (the model is
-  consulted again);
+  interpret -> plan, and round 2 only after assess -> refine;
 - rounds and steps as one run: rounds numbered 1..n; each round's
   `executed_step_indices` exactly its steps in order; those steps' calls the
   leading entries of its `accepted_plan`, and calls left unrun only when the last
@@ -410,9 +421,9 @@ controller defect and raises instead of returning. It checks:
   `model_accepted`, its reason is `model_proposal` exactly when the model planned
   it, and any other reason names the tool and round the policy gives it
   (`POLICY_STEP_TOOL_AND_ROUND`: `query_cve_ids` an exact lookup, `query_terms` a
-  search and `reviewed_topic` a topic in round 1; `residual_terms_after_unknown_ids`
-  a search and `topic_after_unknown_ids` or `topic_after_literal_miss` a topic in
-  round 2);
+  search and `reviewed_topic` a topic in round 1; `query_terms_for_open_need` a
+  search and `topic_after_unknown_ids`, `topic_after_literal_miss` or
+  `topic_for_open_need` a topic in round 2);
 - every round outcome one the trajectory's planner kind records; rejections
   exactly when the outcome says a plan was rejected: a `model_unavailable`,
   `model_timed_out` or `model_reply_after_deadline` round records its own code
@@ -503,16 +514,17 @@ rewrites a decision everywhere it shows, such as an interpretation, or a policy 
 together with its call key, accepted plan and backend request, and reseals the set,
 still passes it. `application/decision_path_audit.py` (`audit_decision_path`) runs
 on every sealed set right after the validator, raises the same
-`EvidenceValidationError`, and takes only the set and the topic registry, so
-`verify_evidence_set` runs it on a set handed back. It re-derives each decision
-from the request, the registry and the set's recorded observations, with the
-controller's own functions, and requires the record to say exactly that:
+`EvidenceValidationError`, and takes only the set, the topic registry and the
+evidence catalog, so `verify_evidence_set` runs it on a set handed back. It
+re-derives each decision from the request, the registry, the catalog and the set's
+recorded observations, with the controller's own functions, and requires the record
+to say exactly that:
 
-- the interpretation equals `interpret_request(request, registry)`: intent,
-  normalized query, CVE IDs, search terms, and the resolution, including every
-  match's topic ID, version, content hash and review status and every excluded
-  term. Every later check derives from it, so a differing interpretation ends the
-  audit;
+- the interpretation equals `interpret_request(request, registry, catalog)`: intent,
+  normalized query, CVE IDs, search terms, the resolution, including every match's
+  topic ID, version, content hash and review status and every excluded term, and the
+  product versions the query asks affectedness of. Every later check derives from it,
+  so a differing interpretation ends the audit;
 - the run stops at interpretation exactly when `find_interpretation_stop` says so,
   with its reason and basis;
 - every round planned before the deadline is the one `choose_round_plan` gives
@@ -534,9 +546,10 @@ controller's own functions, and requires the record to say exactly that:
   (`plan_deadline_round`: `planner_timed_out`, `reply_after_deadline`, or none) and
   runs nothing;
 - every assess and refine decision is the one `decide_assessment` and
-  `decide_refinement_stop` give over the recorded steps: whether round 1 breached a
-  cap is read from its steps' admissions and unrun calls, and whether it found an
-  answer from the answer items its admitted steps found. The transitions, the
+  `decide_refinement_stop` give over the recorded steps and the needs `judge_needs`
+  gives after each round: whether round 1 breached a cap is read from its steps'
+  admissions and unrun calls, and whether it found an answer, and the needs it met,
+  from the answer items its admitted steps found. The transitions, the
   number of rounds and the stop reason must equal the re-derived ones;
 - the breach is the cap the decisions name: `wall_time` for the deadline (before
   planning, in the planner, or in or before a step), `tool_calls` or `sources` for
@@ -557,7 +570,8 @@ controller's own functions, and requires the record to say exactly that:
   model reply the gate rejects (naming its re-derived codes, never its text) and
   one `evidence_discarded` per step a cap kept out of the answer;
 - the coverage's source outcomes are `aggregate_source_outcomes` over the admitted
-  steps' outcomes (none in an `invalid_evidence` run) and the answer;
+  steps' outcomes (none in an `invalid_evidence` run) and the answer, and its needs
+  are `judge_needs` over the same steps and the answer;
 - the trajectory's ranking is `describe_ranking()` (`application/investigation_answer.py`,
   the RRF constant, tier order and merge rule the controller records and the answer
   is ranked with), and a deterministic planner is `describe_deterministic_planner()`,
@@ -699,9 +713,9 @@ test_investigation_gold.py` compares every row and never regenerates the file.
 | `fight_unavailable_protocol` | `5gaka`, protocol_context_only, no FiGHT | topic (5) | source_unavailable / source_unavailable | `[0003, 0004]` excluded |
 | `impl_5gaka_refines` | `5gaka`, implementation_only | search (1) → R2 → topic (4) | sufficient / ok | `[0003, 0004]` |
 | `impl_5g_aka_no_refine` | `5G-AKA`, implementation_only | search `5g aka` (1) | sufficient / ok | `[0003, 0004]` |
-| `unknown_id_residual` | `CVE-9999-4242 AUSF resynchronization crash`, implementation_only | exact (1) → R1 → search (1) | sufficient / ok | `[0003]` |
+| `unknown_id_residual` | `CVE-9999-4242 AUSF resynchronization crash`, implementation_only | exact (1) | no_evidence / no_match (the words beside the ID are not searched) | – |
 | `unknown_id_alone` | `CVE-9999-4242`, implementation_only | exact (1) | no_evidence / no_match | – |
-| `unknown_id_zzqx` | `CVE-9999-4242 zzqx`, mixed | exact (1) → R1 → search (1) | no_evidence / no_match | – |
+| `unknown_id_zzqx` | `CVE-9999-4242 zzqx`, mixed | exact (1) | no_evidence / no_match | – |
 | `bare_aka` | `aka`, mixed | none | no_evidence / no_match | – |
 | `low_signal_only` | `CVEs`, mixed | none | no_evidence / no_match | – |
 | `near_id_after_low_signal_word` | `CVE of 9999-0003`, mixed | none | no_evidence / no_match | – |

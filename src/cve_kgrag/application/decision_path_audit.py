@@ -9,9 +9,9 @@ check. This audit instead recomputes what the controller decides and requires th
 record to say exactly that:
 
 - the interpretation is the one ``interpret_request`` gives the request under this
-  registry: intent, normalized query, CVE IDs, search terms, and the resolution, with
-  every match's topic ID, version, content hash and review status and every excluded
-  term;
+  registry and evidence catalog: intent, normalized query, CVE IDs, search terms, the
+  resolution, with every match's topic ID, version, content hash and review status and
+  every excluded term, and the product versions the query asks affectedness of;
 - the run stops before planning exactly when ``find_interpretation_stop`` says so, for
   its reason;
 - every round planned before the deadline is the one ``choose_round_plan`` gives over
@@ -28,8 +28,9 @@ record to say exactly that:
 - a round the deadline stopped records the rejection its outcome fixes
   (``plan_deadline_round``) and runs nothing;
 - every assess and refine decision is the one ``decide_assessment`` and
-  ``decide_refinement_stop`` give over the recorded steps, so the transitions, the
-  number of rounds and the stop reason are exactly the re-derived ones;
+  ``decide_refinement_stop`` give over the recorded steps and the needs ``judge_needs``
+  gives after each round, so the transitions, the number of rounds and the stop reason
+  are exactly the re-derived ones;
 - the breach is the cap the decisions name: ``wall_time`` for the deadline, the
   call or source cap a rejected policy plan overran (``decide_over_budget_breach``),
   ``rounds`` for the round cap, and ``context_bytes`` for a step discarded over it;
@@ -41,7 +42,8 @@ record to say exactly that:
   gate rejects, naming its re-derived codes, one ``evidence_discarded`` per step a cap
   kept out) are exactly the ones recorded, in order;
 - the coverage's source outcomes are ``aggregate_source_outcomes`` over the admitted
-  steps' outcomes, the answer and the set's ``affectedness`` capability detail;
+  steps' outcomes, the answer and the set's ``affectedness`` capability detail, and its
+  needs are ``judge_needs`` over the admitted steps and the answer;
 - the trajectory's ranking is the one this code applies (``describe_ranking``), and a
   deterministic planner is the policy these decisions come from
   (``describe_deterministic_planner``), so neither can name another configuration.
@@ -67,10 +69,11 @@ detect that. The deadline is measured, not decided: a round recording a deadline
 outcome (``model_timed_out``, ``model_reply_after_deadline``,
 ``model_skipped_at_deadline``, or a ``deterministic`` round that records neither a
 plan nor a rejection) is read as one the deadline stopped, which the validator ties
-to a ``wall_time`` breach. Whether round 1 alone found an answer is
-read from the final answer: an item is kept or dropped on its own, never because of
-another step, so round 1's items stay in the answer unless the result cap cut them
-for higher-tier round-2 items.
+to a ``wall_time`` breach. Whether round 1 alone found an answer, and the needs
+it met, are read from the final answer through the steps that found its items: an item
+is kept or dropped on its own, never because of another step, so round 1's items stay
+in the answer unless the result cap cut them for higher-tier round-2 items, and then
+the refinement round 2 ran is the one either reading plans.
 """
 
 from collections.abc import Sequence
@@ -88,8 +91,8 @@ from cve_kgrag.application.investigation_decisions import (
     Stop,
     choose_round_plan,
     decide_assessment,
+    decide_open_stop,
     decide_refinement_stop,
-    decide_stop_without_answer,
     plan_deadline_round,
 )
 from cve_kgrag.application.investigation_policy import (
@@ -108,8 +111,11 @@ from cve_kgrag.application.investigation_warnings import (
     list_interpretation_warnings,
 )
 from cve_kgrag.domain.budget import BudgetBreach
+from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
+from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
+    EvidenceNeed,
     Interpretation,
     InvestigationState,
     InvestigationWarning,
@@ -129,7 +135,6 @@ from cve_kgrag.domain.investigation_validation import (
 )
 from cve_kgrag.domain.planning import (
     DeterministicPlannerIdentity,
-    PlannerKind,
     PlanRejection,
     TopicContextCall,
 )
@@ -235,6 +240,20 @@ def has_round_one_answer(evidence_set: KnowledgeEvidenceSet) -> bool:
         if round_one_step_indices.intersection(investigation_candidate.found_by_steps):
             return True
     return any(item.technique_id in round_one_answer_ids for item in evidence_set.protocol_context)
+
+
+def judge_set_needs(
+    evidence_set: KnowledgeEvidenceSet, steps: Sequence[ToolStep]
+) -> tuple[EvidenceNeed, ...]:
+    """The needs ``steps`` met, read through the set's answer: an answer item counts only
+    when one of those steps found it."""
+    return judge_needs(
+        evidence_set.request,
+        evidence_set.interpretation,
+        steps,
+        evidence_set.implementation_candidates,
+        evidence_set.protocol_context,
+    )
 
 
 def describe_rejections(rejections: Sequence[PlanRejection]) -> str:
@@ -371,19 +390,23 @@ def derive_decision_path(
         return path
     round_one_steps = list_round_steps(steps, 1)
     path.breach = find_retrieval_breach(round_one, round_one_steps)
+    round_one_needs = judge_set_needs(evidence_set, round_one_steps)
+    has_answer = has_round_one_answer(evidence_set)
     stop = decide_assessment(
-        request, round_one_steps, path.breach is not None, has_round_one_answer(evidence_set)
+        request,
+        interpretation,
+        round_one_steps,
+        path.breach is not None,
+        round_one_needs,
+        has_answer,
     )
     if stop is not None:
         path.end(InvestigationState.ASSESS, stop)
         return path
-    path.move(
-        InvestigationState.ASSESS, InvestigationState.REFINE, DecisionBasis.NO_ANSWER_REFINABLE
-    )
+    path.move(InvestigationState.ASSESS, InvestigationState.REFINE, DecisionBasis.NEEDS_OPEN)
 
-    refinement_steps = plan_refinement(interpretation, round_one_steps)
-    consults_model = evidence_set.trajectory.planner.kind is PlannerKind.MODEL
-    stop = decide_refinement_stop(request, refinement_steps, consults_model)
+    refinement_steps = plan_refinement(interpretation, round_one_steps, round_one_needs)
+    stop = decide_refinement_stop(request, refinement_steps, round_one_needs, has_answer)
     if stop == ROUND_CAP_STOP:
         path.breach = BudgetBreach.ROUNDS
     if stop is not None:
@@ -404,9 +427,13 @@ def derive_decision_path(
     if path.has_ended():
         return path
     path.breach = find_retrieval_breach(round_two, list_round_steps(steps, 2))
-    stop = decide_assessment(request, steps, path.breach is not None, evidence_set.has_answer())
+    needs = judge_set_needs(evidence_set, steps)
+    has_answer = evidence_set.has_answer()
+    stop = decide_assessment(
+        request, interpretation, steps, path.breach is not None, needs, has_answer
+    )
     if stop is None:
-        stop = decide_stop_without_answer(request, DecisionBasis.NO_ANSWER_AFTER_REFINEMENT)
+        stop = decide_open_stop(needs, has_answer, DecisionBasis.NEEDS_OPEN_AFTER_REFINEMENT)
     path.end(InvestigationState.ASSESS, stop)
     return path
 
@@ -511,16 +538,24 @@ def find_coverage_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
             if step.admission is StepAdmission.ADMITTED:
                 admitted_steps.append(step)
     source_outcomes = aggregate_source_outcomes(
-        list_answer_sources(request.scope, request.filters),
+        list_answer_sources(
+            request.scope, request.filters, evidence_set.interpretation.affectedness_mentions
+        ),
         admitted_steps,
         evidence_set.implementation_candidates,
         evidence_set.protocol_context,
         ran_any_step=bool(steps),
         affectedness_detail=find_affectedness_detail(evidence_set.source_capabilities),
     )
+    violations: list[str] = []
     if evidence_set.coverage.source_outcomes != source_outcomes:
-        return ["coverage.source_outcomes do not summarize the admitted steps' outcomes"]
-    return []
+        violations.append("coverage.source_outcomes do not summarize the admitted steps' outcomes")
+    if evidence_set.coverage.needs != judge_set_needs(evidence_set, admitted_steps):
+        violations.append(
+            "coverage.needs are not the needs the request gives, judged over the admitted "
+            "steps and the answer"
+        )
+    return violations
 
 
 def find_configuration_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
@@ -543,10 +578,12 @@ def find_configuration_violations(evidence_set: KnowledgeEvidenceSet) -> list[st
 
 
 def find_decision_path_violations(
-    evidence_set: KnowledgeEvidenceSet, topic_registry: TopicRegistry
+    evidence_set: KnowledgeEvidenceSet,
+    topic_registry: TopicRegistry,
+    evidence_catalog: EvidenceCatalog,
 ) -> list[str]:
     violations = find_configuration_violations(evidence_set)
-    interpretation = interpret_request(evidence_set.request, topic_registry)
+    interpretation = interpret_request(evidence_set.request, topic_registry, evidence_catalog)
     differing_fields = list_interpretation_differences(evidence_set.interpretation, interpretation)
     if differing_fields:
         # Every later decision derives from the interpretation, so none can be checked.
@@ -591,10 +628,14 @@ def find_decision_path_violations(
     return violations
 
 
-def audit_decision_path(evidence_set: KnowledgeEvidenceSet, topic_registry: TopicRegistry) -> None:
+def audit_decision_path(
+    evidence_set: KnowledgeEvidenceSet,
+    topic_registry: TopicRegistry,
+    evidence_catalog: EvidenceCatalog,
+) -> None:
     """Raise ``EvidenceValidationError`` if the set records a decision the controller would
     not have made: run it after ``validate_knowledge_evidence_set``, on any set the
     service seals or is handed back."""
-    violations = find_decision_path_violations(evidence_set, topic_registry)
+    violations = find_decision_path_violations(evidence_set, topic_registry, evidence_catalog)
     if violations:
         raise EvidenceValidationError(violations)

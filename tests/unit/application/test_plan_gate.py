@@ -34,6 +34,7 @@ from tests.support.investigation import (
     MODEL_DISGUISED_LOW_SIGNAL_WORDS,
     build_exact_lookup_call,
     build_investigation_request,
+    build_productless_catalog,
     build_search_call,
     build_topic_call,
     load_gold_rows,
@@ -47,7 +48,7 @@ def build_round_one_context(
     request: InvestigationRequest, topic_registry: TopicRegistry, **overrides: Any
 ) -> PlanContext:
     """The context of a fresh run's round 1 for ``request``, with ``overrides`` applied."""
-    interpretation = interpret_request(request, topic_registry)
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
     topic = find_resolved_topic(interpretation, topic_registry)
     plan_context = build_plan_context(request, interpretation, topic, (), None)
     return replace(plan_context, **overrides)

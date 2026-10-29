@@ -1077,8 +1077,8 @@
       "title": "Rollback Scope"
     },
     "schema_version": {
-      "const": "2.0.0-dev.27",
-      "default": "2.0.0-dev.27",
+      "const": "2.0.0-dev.28",
+      "default": "2.0.0-dev.28",
       "title": "Schema Version",
       "type": "string"
     },

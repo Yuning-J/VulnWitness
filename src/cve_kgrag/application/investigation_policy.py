@@ -1,5 +1,5 @@
-"""The deterministic investigation policy (version ``m4.1``): pure functions of the request,
-its interpretation and the observed steps.
+"""The deterministic investigation policy (version ``m7b.1``): pure functions of the
+request, its interpretation and the observed steps.
 
 The policy reads a query into an intent, decides whether the query can be answered
 at all under the requested scope, plans round 1 by intent and scope, and proposes at
@@ -15,19 +15,33 @@ Round 1, by intent and scope:
   are searched literally first, since one search costs less than a topic's fan-out;
 - free text is searched literally.
 
-Refinement, at most one rule, and never a call round 1 already issued:
+Refinement, at most one call, never one round 1 already issued, and only for an
+implementation or protocol need round 1 left open (``domain/evidence_needs.py``); a named
+CVE no lookup found is met by no other call:
 
-- R1: every ID of a round-1 exact lookup is unknown, so explore the resolved topic,
-  or else search the query's remaining terms;
-- R2: a literal search for a resolved topic ran, so explore the topic.
+- R1: every ID of a round-1 exact lookup is unknown and the resolved topic names a
+  further target, so explore the topic;
+- R2: an implementation or protocol need is open and the resolved topic was not
+  explored, so explore it (after a literal search for a topic query, or for an open
+  need otherwise);
+- R3: the implementation need is open and round 1's searches did not send every search
+  term, none of which is an unexplained unindexed term, so search all of them.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from cve_kgrag.domain.cve import MAX_CVE_ID_CHARS
+from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
+from cve_kgrag.domain.evidence_needs import (
+    is_need_open,
+    list_searched_terms,
+    list_unexplained_unindexed_terms,
+)
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
+    EvidenceNeed,
+    EvidenceNeedKind,
     Interpretation,
     InvestigationRequest,
     StepReason,
@@ -47,7 +61,9 @@ from cve_kgrag.domain.planning import (
 )
 from cve_kgrag.domain.search import MAX_QUERY_CHARS, SearchWarningCode
 from cve_kgrag.domain.text import (
+    asks_affectedness,
     find_cve_ids,
+    find_version_mentions,
     list_query_terms,
     mentions_cve_id_token,
     normalize_query,
@@ -58,7 +74,7 @@ from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.topics.registry import TopicRegistry
 
-DETERMINISTIC_POLICY_VERSION = "m4.1"
+DETERMINISTIC_POLICY_VERSION = "m7b.1"
 # An exact lookup or a CVE search is one backend query.
 CVE_TOOL_COST = 1
 
@@ -107,10 +123,29 @@ def list_search_terms(query: str, excluded_tokens: set[str]) -> tuple[str, ...]:
     return tuple(search_text.split())
 
 
+def list_affectedness_mentions(
+    normalized_query: str, evidence_catalog: EvidenceCatalog
+) -> tuple[str, ...]:
+    """Each product version the query asks affectedness of, once, in query order: a word
+    some stored record carries as its whole vendor or product, followed by a dotted
+    version, in a query holding an affectedness word. A product and version without such
+    a word is a search, not a question about that version."""
+    if not asks_affectedness(normalized_query):
+        return ()
+    affectedness_mentions: list[str] = []
+    for word, version in find_version_mentions(normalized_query):
+        affectedness_mention = f"{word} {version}"
+        is_new = affectedness_mention not in affectedness_mentions
+        if is_new and evidence_catalog.names_product(word):
+            affectedness_mentions.append(affectedness_mention)
+    return tuple(affectedness_mentions)
+
+
 def interpret_request(
-    request: InvestigationRequest, topic_registry: TopicRegistry
+    request: InvestigationRequest, topic_registry: TopicRegistry, evidence_catalog: EvidenceCatalog
 ) -> Interpretation:
-    """The query's intent, CVE IDs, searchable terms and topic resolution.
+    """The query's intent, CVE IDs, searchable terms, topic resolution and the product
+    versions it asks affectedness of.
 
     Tokens of an excluded term are stripped from the search terms, so an ambiguous
     alias cannot reach the CVE index through free text (``EPS AKA crash`` searches
@@ -147,6 +182,7 @@ def interpret_request(
         cve_ids=tuple(cve_ids),
         search_terms=search_terms,
         resolution=resolution,
+        affectedness_mentions=list_affectedness_mentions(normalized_query, evidence_catalog),
     )
 
 
@@ -254,37 +290,53 @@ def has_only_unknown_ids(round_one_steps: Sequence[ToolStep]) -> bool:
     return bool(requested_ids) and requested_ids <= unknown_ids
 
 
+def has_issued_call(call: ToolCall, steps: Sequence[ToolStep]) -> bool:
+    call_key = compute_call_key(call)
+    return any(step.call_key == call_key for step in steps)
+
+
 def choose_refinement_step(
-    interpretation: Interpretation, round_one_steps: Sequence[ToolStep]
+    interpretation: Interpretation,
+    round_one_steps: Sequence[ToolStep],
+    needs: Sequence[EvidenceNeed],
 ) -> PlannedStep | None:
-    """The follow-up call the first refinement rule that fires gives, or ``None``."""
+    """The follow-up call the first refinement rule that fires gives, or ``None``. Every
+    rule serves an open implementation or protocol need: a named CVE no lookup found is
+    met by no other call, so it never draws a refinement on its own."""
     has_topic = bool(interpretation.resolution.matches)
-    if has_only_unknown_ids(round_one_steps):
-        if has_topic:
+    is_implementation_open = is_need_open(needs, EvidenceNeedKind.IMPLEMENTATION_CVES)
+    is_protocol_open = is_need_open(needs, EvidenceNeedKind.PROTOCOL_CONTEXT)
+    if (
+        has_topic
+        and (is_implementation_open or is_protocol_open)
+        and not (has_issued_call(build_topic_call(interpretation), round_one_steps))
+    ):
+        if has_only_unknown_ids(round_one_steps):
             return PlannedStep(build_topic_call(interpretation), StepReason.TOPIC_AFTER_UNKNOWN_IDS)
-        if interpretation.search_terms:
+        has_literal_search = any(isinstance(step.call, CveSearchCall) for step in round_one_steps)
+        if interpretation.intent is QueryIntent.TOPIC and has_literal_search:
             return PlannedStep(
-                build_search_call(interpretation), StepReason.RESIDUAL_TERMS_AFTER_UNKNOWN_IDS
+                build_topic_call(interpretation), StepReason.TOPIC_AFTER_LITERAL_MISS
             )
-        return None
-    has_literal_search = any(isinstance(step.call, CveSearchCall) for step in round_one_steps)
-    if interpretation.intent is QueryIntent.TOPIC and has_literal_search:
-        return PlannedStep(build_topic_call(interpretation), StepReason.TOPIC_AFTER_LITERAL_MISS)
+        return PlannedStep(build_topic_call(interpretation), StepReason.TOPIC_FOR_OPEN_NEED)
+    search_terms = set(interpretation.search_terms)
+    is_searchable = not list_unexplained_unindexed_terms(interpretation, round_one_steps)
+    is_unsearched = not search_terms <= list_searched_terms(round_one_steps)
+    if is_implementation_open and search_terms and is_unsearched and is_searchable:
+        return PlannedStep(build_search_call(interpretation), StepReason.QUERY_TERMS_FOR_OPEN_NEED)
     return None
 
 
 def plan_refinement(
-    interpretation: Interpretation, round_one_steps: Sequence[ToolStep]
+    interpretation: Interpretation,
+    round_one_steps: Sequence[ToolStep],
+    needs: Sequence[EvidenceNeed],
 ) -> list[PlannedStep]:
-    """At most one follow-up call, or ``[]``; a call round 1 already issued (a model's
-    round-1 plan may have run it) is never planned again."""
-    refinement_step = choose_refinement_step(interpretation, round_one_steps)
-    if refinement_step is None:
+    """At most one follow-up call for a need round 1 left open, or ``[]``; a call round 1
+    already issued (a model's round-1 plan may have run it) is never planned again."""
+    refinement_step = choose_refinement_step(interpretation, round_one_steps, needs)
+    if refinement_step is None or has_issued_call(refinement_step.call, round_one_steps):
         return []
-    refinement_call_key = compute_call_key(refinement_step.call)
-    for step in round_one_steps:
-        if step.call_key == refinement_call_key:
-            return []
     return [refinement_step]
 
 

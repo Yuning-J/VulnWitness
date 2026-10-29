@@ -53,6 +53,12 @@ class InMemoryEvidenceCatalog:
         )
         if violations:
             raise EvidenceValidationError(violations)
+        product_names: set[str] = set()
+        for record in self._records_by_id.values():
+            for implicated_product in record.list_implicated_products():
+                product_names.add(implicated_product.vendor.casefold())
+                product_names.add(implicated_product.product.casefold())
+        self._product_names = frozenset(product_names)
 
     def get_evidence(self, evidence_id: str) -> EvidenceAnchor | None:
         return self._anchors_by_id.get(evidence_id)
@@ -62,3 +68,6 @@ class InMemoryEvidenceCatalog:
 
     def get_technique(self, technique_id: str) -> ThreatContextItem | None:
         return self._techniques_by_id.get(technique_id)
+
+    def names_product(self, name: str) -> bool:
+        return name.casefold() in self._product_names

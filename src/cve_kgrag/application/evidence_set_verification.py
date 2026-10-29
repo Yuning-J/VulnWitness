@@ -65,7 +65,7 @@ def verify_evidence_set(
         deployment.evidence_catalog,
         (*deployment.source_capabilities, expected_planner_capability),
     )
-    audit_decision_path(evidence_set, deployment.topic_registry)
+    audit_decision_path(evidence_set, deployment.topic_registry, deployment.evidence_catalog)
     return replay_evidence_set(evidence_set, deployment)
 
 

@@ -12,6 +12,7 @@ import yaml
 from cve_kgrag.adapters.fight.pinned_yaml import UnavailableFightSource
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
+from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
 from cve_kgrag.application.decision_path_audit import audit_decision_path
 from cve_kgrag.application.investigate import InvestigationService
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
@@ -28,6 +29,7 @@ from cve_kgrag.domain.investigation import (
     InvestigationRequest,
     KnowledgeEvidenceSet,
     SourceCapability,
+    StepReason,
 )
 from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
 from cve_kgrag.domain.planning import (
@@ -257,7 +259,7 @@ def verify_as_sealed(
     validate_knowledge_evidence_set(
         evidence_set, pinned_fight_snapshot, evidence_catalog, source_capabilities
     )
-    audit_decision_path(evidence_set, topic_registry)
+    audit_decision_path(evidence_set, topic_registry, evidence_catalog)
 
 
 def reseal_evidence_set(evidence_set: KnowledgeEvidenceSet, **changes: Any) -> KnowledgeEvidenceSet:
@@ -291,6 +293,13 @@ def rewrite_the_ranking(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidence
         update={"rrf_k": 1, "relevance_tier_order": tuple(reversed(ranking.relevance_tier_order))}
     )
     return update_trajectory(evidence_set, ranking=forged_ranking)
+
+
+def list_step_reasons(evidence_set: KnowledgeEvidenceSet) -> list[StepReason]:
+    step_reasons: list[StepReason] = []
+    for step in evidence_set.trajectory.steps:
+        step_reasons.append(step.reason)
+    return step_reasons
 
 
 def list_step_tools(evidence_set: KnowledgeEvidenceSet) -> list[str]:
@@ -329,3 +338,9 @@ def list_warning_codes(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     for warning in evidence_set.warnings:
         warning_codes.append(warning.code.value)
     return warning_codes
+
+
+def build_productless_catalog() -> InMemoryEvidenceCatalog:
+    """A catalog that holds nothing and so names no product: interpreting a query with it
+    records no product version, whatever the query asks."""
+    return InMemoryEvidenceCatalog((), ())

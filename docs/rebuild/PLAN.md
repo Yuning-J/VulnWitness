@@ -14,7 +14,7 @@ milestone once its exit criterion is met and the offline lane is green.
 | M5 | Trustify port + disabled adapter (real adapter BLOCKED_UNVERIFIED, ADR 0003), read-only stdio MCP server with eight bounded tools, evidence-set verification (`cve-kgrag verify`), server-owned text at the MCP boundary (typed affectedness and backend failures, vouched match explanations), search-tool boundary below; contracts `2.0.0-dev.16` | done |
 | M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, loopback, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; WP4 offline CI; WP5 full CLI and the verification report contract, with bounded violations in the server's own words; WP6 HTTP guard, HTTP settings and MCP over Streamable HTTP; WP7 v2 REST API with set verification over HTTP; WP9 read-only legacy-data importer, ADR 0008; WP10 store activation and serving, the operator FiGHT snapshot, visible truncation and the M6 exit audit, ADR 0009; contracts `2.0.0-dev.26`); exit audit in [`m6-exit-audit.md`](m6-exit-audit.md) | done |
 | M7a | Planner behaviour baseline before WP9: `cve-kgrag eval planner`, a pure analyzer over the evidence sets' trajectories (outcomes, fallbacks, divergence from the policy's plans, run stability), the deterministic baseline on the M4 gold file; no agent, vocabulary, round or contract change; [`m7a-planner-baseline.md`](m7a-planner-baseline.md) | done offline; live model runs are started by hand, outside CI |
-| M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | in progress: gold cases and the M7b evaluation done; the first model run, its causes and the planned work order in [`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md); A1 and A2 done, A2 as the `term_not_indexed` warning without the measured admission rule ([`m7b-work-packages.md`](m7b-work-packages.md)) |
+| M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | in progress: gold cases and the M7b evaluation done; the first model run, its causes and the planned work order in [`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md); A1 and A2 done, A2 as the `term_not_indexed` warning without the measured admission rule ([`m7b-work-packages.md`](m7b-work-packages.md)); B, evidence needs deciding stop and refinement ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)) |
 
 ## M5 acceptance: the search-tool boundary
 
@@ -35,14 +35,13 @@ tests and opt-in live tests (ADR 0005, m6 doc). Done. The owner ran the live tes
 2026-10-21 against `https://api.deepseek.com` with `deepseek-flash` and reasoning effort
 `none`: 2 passed.
 
-Follow-up: round 2 consults a configured model even when no call can pass the gate.
-Reproduction: query `CVE-9999-4242`, scope `implementation_only`; round 1 looks the ID up,
-and round 2's planning input offers only that lookup (now repeated) and a search with no
-allowed terms, so every reply is rejected and the set carries `model_plan_rejected`.
-The same holds in round 1 when the policy's own plan is over the source budget (query
+Round 2 runs, and a configured model is consulted for it, only when the policy has a
+refinement for an open need ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)), so
+`CVE-9999-4242` under `implementation_only` makes one planner call. Follow-up: round 1
+still consults the model when the policy's own plan is over the source budget (query
 `5G-AKA`, budget `max_sources: 1`). Proposed fix: consult no model in a round where no
 offered call can pass the gate, with the controller and the audit deciding that by one
-shared rule, and record the round as the policy's.
+shared rule, recording the round under a new planner outcome a model planner may record.
 
 ## Live lane (opt-in)
 
@@ -113,7 +112,7 @@ The migration map lives with the legacy modules it describes, in CVE-KGRAG
 Recorded when M6 closed; none blocks M7b unless it says so.
 
 - CSAF import; an allowlisted refresh command; the Trustify adapter (above); the planner
-  round-2 fix (above).
+  round-1 fix (above).
 - The semantic index build from a store: a collection built from a store records its
   `corpus_content_sha256`, and the semantic channel serves a store only when that
   digest equals the served one; it also settles legacy `KEV-` chunk IDs.

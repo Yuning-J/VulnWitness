@@ -141,8 +141,7 @@ and are never run with `--showlocals`. `tests/live` is linted with the offline l
   `2.0.0.dev0`.
 - Offline tests use a recording transport and loopback servers on 127.0.0.1, never an
   outside network; https is not exercised offline.
-- Round 2 consults the model whenever one is configured, even when no call can pass the
-  gate (an unknown ID already looked up, no search terms left); the reply is rejected and
-  the round falls back, after at most the planner's share of the run. Skipping that call
-  changes the refinement decision the audit re-derives, so it is left to a follow-up
-  (PLAN.md).
+- Round 1 consults the model even when the policy's own plan is over the source budget,
+  so no call can pass the gate; the reply is rejected and the round stops, after at most
+  the planner's share of the run (a PLAN.md follow-up). Round 2 is planned, and the
+  model consulted for it, only when the policy has a refinement for an open need.

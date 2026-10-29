@@ -77,6 +77,21 @@ LOW_SIGNAL_SPELLING = re.compile("(?<![0-9a-z])(cves?)(?:'s)?(?![0-9a-z])")
 # U+0027 itself, the right single quotation mark word processors write for it, and the
 # modifier letter apostrophe; NFKC folds the fullwidth apostrophe into U+0027.
 APOSTROPHES = frozenset("'\u2019\u02bc")
+# A word, one space and a dotted version (``kamailio 5.8.2``, ``open5gs v2.7.2``), read on
+# normalized text; a version ends where no digit or letter follows it, so a sentence's
+# full stop after it is not part of it. A hyphen, underscore or dot before the word makes
+# it part of a longer name (``acme-f5gc``, ``linux_kernel``), which is never read as the
+# whole name its last part spells.
+VERSION_MENTION = re.compile(
+    r"(?<![0-9a-z_.-])([0-9a-z]+) (v?[0-9]+(?:\.[0-9]+)+)(?![0-9a-z]|\.[0-9])"
+)
+# Words by which a question asks whether a product is affected: with one of them, a
+# product followed by a version asks affectedness of that version.
+AFFECTEDNESS_QUESTION_TERMS = frozenset(
+    {"affect", "affected", "affecting", "affects", "vulnerable"}
+)
+IPV4_PART_COUNT = 4
+IPV4_PART_MAX = 255
 
 
 @dataclass(frozen=True)
@@ -390,3 +405,25 @@ def list_query_terms(query: str) -> list[str]:
     order. Empty when the query holds nothing but CVE IDs and their likenesses, stopwords
     and low-signal words."""
     return tokenize(extract_search_text(query))
+
+
+def is_ipv4_shaped(version: str) -> bool:
+    """Whether a dotted number reads as an IPv4 address: four parts of at most 255."""
+    parts = version.split(".")
+    return len(parts) == IPV4_PART_COUNT and all(int(part) <= IPV4_PART_MAX for part in parts)
+
+
+def find_version_mentions(normalized_query: str) -> list[tuple[str, str]]:
+    """Each word followed by a dotted version in ``normalized_query``, as ``(word,
+    version)`` in query order, without IPv4 addresses."""
+    version_mentions: list[tuple[str, str]] = []
+    for mention in VERSION_MENTION.finditer(normalized_query):
+        word, version = mention.group(1), mention.group(2)
+        if not is_ipv4_shaped(version.removeprefix("v")):
+            version_mentions.append((word, version))
+    return version_mentions
+
+
+def asks_affectedness(normalized_query: str) -> bool:
+    """Whether the query holds a word by which a question asks if a product is affected."""
+    return any(token in AFFECTEDNESS_QUESTION_TERMS for token in TOKEN.findall(normalized_query))

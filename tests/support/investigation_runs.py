@@ -183,20 +183,21 @@ def run_model_unavailable(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet
 
 
 def run_model_skipped_at_deadline(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """A model-planned round 1, then a round 2 whose planner the deadline left unconsulted."""
-    model_port = ScriptedModelPort([build_plan_reply({"tool": "cve_search", "query": "zzqx"})])
+    """A model-planned literal search for a topic that found nothing, then the policy's topic
+    refinement in round 2, whose planner the deadline left unconsulted."""
+    model_port = ScriptedModelPort([build_plan_reply({"tool": "cve_search", "query": "5gaka"})])
     service = build_deadline_nearing_service(fixture_bundle, model_port)
-    return service.investigate(build_investigation_request("zzqx", "implementation_only"))
+    return service.investigate(build_investigation_request("5gaka", "implementation_only"))
 
 
 def run_model_refinement_unavailable(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """The reviewer's run: a model-planned search that found nothing, then a round 2 whose
-    consulted planner was unavailable and which had no policy refinement to fall back to."""
+    """A model-planned literal search for a topic that found nothing, then a round 2 whose
+    consulted planner was unavailable, so the policy's topic refinement ran."""
     model_port = ScriptedModelPort(
-        [build_plan_reply({"tool": "cve_search", "query": "zzqx"}), UNAVAILABLE_REPLY]
+        [build_plan_reply({"tool": "cve_search", "query": "5gaka"}), UNAVAILABLE_REPLY]
     )
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
-    return service.investigate(build_investigation_request("zzqx", "implementation_only"))
+    return service.investigate(build_investigation_request("5gaka", "implementation_only"))
 
 
 def run_model_reply_after_deadline(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:

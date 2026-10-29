@@ -1,6 +1,6 @@
 # Hand-labelled investigation trajectories over the packaged 5G-AKA topic card, the
 # FiGHT 3.1.0 excerpt and the synthetic CVE fixture, with the deterministic policy
-# m4.1 and no model planner. Edit only when the labelled truth changes; tests compare
+# m7b.1 and no model planner. Edit only when the labelled truth changes; tests compare
 # against this file and never regenerate it.
 #
 # Each row names the request, which FiGHT source the deployment serves
@@ -121,10 +121,10 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, refine, no_answer_refinable]
+        - [assess, refine, needs_open]
         - [refine, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, no_answer_after_refinement]
+        - [assess, validate, needs_open_after_refinement]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [structured, lexical]}
@@ -150,7 +150,7 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, refine, no_answer_refinable]
+        - [assess, refine, needs_open]
         - [refine, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
         - [assess, validate, affectedness_unavailable]
@@ -233,7 +233,7 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, refine, no_answer_refinable]
+        - [assess, refine, needs_open]
         - [refine, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
         - [assess, validate, answer_found]
@@ -281,6 +281,8 @@ trajectories:
       tool_calls: 1
       rounds: 1
 
+  # An unknown ID beside plain text: the question needs only that CVE, which no search
+  # can meet, so the words are not searched.
   - id: unknown_id_residual
     request: {query: "CVE-9999-4242 AUSF resynchronization crash", scope: implementation_only}
     sources: {mitre_fight: packaged}
@@ -290,25 +292,21 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, refine, no_answer_refinable]
-        - [refine, retrieve, plan_accepted]
-        - [retrieve, assess, steps_finished]
-        - [assess, validate, answer_found]
+        - [assess, refine, needs_open]
+        - [refine, validate, no_refinement_available]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: cve_exact_lookup, reason: query_cve_ids, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [exact_id]}
-        - {round: 2, tool: cve_search, reason: residual_terms_after_unknown_ids, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
-      stop_reason: sufficient
-      status: ok
-      implementation_candidates:
-        - {cve_id: "CVE-9999-0003", tier: null}
+      stop_reason: no_evidence
+      status: no_match
+      implementation_candidates: []
       excluded_implementation_candidates: []
       protocol_context: []
-      claims: ["cve:CVE-9999-0003"]
+      claims: []
       applicability: []
       warning_codes: []
-      tool_calls: 2
-      rounds: 2
+      tool_calls: 1
+      rounds: 1
 
   # An unknown ID with nothing else to search: the policy has no refinement to offer.
   - id: unknown_id_alone
@@ -320,7 +318,7 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, refine, no_answer_refinable]
+        - [assess, refine, needs_open]
         - [refine, validate, no_refinement_available]
         - [validate, return, answer_validated]
       steps:
@@ -345,14 +343,11 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, refine, no_answer_refinable]
-        - [refine, retrieve, plan_accepted]
-        - [retrieve, assess, steps_finished]
-        - [assess, validate, no_answer_after_refinement]
+        - [assess, refine, needs_open]
+        - [refine, validate, no_refinement_available]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: cve_exact_lookup, reason: query_cve_ids, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [exact_id]}
-        - {round: 2, tool: cve_search, reason: residual_terms_after_unknown_ids, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [lexical]}
       stop_reason: no_evidence
       status: no_match
       implementation_candidates: []
@@ -361,8 +356,8 @@ trajectories:
       claims: []
       applicability: []
       warning_codes: []
-      tool_calls: 2
-      rounds: 2
+      tool_calls: 1
+      rounds: 1
 
   # A bare ambiguous alias is never searched: it would launder into an unrelated hit.
   - id: bare_aka

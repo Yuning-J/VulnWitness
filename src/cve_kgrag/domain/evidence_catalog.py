@@ -29,3 +29,8 @@ class EvidenceCatalog(Protocol):
         """The technique as its source indexes it, with no ``matched_fields`` or
         ``matched_terms``, or ``None`` when the catalog has none."""
         ...
+
+    def names_product(self, name: str) -> bool:
+        """Whether some record names a product it is not marked unaffected by with ``name``,
+        case-folded, as its whole vendor or product."""
+        ...

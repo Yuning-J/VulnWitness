@@ -23,12 +23,18 @@ from cve_kgrag.application.plan_gate import (
     parse_plan_text,
 )
 from cve_kgrag.domain.budget import BudgetBreach
+from cve_kgrag.domain.evidence_needs import (
+    has_affectedness_need,
+    has_unmet_need_beyond_affectedness,
+)
 from cve_kgrag.domain.investigation import (
     FIRST_REJECTION_BY_OUTCOME,
     DecisionBasis,
+    EvidenceNeed,
     Interpretation,
     InvestigationRequest,
     InvestigationWarning,
+    NeedOutcome,
     PlannerOutcome,
     StepAdmission,
     StepReason,
@@ -84,11 +90,13 @@ class ModelProposal:
     rejections: tuple[PlanRejection, ...]
 
 
-def decide_stop_without_answer(request: InvestigationRequest, basis: DecisionBasis) -> Stop:
-    """No answer: honest ``no_evidence``, unless the unavailable affectedness source was
+def decide_open_stop(needs: Sequence[EvidenceNeed], has_answer: bool, basis: DecisionBasis) -> Stop:
+    """The stop with a need left open and no call to meet it: ``needs_unmet`` with an
+    answer, else honest ``no_evidence``, unless the unavailable affectedness source was
     needed to answer at all."""
-    answer_sources = list_answer_sources(request.scope, request.filters)
-    if KnowledgeSource.AFFECTEDNESS in answer_sources:
+    if has_answer and has_unmet_need_beyond_affectedness(needs):
+        return StopReason.NEEDS_UNMET, basis
+    if has_affectedness_need(needs):
         return StopReason.SOURCE_UNAVAILABLE, basis
     return StopReason.NO_EVIDENCE, basis
 
@@ -113,21 +121,25 @@ def decide_over_budget_breach(rejections: Sequence[PlanRejection]) -> BudgetBrea
 
 def decide_assessment(
     request: InvestigationRequest,
+    interpretation: Interpretation,
     steps: Sequence[ToolStep],
     is_breached: bool,
+    needs: Sequence[EvidenceNeed],
     has_answer: bool,
 ) -> Stop | None:
-    """The stop the steps so far justify, or ``None`` when nothing answered yet.
+    """The stop the steps so far justify, or ``None`` when a need is still open.
 
     In order: a step's evidence failed integrity, a cap was breached, an admitted step
-    saw an answer source fail, then an answer (which still needs the unavailable
-    affectedness source when the request names a product).
+    saw an answer source fail, every need was met, then an answer whose only unmet needs
+    are the unavailable affectedness source's.
     """
     if any(step.admission is StepAdmission.REJECTED_INVALID_EVIDENCE for step in steps):
         return StopReason.INVALID_EVIDENCE, DecisionBasis.EVIDENCE_INVALID
     if is_breached:
         return StopReason.BUDGET_EXHAUSTED, DecisionBasis.BUDGET_BREACHED
-    answer_sources = list_answer_sources(request.scope, request.filters)
+    answer_sources = list_answer_sources(
+        request.scope, request.filters, interpretation.affectedness_mentions
+    )
     for step in steps:
         if step.admission is not StepAdmission.ADMITTED:
             continue
@@ -135,30 +147,29 @@ def decide_assessment(
             is_answer_source = step_outcome.source in answer_sources
             if is_answer_source and step_outcome.status not in SERVED_STATUSES:
                 return StopReason.SOURCE_UNAVAILABLE, DecisionBasis.ANSWER_SOURCE_FAILED
-    if not has_answer:
-        return None
-    if KnowledgeSource.AFFECTEDNESS in answer_sources:
+    if all(need.outcome is NeedOutcome.FOUND for need in needs):
+        return StopReason.SUFFICIENT, DecisionBasis.ANSWER_FOUND
+    if has_answer and not has_unmet_need_beyond_affectedness(needs):
         return StopReason.SOURCE_UNAVAILABLE, DecisionBasis.AFFECTEDNESS_UNAVAILABLE
-    return StopReason.SUFFICIENT, DecisionBasis.ANSWER_FOUND
+    return None
 
 
 def decide_refinement_stop(
     request: InvestigationRequest,
     refinement_steps: Sequence[PlannedStep],
-    consults_model: bool,
+    needs: Sequence[EvidenceNeed],
+    has_answer: bool,
 ) -> Stop | None:
     """The stop on entering refine, or ``None`` when round 2 is planned.
 
-    Under ``max_rounds`` 1, a refinement the policy would run breaches the round cap.
-    Otherwise round 2 is planned when the policy has a refinement or a model planner
-    is consulted for one.
+    Round 2 is planned only for the policy's refinement, a call that serves an open need;
+    without one the run stops, and a configured model is not consulted. Under
+    ``max_rounds`` 1 a refinement breaches the round cap.
     """
+    if not refinement_steps:
+        return decide_open_stop(needs, has_answer, DecisionBasis.NO_REFINEMENT_AVAILABLE)
     if request.budget.max_rounds == 1:
-        if refinement_steps:
-            return ROUND_CAP_STOP
-        return decide_stop_without_answer(request, DecisionBasis.NO_REFINEMENT_AVAILABLE)
-    if not refinement_steps and not consults_model:
-        return decide_stop_without_answer(request, DecisionBasis.NO_REFINEMENT_AVAILABLE)
+        return ROUND_CAP_STOP
     return None
 
 
@@ -202,7 +213,8 @@ def choose_round_plan(
     with round 1's baseline sources. Otherwise the round falls back to the policy's plan,
     gated in the same context without a baseline; the round records the reply's
     rejections, then the policy plan's. A rejected policy plan runs nothing and stops as
-    ``decide_rejected_plan_stop`` says; an empty one stops with no refinement available.
+    ``decide_rejected_plan_stop`` says. The policy's plan is never empty: round 1 plans a
+    call for every intent that reaches planning, and round 2 is planned only for one.
     """
     model_rejections: tuple[PlanRejection, ...] = ()
     planner_outcome = PlannerOutcome.DETERMINISTIC
@@ -245,8 +257,6 @@ def choose_round_plan(
         stop = decide_rejected_plan_stop(policy_rejections)
         if stop == PLAN_OVER_BUDGET_STOP:
             breach = decide_over_budget_breach(policy_rejections)
-    elif not planned_steps:
-        stop = decide_stop_without_answer(request, DecisionBasis.NO_REFINEMENT_AVAILABLE)
     return RoundPlan(
         planned_steps=planned_steps,
         planned_by=PlannerKind.DETERMINISTIC,
