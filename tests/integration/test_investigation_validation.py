@@ -89,6 +89,8 @@ from tests.support.investigation_runs import (
     run_exact_id,
     run_five_g_aka,
     run_model_accepted,
+    run_model_not_consulted,
+    run_model_refinement_unavailable,
     run_model_rejected,
     run_model_reply_after_deadline,
     run_model_skipped_at_deadline,
@@ -1931,6 +1933,7 @@ def sets_by_planner_outcome(
         PlannerOutcome.MODEL_REPLY_AFTER_DEADLINE: run_model_reply_after_deadline(fixture_bundle),
         PlannerOutcome.MODEL_TIMED_OUT: timed_out_planner_set,
         PlannerOutcome.MODEL_SKIPPED_AT_DEADLINE: run_model_skipped_at_deadline(fixture_bundle),
+        PlannerOutcome.MODEL_NOT_CONSULTED: run_model_not_consulted(fixture_bundle),
     }
 
 
@@ -1955,6 +1958,9 @@ REPLY_RECORD_VIOLATIONS: dict[PlannerOutcome, str] = {
     ),
     PlannerOutcome.MODEL_SKIPPED_AT_DEADLINE: (
         "round 2 records a reply its model_skipped_at_deadline planner never gave"
+    ),
+    PlannerOutcome.MODEL_NOT_CONSULTED: (
+        "round 1 records a reply its model_not_consulted planner never gave"
     ),
 }
 
@@ -2001,6 +2007,59 @@ def test_round_missing_its_reply_or_holding_an_unexpected_one_is_rejected(
             pinned_fight_snapshot,
             packaged_evidence_catalog,
             evidence_set.source_capabilities,
+        )
+    assert expected_violation in raised.value.violations
+
+
+def drop_the_policy_rejections(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    return update_round(evidence_set, 0, rejections=())
+
+
+def relabel_round_two_not_consulted(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """Round 2, whose model replied unavailable, claims it was never consulted."""
+    return update_round(
+        evidence_set,
+        1,
+        planner_outcome=PlannerOutcome.MODEL_NOT_CONSULTED,
+        model_reply=None,
+        model_reply_sha256=None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("run", "forgery", "expected_violation"),
+    [
+        (
+            run_model_not_consulted,
+            drop_the_policy_rejections,
+            "round 1 is model_not_consulted: only round 1 is, recording the policy plan's "
+            "rejections and running nothing",
+        ),
+        (
+            run_model_refinement_unavailable,
+            relabel_round_two_not_consulted,
+            "round 2 is model_not_consulted: only round 1 is, recording the policy plan's "
+            "rejections and running nothing",
+        ),
+    ],
+    ids=["without_the_policy_rejections", "in_round_two"],
+)
+def test_round_not_consulting_its_model_is_rejected_unless_it_is_round_one_with_rejections(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+    run: TrajectoryRun,
+    forgery: SetForgery,
+    expected_violation: str,
+) -> None:
+    forged_set = forgery(run(fixture_bundle))
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        validate_knowledge_evidence_set(
+            forged_set,
+            pinned_fight_snapshot,
+            packaged_evidence_catalog,
+            forged_set.source_capabilities,
         )
     assert expected_violation in raised.value.violations
 

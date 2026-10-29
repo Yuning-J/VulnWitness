@@ -196,6 +196,55 @@ def read_model_reply(
     return ModelProposal(tuple(model_steps), PlannerOutcome.MODEL_ACCEPTED, ())
 
 
+def find_policy_plan_rejections(
+    request: InvestigationRequest,
+    interpretation: Interpretation,
+    topic: ProtocolTopic | None,
+    issued_steps: Sequence[ToolStep],
+    policy_steps: Sequence[PlannedStep],
+    topic_registry: TopicRegistry,
+) -> tuple[PlanRejection, ...]:
+    """What the gate rejects in the policy's plan, in the context the issued steps leave."""
+    return tuple(
+        find_plan_rejections(
+            list_calls(policy_steps),
+            build_plan_context(request, interpretation, topic, issued_steps, None),
+            topic_registry,
+        )
+    )
+
+
+def is_model_consultable(round_number: int, policy_rejections: Sequence[PlanRejection]) -> bool:
+    """Whether a configured model may plan the round: not round 1 when the policy's own plan
+    is over the source budget, since a round-1 model plan must consult the policy's sources.
+    A plan over the tool-call budget does not decide it: a model may reach the same sources
+    with fewer calls (one search instead of a topic's template searches), and in round 2 it
+    may propose any cheaper call."""
+    is_over_source_budget = any(
+        rejection.code is PlanRejectionCode.OVER_SOURCE_BUDGET for rejection in policy_rejections
+    )
+    return not (round_number == 1 and is_over_source_budget)
+
+
+def plan_unconsulted_round(policy_rejections: tuple[PlanRejection, ...]) -> RoundPlan:
+    """The round a configured model was not consulted for (``model_not_consulted``): it
+    records the policy's rejections and runs nothing, stopping as the rejected plan does."""
+    stop = decide_rejected_plan_stop(policy_rejections)
+    breach: BudgetBreach | None = None
+    if stop == PLAN_OVER_BUDGET_STOP:
+        breach = decide_over_budget_breach(policy_rejections)
+    return RoundPlan(
+        planned_steps=(),
+        planned_by=PlannerKind.MODEL,
+        planner_outcome=PlannerOutcome.MODEL_NOT_CONSULTED,
+        rejections=policy_rejections,
+        model_reply=None,
+        warnings=(),
+        stop=stop,
+        breach=breach,
+    )
+
+
 def choose_round_plan(
     request: InvestigationRequest,
     interpretation: Interpretation,
@@ -204,6 +253,7 @@ def choose_round_plan(
     round_number: int,
     policy_steps: Sequence[PlannedStep],
     model_reply: ModelReply | None,
+    consults_model: bool,
     topic_registry: TopicRegistry,
 ) -> RoundPlan:
     """The plan of a round planned before the deadline, from the model's reply when the
@@ -214,8 +264,15 @@ def choose_round_plan(
     gated in the same context without a baseline; the round records the reply's
     rejections, then the policy plan's. A rejected policy plan runs nothing and stops as
     ``decide_rejected_plan_stop`` says. The policy's plan is never empty: round 1 plans a
-    call for every intent that reaches planning, and round 2 is planned only for one.
+    call for every intent that reaches planning, and round 2 is planned only for one. A
+    configured model (``consults_model``) the round may not consult
+    (``is_model_consultable``) is not consulted, whatever reply the round records.
     """
+    policy_rejections = find_policy_plan_rejections(
+        request, interpretation, topic, issued_steps, policy_steps, topic_registry
+    )
+    if consults_model and not is_model_consultable(round_number, policy_rejections):
+        return plan_unconsulted_round(policy_rejections)
     model_rejections: tuple[PlanRejection, ...] = ()
     planner_outcome = PlannerOutcome.DETERMINISTIC
     warnings: tuple[InvestigationWarning, ...] = ()
@@ -242,13 +299,6 @@ def choose_round_plan(
         model_rejections = proposal.rejections
         if planner_outcome is PlannerOutcome.MODEL_REJECTED:
             warnings = (build_model_plan_rejected_warning(round_number, model_rejections),)
-    policy_rejections = tuple(
-        find_plan_rejections(
-            list_calls(policy_steps),
-            build_plan_context(request, interpretation, topic, issued_steps, None),
-            topic_registry,
-        )
-    )
     planned_steps = tuple(policy_steps)
     stop: Stop | None = None
     breach: BudgetBreach | None = None

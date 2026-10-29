@@ -190,6 +190,16 @@ def run_model_skipped_at_deadline(fixture_bundle: FixtureBundle) -> KnowledgeEvi
     return service.investigate(build_investigation_request("5gaka", "implementation_only"))
 
 
+def run_model_not_consulted(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """One source allowed: the policy's round-1 topic call consults two, so the configured
+    model is not consulted and nothing runs."""
+    model_port = ScriptedModelPort([])
+    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    return service.investigate(
+        build_investigation_request("5G-AKA", "mixed", budget={"max_sources": 1})
+    )
+
+
 def run_model_refinement_unavailable(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
     """A model-planned literal search for a topic that found nothing, then a round 2 whose
     consulted planner was unavailable, so the policy's topic refinement ran."""

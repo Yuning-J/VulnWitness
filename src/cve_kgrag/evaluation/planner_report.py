@@ -27,7 +27,7 @@ from cve_kgrag.domain.planning import SHA256_HEX_PATTERN
 from cve_kgrag.domain.taxonomy import ResultStatus
 from cve_kgrag.evaluation.labelled_cases import EvidenceCategory, Split, Sufficiency
 
-EVALUATION_FORMAT_VERSION: Literal[3] = 3
+EVALUATION_FORMAT_VERSION: Literal[4] = 4
 RATE_DECIMALS = 4
 # A git commit ID, SHA-1 or SHA-256.
 GIT_COMMIT_PATTERN = r"[0-9a-f]{40}(?:[0-9a-f]{24})?"
@@ -74,7 +74,7 @@ class DatasetIdentity(ContractModel):
 class EvaluationIdentity(ContractModel):
     """What a report measured, so two reports can be told apart before they are compared."""
 
-    evaluation_format_version: Literal[3] = EVALUATION_FORMAT_VERSION
+    evaluation_format_version: Literal[4] = EVALUATION_FORMAT_VERSION
     evidence_set_schema_version: str
     source_revision: str = Field(
         pattern=SOURCE_REVISION_PATTERN,

@@ -162,13 +162,15 @@ def test_round_outcomes_are_counted_over_their_stated_denominators(
             build_text_reply("not json"),
             budget={"max_tool_calls": 4},
         ),
+        # The policy's round-1 plan is over the source budget: the model is not consulted.
+        run_with_replies(fixture_bundle, "5gaka", "mixed", budget={"max_sources": 1}),
     )
     deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
 
     model_section = require_model_section(analyze(build_case(deterministic_set, *model_sets)))
 
     round_one = model_section.round_one
-    assert round_one.rounds == 8
+    assert round_one.rounds == 9
     assert round_one.outcomes == {
         PlannerOutcome.DETERMINISTIC: 0,
         PlannerOutcome.MODEL_ACCEPTED: 1,
@@ -177,13 +179,14 @@ def test_round_outcomes_are_counted_over_their_stated_denominators(
         PlannerOutcome.MODEL_REPLY_AFTER_DEADLINE: 1,
         PlannerOutcome.MODEL_TIMED_OUT: 1,
         PlannerOutcome.MODEL_SKIPPED_AT_DEADLINE: 1,
+        PlannerOutcome.MODEL_NOT_CONSULTED: 1,
     }
     assert round_one.gate_acceptance == Proportion(count=1, of=3, rate=0.3333)
-    assert round_one.fallback_attempt == Proportion(count=4, of=8, rate=0.5)
+    assert round_one.fallback_attempt == Proportion(count=4, of=9, rate=0.4444)
     assert round_one.fallback_executed == Proportion(count=3, of=4, rate=0.75)
-    assert round_one.timed_out_fallback == Proportion(count=1, of=8, rate=0.125)
-    assert round_one.deadline_no_execution == Proportion(count=2, of=8, rate=0.25)
-    assert round_one.skipped_before_planning == Proportion(count=1, of=8, rate=0.125)
+    assert round_one.timed_out_fallback == Proportion(count=1, of=9, rate=0.1111)
+    assert round_one.deadline_no_execution == Proportion(count=2, of=9, rate=0.2222)
+    assert round_one.skipped_before_planning == Proportion(count=1, of=9, rate=0.1111)
     assert keep_counted(round_one.unavailable_details) == {
         "unreachable": 1,
         "timed_out": 1,

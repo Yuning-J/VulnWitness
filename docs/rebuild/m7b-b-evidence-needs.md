@@ -143,8 +143,8 @@ whose need kinds equal the case's. `evaluation_format_version` moves to 3.
   products ("linux kernel 5.10.1") and hyphenated forms.
 - "What is CVE-X" searches no residual words; text B cannot recognise as a target is
   a stated limit.
-- The round-1 model call when the policy's own round-1 plan fails the gate is a separate
-  change after B.
+- The round-1 model call when the policy's own round-1 plan is over the source budget is
+  a separate change after B ([`PLAN.md`](PLAN.md#follow-up-model-planner-adapter)).
 
 ## Measured on the 13 baseline cases
 

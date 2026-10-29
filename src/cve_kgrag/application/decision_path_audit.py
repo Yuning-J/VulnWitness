@@ -135,6 +135,7 @@ from cve_kgrag.domain.investigation_validation import (
 )
 from cve_kgrag.domain.planning import (
     DeterministicPlannerIdentity,
+    PlannerKind,
     PlanRejection,
     TopicContextCall,
 )
@@ -340,6 +341,7 @@ def derive_round(
             round_number,
             policy_steps,
             round_record.model_reply,
+            evidence_set.trajectory.planner.kind is PlannerKind.MODEL,
             topic_registry,
         )
     round_steps = list_round_steps(evidence_set.trajectory.steps, round_number)

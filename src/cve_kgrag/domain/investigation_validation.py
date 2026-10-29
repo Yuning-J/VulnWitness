@@ -776,7 +776,8 @@ def find_round_step_violations(
 
 def find_rejection_violations(round_record: RoundRecord) -> list[str]:
     """A rejection is recorded exactly when the outcome says a plan was rejected: a rejected
-    model reply records why, first; an accepted, skipped or deterministic plan records
+    model reply records why, first; a round a model was not consulted for records the
+    policy's rejections and runs nothing; an accepted, skipped or deterministic plan records
     none, unless the policy's own plan was rejected and the round runs nothing."""
     violations: list[str] = []
     round_number = round_record.round_number
@@ -806,7 +807,18 @@ def find_rejection_violations(round_record: RoundRecord) -> list[str]:
                 f"{planner_outcome} rejected no model reply"
             )
     runs_no_plan = not round_record.accepted_plan
-    is_policy_plan_rejected = planner_outcome is PlannerOutcome.DETERMINISTIC and runs_no_plan
+    is_policy_planned = planner_outcome in (
+        PlannerOutcome.DETERMINISTIC,
+        PlannerOutcome.MODEL_NOT_CONSULTED,
+    )
+    is_policy_plan_rejected = is_policy_planned and runs_no_plan
+    if planner_outcome is PlannerOutcome.MODEL_NOT_CONSULTED and not (
+        round_number == 1 and rejection_codes and runs_no_plan
+    ):
+        violations.append(
+            f"round {round_number} is {planner_outcome}: only round 1 is, recording the "
+            "policy plan's rejections and running nothing"
+        )
     if rejection_codes and not is_policy_plan_rejected:
         violations.append(
             f"round {round_number} is {planner_outcome} and runs its plan, but records rejections"

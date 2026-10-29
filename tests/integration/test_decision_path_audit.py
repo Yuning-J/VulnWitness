@@ -38,6 +38,7 @@ from cve_kgrag.domain.planning import (
     PlanRejectionCode,
     QueryIntent,
     compute_call_key,
+    compute_model_reply_sha256,
     format_cve_tool_query,
 )
 from cve_kgrag.domain.search import SearchWarning, SearchWarningCode
@@ -69,6 +70,7 @@ from tests.support.investigation_runs import (
     run_five_g_aka_mixed,
     run_model_accepted,
     run_model_low_signal_search,
+    run_model_not_consulted,
     run_model_rejected,
     run_model_skipped_at_deadline,
     run_over_the_byte_cap,
@@ -973,6 +975,26 @@ def claim_protocol_context_searchable(evidence_set: KnowledgeEvidenceSet) -> Kno
     return reseal_evidence_set(evidence_set, coverage=coverage)
 
 
+def claim_the_model_was_consulted(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """Round 1, which no model plan could pass, claims the model replied unavailable and the
+    policy's over-budget plan was rejected after it, with the call, its hash, the planner
+    duration and the rejection warning all recorded."""
+    round_one = evidence_set.trajectory.rounds[0]
+    rejections = (PlanRejection(code=PlanRejectionCode.PLANNER_UNAVAILABLE), *round_one.rejections)
+    consulted_round = round_one.model_copy(
+        update={
+            "planner_outcome": PlannerOutcome.MODEL_UNAVAILABLE,
+            "rejections": rejections,
+            "model_reply": UNAVAILABLE_REPLY,
+            "model_reply_sha256": compute_model_reply_sha256(UNAVAILABLE_REPLY),
+        }
+    )
+    budget_used = evidence_set.trajectory.budget_used.model_copy(update={"planner_calls": 1})
+    timings = evidence_set.timings.model_copy(update={"planner_durations_ms": (0,)})
+    forged_set = update_trajectory(evidence_set, rounds=(consulted_round,), budget_used=budget_used)
+    return reseal_evidence_set(forged_set, timings=timings)
+
+
 def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
     """Round 2, which the deadline stopped before its planner ran, is dropped from the
     record, so the run appears to have stopped at refine without planning it."""
@@ -1020,6 +1042,12 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
             "the controller's decisions plan round 2, but the run records no such round",
         ),
         (
+            run_model_not_consulted,
+            claim_the_model_was_consulted,
+            "round 1 is model_unavailable, but the controller's decisions over its recorded "
+            "reply give model_not_consulted",
+        ),
+        (
             run_mixed_free_text,
             claim_protocol_context_searchable,
             "coverage.needs are not the needs the request gives, judged over the admitted "
@@ -1033,6 +1061,7 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
         "rejection_codes_rewritten",
         "accepted_plan_omitting_a_named_cve_id",
         "planned_round_two_erased",
+        "unconsultable_round_claims_a_model_reply",
         "need_outcome_rewritten",
     ],
 )

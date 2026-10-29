@@ -1709,7 +1709,7 @@
       "type": "string"
     },
     "PlannerOutcome": {
-      "description": "How a round's plan was chosen.\n\n``deterministic``: no model planner is configured, so the policy planned the round.\n``model_accepted``: the model's plan passed the gate and runs. ``model_rejected`` and\n``model_unavailable``: the model's reply failed the gate or carried no plan, so the\nround falls back to the policy's plan. ``model_reply_after_deadline`` and\n``model_timed_out``: the model replied at or after the deadline, or not at all, so\nnothing runs. ``model_skipped_at_deadline``: a model is configured, but the deadline\nhad passed before the round was planned, so it was never consulted. Every outcome but\n``deterministic``, ``model_timed_out`` and ``model_skipped_at_deadline`` has a reply,\nwhich the round records.",
+      "description": "How a round's plan was chosen.\n\n``deterministic``: no model planner is configured, so the policy planned the round.\n``model_accepted``: the model's plan passed the gate and runs. ``model_rejected`` and\n``model_unavailable``: the model's reply failed the gate or carried no plan, so the\nround falls back to the policy's plan. ``model_reply_after_deadline`` and\n``model_timed_out``: the model replied at or after the deadline, or not at all, so\nnothing runs. ``model_skipped_at_deadline``: a model is configured, but the deadline\nhad passed before the round was planned, so it was never consulted.\n``model_not_consulted``: a model is configured, but the policy's own round-1 plan is over\nthe source budget; a round-1 model plan must consult the policy's sources, so no plan the\ngate accepts exists, the model is not called and the round records the policy's\nrejections.\nEvery outcome but ``deterministic``, ``model_timed_out``, ``model_skipped_at_deadline``\nand ``model_not_consulted`` has a reply, which the round records.",
       "enum": [
         "deterministic",
         "model_accepted",
@@ -1717,7 +1717,8 @@
         "model_unavailable",
         "model_reply_after_deadline",
         "model_timed_out",
-        "model_skipped_at_deadline"
+        "model_skipped_at_deadline",
+        "model_not_consulted"
       ],
       "title": "PlannerOutcome",
       "type": "string"
@@ -2050,6 +2051,30 @@
             "properties": {
               "rejections": {
                 "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "planner_outcome": {
+                "enum": [
+                  "model_not_consulted"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "accepted_plan": {
+                "maxItems": 0
+              },
+              "rejections": {
+                "minItems": 1
+              },
+              "round_number": {
+                "const": 1
               }
             }
           }
@@ -3798,6 +3823,7 @@
                     "planner_outcome": {
                       "enum": [
                         "model_accepted",
+                        "model_not_consulted",
                         "model_rejected",
                         "model_reply_after_deadline",
                         "model_skipped_at_deadline",
@@ -4355,8 +4381,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.28",
-      "default": "2.0.0-dev.28",
+      "const": "2.0.0-dev.29",
+      "default": "2.0.0-dev.29",
       "title": "Schema Version",
       "type": "string"
     },

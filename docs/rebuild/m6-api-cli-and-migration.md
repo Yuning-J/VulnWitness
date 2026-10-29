@@ -112,8 +112,8 @@ CVE_KGRAG_LIVE_TESTS=1 uv run pytest tests/live -m live
 - Connecting runs under the socket timeout for each address tried, so a slow connect and
   a slow TLS handshake can take the timeout each; the core stops waiting at the run's
   deadline regardless.
-- Round 1 consults a configured model even when the policy's own plan is over the source
-  budget, so no call can pass the gate (PLAN.md follow-up).
+- A configured model is not consulted in round 1 when the policy's own plan is over the
+  source budget, which no round-1 plan can meet (`model_not_consulted`, PLAN.md).
 
 ## WP2 — semantic settings
 

@@ -35,13 +35,16 @@ tests and opt-in live tests (ADR 0005, m6 doc). Done. The owner ran the live tes
 2026-10-21 against `https://api.deepseek.com` with `deepseek-flash` and reasoning effort
 `none`: 2 passed.
 
-Round 2 runs, and a configured model is consulted for it, only when the policy has a
+A configured model is not consulted in two cases: round 2 when the policy has no
 refinement for an open need ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)), so
-`CVE-9999-4242` under `implementation_only` makes one planner call. Follow-up: round 1
-still consults the model when the policy's own plan is over the source budget (query
-`5G-AKA`, budget `max_sources: 1`). Proposed fix: consult no model in a round where no
-offered call can pass the gate, with the controller and the audit deciding that by one
-shared rule, recording the round under a new planner outcome a model planner may record.
+`CVE-9999-4242` under `implementation_only` makes one planner call; and round 1 when the
+policy's own plan is over the source budget (`5G-AKA`, `max_sources: 1`), since a round-1
+model plan must consult the same sources. In every other round it is consulted, whether or
+not some plan could pass the gate; over the tool-call budget alone, a search may reach a
+topic call's sources with fewer calls. The skipped round 1 records `model_not_consulted` with the policy plan's rejections; the
+controller and the audit decide it by one rule (`is_model_consultable`). Contracts move
+to `2.0.0-dev.29` for that outcome, and `evaluation_format_version` to 4, whose round
+outcome counts include it.
 
 ## Live lane (opt-in)
 
@@ -111,8 +114,7 @@ The migration map lives with the legacy modules it describes, in CVE-KGRAG
 
 Recorded when M6 closed; none blocks M7b unless it says so.
 
-- CSAF import; an allowlisted refresh command; the Trustify adapter (above); the planner
-  round-1 fix (above).
+- CSAF import; an allowlisted refresh command; the Trustify adapter (above).
 - The semantic index build from a store: a collection built from a store records its
   `corpus_content_sha256`, and the semantic channel serves a store only when that
   digest equals the served one; it also settles legacy `KEV-` chunk IDs.

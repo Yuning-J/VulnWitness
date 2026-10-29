@@ -73,7 +73,7 @@ hash of its request and FiGHT source; a plan by the hash of its call keys
 
 ## The report
 
-The report is the evaluation's own format (`evaluation_format_version: 3`), not part of
+The report is the evaluation's own format (`evaluation_format_version: 4`), not part of
 the v2 knowledge contract, so it is not under `schemas/v2`. It is JSON with sorted keys,
 and the analysis is a pure function of the sets: equal sets give byte-equal reports.
 [`m7b-planner-evaluation.md`](m7b-planner-evaluation.md) describes the dataset identity
@@ -125,6 +125,8 @@ rate is over every round in the group.
 | `deadline_no_execution` | `model_timed_out` and `model_reply_after_deadline`: nothing ran | every round |
 | `skipped_before_planning` | `model_skipped_at_deadline`: the model was never called | every round |
 
+`outcomes` counts every planner outcome, `model_not_consulted` included: a round 1 whose
+policy plan is over the source budget, for which the model was not called and nothing ran.
 `timed_out_fallback` is a subset of `fallback_attempt`. It joins two causes the sets do not
 tell apart: the planner's share of the run ending (`PLANNER_CAP_REPLY`) and the adapter
 reporting a timeout, an HTTP 408, 504 or 524. Telling them apart would need a new failure

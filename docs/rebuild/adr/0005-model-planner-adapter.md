@@ -92,8 +92,10 @@ policy, so ADR 0003 §8's bound on their abandoned calls stands.
   sources than the run may, and `required_tools` names only offered tools, so the model is
   never asked for a tool it is not offered. Two offered tools can still exceed the budget
   together, and the gate then falls back. When the policy's own round-1 plan is over the
-  budget, no plan passes the gate and the round stops as the policy's would; the model is
-  still consulted then (PLAN.md follow-up).
+  source budget, no plan passes the gate, since a round-1 plan must consult the policy's
+  sources: the model is not called, and the round records `model_not_consulted` with the
+  policy plan's rejections (`is_model_consultable`). Over the tool-call budget alone the
+  model is consulted, since fewer calls may reach the same sources.
 
 ### 4. The answer
 
@@ -141,7 +143,7 @@ and are never run with `--showlocals`. `tests/live` is linted with the offline l
   `2.0.0.dev0`.
 - Offline tests use a recording transport and loopback servers on 127.0.0.1, never an
   outside network; https is not exercised offline.
-- Round 1 consults the model even when the policy's own plan is over the source budget,
-  so no call can pass the gate; the reply is rejected and the round stops, after at most
-  the planner's share of the run (a PLAN.md follow-up). Round 2 is planned, and the
-  model consulted for it, only when the policy has a refinement for an open need.
+- The model is not consulted in round 1 when the policy's own plan is over the source
+  budget, which no round-1 plan can meet (`model_not_consulted`), nor in round 2 without a
+  policy refinement for an open need. Otherwise it is consulted, whether or not some
+  plan could pass the gate.

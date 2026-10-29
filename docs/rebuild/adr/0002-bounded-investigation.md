@@ -103,8 +103,9 @@ degrades to the production baseline instead of blocking the question; the round
 records the model plan's rejections followed by any of the fallback plan's. A reply
 that arrives after the deadline, or no reply by it, stops the run; a round the
 deadline stops before its configured model is consulted is recorded as
-`model_skipped_at_deadline`, so a round's outcome always says which planner kind
-the run was configured with.
+`model_skipped_at_deadline`, and a round 1 whose policy plan is over the source budget, which no
+model plan could pass since it must consult the same sources, as `model_not_consulted`,
+so a round's outcome always says which planner kind the run was configured with.
 
 The vocabulary check reads only search terms, so an accepted call is rewritten into
 its canonical form before it runs or is recorded: a search keeps its search terms,
@@ -122,7 +123,8 @@ Each round records the model's reply as the port returned it, within `ModelReply
 length caps: the plan text or the typed failure, beside its hash. Every outcome
 with a reply records it, a failed reply (`model_unavailable`) and a reply that
 landed after the deadline (`model_reply_after_deadline`) included; only
-`deterministic`, `model_timed_out` and `model_skipped_at_deadline` have none.
+`deterministic`, `model_timed_out`, `model_skipped_at_deadline` and
+`model_not_consulted` have none.
 Recording only the reply's hash was rejected: a hash cannot be parsed, so the
 outcome, the rejection codes and the accepted plan it led to could not be
 re-derived, and a rejected or failed reply could be relabelled accepted. Recording

@@ -580,16 +580,41 @@ def test_policy_refinement_already_issued_by_the_model_is_not_run_again_and_no_r
 def test_rejected_model_plan_and_its_over_budget_fallback_are_both_recorded(
     fixture_bundle: FixtureBundle,
 ) -> None:
+    """Round 1 searches literally; round 2's topic refinement (four template searches) is
+    over the three calls left, and the model's round-2 reply is malformed."""
+    model_port = ScriptedModelPort(
+        [build_plan_reply({"tool": "cve_search", "query": "5gaka"}), build_text_reply("not json")]
+    )
+    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+
+    evidence_set = service.investigate(
+        build_investigation_request("5gaka", "implementation_only", budget={"max_tool_calls": 4})
+    )
+
+    assert describe_rounds(evidence_set) == [
+        ("model_accepted", []),
+        ("model_rejected", ["malformed_plan", "over_tool_call_budget"]),
+    ]
+    assert list_transitions(evidence_set)[-2] == ["refine", "validate", "plan_over_budget"]
+    assert evidence_set.stop_reason is StopReason.BUDGET_EXHAUSTED
+
+
+@pytest.mark.parametrize("scope", ["mixed", "protocol_context_only"])
+def test_policy_round_one_plan_over_the_source_budget_consults_no_model(
+    fixture_bundle: FixtureBundle, scope: str
+) -> None:
+    """A round-1 model plan must consult the policy's sources, so with one source allowed
+    for a topic call that consults two, no plan the gate accepts exists."""
     model_port = ScriptedModelPort([build_text_reply("not json")])
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(
-        build_investigation_request("5gaka", "mixed", budget={"max_tool_calls": 4})
+        build_investigation_request("5G-AKA", scope, budget={"max_sources": 1})
     )
 
-    assert describe_rounds(evidence_set) == [
-        ("model_rejected", ["malformed_plan", "over_tool_call_budget"])
-    ]
+    assert model_port.planning_inputs == []
+    assert describe_rounds(evidence_set) == [("model_not_consulted", ["over_source_budget"])]
+    assert evidence_set.trajectory.budget_used.planner_calls == 0
     assert list_transitions(evidence_set)[-2] == ["plan", "validate", "plan_over_budget"]
     assert evidence_set.stop_reason is StopReason.BUDGET_EXHAUSTED
 
@@ -987,11 +1012,12 @@ def test_planner_is_offered_only_tools_the_source_budget_leaves_room_for(
 def test_planner_is_never_asked_for_a_tool_the_budget_does_not_offer(
     fixture_bundle: FixtureBundle, scope: str
 ) -> None:
-    """With one source allowed, the policy's topic call is over budget; the planner is not
-    told to include a tool it is not offered."""
+    """With four calls allowed, the policy's topic call (four template searches and a FiGHT
+    search) is over the tool-call budget, but a cheaper plan may exist, so the planner is
+    consulted; it is not told to include the tool it is not offered."""
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
-    request = build_investigation_request("5G-AKA", scope, budget={"max_sources": 1})
+    request = build_investigation_request("5G-AKA", scope, budget={"max_tool_calls": 4})
 
     service.investigate(request)
 

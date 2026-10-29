@@ -41,6 +41,8 @@ from cve_kgrag.application.investigation_decisions import (
     decide_assessment,
     decide_open_stop,
     decide_refinement_stop,
+    find_policy_plan_rejections,
+    is_model_consultable,
     plan_deadline_round,
 )
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
@@ -365,6 +367,8 @@ class InvestigationService:
 
         Past the deadline no plan is chosen: neither the planner nor any step may start, and
         a configured model planner is recorded as not consulted (``model_skipped_at_deadline``).
+        Nor is a model consulted for a round it could not plan (``is_model_consultable``:
+        round 1 under a policy plan over budget), which records ``model_not_consulted``.
         A planner that has not replied by the deadline is abandoned (``model_timed_out``); a
         reply that lands at or after it is recorded but never read
         (``model_reply_after_deadline``). A planner call gets at most its share of the run's
@@ -379,8 +383,17 @@ class InvestigationService:
             if self._model_port is None:
                 return plan_deadline_round(PlannerOutcome.DETERMINISTIC, None)
             return plan_deadline_round(PlannerOutcome.MODEL_SKIPPED_AT_DEADLINE, None)
+        consults_model = self._model_port is not None
+        policy_rejections = find_policy_plan_rejections(
+            run.request,
+            run.interpretation,
+            run.topic,
+            run.steps,
+            policy_steps,
+            self._topic_registry,
+        )
         model_reply: ModelReply | None = None
-        if self._model_port is not None:
+        if self._model_port is not None and is_model_consultable(round_number, policy_rejections):
             planning_input = build_planning_input(
                 run,
                 round_number,
@@ -435,6 +448,7 @@ class InvestigationService:
             round_number,
             policy_steps,
             model_reply,
+            consults_model,
             self._topic_registry,
         )
 

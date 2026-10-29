@@ -286,6 +286,7 @@ two searches that differ only in such a token run as one query and the second is
 | no reply by the deadline | `model_timed_out`, rejection `planner_timed_out`, no reply | nothing; `budget_exhausted` |
 | any reply finishing after the deadline | `model_reply_after_deadline`, rejection `reply_after_deadline`; the reply is recorded but never parsed | nothing; `budget_exhausted` |
 | not called: the deadline had passed before the round was planned | `model_skipped_at_deadline`, no rejection, no reply | nothing; `budget_exhausted` |
+| not called: the policy's own round-1 plan is over the source budget, and a round-1 model plan must consult the policy's sources, so none could pass the gate | `model_not_consulted`, the policy plan's rejections, no reply | nothing; `budget_exhausted` (`plan_over_budget`) |
 
 Without a model planner every round's outcome is `deterministic`, including a round
 the deadline stopped before planning; with one, no round is `deterministic`. Once
@@ -310,8 +311,8 @@ status, plan text within `ModelReply`'s cap of 16,384 characters, or a
 `ModelReplyFailureDetail` sentence) beside `model_reply_sha256`, its hash from
 `compute_model_reply_sha256`. Every outcome with a reply records it, a typed
 failure (`model_unavailable`) and a late reply (`model_reply_after_deadline`)
-included; only `deterministic`, `model_timed_out` and `model_skipped_at_deadline`
-have none. The reply is data: it is never logged, never quoted in a warning or a
+included; only `deterministic`, `model_timed_out`, `model_skipped_at_deadline` and
+`model_not_consulted` have none. The reply is data: it is never logged, never quoted in a warning or a
 violation, and its text reaches the set only in that field, while the steps and the
 accepted plan carry the canonical calls. The decision-path audit parses and gates
 the recorded reply again (see Decision-path audit). The controller and the audit
@@ -427,15 +428,17 @@ controller defect and raises instead of returning. It checks:
 - every round outcome one the trajectory's planner kind records; rejections
   exactly when the outcome says a plan was rejected: a `model_unavailable`,
   `model_timed_out` or `model_reply_after_deadline` round records its own code
-  first, a `model_rejected` round never starts with one of those codes, an
-  accepted or skipped round records none, and a `deterministic` round records
-  them only when the policy's plan was rejected, nothing ran and the run stopped
-  `policy_blocked` or `budget_exhausted`; model-reply codes (`malformed_plan`, the
+  first, a `model_rejected` round never starts with one of those codes, a
+  `model_accepted` or `model_skipped_at_deadline` round records none, a
+  `model_not_consulted` round is round 1 and records the policy plan's rejections and
+  runs nothing, and a `deterministic` round records them only when the policy's plan
+  was rejected, nothing ran and the run stopped `policy_blocked` or `budget_exhausted`; model-reply codes (`malformed_plan`, the
   three fixed first codes, `missing_baseline_source`, `missing_named_cve_id`) only
   under a rejected model outcome; a `deterministic` round that runs no plan and records no
   rejection reached the deadline;
 - the model's reply exactly when the model replied (every model outcome but
-  `model_timed_out` and `model_skipped_at_deadline`), with `model_reply_sha256`
+  `model_timed_out`, `model_skipped_at_deadline` and `model_not_consulted`, which
+  records the policy plan's rejections and runs nothing), with `model_reply_sha256`
   recomputed from it, never trusted, and `budget_used.rounds`,
   `planner_calls`, the number of planner durations in the timings and the number
   of `plan_accepted` transitions counted from the rounds;
