@@ -368,3 +368,33 @@ default budgets, `gold-sets --check` passed). The fix's working-tree diff has SH
   (`aka attacks`, `EAP-AKA' threats`, `5G-AKA threats`, `5G AKA threats`, `5gaka threats`)
   and the accented non-telecom queries (`Café WiFi router overflow`,
   `Müller GmbH gateway`, a Spanish query, `naïve parser crash`) are unchanged.
+
+## Holdout, evaluated once (2026-10-30)
+
+After the agreed packages (D, A1, A2, B, the round-1 skip, C and its mixed-script
+follow-up), the four holdout cases were evaluated once: a deterministic run of all 17
+cases at b4eaade (contracts `2.0.0-dev.31`, policy `m7b.3`), store `nvd-2026-10-27`,
+FiGHT 3.1.0, default budgets, `gold-sets --check` passed first. The four requests count
+as seen (above); their labels were read only for this evaluation, and nothing is tuned
+on it. The first model run's deterministic baseline (ef494d7) is the comparison.
+
+| Case | Label | First run (ef494d7): stop, judged | Now (b4eaade): stop, judged | Run judgement now |
+|---|---|---|---|---|
+| `asterisk-pjsip` | sufficient | `sufficient`, sufficient | `sufficient`, sufficient | — |
+| `rejected-cve-id` | insufficient | `no_evidence`, insufficient | `no_evidence`, insufficient | — |
+| `nas-threats` | sufficient | `no_evidence` before planning, insufficient (protocol coverage 0.0) | `needs_unmet`, sufficient (protocol coverage 1.0) | `false_gap` |
+| `diameter-core` | sufficient | `sufficient`, partial (implementation 0.308, protocol 0.0) | `needs_unmet`, partial (implementation 0.308, protocol 1.0) | — |
+
+- Totals over the four: `wrong_stop` 1 → 0, `premature_no_evidence` 1 → 0, `false_gap`
+  0 → 1 (not measured in the first run's format), `need_agreement` 4/4. CVE answers are
+  unchanged; protocol irrelevant items stay 0.
+- The protocol gains come from C: both protocol-only and mixed free text now search FiGHT
+  with the question's words, and the required techniques are in the top 20.
+- Both stops that changed rest on C1b's spelling sensitivity: in each case the direct
+  FiGHT search warned `term_not_indexed` for `signalling`, which no technique holds
+  (`signaling` is held). For `nas-threats` that makes a sufficient answer a reported gap
+  (`false_gap`). For `diameter-core` it stops the run short of `sufficient`, which matches
+  its partial judgement, but for that word, not because the implementation shortfall
+  (0.308) was seen. Neither stop counts as a robust gain.
+- The baseline figures in the same run are those measured for D2 (`wrong_stop` 4/13,
+  protocol coverage 0.556, protocol irrelevant items 7).
