@@ -1,6 +1,6 @@
 # Hand-labelled investigation trajectories over the packaged 5G-AKA topic card, the
 # FiGHT 3.1.0 excerpt and the synthetic CVE fixture, with the deterministic policy
-# m7b.2 and no model planner. Edit only when the labelled truth changes; tests compare
+# m7b.3 and no model planner. Edit only when the labelled truth changes; tests compare
 # against this file and never regenerate it.
 #
 # Each row names the request, which FiGHT source the deployment serves

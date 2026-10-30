@@ -17,6 +17,8 @@ from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.hashing import canonical_sha256, sha256_hex
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
+    InvestigationWarning,
+    InvestigationWarningCode,
     KnowledgeEvidenceSet,
     PlannerOutcome,
     SourceCapabilityState,
@@ -471,6 +473,75 @@ def test_query_of_only_low_signal_words_stops_without_a_call(
         DecisionBasis.NO_SEARCHABLE_TERMS,
     )
     assert list_implementation_ids(evidence_set) == []
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_search_text", "expected_excluded_term"),
+    [
+        ("5G\u00e9aka threats", "5g threats", "aka"),
+        ("\u00e9aka attacks", "attacks", "aka"),
+        ("\u03b1aka attacks", "attacks", "aka"),
+        ("\u3164aka attacks", "attacks", "aka"),
+        ("\uffa0aka attacks", "attacks", "aka"),
+        ("\u0665aka attacks", "attacks", "aka"),
+        ("EAP-AKA\u02bc threats", "threats", "EAP-AKA'"),
+        ("x\u200baka attacks", "x attacks", "aka"),
+        ("5g\u200baka threats", "5g threats", "aka"),
+        ("EAP\u200b-AKA' threats", "eap threats", "aka"),
+    ],
+    ids=[
+        "accented_letter",
+        "accented_letter_with_nothing_before",
+        "greek_letter",
+        "hangul_filler",
+        "halfwidth_hangul_filler",
+        "arabic_indic_digit",
+        "modifier_letter_apostrophe",
+        "zero_width_space",
+        "zero_width_space_inside_the_topic_alias",
+        "zero_width_space_splits_an_excluded_phrase",
+    ],
+)
+def test_excluded_term_beside_a_non_ascii_or_format_character_is_left_out_of_the_search_sent(
+    fixture_bundle: FixtureBundle,
+    query: str,
+    expected_search_text: str,
+    expected_excluded_term: str,
+) -> None:
+    """Each of these spellings leaves the excluded word a registry word, so the excluded
+    term is reported, warned and stripped before the search is built (not every spelling
+    does; ADR 0002 §8)."""
+    service = build_test_investigation_service(fixture_bundle)
+
+    evidence_set = service.investigate(build_investigation_request(query, "implementation_only"))
+
+    assert list_step_tools(evidence_set) == ["cve_search"]
+    assert evidence_set.trajectory.steps[0].backend_requests[0].query == expected_search_text
+    assert (
+        InvestigationWarning(
+            code=InvestigationWarningCode.EXCLUDED_TERM, subject=expected_excluded_term
+        )
+        in evidence_set.warnings
+    )
+
+
+@pytest.mark.parametrize("scope", ["implementation_only", "mixed"])
+def test_excluded_alias_alone_after_a_non_ascii_letter_stops_with_its_warning_and_no_call(
+    fixture_bundle: FixtureBundle, scope: str
+) -> None:
+    service = build_test_investigation_service(fixture_bundle)
+
+    evidence_set = service.investigate(build_investigation_request("\u00e9aka", scope))
+
+    assert list_step_tools(evidence_set) == []
+    assert (evidence_set.stop_reason, evidence_set.coverage.basis) == (
+        StopReason.NO_EVIDENCE,
+        DecisionBasis.EXCLUDED_TERMS_ONLY,
+    )
+    assert (
+        InvestigationWarning(code=InvestigationWarningCode.EXCLUDED_TERM, subject="aka")
+        in evidence_set.warnings
+    )
 
 
 @pytest.mark.parametrize(

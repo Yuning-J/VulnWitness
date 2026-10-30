@@ -1748,8 +1748,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.30",
-      "default": "2.0.0-dev.30",
+      "const": "2.0.0-dev.31",
+      "default": "2.0.0-dev.31",
       "title": "Schema Version",
       "type": "string"
     },

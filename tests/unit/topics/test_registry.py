@@ -75,10 +75,49 @@ def test_alias_never_matches_across_punctuation(query: str) -> None:
     assert matches == []
 
 
-def test_letter_outside_ascii_stays_part_of_its_word() -> None:
+def test_letter_outside_ascii_inside_an_alias_breaks_it() -> None:
     matches, _ = resolve("d\u00e9kx")
 
     assert matches == []
+
+
+def test_excluded_term_written_against_a_letter_outside_ascii_is_reported() -> None:
+    """The ASCII run is a word of its own, as the CVE side reads it."""
+    matches, excluded_terms = resolve("\u00e9dk vulnerability")
+
+    assert matches == []
+    assert excluded_terms == ["dk"]
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_excluded"),
+    [
+        ("5G\u00e9aka threats", ["aka"]),
+        ("\u00e9aka", ["aka"]),
+        ("EAP-AKA\u02bc threats", ["EAP-AKA'"]),
+        ("x\u200baka attacks", ["aka"]),
+        ("5g\u200baka", ["aka"]),
+        ("EAP\u200b-AKA' threats", ["aka"]),
+    ],
+    ids=[
+        "accented_letter_before_the_alias",
+        "alias_alone_after_an_accented_letter",
+        "modifier_letter_apostrophe",
+        "zero_width_space_before_the_alias",
+        "zero_width_space_inside_the_topic_alias",
+        "zero_width_space_splits_an_excluded_phrase",
+    ],
+)
+def test_excluded_alias_beside_a_non_ascii_or_format_character_is_reported_without_a_topic(
+    topic_registry: TopicRegistry, query: str, expected_excluded: list[str]
+) -> None:
+    resolution = topic_registry.resolve(query)
+
+    excluded_terms: list[str] = []
+    for excluded_term in resolution.excluded_terms:
+        excluded_terms.append(excluded_term.term)
+    assert resolution.matches == ()
+    assert excluded_terms == expected_excluded
 
 
 def test_canonical_name_and_alias_together_report_no_excluded_term() -> None:
@@ -229,14 +268,12 @@ def test_repeated_excluded_term_is_reported_once() -> None:
 @pytest.mark.parametrize(
     ("query", "expected_alias"),
     [
-        ("d\u00adkx", "DKX"),
-        ("d\u200bkx", "DKX"),
         ("d\u2212kx", "DKX"),
         ("d-kx\u534f\u8bae", "DKX"),
     ],
-    ids=["soft_hyphen", "zero_width_space", "unicode_minus", "followed_by_cjk"],
+    ids=["unicode_minus", "followed_by_cjk"],
 )
-def test_invisible_characters_and_script_changes_do_not_break_an_alias(
+def test_unicode_minus_and_a_following_ideograph_do_not_break_an_alias(
     query: str, expected_alias: str
 ) -> None:
     matches, _ = resolve(query)
@@ -245,9 +282,13 @@ def test_invisible_characters_and_script_changes_do_not_break_an_alias(
 
 
 @pytest.mark.parametrize(
-    "query", ["d - kx", "d _kx_", "d\n-kx"], ids=["spaced_dash", "spaced_underscore", "line_break"]
+    "query",
+    ["d - kx", "d _kx_", "d\n-kx", "d\u00adkx", "d\u200bkx"],
+    ids=["spaced_dash", "spaced_underscore", "line_break", "soft_hyphen", "zero_width_space"],
 )
-def test_spaced_or_broken_separators_are_boundaries(query: str) -> None:
+def test_spaced_broken_or_invisible_separators_are_boundaries(query: str) -> None:
+    """A format character (soft hyphen, zero-width space) displays nothing, so no alias
+    joins across one: the alias is not written as the query shows it."""
     matches, _ = resolve(query)
 
     assert matches == []

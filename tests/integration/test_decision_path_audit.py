@@ -21,6 +21,8 @@ from cve_kgrag.domain.investigation import (
     DecisionBasis,
     EvidenceNeed,
     EvidenceNeedKind,
+    FightBlock,
+    FightBlockReason,
     InvestigationWarning,
     InvestigationWarningCode,
     KnowledgeEvidenceSet,
@@ -893,7 +895,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_five_g_aka,
             name_another_policy_version,
-            "the planner names a policy other than m7b.2, the one whose decisions the audit "
+            "the planner names a policy other than m7b.3, the one whose decisions the audit "
             "re-derives",
         ),
     ],
@@ -1027,22 +1029,26 @@ def send_aka_to_fight_everywhere(evidence_set: KnowledgeEvidenceSet) -> Knowledg
     return rewrite_step(forged_set, 1, backend_requests=(forged_request,))
 
 
-def run_mixed_free_text_with_a_word_read_alone_as_a_topic(
-    fixture_bundle: FixtureBundle,
+def run_implementation_free_text(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """Free text under ``implementation_only``: ``ausf crash`` names no topic, excluded
+    term or CVE ID, so its ``fight_block`` is null and its ``fight_terms`` are every search
+    term, and the run has no FiGHT step a forged block would contradict."""
+    return investigate(fixture_bundle, "ausf crash", "implementation_only")
+
+
+def blame_a_search_term_read_alone_for_a_block(
+    evidence_set: KnowledgeEvidenceSet,
 ) -> KnowledgeEvidenceSet:
-    """Mixed free text whose word ``aka``, read alone, the registry reads as a topic: the
-    interpretation blocks a direct FiGHT search, and only the audit, holding the registry,
-    can re-check that block."""
-    return investigate(fixture_bundle, "5Géaka threats", "mixed")
-
-
-def clear_the_word_read_alone_block(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
-    """The block is cleared and every search term becomes a FiGHT term, so the
-    interpretation still agrees with itself."""
+    """A ``term_reads_as_topic`` block names a search term the registry reads as no topic
+    and no excluded term. The interpretation still agrees with itself, and only the
+    audit, holding the registry, can re-check that reading."""
     return update_interpretation(
         evidence_set,
-        fight_block=None,
-        fight_terms=evidence_set.interpretation.search_terms,
+        fight_block=FightBlock(
+            reason=FightBlockReason.TERM_READS_AS_TOPIC,
+            subject=evidence_set.interpretation.search_terms[0],
+        ),
+        fight_terms=(),
     )
 
 
@@ -1149,8 +1155,8 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
             "registry",
         ),
         (
-            run_mixed_free_text_with_a_word_read_alone_as_a_topic,
-            clear_the_word_read_alone_block,
+            run_implementation_free_text,
+            blame_a_search_term_read_alone_for_a_block,
             "interpretation.fight_block is not the one the request gives under this topic registry",
         ),
     ],
@@ -1167,7 +1173,7 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
         "unevaluated_need_relabelled_found",
         "uncovered_protocol_need_relabelled_found",
         "aka_added_to_the_fight_words_everywhere",
-        "word_read_alone_block_cleared",
+        "block_blamed_on_a_search_term_the_registry_reads_as_nothing",
     ],
 )
 def test_planner_record_the_validator_accepts_is_rejected_by_the_audit(

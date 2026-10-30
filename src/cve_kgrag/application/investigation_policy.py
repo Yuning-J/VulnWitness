@@ -1,4 +1,4 @@
-"""The deterministic investigation policy (version ``m7b.2``): pure functions of the
+"""The deterministic investigation policy (version ``m7b.3``): pure functions of the
 request, its interpretation and the observed steps.
 
 The policy reads a query into an intent, decides whether the query can be answered
@@ -85,7 +85,7 @@ from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.topics.registry import TopicRegistry
 
-DETERMINISTIC_POLICY_VERSION = "m7b.2"
+DETERMINISTIC_POLICY_VERSION = "m7b.3"
 # An exact lookup or a CVE search is one backend query.
 CVE_TOOL_COST = 1
 # A direct FiGHT search is one backend query.
@@ -153,11 +153,14 @@ def find_fight_block(query: str, topic_registry: TopicRegistry) -> FightBlock | 
 
     Checked in order: a topic resolved (its card's terms reach FiGHT through
     ``topic_context``); an excluded term is named, which is never stripped and searched
-    around; a CVE ID ``interpret_request`` keeps is named, so only a topic is a text
-    target; one of the search terms the registry reads alone as a topic or an excluded
-    term, which the query's own Unicode reading may not report (``5Géaka`` yields the
-    ASCII term ``aka``). The rule reuses the registry's resolution and exclusions and the
-    search-term rules, and adds no word list.
+    around (an ASCII run is a registry word of its own beside a non-ASCII letter, so
+    ``5Géaka`` names the excluded ``aka``); a CVE ID ``interpret_request`` keeps is
+    named, so only a topic is a text target; one of the search terms the registry reads
+    alone as a topic or an excluded term, which catches a search term that is not a word
+    of the registry's reading (``topics/normalization.py``: the CVE side normalizes
+    twice, so ``na\\u00df\\u0301`` searches ``nas``); it guards FiGHT only. The rule
+    reuses the registry's resolution and exclusions and the search-term rules, and adds
+    no word list.
     """
     resolution = topic_registry.resolve(query)
     if resolution.matches:
@@ -211,13 +214,14 @@ def interpret_request(
     """The query's intent, CVE IDs, searchable terms, the words a direct FiGHT search may
     send and why not, topic resolution and the product versions it asks affectedness of.
 
-    Tokens of an excluded term are stripped from the search terms, so an ambiguous
-    alias cannot reach the CVE index through free text (``EPS AKA crash`` searches
-    ``crash``). Every CVE ID named is kept, so a query naming more than one lookup
-    can carry is stopped by ``find_interpretation_stop`` rather than cut short. An ID
-    longer than ``MAX_CVE_ID_CHARS`` is one the CVE program never assigns, and a token
-    that starts as an ID but runs on into another digit or letter is malformed: neither
-    is looked up or searched.
+    Tokens of each excluded term the registry reports are stripped from the search
+    terms (``EPS AKA crash`` searches ``crash``); an excluded word the registry does not
+    report is still searched (``topics/normalization.py``; ADR 0002 §8). Every CVE ID
+    named is kept, so a query naming more than one lookup can carry is stopped by
+    ``find_interpretation_stop`` rather than cut short. An ID longer than
+    ``MAX_CVE_ID_CHARS`` is one the CVE program never assigns, and a token that starts
+    as an ID but runs on into another digit or letter is malformed: neither is looked up
+    or searched.
     """
     normalized_query = normalize_query(request.query)
     cve_ids = list_kept_cve_ids(request.query)

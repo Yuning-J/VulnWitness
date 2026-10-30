@@ -3,7 +3,7 @@
 Schema version `2.0.0-dev.11`. Adds an investigation service that interprets a
 question, chooses allowlisted tools, observes what they return, refines at most
 once, and returns a validated `KnowledgeEvidenceSet` with a replayable
-trajectory. The deterministic policy `m7b.2` is the production planner; a model
+trajectory. The deterministic policy `m7b.3` is the production planner; a model
 planner is optional and untrusted. Design rationale: ADR 0002.
 
 ## Contracts
@@ -131,9 +131,12 @@ order: `topic_resolved` (the card's terms reach FiGHT through `topic_context`),
 `excluded_term` (an excluded term is named; its words are never stripped and sent
 around it), `cve_id_named` (a CVE ID the interpretation keeps is named), and
 `term_reads_as_topic` (one search term the registry reads alone as a topic or an
-excluded term, as `aka` in `5Géaka threats`, which the Unicode matcher does not
-report). Its `subject` is the first matched topic ID, excluded term or CVE ID, or that
-term.
+excluded term). An ASCII run is a registry word of its own beside a non-ASCII letter
+(`topics/normalization.py`), so `5Géaka threats` names the excluded `aka`, searches
+`5g threats` and is blocked `excluded_term`; `term_reads_as_topic` catches a search term
+that is not a registry word, which double normalization can produce
+(`na\u00df\u0301 threats` searches `nas`; ADR 0002 §8), and guards FiGHT only. Its `subject` is the first matched topic
+ID, excluded term or CVE ID, or that term.
 `fight_terms` are every search term when there is no block and none otherwise, never
 a subset (`list_fight_terms`, the one source of the words a direct FiGHT search
 sends).
@@ -154,7 +157,7 @@ than one lookup can return is blocked rather than cut short:
 | intent `unsearchable` | `no_evidence` | `no_searchable_terms` |
 | `protocol_context_only` with intent `free_text` and no `fight_terms` | `no_evidence` | `protocol_scope_needs_topic` |
 
-## Policy m7b.2
+## Policy m7b.3
 
 Round 1 plans one call, or two for `mixed` free text whose words may go to FiGHT:
 
@@ -332,7 +335,7 @@ and every trajectory's planner, and the port has no method but `propose_plan`. A
 planner's identity (`ModelPlannerIdentity`) names its model, adapter, adapter version
 and endpoint fingerprint and no policy version, and a
 deterministic planner's (`DeterministicPlannerIdentity`) names the policy version,
-`m7b.2`, and no model; neither shape has the other's field, so a set handed back with
+`m7b.3`, and no model; neither shape has the other's field, so a set handed back with
 one fails to parse. The service consults the model exactly when a port is
 configured, so `ModelPlanning` pairs the port with a `ModelPlannerIdentity` and
 never with the policy's. The planner chooses

@@ -181,11 +181,42 @@ question explored through the topic would return CVEs for other products.
 A topic card's exclusions (`aka`, `EPS AKA`, `EAP-AKA'`) block topic resolution
 but did not stop the excluded tokens from reaching the lexical index: `EPS AKA
 crash` would have searched `aka` and returned a 5G-AKA record. The tokens of every
-excluded term in the query are removed from its search terms, so the query
+excluded term the registry reports in the query are removed from its search terms, so the query
 searches `crash`, and a bare `aka` searches nothing and stops `no_evidence`.
 
-The FiGHT side blocks where the CVE side strips: a query naming an excluded term
-gets no direct FiGHT search at all (see 15), because FiGHT's generic matches for the
+The strip sees only the excluded terms the registry reports, so it relies on the
+registry reading the CVE search tokens as whole words: the ASCII words of
+`split_terms` (`topics/normalization.py`) are, in order, exactly the `[0-9a-z]` runs of
+the once-normalized query (`TOKEN.findall(normalize_query(text))`). An ASCII run
+meeting a non-ASCII letter (accented or of another script), a non-ASCII digit or a
+modifier letter is a word of its own (`5Géaka threats` reports `aka` and searches
+`5g threats`; `EAP-AKAʼ` with U+02BC reports `EAP-AKA'`), and an invisible format
+character (Unicode Cf: zero-width space, soft hyphen) is a hard boundary no alias joins
+across (`x\u200baka attacks` reports `aka`; `5g\u200baka` reports `aka` and does not
+resolve 5G-AKA). The rule is on the registry side only; the CVE tokenizer and index
+read words as `[0-9a-z]` runs.
+
+There is no end-to-end guarantee that every excluded word the CVE search sends is
+reported. Known exceptions:
+
+- The CVE search terms (`list_query_terms`) normalize the query twice, and
+  `normalize_query` is not idempotent. Confirmed under the current Unicode data:
+  `na\u00df\u0301 threats` reads in the registry as `nass` but searches `nas`, and
+  `x H\u0302\u0331 attacks` reads `\u0125` as a non-ASCII word but searches `h`. A
+  card excluding `NAS` or `h` gets no exclusion reported, and the CVE side sends the
+  word. The check of each search term read alone (`term_reads_as_topic`, §15) blocks
+  FiGHT for it; nothing strips it on the CVE side. No packaged card has such an
+  exclusion, which does not make every valid card safe.
+- A Cf inside an excluded phrase splits it, so the phrase is not stripped as a whole:
+  `EAP\u200b-AKA' threats` reports and strips `aka`, is blocked from FiGHT, and searches
+  `eap threats`.
+- A Cf inside an excluded word splits the word itself, so the exclusion is not
+  recognised at all: `a\u200bka attacks` reports nothing, warns nothing, searches
+  `ka attacks`, and under `mixed` or `protocol_context_only` runs a direct FiGHT search
+  of `ka`, `attacks`.
+
+The FiGHT side blocks where the CVE side strips: a query in which the registry
+reports an excluded term gets no direct FiGHT search at all (see 15), because FiGHT's generic matches for the
 remaining words would stand in for protocol context the caller did not ask about.
 
 ### 9. A CVE named by ID is never dropped
@@ -563,8 +594,8 @@ narrow with `isinstance`.
 When a topic resolves, its card owns FiGHT: only the card's name, aliases and
 entities reach it, through `topic_context`. When none resolves, an investigation may
 make one FiGHT search of the query's own search terms (`fight_direct_search`, which
-takes no arguments, so no planner chooses its words), never past an excluded term, a
-CVE ID the interpretation keeps, or a search term the registry reads alone as a topic
+takes no arguments, so no planner chooses its words), never past an excluded term the registry
+reports (§8 lists how one can go unreported), a CVE ID the interpretation keeps, or a search term the registry reads alone as a topic
 or an excluded term. The words go all or none: `interpret_request` records
 `fight_block` (`topic_resolved`, `excluded_term`, `cve_id_named`,
 `term_reads_as_topic`, with its subject) and `fight_terms`, every search term

@@ -9,6 +9,13 @@ terms); each package is measured on its own. Development reads the `baseline` ca
 synthetic queries only; the `holdout` cases, read once in the first run, are read again
 only after the agreed packages.
 
+On 2026-10-30, while the mixed-script follow-up to C was analysed, a search of
+`eval/gold/m7b_cases.yaml` printed the request lines (query and scope) of the four
+holdout cases. No label or other field was read, and nothing from them shaped a design or
+a measurement. The owner ruled that the four requests count as seen, so they are no
+longer a strict blind test; with their labels unseen and unused for tuning, they remain a
+validation set evaluated once, and they guide no further design.
+
 ## A1 — lexical search without per-record objects
 
 Lexical search is an inverted index that builds a match object only for the results it
@@ -140,8 +147,9 @@ a technique is a crude, word-level check, not a relevance label.
 **Exclusion table.** Each issues no FiGHT step and records the block: `aka attacks`,
 `EAP-AKA' threats`, `5G, aka NR GTP threats` (`excluded_term`), `EPS AKA crash` under
 both `protocol_context_only` and `mixed` (`excluded_term`), `5Géaka threats`
-(`term_reads_as_topic`, `aka`), `CVE-2024-37877 GTP threats` under `mixed`
-(`cve_id_named`).
+(`excluded_term`, `aka`; C as measured below recorded `term_reads_as_topic`, see
+[C follow-up](#c-follow-up--mixed-script-words)), `CVE-2024-37877 GTP threats` under
+`mixed` (`cve_id_named`).
 
 **Measured on the 13 baseline cases.** Deterministic runs over the 2026-10-27 store and
 FiGHT 3.1.0 with default budgets, `gold-sets --check` passed before each. The dev.29 row
@@ -236,3 +244,127 @@ the order decides only which matches the limit keeps:
   `CVE-2024-37877 GTP threats` under `mixed` (`cve_id_named`), which ran its exact
   lookup only. The protocol need is `unsupported` in each, except the last, which
   derives no protocol need.
+
+## C follow-up — mixed-script words
+
+**Problem.** ADR 0002 §8 strips the tokens of every excluded term from the CVE search
+terms, but it sees only the exclusions the topic registry reports, and the two sides read
+words differently. The CVE side (`domain/text.tokenize`) reads a word as a run of
+`[0-9a-z]`; the registry read it as a run of any Unicode letters and digits, after
+deleting format characters (Cf). So `5Géaka threats` was one registry word, `5géaka`,
+reporting nothing, while `cve_search` sent `5g aka threats` with no `excluded_term`
+warning; only C's `term_reads_as_topic` check kept the word from FiGHT. The same leak
+came from any accented or other-script letter, non-ASCII digit or Hangul filler written
+against `aka` (`éaka`, `ㅤaka`, `٥aka`, `αaka`), from U+02BC (`EAP-AKAʼ threats` sent
+`eap aka threats`; its top hit, CVE-2026-78126, is on the irrelevant list of
+`5g-aka-implementations`), from a Cf between an ASCII word and `aka`
+(`x\u200baka attacks` sent `x aka attacks`), and from such a word alone (`éaka`
+searched `aka` instead of stopping `excluded_terms_only`). The leak is on the query side
+only: all 16,276 records holding `aka` hold it as a standalone word.
+
+**The rule** (`topics/normalization.py`; contracts `2.0.0-dev.31`, policy `m7b.3`). The
+registry reads the CVE search tokens as whole words, with the exceptions under Known
+limits:
+
+- A word boundary falls wherever a run of ASCII letters and digits meets a non-ASCII word
+  character (a non-ASCII letter or digit, a modifier letter such as U+02BC, a Hangul
+  filler) with nothing between. A run of non-ASCII letters and digits stays one word, and
+  each ideograph is one word.
+- A format character (Cf: zero-width space, soft hyphen) is a hard boundary no alias joins
+  across. It is neither deleted before splitting nor read as joining whitespace. This is
+  an intended tightening: `5g\u200baka` and `5G\u00ad-AKA` no longer resolve 5G-AKA and
+  report the excluded `aka`. Ordinary spaces, hyphens and underscores are unaffected
+  (`5G-AKA`, `5G AKA`, `5gaka`, `5G-AKA协议` still resolve).
+- A local property, pinned by a test: for every query, `TOKEN.findall(normalize_query(q))`
+  equals the ASCII words of `split_terms(q)`, in order. It is about the once-normalized
+  query; the search terms themselves (`list_query_terms`) normalize twice, so it does not
+  make every excluded word the CVE search sends a reported one.
+
+The existing pieces then apply unchanged: the §8 strip, the `excluded_term` warning, the
+`excluded_terms_only` stop, C's `excluded_term` FiGHT block, the gate vocabulary (a model
+plan searching `aka` for `5Géaka threats` is rejected `term_outside_vocabulary`), the
+validator and the audit. `5Géaka threats` now searches `5g threats` with the warning and
+is blocked `excluded_term` (`aka`); `EAP-AKAʼ threats` searches `threats`; `éaka` stops
+`excluded_terms_only` with the warning. The CVE tokenizer and the BM25 index are
+unchanged. `term_reads_as_topic` stays: reading the registry code shows it is still
+reached by cards the schema allows (the first known limit below), where it is FiGHT's only
+guard. The gold row `5Géaka` in `eval/gold/m3_topic_queries.yaml` now expects
+`excluded: [aka]`.
+
+**Rejected options**, measured on store `nvd-2026-10-27` and FiGHT 3.1.0 with the options
+applied in memory to 09cb28b, deterministic runs with default budgets:
+
+- **A, strip each term the registry reads alone:** `eap` still leaks from `EAP-AKAʼ`, the
+  strip gives no warning, the interpretations of 2 baseline cases change
+  (`5g-aka-threats` and `5g-aka-implementations` lose `aka`; answers identical), and the
+  validator needs a change.
+- **B, block the run** when an excluded word (B_excl) or any topic word (B_any) is read
+  alone: `5Géaka threats` stops outright with no warning, B_any needs a new stop basis,
+  and neither is better than the rule on any probe.
+- **C, a Unicode `tokenize`:** the BM25 tokens of 303,899 of 396,211 records change
+  (vocabulary 407,024 → 411,504 terms, mean length 120.93 → 117.78), the CVE order
+  changes in 8 of 13 baseline cases, `naïve parser crash` goes from found to not_found,
+  and every leak shape unblocks FiGHT (`EAP-AKAʼ threats` sends `eap` to FiGHT).
+- **D, the word rule without the Cf rule:** misses `x\u200baka attacks`; in 20,000 seeded
+  fuzz queries 235 still sent an excluded token, against 0 under D2 measured with Cf as a
+  joinable separator (apart from the whole-word spellings below); not re-measured with Cf
+  as a hard boundary.
+
+Measured cost of the rule before implementation (in memory, Cf then joinable rather than
+a hard boundary): relevance unchanged for all 396,211 records; one FiGHT index word
+changes (`özeren`, in 2 strings); 13 of 13 baseline cases byte-identical apart from the
+version fields; 29 of 30 synthetic queries unchanged (only `5Géaka`); of 71 non-holdout
+gold queries only the `5Géaka` row of `m3_topic_queries.yaml` changes.
+
+Known limits, not addressed here. There is no end-to-end guarantee that every excluded
+word the CVE search sends is reported:
+
+- The CVE search terms normalize the query twice, and `normalize_query` is not
+  idempotent. Confirmed under the current Unicode data: `na\u00df\u0301 threats` reads in
+  the registry as `nass` but searches `nas`; `x H\u0302\u0331 attacks` reads `\u0125` as a
+  non-ASCII word but searches `h`. With a card excluding `NAS` or `h`, no exclusion is
+  reported and the CVE side sends the word; `term_reads_as_topic` blocks FiGHT, and
+  nothing strips the word on the CVE side. No packaged card has such an exclusion, which
+  does not make every valid card safe. Follow-up: make the query normalization
+  idempotent, as its own measured change.
+- The strip removes the excluded term's tokens, not the query's own words, so
+  `eapaka threats` and `epsaka crash` send `eapaka` and `epsaka` (no record holds
+  either; `term_not_indexed`).
+- A Cf inside an excluded phrase splits it. `EAP\u200b-AKA' threats` reads `eap` and
+  `aka'`: `aka` is still reported, warned and stripped, and FiGHT is still blocked, but
+  the phrase is not stripped as a whole, so `eap` reaches the CVE search
+  (`eap threats`; `EPS\u200bAKA crash` sends `eps crash`). The extra words can bring in
+  unrelated results; they do not make the exclusion of `aka` fail. This follows from
+  the owner's choice of Cf as a hard boundary (2026-10-30) and is accepted. Stripping by
+  the reported exclusion's span would not fix it, since the reported exclusion is `aka`
+  alone; recognising a split phrase as a whole would be its own change.
+- A Cf inside an excluded word splits the word itself, so the exclusion is not recognised
+  at all and the query is treated as free text:
+  `a\u200bka attacks` reads `a`, `ka` and sends `ka attacks`, with no exclusion reported
+  and no warning, and under `mixed` or `protocol_context_only` a direct FiGHT search of
+  `ka`, `attacks` runs; `e\u00adps aka crash` reports `aka` and sends `e ps crash`.
+  Invisible characters can therefore change what an exclusion covers.
+- Ordinary accented words still fragment on the CVE side (`café` searches `caf`).
+
+**Measured** against a clean dev.30 run of 09cb28b (store `nvd-2026-10-27`, FiGHT 3.1.0,
+default budgets, `gold-sets --check` passed). The fix's working-tree diff has SHA-256
+`9008e3c1a1e1c3dd8f5b59746f4c2a1015f40da47d444c906d520bf6197cee3b`; runs under
+`runs/d2-stages/` (`dev30/planner-c_p2xx4e`, `d2/planner-h2_u8st4`).
+
+- **13 baseline cases:** every evidence set equal to dev.30 apart from version fields,
+  identifiers and timings; the figures are unchanged (`wrong_stop` 4/13, protocol
+  coverage 0.556, protocol irrelevant items 7).
+- **C's 27 synthetic and exclusion queries:** unchanged except `5Géaka threats`, whose
+  block becomes `excluded_term` (`aka`).
+- **Leak probes**, 27 queries under all three scopes (81 runs): no run sends the excluded
+  `aka`; the only runs that send the word are `5G-AKA threats` and `5G AKA threats`, where
+  it belongs to the resolved alias. Every accent, other-script, non-ASCII-digit,
+  Hangul-filler, U+02BC and Cf-before-a-word shape now reports the exclusion, warns and
+  strips it (`5Géaka threats` sends `5g threats`; `EAP-AKAʼ threats` sends `threats`;
+  `éaka` and `ㅤaka` alone stop `no_evidence` instead of searching `aka`), and none reaches
+  FiGHT. `5gakaé threats` resolves 5G-AKA. As decided, `5g\u200baka attacks` no longer
+  resolves 5G-AKA and reports `aka` (under `mixed` it stops `budget_exhausted` instead of
+  `sufficient`), and `a\u200bka attacks` loses its exclusion (above). The ASCII controls
+  (`aka attacks`, `EAP-AKA' threats`, `5G-AKA threats`, `5G AKA threats`, `5gaka threats`)
+  and the accented non-telecom queries (`Café WiFi router overflow`,
+  `Müller GmbH gateway`, a Spanish query, `naïve parser crash`) are unchanged.

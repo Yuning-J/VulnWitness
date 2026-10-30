@@ -1,4 +1,4 @@
-"""The deterministic policy m7b.2: interpretation, stops, round-1 plans, refinement and cost."""
+"""The deterministic policy m7b.3: interpretation, stops, round-1 plans, refinement and cost."""
 
 from typing import Any
 
@@ -36,7 +36,7 @@ from cve_kgrag.domain.planning import (
 from cve_kgrag.domain.search import SearchWarning, SearchWarningCode
 from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.topics.registry import TopicRegistry
-from tests.support.builders import build_recorded_step
+from tests.support.builders import build_recorded_step, build_topic
 from tests.support.investigation import (
     FIVE_G_AKA_TOPIC_ID,
     TWENTY_ONE_IDS,
@@ -92,6 +92,9 @@ def judge_round_one(
         ("CVE 2022 log4j", QueryIntent.FREE_TEXT, (), ("2022", "log4j")),
         ("CVE-9999-0003 cve", QueryIntent.EXACT_ID, ("CVE-9999-0003",), ()),
         ("cves 5G-AKA", QueryIntent.TOPIC, (), ("5g", "aka")),
+        ("5G\u00e9aka threats", QueryIntent.FREE_TEXT, (), ("5g", "threats")),
+        ("EAP-AKA\u02bc threats", QueryIntent.FREE_TEXT, (), ("threats",)),
+        ("\u00e9aka", QueryIntent.EXCLUDED_TERMS_ONLY, (), ()),
     ],
     ids=[
         "exact_id",
@@ -115,6 +118,9 @@ def judge_round_one(
         "low_signal_word_before_a_year",
         "low_signal_word_beside_an_id",
         "low_signal_word_beside_a_topic",
+        "excluded_alias_written_against_a_non_ascii_letter_stripped",
+        "excluded_phrase_with_a_modifier_letter_apostrophe_stripped",
+        "excluded_alias_alone_after_a_non_ascii_letter",
     ],
 )
 def test_query_is_interpreted_into_intent_ids_and_searchable_terms(
@@ -143,7 +149,11 @@ def test_query_is_interpreted_into_intent_ids_and_searchable_terms(
             "5G, aka NR GTP threats",
             FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="aka"),
         ),
-        ("5Géaka threats", FightBlock(reason=FightBlockReason.TERM_READS_AS_TOPIC, subject="aka")),
+        ("5Géaka threats", FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="aka")),
+        (
+            "EAP-AKA\u02bc threats",
+            FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="EAP-AKA'"),
+        ),
         (
             "CVE-9999-0003 GTP threats",
             FightBlock(reason=FightBlockReason.CVE_ID_NAMED, subject="CVE-9999-0003"),
@@ -159,7 +169,8 @@ def test_query_is_interpreted_into_intent_ids_and_searchable_terms(
         "excluded_phrase",
         "excluded_phrase_with_an_apostrophe",
         "excluded_alias_among_other_words",
-        "excluded_alias_only_the_ascii_reading_finds",
+        "excluded_alias_written_against_a_non_ascii_letter",
+        "excluded_phrase_with_a_modifier_letter_apostrophe",
         "cve_id_named",
         "topic_resolved",
         "free_text_without_a_block",
@@ -172,6 +183,38 @@ def test_fight_block_names_the_first_reason_the_words_may_not_go_to_fight(
 
 
 @pytest.mark.parametrize(
+    ("excluded_term", "query", "expected_search_term", "expected_cve_query"),
+    [
+        ("NAS", "na\u00df\u0301 threats", "nas", "nas threats"),
+        ("h", "x H\u0302\u0331 attacks", "h", "x h attacks"),
+    ],
+    ids=["sharp_s_and_combining_acute", "h_circumflex_and_macron_below"],
+)
+def test_excluded_word_only_double_normalization_produces_is_kept_from_fight_not_cve_search(
+    excluded_term: str, query: str, expected_search_term: str, expected_cve_query: str
+) -> None:
+    """The registry reads the query once and reports no exclusion; the search terms,
+    normalized twice, hold the excluded word. ``term_reads_as_topic`` keeps it from FiGHT,
+    and the CVE search still sends it (ADR 0002 §8, a known limit)."""
+    topic_registry = TopicRegistry(
+        [build_topic(exclusions=[{"term": excluded_term, "reason": "a test exclusion"}])]
+    )
+    request = build_investigation_request(query, "mixed")
+
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
+    planned_steps = plan_first_round(request, interpretation)
+
+    assert interpretation.resolution.excluded_terms == ()
+    assert interpretation.fight_block == FightBlock(
+        reason=FightBlockReason.TERM_READS_AS_TOPIC, subject=expected_search_term
+    )
+    assert interpretation.fight_terms == ()
+    assert describe_planned_steps(planned_steps) == [
+        (build_search_call(expected_cve_query), StepReason.QUERY_TERMS)
+    ]
+
+
+@pytest.mark.parametrize(
     ("query", "expected_fight_terms"),
     [
         ("GTP threats in the mobile core", ("gtp", "threats", "mobile", "core")),
@@ -180,7 +223,13 @@ def test_fight_block_names_the_first_reason_the_words_may_not_go_to_fight(
         ("CVE-9999-0003 GTP threats", ()),
         ("5G-AKA threats", ()),
     ],
-    ids=["every_word", "excluded_term", "word_read_alone", "cve_id", "topic"],
+    ids=[
+        "every_word",
+        "excluded_term",
+        "excluded_term_written_against_a_non_ascii_letter",
+        "cve_id",
+        "topic",
+    ],
 )
 def test_fight_terms_are_every_search_term_or_none(
     topic_registry: TopicRegistry, query: str, expected_fight_terms: tuple[str, ...]
@@ -233,6 +282,12 @@ def test_overlong_normalized_token_is_dropped_rather_than_searched(
         ),
         ("aka", "mixed", {}, (StopReason.NO_EVIDENCE, DecisionBasis.EXCLUDED_TERMS_ONLY)),
         (
+            "\u00e9aka",
+            "mixed",
+            {},
+            (StopReason.NO_EVIDENCE, DecisionBasis.EXCLUDED_TERMS_ONLY),
+        ),
+        (
             "the",
             "implementation_only",
             {},
@@ -266,9 +321,10 @@ def test_overlong_normalized_token_is_dropped_rather_than_searched(
         "product_filter_under_protocol",
         "any_filter_under_protocol",
         "excluded_terms_only",
+        "excluded_alias_alone_after_a_non_ascii_letter",
         "unsearchable",
         "free_text_with_an_excluded_term_under_protocol",
-        "free_text_with_a_word_read_alone_as_an_excluded_term_under_protocol",
+        "free_text_with_an_excluded_term_written_against_a_non_ascii_letter_under_protocol",
         "more_ids_than_one_lookup_takes",
         "topic_under_protocol",
         "free_text_under_protocol_searches_fight_directly",

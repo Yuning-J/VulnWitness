@@ -17,7 +17,7 @@ resolution:
   - {query: "Huawei 5G, aka NR, modem flaws", topic: null, match_kind: null, excluded: ["aka"]}
   - {query: "Qualcomm 5G (aka NR) firmware", topic: null, match_kind: null, excluded: ["aka"]}
   - {query: "5G a.k.a. New Radio", topic: null, match_kind: null, excluded: []}
-  - {query: "5Géaka", topic: null, match_kind: null, excluded: []}
+  - {query: "5Géaka", topic: null, match_kind: null, excluded: ["aka"]}
 context:
   # protocol_context lists techniques in the FiGHT search order: phrase-unit BM25 score
   # over the card's terms, best first, ties by technique ID.

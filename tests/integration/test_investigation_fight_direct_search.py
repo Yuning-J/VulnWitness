@@ -24,7 +24,7 @@ from cve_kgrag.domain.investigation import (
     StepReason,
     StopReason,
 )
-from cve_kgrag.domain.planning import PlanRejection, PlanRejectionCode, ToolName
+from cve_kgrag.domain.planning import PlanRejection, PlanRejectionCode, QueryIntent, ToolName
 from cve_kgrag.domain.taxonomy import ResultStatus
 from cve_kgrag.domain.topic_context import (
     KnowledgeSource,
@@ -279,7 +279,7 @@ def test_direct_search_whose_fight_source_failed_stops_source_unavailable(
         (
             "5Géaka threats",
             "mixed",
-            FightBlock(reason=FightBlockReason.TERM_READS_AS_TOPIC, subject="aka"),
+            FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="aka"),
             [NeedOutcome.UNSUPPORTED],
         ),
         (
@@ -295,7 +295,7 @@ def test_direct_search_whose_fight_source_failed_stops_source_unavailable(
         "eps_aka_protocol",
         "eap_aka_prime",
         "aka_as_also_known_as",
-        "aka_only_the_ascii_reading_finds",
+        "aka_written_against_a_non_ascii_letter",
         "cve_id_named",
     ],
 )
@@ -318,10 +318,49 @@ def test_query_the_exclusion_table_bars_issues_no_fight_search(
     assert protocol_outcomes == expected_protocol_outcomes
 
 
+@pytest.mark.parametrize("scope", ["implementation_only", "mixed"])
+def test_excluded_alias_written_against_a_non_ascii_letter_is_stripped_warned_and_kept_from_fight(
+    fixture_bundle: FixtureBundle, scope: str
+) -> None:
+    """``5Géaka`` reads as the words ``5g``, ``é`` and ``aka``: the CVE search sends the
+    other words, the excluded ``aka`` is warned, and FiGHT is not searched."""
+    evidence_set = run_deterministically(fixture_bundle, "5Géaka threats", scope)
+
+    interpretation = evidence_set.interpretation
+    assert interpretation.search_terms == ("5g", "threats")
+    assert interpretation.intent is QueryIntent.FREE_TEXT
+    assert interpretation.fight_block == FightBlock(
+        reason=FightBlockReason.EXCLUDED_TERM, subject="aka"
+    )
+    assert interpretation.fight_terms == ()
+    assert list_step_tools(evidence_set) == ["cve_search"]
+    assert evidence_set.trajectory.steps[0].backend_requests[0].query == "5g threats"
+    assert count_fight_steps(evidence_set) == 0
+    assert "excluded_term:aka" in describe_warnings(evidence_set.warnings)
+
+
+def test_excluded_alias_written_against_a_non_ascii_letter_stops_protocol_scope_with_its_warning(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    evidence_set = run_deterministically(fixture_bundle, "5Géaka threats", "protocol_context_only")
+
+    assert evidence_set.trajectory.steps == ()
+    assert (evidence_set.stop_reason, evidence_set.coverage.basis) == (
+        StopReason.NO_EVIDENCE,
+        DecisionBasis.PROTOCOL_SCOPE_NEEDS_TOPIC,
+    )
+    assert "excluded_term:aka" in describe_warnings(evidence_set.warnings)
+
+
 @pytest.mark.parametrize(
     "query",
     ["EPS AKA crash", "5Géaka threats", "CVE-9999-0003 GTP threats", "5G-AKA threats"],
-    ids=["excluded_term", "word_read_alone", "cve_id_named", "topic_resolved"],
+    ids=[
+        "excluded_term",
+        "excluded_term_written_against_a_non_ascii_letter",
+        "cve_id_named",
+        "topic_resolved",
+    ],
 )
 def test_model_plan_adding_a_direct_fight_search_the_interpretation_bars_is_rejected(
     fixture_bundle: FixtureBundle, query: str

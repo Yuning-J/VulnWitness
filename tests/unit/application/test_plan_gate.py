@@ -121,6 +121,20 @@ def build_round_one_context(
             [PlanRejection(step_position=0, code=PlanRejectionCode.TERM_OUTSIDE_VOCABULARY)],
         ),
         (
+            "5G\u00e9aka threats",
+            "implementation_only",
+            [build_search_call("aka")],
+            {},
+            [PlanRejection(step_position=0, code=PlanRejectionCode.TERM_OUTSIDE_VOCABULARY)],
+        ),
+        (
+            "5G\u00e9aka threats",
+            "implementation_only",
+            [build_search_call("5G\u00e9aka threats")],
+            {},
+            [PlanRejection(step_position=0, code=PlanRejectionCode.TERM_OUTSIDE_VOCABULARY)],
+        ),
+        (
             "5G-AKA",
             "implementation_only",
             [build_search_call("the of and")],
@@ -323,6 +337,8 @@ def build_round_one_context(
         "hyphen_variant_cve_id_in_search_text",
         "zero_width_split_cve_id_in_search_text",
         "term_outside_vocabulary",
+        "search_of_the_excluded_alias_written_against_a_non_ascii_letter",
+        "search_resending_the_query_with_that_excluded_alias",
         "search_without_tokens",
         "search_of_only_a_low_signal_word",
         "search_of_only_low_signal_words_and_stopwords",
@@ -379,7 +395,7 @@ def test_plan_breaking_a_rule_is_rejected_with_its_code(
         "topic_resolved",
         "excluded_term",
         "cve_id_named",
-        "word_read_alone_as_an_excluded_term",
+        "excluded_term_written_against_a_non_ascii_letter",
         "implementation_only",
     ],
 )

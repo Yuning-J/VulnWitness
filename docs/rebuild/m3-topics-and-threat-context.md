@@ -18,17 +18,27 @@ source, CVE relevance tiers and a scoped topic-context service.
   spanning punctuation, two spellings of one entity or ecosystem term, and a query
   template over 512 characters, without searchable terms or naming a CVE ID. A
   reviewed card must name its reviewer and date; a pending card names neither.
-- Matching (`topics/normalization.py`) works on words after NFKC, case-folding and
-  removal of invisible format characters (soft hyphens, zero-width spaces): runs of
-  letters and digits, with each CJK, Kana or Hangul character a word of its own.
-  Words join into an alias only across exactly whitespace, or exactly one dash or
-  underscore with no space around it, or between two ideographs; other
-  punctuation, a spaced dash and a change of script are boundaries. `5gaka`,
-  `5G-AKA`, `5G AKA`, `５Ｇ－ＡＫＡ`, `5G−AKA`, `5G-AKA协议` and `5G Authentication
-  and Key Agreement` resolve to `3gpp:5g-aka`; `aka`, `EAP-AKA'`, `EAP-AKA`,
-  `EPS AKA`, `5G, aka NR`, `5G (aka NR)`, `5G - aka NR`, `5G a.k.a. New Radio`
-  and `5Géaka` do not, and the response names any excluded term used with its
-  reason.
+- Matching (`topics/normalization.py`) works on words after NFKC and
+  case-folding: a run of ASCII letters and digits, a run of other letters and
+  digits (accented and other-script letters, non-ASCII digits, modifier letters
+  such as U+02BC, Hangul fillers), and each CJK, Kana or Hangul character a word
+  of its own. Words join into an alias only across exactly whitespace, or exactly
+  one dash or underscore with no space around it, or between two ideographs; other
+  punctuation, a spaced dash, an ASCII word meeting a non-ASCII one with nothing
+  between, and any separator holding an invisible format character (Unicode Cf:
+  soft hyphen, zero-width space) are boundaries. The ASCII words are therefore
+  exactly the `[0-9a-z]` runs of the once-normalized query. The CVE search terms
+  normalize it twice, which differs for a few sequences confirmed under the current
+  Unicode data (`na\u00df\u0301` searches `nas`, `H\u0302\u0331` searches `h`); an
+  exclusion named only that way is not reported, and only FiGHT is guarded against it
+  (ADR 0002 §8). `5gaka`, `5G-AKA`, `5G AKA`, `５Ｇ－ＡＫＡ`, `5G−AKA`,
+  `5G-AKA协议` and `5G Authentication and Key Agreement` resolve to
+  `3gpp:5g-aka`; `aka`, `EAP-AKA'`, `EAP-AKA`, `EPS AKA`, `5G, aka NR`,
+  `5G (aka NR)`, `5G - aka NR`, `5G a.k.a. New Radio`, `5Géaka` and
+  `5g\u200baka` do not, and the response names each excluded term the registry
+  reads, with its reason (`aka` for the last two); a format character inside an
+  excluded word (`a\u200bka`) splits the word, so no exclusion is recognised and a
+  direct FiGHT search can run (ADR 0002 §8).
 - All spans of the canonical name and exact aliases belong to the match, so
   `5G Authentication and Key Agreement (5G-AKA)` reports no excluded `aka`. When
   several topics match, exact matches rank before contextual ones and the longer
