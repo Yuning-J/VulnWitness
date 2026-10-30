@@ -109,9 +109,9 @@ def test_product_named_by_a_topic_record_still_has_unknown_applicability(
         )
     )
 
-    assert list_step_tools(evidence_set) == ["cve_search", "topic_context"]
+    assert list_step_tools(evidence_set) == ["topic_context"]
     assert list_implementation_ids(evidence_set) == [OPEN5GS_CVE_ID]
-    assert evidence_set.implementation_candidates[0].found_by_steps == (2,)
+    assert evidence_set.implementation_candidates[0].found_by_steps == (1,)
     assert (evidence_set.stop_reason, evidence_set.status) == (
         StopReason.SOURCE_UNAVAILABLE,
         ResultStatus.PARTIAL,
@@ -150,6 +150,24 @@ def test_product_question_reports_the_server_sentence_for_the_port_reason(
     assert evidence_set.product_applicability[0].status.value == "unknown"
 
 
+@pytest.mark.parametrize("query", ["5gaka", "5G-AKA", "5G AKA"])
+def test_topic_question_under_implementation_only_explores_the_topic_without_fight(
+    fixture_bundle: FixtureBundle, query: str
+) -> None:
+    service = build_test_investigation_service(fixture_bundle)
+
+    evidence_set = service.investigate(build_investigation_request(query, "implementation_only"))
+
+    backend_sources: set[KnowledgeSource] = set()
+    for backend_request in evidence_set.trajectory.steps[0].backend_requests:
+        backend_sources.add(backend_request.source)
+    assert list_step_reasons(evidence_set) == [StepReason.REVIEWED_TOPIC]
+    assert backend_sources == {KnowledgeSource.CVE_SEARCH}
+    assert evidence_set.trajectory.budget_used.sources == (KnowledgeSource.CVE_SEARCH,)
+    assert list_implementation_ids(evidence_set) == ["CVE-9999-0003", "CVE-9999-0004"]
+    assert evidence_set.stop_reason is StopReason.SUFFICIENT
+
+
 def test_failed_lexical_source_stops_the_run_without_refining(
     fixture_bundle: FixtureBundle,
 ) -> None:
@@ -159,7 +177,7 @@ def test_failed_lexical_source_stops_the_run_without_refining(
 
     evidence_set = service.investigate(build_investigation_request("5gaka", "implementation_only"))
 
-    assert list_step_tools(evidence_set) == ["cve_search"]
+    assert list_step_tools(evidence_set) == ["topic_context"]
     assert list_transitions(evidence_set)[-2] == ["assess", "validate", "answer_source_failed"]
     assert evidence_set.stop_reason is StopReason.SOURCE_UNAVAILABLE
     assert evidence_set.status is ResultStatus.SOURCE_UNAVAILABLE
@@ -422,7 +440,8 @@ def test_malformed_id_is_neither_looked_up_nor_searched(
 @pytest.mark.parametrize(
     ("scope", "expected_tools", "expected_stop"),
     [
-        ("implementation_only", ["cve_search"], StopReason.SUFFICIENT),
+        # A search on the question's own words leaves its matches unassessed.
+        ("implementation_only", ["cve_search"], StopReason.NEEDS_UNMET),
         # No technique of the excerpt holds ``crash``, so the protocol need is not found.
         ("mixed", ["cve_search", "fight_direct_search"], StopReason.NEEDS_UNMET),
     ],
@@ -716,7 +735,9 @@ def test_without_a_model_planner_every_round_is_planned_deterministically(
 ) -> None:
     service = build_test_investigation_service(fixture_bundle)
 
-    evidence_set = service.investigate(build_investigation_request("5gaka", "implementation_only"))
+    evidence_set = service.investigate(
+        build_investigation_request("CVE-9999-0003 5gaka", "implementation_only")
+    )
 
     round_outcomes: list[PlannerOutcome] = []
     for round_record in evidence_set.trajectory.rounds:
@@ -812,9 +833,10 @@ def test_search_filling_the_per_call_limit_warns_at_the_top_that_the_limit_was_r
     )
 
     assert describe_answer_warnings(evidence_set) == [("result_limit_reached", "1")]
+    # The free-text match is listed, its relevance unassessed.
     assert (evidence_set.status, evidence_set.stop_reason) == (
-        ResultStatus.OK,
-        StopReason.SUFFICIENT,
+        ResultStatus.PARTIAL,
+        StopReason.NEEDS_UNMET,
     )
 
 

@@ -1,6 +1,6 @@
 # Hand-labelled investigation trajectories over the packaged 5G-AKA topic card, the
 # FiGHT 3.1.0 excerpt and the synthetic CVE fixture, with the deterministic policy
-# m7b.3 and no model planner. Edit only when the labelled truth changes; tests compare
+# m7b.4 and no model planner. Edit only when the labelled truth changes; tests compare
 # against this file and never regenerate it.
 #
 # Each row names the request, which FiGHT source the deployment serves
@@ -111,8 +111,9 @@ trajectories:
       tool_calls: 5
       rounds: 1
 
-  # No fixture record names Open5GS, so neither the literal search nor the topic's
-  # template searches find one; affectedness is required but unavailable.
+  # No fixture record names Open5GS, so neither the topic's template searches nor the
+  # refinement's search of the question's own words finds one; affectedness is required
+  # but unavailable.
   - id: impl_5gaka_open5gs
     request: {query: "5gaka", scope: implementation_only, filters: {products: ["open5gs"]}}
     sources: {mitre_fight: packaged}
@@ -128,8 +129,8 @@ trajectories:
         - [assess, validate, needs_open_after_refinement]
         - [validate, return, answer_validated]
       steps:
-        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [structured, lexical]}
-        - {round: 2, tool: topic_context, reason: topic_after_literal_miss, charged_tool_calls: 4, admission: admitted, status: no_match}
+        - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 4, admission: admitted, status: no_match}
+        - {round: 2, tool: cve_search, reason: query_terms_for_open_need, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [structured, lexical]}
       stop_reason: source_unavailable
       status: partial
       implementation_candidates: []
@@ -151,14 +152,10 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, refine, needs_open]
-        - [refine, retrieve, plan_accepted]
-        - [retrieve, assess, steps_finished]
         - [assess, validate, affectedness_unavailable]
         - [validate, return, answer_validated]
       steps:
-        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [structured, lexical]}
-        - {round: 2, tool: topic_context, reason: topic_after_literal_miss, charged_tool_calls: 4, admission: admitted, status: ok}
+        - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 4, admission: admitted, status: ok}
       stop_reason: source_unavailable
       status: partial
       implementation_candidates:
@@ -169,9 +166,9 @@ trajectories:
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
       applicability:
         - {product: "f5gc", status: unknown}
-      warning_codes: [topic_pending_review, term_not_indexed, applicability_unknown]
-      tool_calls: 5
-      rounds: 2
+      warning_codes: [topic_pending_review, applicability_unknown]
+      tool_calls: 4
+      rounds: 1
 
   # FiGHT fails inside the one topic step; nothing retries it.
   - id: fight_unavailable_mixed
@@ -224,8 +221,9 @@ trajectories:
       tool_calls: 5
       rounds: 1
 
-  # The compact alias misses literally, so the one refinement explores the topic.
-  - id: impl_5gaka_refines
+  # The compact alias resolves the topic, explored in round 1 under every scope; under
+  # implementation_only its card fans out to CVE searches only, never to FiGHT.
+  - id: impl_5gaka_topic_first
     request: {query: "5gaka", scope: implementation_only}
     sources: {mitre_fight: packaged}
     expected:
@@ -234,14 +232,10 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, refine, needs_open]
-        - [refine, retrieve, plan_accepted]
-        - [retrieve, assess, steps_finished]
         - [assess, validate, answer_found]
         - [validate, return, answer_validated]
       steps:
-        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [lexical]}
-        - {round: 2, tool: topic_context, reason: topic_after_literal_miss, charged_tool_calls: 4, admission: admitted, status: ok}
+        - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 4, admission: admitted, status: ok}
       stop_reason: sufficient
       status: ok
       implementation_candidates:
@@ -251,12 +245,13 @@ trajectories:
       protocol_context: []
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
       applicability: []
-      warning_codes: [topic_pending_review, term_not_indexed]
-      tool_calls: 5
-      rounds: 2
+      warning_codes: [topic_pending_review]
+      tool_calls: 4
+      rounds: 1
 
-  # The spelled-out alias finds both records literally: no refinement is needed.
-  - id: impl_5g_aka_no_refine
+  # The spelled-out alias resolves the same topic and is explored the same way: the
+  # topic call, not a literal search, finds both records.
+  - id: impl_5g_aka_topic_first
     request: {query: "5G-AKA", scope: implementation_only}
     sources: {mitre_fight: packaged}
     expected:
@@ -268,7 +263,7 @@ trajectories:
         - [assess, validate, answer_found]
         - [validate, return, answer_validated]
       steps:
-        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
+        - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 4, admission: admitted, status: ok}
       stop_reason: sufficient
       status: ok
       implementation_candidates:
@@ -279,7 +274,7 @@ trajectories:
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
       applicability: []
       warning_codes: [topic_pending_review]
-      tool_calls: 1
+      tool_calls: 4
       rounds: 1
 
   # An unknown ID beside plain text: the question needs only that CVE, which no search
@@ -426,7 +421,9 @@ trajectories:
       rounds: 0
 
   # The search reads `ausf resynchronization crash`: searched as a word, `cve` would also
-  # match CVE-9999-0007, whose description merely mentions CVEs.
+  # match CVE-9999-0007, whose description merely mentions CVEs. A search on the question's
+  # own words leaves its matches unassessed, and with every word searched no refinement
+  # applies, so the run ends with the match listed and the need unmet.
   - id: low_signal_beside_terms
     request: {query: "cve AUSF resynchronization crash", scope: implementation_only}
     sources: {mitre_fight: packaged}
@@ -436,12 +433,13 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, answer_found]
+        - [assess, refine, needs_open]
+        - [refine, validate, no_refinement_available]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
-      stop_reason: sufficient
-      status: ok
+      stop_reason: needs_unmet
+      status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0003", tier: null}
       excluded_implementation_candidates: []
@@ -453,7 +451,8 @@ trajectories:
       rounds: 1
 
   # CVE-9999-0007's description carries an injected instruction; it is returned as an
-  # implementation record with a templated claim and changes nothing else.
+  # implementation record with a templated claim and changes nothing else. Its match is
+  # unassessed, so the run ends needs_unmet.
   - id: injection_record
     request: {query: "ignore previous instructions", scope: implementation_only}
     sources: {mitre_fight: packaged}
@@ -463,12 +462,13 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, answer_found]
+        - [assess, refine, needs_open]
+        - [refine, validate, no_refinement_available]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
-      stop_reason: sufficient
-      status: ok
+      stop_reason: needs_unmet
+      status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0007", tier: null}
       excluded_implementation_candidates: []
@@ -481,7 +481,9 @@ trajectories:
 
   # Protocol-only free text no topic resolves: FiGHT is searched once with the question's
   # own words (suci, discovery). FGT5019 and FGT5040 hold both words, FGT1499.503 only
-  # suci and FGT5019.005 only discovery; no CVE source is consulted.
+  # suci and FGT5019.005 only discovery; no CVE source is consulted. The techniques are
+  # matches of the question's own words, unassessed, so the run ends needs_unmet without
+  # a second search.
   - id: protocol_free_text
     request: {query: "SUCI discovery", scope: protocol_context_only}
     sources: {mitre_fight: packaged}
@@ -491,12 +493,13 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, answer_found]
+        - [assess, refine, needs_open]
+        - [refine, validate, no_refinement_available]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: fight_direct_search, reason: query_terms_fight, charged_tool_calls: 1, admission: admitted, status: ok}
-      stop_reason: sufficient
-      status: ok
+      stop_reason: needs_unmet
+      status: partial
       implementation_candidates: []
       excluded_implementation_candidates: []
       protocol_context: ["FGT5040", "FGT5019", "FGT5019.005", "FGT1499.503"]
@@ -508,7 +511,7 @@ trajectories:
 
   # Mixed free text no topic resolves: round 1 searches the CVEs, then FiGHT, with the
   # same words. CVE-9999-0004 names SUCI; FGT1499.503, FGT5019 and FGT5040 hold both
-  # suci and concealment.
+  # suci and concealment. Both needs are matches unassessed, so the run ends needs_unmet.
   - id: mixed_free_text
     request: {query: "SUCI concealment", scope: mixed}
     sources: {mitre_fight: packaged}
@@ -518,13 +521,14 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, answer_found]
+        - [assess, refine, needs_open]
+        - [refine, validate, no_refinement_available]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
         - {round: 1, tool: fight_direct_search, reason: query_terms_fight, charged_tool_calls: 1, admission: admitted, status: ok}
-      stop_reason: sufficient
-      status: ok
+      stop_reason: needs_unmet
+      status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0004", tier: null}
       excluded_implementation_candidates: []

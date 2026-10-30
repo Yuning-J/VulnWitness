@@ -1461,14 +1461,15 @@ def test_eval_planner_model_runs_plan_through_the_installed_adapter_and_report_n
 ) -> None:
     """The plan carries a field the plan shape rejects, so every round falls back; its text
     and the queries stay in the sets the run wrote and never reach the report, nor do the
-    endpoint, the model's name or the key. The marker query's search warns its unindexed
-    marker term, so the policy refines it with the topic call and each of its runs asks
-    the model again in round 2; the ID case finishes in round 1."""
+    endpoint, the model's name or the key. The marker question asks about a product no
+    record names, so the topic call finds nothing, the policy refines it with a search of
+    the question's own words and each of its runs asks the model again in round 2; the ID
+    case finishes in round 1."""
     plan_text = json.dumps({"steps": [SEARCH_5G_AKA], "note": EVAL_MARKER})
     server = fake_chat_servers.start(ScriptedAnswer(body=build_completion_body(plan_text)))
     environment = build_planner_environment(server)
     gold_rows = [
-        build_gold_row(f"5G-AKA {EVAL_QUERY_MARKER}"),
+        build_gold_row(f"5G-AKA {EVAL_QUERY_MARKER}", filters={"products": ["open5gs"]}),
         build_gold_row("CVE-9999-0003", "unavailable"),
     ]
 

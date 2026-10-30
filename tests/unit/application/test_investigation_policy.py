@@ -1,4 +1,4 @@
-"""The deterministic policy m7b.3: interpretation, stops, round-1 plans, refinement and cost."""
+"""The deterministic policy m7b.4: interpretation, stops, round-1 plans, refinement and cost."""
 
 from typing import Any
 
@@ -360,7 +360,8 @@ def test_interpretation_stop_is_decided_before_any_call(
             "mixed",
             [(build_exact_lookup_call("CVE-9999-0003"), StepReason.QUERY_CVE_IDS)],
         ),
-        ("5gaka", "implementation_only", [(build_search_call("5gaka"), StepReason.QUERY_TERMS)]),
+        ("5gaka", "implementation_only", [(build_topic_call(), StepReason.REVIEWED_TOPIC)]),
+        ("5G-AKA", "implementation_only", [(build_topic_call(), StepReason.REVIEWED_TOPIC)]),
         ("5gaka", "mixed", [(build_topic_call(), StepReason.REVIEWED_TOPIC)]),
         ("5gaka", "protocol_context_only", [(build_topic_call(), StepReason.REVIEWED_TOPIC)]),
         (
@@ -391,7 +392,8 @@ def test_interpretation_stop_is_decided_before_any_call(
     ids=[
         "exact_id_implementation",
         "exact_id_mixed",
-        "topic_implementation_searches_literally_first",
+        "topic_implementation",
+        "topic_implementation_spelled_out",
         "topic_mixed",
         "topic_protocol",
         "free_text_implementation",

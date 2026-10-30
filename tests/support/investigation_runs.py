@@ -24,6 +24,7 @@ from tests.support.investigation import (
 )
 from tests.support.marker_sweep import ECHO_MARKER
 from tests.support.planners import (
+    FIVE_G_AKA_TOPIC_REPLY,
     UNAVAILABLE_REPLY,
     FailingModelPort,
     ScriptedModelPort,
@@ -57,16 +58,18 @@ def build_semantic_hit_retriever() -> CannedRetriever:
 
 
 def run_semantic_hit(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """A semantic request for 5G-AKA, whose wired semantic channel matches CVE-9999-0003."""
+    """A semantic search of the free text ``ausf suci``, whose wired semantic channel matches
+    CVE-9999-0003; a topic question would run no semantic channel."""
     service = build_test_investigation_service(
         fixture_bundle, semantic_retriever=build_semantic_hit_retriever()
     )
-    request = build_investigation_request("5G-AKA", "implementation_only", semantic=True)
+    request = build_investigation_request("ausf suci", "implementation_only", semantic=True)
     return service.investigate(request)
 
 
 def run_five_g_aka(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """One ``cve_search("5g aka")`` finds CVE-9999-0003 and CVE-9999-0004."""
+    """One ``topic_context`` step: the 5G-AKA card's CVE searches, and no FiGHT search under
+    ``implementation_only``, find CVE-9999-0003 and CVE-9999-0004."""
     return investigate(fixture_bundle, "5G-AKA", "implementation_only")
 
 
@@ -125,9 +128,11 @@ def run_over_the_byte_cap(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet
 
 
 def run_refinement(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """Two deterministic rounds: a literal search for ``5gaka`` finds nothing, so round 2
-    explores the topic."""
-    return investigate(fixture_bundle, "5gaka", "implementation_only")
+    """Two deterministic rounds of one step each: the topic call finds no open5gs record,
+    so round 2 searches the question's own words, ``5gaka``, which find none either."""
+    return investigate(
+        fixture_bundle, "5gaka", "implementation_only", filters={"products": ["open5gs"]}
+    )
 
 
 def run_cve_under_protocol_scope(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
@@ -144,21 +149,25 @@ def run_policy_plan_over_budget(fixture_bundle: FixtureBundle) -> KnowledgeEvide
 
 
 def run_model_accepted(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """One round whose model plan, ``cve_search("ausf suci")``, passes the gate and runs."""
+    """Two model-planned rounds: round 1's plan, ``cve_search("ausf suci")``, passes the gate
+    and runs; its matches are unassessed, so round 2 explores the topic, which the model
+    plans too."""
     return investigate_with_model_replies(
         fixture_bundle,
         build_investigation_request("5G-AKA", "implementation_only"),
         build_plan_reply({"tool": "cve_search", "query": "ausf suci"}),
+        FIVE_G_AKA_TOPIC_REPLY,
     )
 
 
 def run_model_low_signal_search(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """One round whose model plan, ``cve_search("cve ausf suci")``, passes the gate and runs
-    as ``cve_search("ausf suci")``."""
+    """Round 1's model plan, ``cve_search("cve ausf suci")``, passes the gate and runs as
+    ``cve_search("ausf suci")``; round 2 explores the topic, as the model plans."""
     return investigate_with_model_replies(
         fixture_bundle,
         build_investigation_request("5G-AKA", "implementation_only"),
         build_plan_reply({"tool": "cve_search", "query": "cve ausf suci"}),
+        FIVE_G_AKA_TOPIC_REPLY,
     )
 
 

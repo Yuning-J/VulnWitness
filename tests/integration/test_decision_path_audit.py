@@ -23,6 +23,7 @@ from cve_kgrag.domain.investigation import (
     EvidenceNeedKind,
     FightBlock,
     FightBlockReason,
+    InvestigationState,
     InvestigationWarning,
     InvestigationWarningCode,
     KnowledgeEvidenceSet,
@@ -80,6 +81,7 @@ from tests.support.investigation_runs import (
     run_model_accepted,
     run_model_low_signal_search,
     run_model_not_consulted,
+    run_model_refinement_unavailable,
     run_model_rejected,
     run_model_skipped_at_deadline,
     run_over_the_byte_cap,
@@ -104,13 +106,23 @@ def run_unknown_id_under_filters(fixture_bundle: FixtureBundle) -> KnowledgeEvid
 
 
 def run_semantic_without_adapter(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """A semantic request on a deployment without a semantic adapter: the search is partial."""
-    return investigate(fixture_bundle, "5G-AKA", "implementation_only", semantic=True)
+    """A semantic search of free text on a deployment without a semantic adapter: the search
+    is partial."""
+    return investigate(fixture_bundle, "ausf suci", "implementation_only", semantic=True)
 
 
 def run_refinement_under_one_round(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """The same run allowed one round: the refinement breaches the round cap."""
-    return investigate(fixture_bundle, "5gaka", "implementation_only", budget={"max_rounds": 1})
+    """An unknown ID beside a topic allowed one round: the topic refinement breaches the
+    round cap."""
+    return investigate(
+        fixture_bundle, "CVE-9999-4242 5gaka", "implementation_only", budget={"max_rounds": 1}
+    )
+
+
+def run_free_text_with_matches(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """``sql injection gateway`` searched in its own words finds CVEs whose relevance is not
+    assessed; with every word searched no refinement applies, so it stops ``needs_unmet``."""
+    return investigate(fixture_bundle, "sql injection gateway", "implementation_only")
 
 
 def run_search_of_every_term_after_a_dropped_word(
@@ -152,11 +164,12 @@ def run_excluded_term_with_free_text(fixture_bundle: FixtureBundle) -> Knowledge
 
 
 def run_model_rejected_twice(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """Both rounds reject the model's plan, so the policy's search and topic call run."""
+    """Both rounds reject the model's plan, so the policy's lookup of the named ID and the
+    topic call its open implementation need draws run."""
     invented_lookup = build_plan_reply({"tool": "cve_exact_lookup", "cve_ids": ["CVE-9999-0004"]})
     return investigate_with_model_replies(
         fixture_bundle,
-        build_investigation_request("5gaka", "implementation_only"),
+        build_investigation_request("CVE-9999-0003 5gaka", "implementation_only"),
         invented_lookup,
         invented_lookup,
     )
@@ -259,8 +272,8 @@ def turn_the_interpretation_into_free_text(
 
 
 def search_an_unrelated_query(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
-    """The reviewer's forgery (b): the policy's ``cve_search("5g aka")`` becomes another query,
-    with its call key, accepted plan and backend request updated to match."""
+    """The reviewer's forgery (b): the policy's search becomes another query, with its call
+    key, accepted plan and backend request updated to match."""
     return replace_call(evidence_set, 1, build_search_call("open5gs crash"))
 
 
@@ -334,8 +347,8 @@ def look_up_another_id_on_fallback(evidence_set: KnowledgeEvidenceSet) -> Knowle
 def search_5g_aka_in_round_one(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
     """Round 1's search becomes ``cve_search("5g aka")``, a call the gate accepts, with its
     call key, accepted plan, backend request, search warnings and the answer's
-    ``term_not_indexed`` warnings to match: on a fallback it replaces the policy's search,
-    and on an accepted model plan it swaps that plan for another."""
+    ``term_not_indexed`` warnings to match: on an accepted model plan it swaps that plan for
+    another."""
     forged_set = rewrite_step(
         replace_call(evidence_set, 1, build_search_call("5g aka")), 1, search_warnings=()
     )
@@ -368,18 +381,29 @@ def keep_the_low_signal_word(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvi
     return replace_call(evidence_set, 1, build_search_call("cve ausf suci"))
 
 
-def credit_round_one_with_an_answer(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
-    """Round 1's search claims it found CVE-9999-0003 with its anchors, yet the run refined."""
-    candidates = list(evidence_set.implementation_candidates)
-    found_candidate = candidates[0]
-    candidates[0] = found_candidate.model_copy(update={"found_by_steps": (1, 2)})
-    record = found_candidate.candidate.record
-    steps = list(evidence_set.trajectory.steps)
-    steps[0] = steps[0].model_copy(
-        update={"answer_ids": (record.cve_id,), "evidence_ids": record.evidence_ids}
+def claim_the_free_text_matches_sufficient(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    """A free-text run whose search matches were left unassessed claims it stopped
+    sufficient after round 1: its need reads found, and its transitions, stop, status and
+    coverage basis agree."""
+    transitions = list(evidence_set.trajectory.transitions[:3])
+    transitions.append(
+        StateTransition(
+            from_state=InvestigationState.ASSESS,
+            to_state=InvestigationState.VALIDATE,
+            basis=DecisionBasis.ANSWER_FOUND,
+        )
     )
-    forged_set = update_trajectory(evidence_set, steps=tuple(steps))
-    return reseal_evidence_set(forged_set, implementation_candidates=tuple(candidates))
+    transitions.append(evidence_set.trajectory.transitions[-1])
+    forged_set = update_trajectory(evidence_set, transitions=tuple(transitions))
+    found_need = forged_set.coverage.needs[0].model_copy(update={"outcome": NeedOutcome.FOUND})
+    coverage = forged_set.coverage.model_copy(
+        update={"needs": (found_need,), "basis": DecisionBasis.ANSWER_FOUND}
+    )
+    return reseal_evidence_set(
+        forged_set, stop_reason=StopReason.SUFFICIENT, status=ResultStatus.OK, coverage=coverage
+    )
 
 
 def hide_the_round_cap(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
@@ -672,7 +696,7 @@ def name_another_policy_version(evidence_set: KnowledgeEvidenceSet) -> Knowledge
             "interpretation.intent is not the one the request gives",
         ),
         (
-            run_five_g_aka,
+            run_excluded_term_with_free_text,
             search_an_unrelated_query,
             "round 1 accepts another plan than the controller's decisions choose",
         ),
@@ -770,7 +794,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
             "round 2 accepts another plan than the controller's decisions choose",
         ),
         (
-            run_refinement,
+            run_model_refinement_unavailable,
             give_the_refinement_another_reason,
             "step 2's reason is topic_after_unknown_ids, but the controller's decisions give "
             "topic_after_literal_miss",
@@ -782,7 +806,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         ),
         (
             run_model_rejected_twice,
-            search_5g_aka_in_round_one,
+            look_up_another_id_on_fallback,
             "round 1 accepts another plan than the controller's decisions choose",
         ),
         (
@@ -807,10 +831,10 @@ def test_reviewer_forgery_is_rejected_after_reseal(
             "round 1 accepts another plan than the controller's decisions choose",
         ),
         (
-            run_refinement,
-            credit_round_one_with_an_answer,
-            "transition 4 is assess -> refine (needs_open), but the controller's "
-            "decisions give assess -> validate (answer_found)",
+            run_free_text_with_matches,
+            claim_the_free_text_matches_sufficient,
+            "transition 4 is assess -> validate (answer_found), but the controller's "
+            "decisions give assess -> refine (needs_open)",
         ),
         (
             run_refinement_under_one_round,
@@ -905,7 +929,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_five_g_aka,
             name_another_policy_version,
-            "the planner names a policy other than m7b.3, the one whose decisions the audit "
+            "the planner names a policy other than m7b.4, the one whose decisions the audit "
             "re-derives",
         ),
     ],
@@ -927,7 +951,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         "model_plan_outside_the_gate",
         "model_plan_not_canonical",
         "model_plan_keeping_a_low_signal_word",
-        "refined_despite_a_round_one_answer",
+        "free_text_matches_claimed_sufficient",
         "hidden_round_cap",
         "forged_stop_after_round_two",
         "byte_breach_named_wall_time",
@@ -974,9 +998,9 @@ def test_forged_decision_is_rejected_after_reseal(
 def run_mixed_free_text_with_an_excluded_term(
     fixture_bundle: FixtureBundle,
 ) -> KnowledgeEvidenceSet:
-    """Free text under ``mixed`` naming an excluded term: implementation CVEs found,
-    protocol context unsupported because the excluded term bars a direct FiGHT search, so
-    the run stops ``needs_unmet``."""
+    """Free text under ``mixed`` naming an excluded term: implementation CVEs matched but
+    unassessed, protocol context unsupported because the excluded term bars a direct FiGHT
+    search, so the run stops ``needs_unmet``."""
     return investigate(fixture_bundle, "EPS AKA crash", "mixed")
 
 
@@ -986,14 +1010,28 @@ def claim_protocol_context_searchable(evidence_set: KnowledgeEvidenceSet) -> Kno
     return relabel_protocol_need(evidence_set, NeedOutcome.NOT_FOUND)
 
 
+def claim_the_unassessed_matches_found(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    """The implementation need, matches whose relevance was not assessed, is relabelled
+    ``found``; the unsupported protocol need keeps the stop ``needs_unmet`` consistent."""
+    return relabel_need(evidence_set, EvidenceNeedKind.IMPLEMENTATION_CVES, NeedOutcome.FOUND)
+
+
 def relabel_protocol_need(
     evidence_set: KnowledgeEvidenceSet, outcome: NeedOutcome
 ) -> KnowledgeEvidenceSet:
-    """The protocol need is given ``outcome``; the stop is left as recorded."""
+    return relabel_need(evidence_set, EvidenceNeedKind.PROTOCOL_CONTEXT, outcome)
+
+
+def relabel_need(
+    evidence_set: KnowledgeEvidenceSet, kind: EvidenceNeedKind, outcome: NeedOutcome
+) -> KnowledgeEvidenceSet:
+    """The need of ``kind`` is given ``outcome``; the stop is left as recorded."""
     needs: list[EvidenceNeed] = []
     for need in evidence_set.coverage.needs:
         recorded_need = need
-        if need.kind is EvidenceNeedKind.PROTOCOL_CONTEXT:
+        if need.kind is kind:
             recorded_need = need.model_copy(update={"outcome": outcome})
         needs.append(recorded_need)
     coverage = evidence_set.coverage.model_copy(update={"needs": tuple(needs)})
@@ -1210,6 +1248,12 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
             "steps and the answer",
         ),
         (
+            run_mixed_free_text_with_an_excluded_term,
+            claim_the_unassessed_matches_found,
+            "coverage.needs are not the needs the request gives, judged over the admitted "
+            "steps and the answer",
+        ),
+        (
             run_fight_direct_search_over_the_byte_cap,
             claim_the_unevaluated_need_not_found,
             "coverage.needs are not the needs the request gives, judged over the admitted "
@@ -1250,6 +1294,7 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
         "topic_round_claims_the_model_was_not_consulted",
         "free_text_round_claims_a_model_plan",
         "need_outcome_rewritten",
+        "unassessed_matches_relabelled_found",
         "unevaluated_need_relabelled_not_found",
         "unevaluated_need_relabelled_found",
         "uncovered_protocol_need_relabelled_found",

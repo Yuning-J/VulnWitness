@@ -17,7 +17,7 @@ from cve_kgrag.domain.investigation import (
 from cve_kgrag.domain.planning import CveSearchCall, ToolName
 from cve_kgrag.domain.taxonomy import ResultStatus
 from tests.support.evaluation import run_deterministically, run_with_replies
-from tests.support.investigation import list_need_outcomes, list_step_reasons
+from tests.support.investigation import list_need_outcomes, list_step_reasons, list_step_tools
 from tests.support.planners import UNAVAILABLE_REPLY, build_plan_reply
 
 SEARCH_GATEWAY = {"tool": "cve_search", "query": "zzqx gateway"}
@@ -53,6 +53,56 @@ def test_open_need_without_a_policy_refinement_consults_no_model_in_round_two(
     assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
     assert evidence_set.coverage.basis is DecisionBasis.NO_REFINEMENT_AVAILABLE
     assert evidence_set.trajectory.budget_used.planner_calls == 1
+    assert len(evidence_set.trajectory.rounds) == 1
+
+
+@pytest.mark.parametrize(
+    ("query", "scope", "expected_tools", "expected_needs"),
+    [
+        (
+            "sql injection gateway",
+            "implementation_only",
+            ["cve_search"],
+            [EvidenceNeedKind.IMPLEMENTATION_CVES],
+        ),
+        (
+            "SUCI concealment",
+            "mixed",
+            ["cve_search", "fight_direct_search"],
+            [EvidenceNeedKind.IMPLEMENTATION_CVES, EvidenceNeedKind.PROTOCOL_CONTEXT],
+        ),
+        (
+            "SUCI discovery",
+            "protocol_context_only",
+            ["fight_direct_search"],
+            [EvidenceNeedKind.PROTOCOL_CONTEXT],
+        ),
+    ],
+    ids=["implementation_only", "mixed", "protocol_context_only"],
+)
+def test_free_text_answer_ends_partial_with_its_matches_unassessed_and_no_second_search(
+    fixture_bundle: FixtureBundle,
+    query: str,
+    scope: str,
+    expected_tools: list[str],
+    expected_needs: list[EvidenceNeedKind],
+) -> None:
+    """Searches on the question's own words find matches whose relevance the run does not
+    assess. Every word was searched and no rule plans FiGHT again, so no refinement
+    applies: the run lists the matches and ends with each need ``matches_unassessed``."""
+    evidence_set = run_deterministically(fixture_bundle, query, scope)
+
+    expected_outcomes: list[tuple[EvidenceNeedKind, str | None, NeedOutcome]] = []
+    for need_kind in expected_needs:
+        expected_outcomes.append((need_kind, None, NeedOutcome.MATCHES_UNASSESSED))
+    assert list_step_tools(evidence_set) == expected_tools
+    assert evidence_set.implementation_candidates or evidence_set.protocol_context
+    assert list_need_outcomes(evidence_set) == expected_outcomes
+    assert (evidence_set.stop_reason, evidence_set.status) == (
+        StopReason.NEEDS_UNMET,
+        ResultStatus.PARTIAL,
+    )
+    assert evidence_set.coverage.basis is DecisionBasis.NO_REFINEMENT_AVAILABLE
     assert len(evidence_set.trajectory.rounds) == 1
 
 
@@ -96,7 +146,7 @@ def test_mixed_free_text_naming_an_excluded_term_stops_with_protocol_context_uns
     assert list_step_reasons(evidence_set) == [StepReason.QUERY_TERMS]
     assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
     assert list_need_outcomes(evidence_set) == [
-        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.FOUND),
+        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.MATCHES_UNASSESSED),
         (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.UNSUPPORTED),
     ]
 
@@ -104,15 +154,17 @@ def test_mixed_free_text_naming_an_excluded_term_stops_with_protocol_context_uns
 def test_question_whether_a_product_version_is_affected_leaves_its_applicability_unknown(
     fixture_bundle: FixtureBundle,
 ) -> None:
+    """The search of the question's own words leaves its matches unassessed, an unmet need
+    beside the unavailable affectedness source, so the run stops ``needs_unmet``."""
     evidence_set = run_deterministically(
         fixture_bundle, "Is f5gc 1.2.3 affected", "implementation_only"
     )
 
     assert evidence_set.interpretation.affectedness_mentions == ("f5gc 1.2.3",)
-    assert evidence_set.stop_reason is StopReason.SOURCE_UNAVAILABLE
-    assert evidence_set.coverage.basis is DecisionBasis.AFFECTEDNESS_UNAVAILABLE
+    assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
+    assert evidence_set.coverage.basis is DecisionBasis.NO_REFINEMENT_AVAILABLE
     assert list_need_outcomes(evidence_set) == [
-        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.FOUND),
+        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.MATCHES_UNASSESSED),
         (EvidenceNeedKind.AFFECTEDNESS, "f5gc 1.2.3", NeedOutcome.SOURCE_UNAVAILABLE),
     ]
     assert evidence_set.product_applicability[0].product_kind == "product_version"

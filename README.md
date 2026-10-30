@@ -12,13 +12,17 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.33` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.34` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
-Known limit: a free-text investigation (one that names no CVE ID and resolves no reviewed
-topic) can report its CVE need `found` and stop `sufficient` on candidates that only share
-words with the question. Read the candidates and the terms each matched before relying on
-such an answer.
+Known limit: the current version does not judge free-text results sufficient
+automatically. A free-text investigation (one that names no CVE ID and resolves no reviewed
+topic) lists the CVEs and techniques that match the question's words and ends
+`needs_unmet` / `partial`, each such need `matches_unassessed`: matches were found and
+their relevance was not assessed, which does not mean no relevant evidence exists. Read the
+candidates and the terms each matched before relying on them. An investigation ends
+`sufficient` only through an exact lookup of a named CVE or a reviewed topic's mapping, and
+a topic run can still stop `sufficient` on CVEs that do not answer the question.
 
 ## What it does
 
@@ -161,7 +165,9 @@ optional capabilities are off by default:
   [ADR 0005](docs/rebuild/adr/0005-model-planner-adapter.md)). It plans only questions
   that name a CVE ID or resolve a reviewed topic; free text is planned by the policy, and
   its rounds record `model_not_consulted` (`model_skipped_at_deadline` when the deadline
-  passed before planning);
+  passed before planning). Only the CLI's `investigate` and `eval planner` use it; the
+  REST API and MCP servers plan with the deterministic policy
+  ([ADR 0007](docs/rebuild/adr/0007-http-surfaces.md));
 - the semantic channel, `CVE_KGRAG_SEMANTIC_*`. It reads a Chroma store in the format
   CVE-KGRAG's pipeline writes, from a directory the operator names; this repository does
   not build that store ([ADR 0006](docs/rebuild/adr/0006-repository-split.md)).

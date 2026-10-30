@@ -47,7 +47,7 @@ from cve_kgrag.domain.investigation_validation import (
     validate_knowledge_evidence_set,
 )
 from cve_kgrag.domain.planning import ModelReply
-from cve_kgrag.domain.taxonomy import ResultStatus
+from cve_kgrag.domain.taxonomy import ResultStatus, RetrievalChannel
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import (
     KnowledgeSource,
@@ -104,10 +104,18 @@ from tests.support.investigation_runs import (
     run_model_unavailable,
     run_over_the_byte_cap,
     run_policy_plan_over_budget,
+    run_refinement,
     run_semantic_hit,
     run_with_invalid_evidence,
+    wire_lexical_unavailable,
 )
-from tests.support.planners import BlockingModelPort, ScriptedModelPort, build_plan_reply
+from tests.support.planners import (
+    FIVE_G_AKA_TOPIC_REPLY,
+    UNAVAILABLE_REPLY,
+    BlockingModelPort,
+    ScriptedModelPort,
+    build_plan_reply,
+)
 
 # The deployment a set was produced on and is replayed against: the packaged one, one whose
 # pinned FiGHT backend is down, one whose lexical channel invents a record, or one with a
@@ -119,31 +127,34 @@ REPLAYED_REQUESTS = [
     InvestigationRequest(query="5gaka", scope="implementation_only"),
     InvestigationRequest(query="CVE-9999-4242 AUSF resynchronization crash", scope="mixed"),
 ]
-REPLAYED_IDS = ["protocol_5gaka", "impl_5gaka_refines", "unknown_id_residual_mixed"]
+REPLAYED_IDS = ["protocol_5gaka", "impl_5gaka_topic_first", "unknown_id_residual_mixed"]
+# The topic finds no open5gs record, so round 2 searches the question's own words.
+OPEN5GS_REQUEST = InvestigationRequest(
+    query="5gaka", scope="implementation_only", filters={"products": ["open5gs"]}
+)
 GOLD_ROWS = load_gold_rows()
 FORGED_SHA256 = "f" * 64
 # One byte over the server's byte cap: a response this size is discarded whatever the run
 # admitted before it.
 OVER_THE_SERVER_BYTE_CAP = 200_001
 NO_DIFFERENCE = ReplayCompleted(())
-FIVE_G_AKA_TOPIC_REPLY = build_plan_reply({"tool": "topic_context", "topic_id": "3gpp:5g-aka"})
-# A run whose literal ``5gaka`` search answers in round 1, compared with one whose search
-# found nothing and whose round 2 ran the topic call: both stop ``sufficient``, so they
-# differ in round 1's step, round 2's step and every part the rounds count.
+# A model-planned ``5gaka`` search whose lexical channel failed, so the run stopped in round
+# 1, compared with one whose search was served and whose round 2 ran the topic call: they
+# differ in round 1's step, round 2's step and every part the stop and the rounds count.
 REPLAY_OF_ONE_ROUND_AGAINST_TWO = ReplayCompleted(
     (
         ReplayDifference(1, "status"),
         ReplayDifference(1, "source_outcomes"),
         ReplayDifference(1, "search_warnings"),
-        ReplayDifference(1, "answer_ids"),
-        ReplayDifference(1, "evidence_ids"),
         ReplayDifference(1, "result_sha256"),
         ReplayDifference(1, "context_bytes"),
         ReplayDifference(2, "step"),
+        ReplayDifference(None, "status"),
+        ReplayDifference(None, "stop_reason"),
         ReplayDifference(None, "implementation_candidates"),
         ReplayDifference(None, "claims"),
         ReplayDifference(None, "evidence"),
-        # Only the recorded run's step warned that no record holds "5gaka", and the answer
+        # Only the served search warned that no record holds "5gaka", and the answer
         # repeats that as a term_not_indexed warning.
         ReplayDifference(None, "warnings"),
         ReplayDifference(None, "trajectory.transitions"),
@@ -153,7 +164,10 @@ REPLAY_OF_ONE_ROUND_AGAINST_TWO = ReplayCompleted(
         ReplayDifference(None, "trajectory.budget_used.tool_calls"),
         ReplayDifference(None, "trajectory.budget_used.planner_calls"),
         ReplayDifference(None, "trajectory.budget_used.context_bytes"),
+        ReplayDifference(None, "coverage.source_outcomes"),
         ReplayDifference(None, "coverage.refinement_applied"),
+        ReplayDifference(None, "coverage.basis"),
+        ReplayDifference(None, "coverage.needs"),
     )
 )
 
@@ -174,11 +188,14 @@ def build_replay_deployment(
     return build_test_deployment(fixture_bundle, fight=deployment)
 
 
-def build_bundle_matching_5gaka(fixture_bundle: FixtureBundle) -> FixtureBundle:
-    """``fixture_bundle`` plus a record whose description holds the literal word ``5gaka``,
-    which no fixture record holds."""
+def build_bundle_with_an_open5gs_record(fixture_bundle: FixtureBundle) -> FixtureBundle:
+    """``fixture_bundle`` plus an open5gs record naming 5G-AKA, which the topic's template
+    searches find; no fixture record names open5gs."""
     return build_bundle_with(
-        fixture_bundle, "CVE-9999-0711", "[SYNTHETIC] 5gaka handshake crash in the AUSF."
+        fixture_bundle,
+        "CVE-9999-0711",
+        "[SYNTHETIC] Open5GS AUSF mishandles 5G-AKA resynchronization.",
+        affected=[{"vendor": "open5gs", "product": "open5gs", "status": "affected"}],
     )
 
 
@@ -199,7 +216,7 @@ def run_protocol_context(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
     return build_test_investigation_service(fixture_bundle).investigate(REPLAYED_REQUESTS[0])
 
 
-def run_refinement(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+def run_topic_for_implementation(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
     return build_test_investigation_service(fixture_bundle).investigate(REPLAYED_REQUESTS[1])
 
 
@@ -208,8 +225,14 @@ def run_unknown_id_residual(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceS
 
 
 def run_dropping_an_unrelated_candidate(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """``heap overflow`` finds a CVE unrelated to the topic, which the answer drops."""
-    return investigate(fixture_bundle, "5gaka heap overflow", "implementation_only")
+    """The model's search of ``heap overflow`` finds a CVE unrelated to the topic, which the
+    answer drops; round 2 explores the topic the search left open."""
+    return investigate_with_model_replies(
+        fixture_bundle,
+        build_investigation_request("5gaka heap overflow", "implementation_only"),
+        build_plan_reply({"tool": "cve_search", "query": "heap overflow"}),
+        UNAVAILABLE_REPLY,
+    )
 
 
 def run_truncating_the_answer(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
@@ -231,7 +254,8 @@ def run_truncating_the_answer(fixture_bundle: FixtureBundle) -> KnowledgeEvidenc
 
 
 def run_past_the_deadline(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """The one search lands after the deadline, so it is discarded."""
+    """The topic call's first template search lands after the deadline, so the step is
+    discarded."""
     clock = SteppingClock()
     slow_lexical = SlowRetriever(Bm25LexicalIndex(fixture_bundle.records), clock, seconds=31)
     service = build_test_investigation_service(
@@ -243,10 +267,10 @@ def run_past_the_deadline(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet
 def run_deadline_before_the_refinement_round(
     fixture_bundle: FixtureBundle,
 ) -> KnowledgeEvidenceSet:
-    """Round 1's search lands in time, and the deterministic round 2 is planned past the
-    deadline, so it runs nothing."""
+    """Round 1's topic call, which finds no open5gs record, lands in time, and the
+    deterministic round 2 is planned past the deadline, so it runs nothing."""
     service = build_deadline_nearing_service(fixture_bundle)
-    return service.investigate(build_investigation_request("5gaka", "implementation_only"))
+    return service.investigate(OPEN5GS_REQUEST)
 
 
 def run_deadline_before_the_second_step(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
@@ -277,17 +301,19 @@ def run_with_failing_fight(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSe
 
 
 def run_model_search_for_5gaka(
-    fixture_bundle: FixtureBundle, *later_replies: ModelReply
+    fixture_bundle: FixtureBundle, deployment_wiring: dict[str, Any], *later_replies: ModelReply
 ) -> KnowledgeEvidenceSet:
     """Round 1's model plan, ``cve_search("5gaka")``, searches the literal word of a query
-    that resolves the 5G-AKA topic. When it finds nothing the policy refines with the topic
-    call, and round 2's planner answers with the first of ``later_replies``."""
-    return investigate_with_model_replies(
-        fixture_bundle,
-        build_investigation_request("5gaka", "implementation_only"),
-        build_plan_reply({"tool": "cve_search", "query": "5gaka"}),
-        *later_replies,
+    that resolves the 5G-AKA topic, on the fixture deployment ``deployment_wiring`` wires.
+    When its source serves it, the policy refines with the topic call and round 2's planner
+    answers with the first of ``later_replies``; when its source fails, the run stops."""
+    model_port = ScriptedModelPort(
+        [build_plan_reply({"tool": "cve_search", "query": "5gaka"}), *later_replies]
     )
+    service = build_test_investigation_service(
+        fixture_bundle, model_port=model_port, **deployment_wiring
+    )
+    return service.investigate(build_investigation_request("5gaka", "implementation_only"))
 
 
 @pytest.fixture(scope="module")
@@ -375,7 +401,7 @@ def test_start_time_and_speed_never_change_the_result_hash(fixture_bundle: Fixtu
     ("run", "deployment"),
     [
         (run_protocol_context, "packaged"),
-        (run_refinement, "packaged"),
+        (run_topic_for_implementation, "packaged"),
         (run_unknown_id_residual, "packaged"),
         (run_dropping_an_unrelated_candidate, "packaged"),
         (run_truncating_the_answer, "packaged"),
@@ -403,7 +429,7 @@ def test_start_time_and_speed_never_change_the_result_hash(fixture_bundle: Fixtu
     ],
     ids=[
         "protocol_5gaka",
-        "impl_5gaka_refines",
+        "impl_5gaka_topic_first",
         "unknown_id_residual_mixed",
         "unrelated_candidate_dropped",
         "answer_truncated",
@@ -548,7 +574,7 @@ def test_replay_of_a_late_result_against_a_backend_that_never_returns_times_out(
 def test_replay_over_changed_data_names_the_step_and_answer_parts_it_changes(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    evidence_set = run_refinement(fixture_bundle)
+    evidence_set = run_topic_for_implementation(fixture_bundle)
     changed_bundle = build_bundle_with(
         fixture_bundle,
         "CVE-9999-0710",
@@ -559,10 +585,10 @@ def test_replay_over_changed_data_names_the_step_and_answer_parts_it_changes(
 
     assert replay_outcome == ReplayCompleted(
         (
-            ReplayDifference(2, "answer_ids"),
-            ReplayDifference(2, "evidence_ids"),
-            ReplayDifference(2, "result_sha256"),
-            ReplayDifference(2, "context_bytes"),
+            ReplayDifference(1, "answer_ids"),
+            ReplayDifference(1, "evidence_ids"),
+            ReplayDifference(1, "result_sha256"),
+            ReplayDifference(1, "context_bytes"),
             ReplayDifference(None, "implementation_candidates"),
             ReplayDifference(None, "claims"),
             ReplayDifference(None, "evidence"),
@@ -620,12 +646,13 @@ def test_replay_of_a_response_that_shrank_under_the_cap_names_the_new_stop(
 def test_replay_whose_first_round_now_answers_runs_no_refinement_round(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    """Round 1's literal search for ``5gaka`` found nothing, so round 2 explored the topic.
-    The source now holds a record naming ``5gaka``, so round 1 answers and the replayed run
-    stops there: replay names the step only the record holds, the rounds, the transitions
-    and ``refinement_applied``, rather than running the recorded round 2 again."""
+    """Round 1's topic call found no open5gs record, so round 2 searched the question's own
+    words. The source now holds an open5gs 5G-AKA record the topic call finds, so round 1
+    meets the need and the replayed run stops there: replay names the step only the record
+    holds, the rounds, the transitions and ``refinement_applied``, rather than running the
+    recorded round 2 again."""
     evidence_set = run_refinement(fixture_bundle)
-    changed_bundle = build_bundle_matching_5gaka(fixture_bundle)
+    changed_bundle = build_bundle_with_an_open5gs_record(fixture_bundle)
 
     replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(changed_bundle))
 
@@ -633,7 +660,6 @@ def test_replay_whose_first_round_now_answers_runs_no_refinement_round(
         (
             ReplayDifference(1, "status"),
             ReplayDifference(1, "source_outcomes"),
-            ReplayDifference(1, "search_warnings"),
             ReplayDifference(1, "answer_ids"),
             ReplayDifference(1, "evidence_ids"),
             ReplayDifference(1, "result_sha256"),
@@ -642,7 +668,7 @@ def test_replay_whose_first_round_now_answers_runs_no_refinement_round(
             ReplayDifference(None, "implementation_candidates"),
             ReplayDifference(None, "claims"),
             ReplayDifference(None, "evidence"),
-            # The answer's term_not_indexed warning for "5gaka" follows the step's.
+            # The answer's term_not_indexed warning for "5gaka" follows round 2's search.
             ReplayDifference(None, "warnings"),
             ReplayDifference(None, "trajectory.transitions"),
             ReplayDifference(None, "trajectory.rounds"),
@@ -650,7 +676,10 @@ def test_replay_whose_first_round_now_answers_runs_no_refinement_round(
             ReplayDifference(None, "trajectory.budget_used.rounds"),
             ReplayDifference(None, "trajectory.budget_used.tool_calls"),
             ReplayDifference(None, "trajectory.budget_used.context_bytes"),
+            ReplayDifference(None, "coverage.source_outcomes"),
             ReplayDifference(None, "coverage.refinement_applied"),
+            ReplayDifference(None, "coverage.basis"),
+            ReplayDifference(None, "coverage.needs"),
         )
     )
 
@@ -659,10 +688,11 @@ def test_replay_that_stops_before_the_recorded_deadline_point_names_the_breach(
     fixture_bundle: FixtureBundle,
 ) -> None:
     """The recorded run found the deadline when it came to plan round 2. The source now
-    answers round 1, so the replayed run stops before that point: the deadline is never put
+    holds an open5gs record the topic call finds, so round 1 meets the need and the
+    replayed run stops before that point: the deadline is never put
     back, and replay names the stop, the breach and the rounds the deadline gave."""
     evidence_set = run_deadline_before_the_refinement_round(fixture_bundle)
-    changed_bundle = build_bundle_matching_5gaka(fixture_bundle)
+    changed_bundle = build_bundle_with_an_open5gs_record(fixture_bundle)
 
     replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(changed_bundle))
 
@@ -670,18 +700,15 @@ def test_replay_that_stops_before_the_recorded_deadline_point_names_the_breach(
         (
             ReplayDifference(1, "status"),
             ReplayDifference(1, "source_outcomes"),
-            ReplayDifference(1, "search_warnings"),
             ReplayDifference(1, "answer_ids"),
             ReplayDifference(1, "evidence_ids"),
             ReplayDifference(1, "result_sha256"),
             ReplayDifference(1, "context_bytes"),
-            ReplayDifference(None, "status"),
+            # Both runs end partial: the open5gs applicability stays unknown.
             ReplayDifference(None, "stop_reason"),
             ReplayDifference(None, "implementation_candidates"),
             ReplayDifference(None, "claims"),
             ReplayDifference(None, "evidence"),
-            # The answer's term_not_indexed warning for "5gaka" follows the step's.
-            ReplayDifference(None, "warnings"),
             ReplayDifference(None, "trajectory.transitions"),
             ReplayDifference(None, "trajectory.rounds"),
             ReplayDifference(None, "trajectory.evidence_ids"),
@@ -698,14 +725,15 @@ def test_replay_that_stops_before_the_recorded_deadline_point_names_the_breach(
 def test_replay_that_no_longer_asks_for_a_recorded_reply_names_the_rounds(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    """Round 1's model search for ``5gaka`` found nothing, so the policy refined with the
-    topic call and round 2's planner replied with that call. The source now holds a
-    ``5gaka`` record, so round 1 answers and round 2's recorded reply is never asked for."""
-    evidence_set = run_model_search_for_5gaka(fixture_bundle, FIVE_G_AKA_TOPIC_REPLY)
+    """Round 1's model search for ``5gaka`` was served, so the policy refined with the topic
+    call and round 2's planner replied with that call. The deployment's lexical channel now
+    fails, so round 1 stops on the failed source and round 2's recorded reply is never
+    asked for."""
+    evidence_set = run_model_search_for_5gaka(fixture_bundle, {}, FIVE_G_AKA_TOPIC_REPLY)
     assert len(evidence_set.trajectory.rounds) == 2
 
     replay_outcome = replay_evidence_set(
-        evidence_set, build_test_deployment(build_bundle_matching_5gaka(fixture_bundle))
+        evidence_set, build_test_deployment(fixture_bundle, **wire_lexical_unavailable())
     )
 
     assert replay_outcome == REPLAY_OF_ONE_ROUND_AGAINST_TWO
@@ -714,11 +742,11 @@ def test_replay_that_no_longer_asks_for_a_recorded_reply_names_the_rounds(
 def test_replay_that_asks_for_a_reply_the_record_lacks_names_the_rounds(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    """Round 1's model search for ``5gaka`` answered, so no round 2 was planned. The source no
-    longer holds that record, so the replayed run refines with the topic call in round 2,
-    whose planner the record holds no reply for: it is told ``unavailable``, the policy's
-    topic call runs, and the round differs."""
-    evidence_set = run_model_search_for_5gaka(build_bundle_matching_5gaka(fixture_bundle))
+    """Round 1's model search for ``5gaka`` met a failed lexical channel, so the run stopped
+    and no round 2 was planned. The channel now serves, so the replayed run refines with
+    the topic call in round 2, whose planner the record holds no reply for: it is told
+    ``unavailable``, the policy's topic call runs, and the round differs."""
+    evidence_set = run_model_search_for_5gaka(fixture_bundle, wire_lexical_unavailable())
     assert len(evidence_set.trajectory.rounds) == 1
 
     replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(fixture_bundle))
@@ -877,7 +905,7 @@ def test_admitted_response_relabelled_over_the_byte_cap_passes_the_audit_but_not
         (run_five_g_aka, "sources", (KnowledgeSource.MITRE_FIGHT,)),
         (run_five_g_aka, "admission", StepAdmission.DISCARDED_OVER_CONTEXT_BUDGET),
         (run_five_g_aka, "status", ResultStatus.NO_MATCH),
-        (run_five_g_aka, "channels_executed", ()),
+        (run_five_g_aka, "channels_executed", (RetrievalChannel.LEXICAL,)),
         (
             run_five_g_aka,
             "source_outcomes",

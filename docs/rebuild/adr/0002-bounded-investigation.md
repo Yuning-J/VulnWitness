@@ -15,8 +15,8 @@ terminates, that failures stay typed, and that runs replay to the same hash.
 
 Three designs were compared: a minimal one, a safety-first one and one built for
 testability and replay. The last was taken as the base, with the straight-line
-controller and literal-first topic refinement of the minimal design and the
-budget and identity rules of the safety-first design.
+controller of the minimal design and the budget and identity rules of the
+safety-first design.
 
 ## Decisions
 
@@ -624,8 +624,9 @@ and its constant call key holds a run to one. `topic_context` needs a match and
 A direct search's response keeps the unresolved resolution and `topic_not_resolved`,
 names each sent word no technique holds (`term_not_indexed`), and gives its
 techniques no topic identity; the evidence needs judge its protocol need, a word no
-technique holds and the interpretation does not explain leaving it `not_found`
-(`../m7b-b-evidence-needs.md`). Both FiGHT paths order techniques by one phrase-unit
+technique holds and the interpretation does not explain leaving it `not_found`, and
+its listed techniques otherwise leaving it `matches_unassessed` (§16,
+`../m7b-b-evidence-needs.md`). Both FiGHT paths order techniques by one phrase-unit
 BM25 score over the sent terms (`domain/bm25.py`, shared with the CVE index), ties by
 technique ID.
 
@@ -648,6 +649,45 @@ Rejected:
   credit would let the `aka` of `5G-AKA` raise any technique that mentions EAP-AKA;
 - one FiGHT order per path: a direct search needs a ranked order, and two orders over
   one source are harder to state and to check than one.
+
+### 16. A need is found through a reviewed mapping or an exact match, never through matches of words
+
+A need is `found` only through an exact correspondence or a reviewed mapping: an exact
+lookup that returned the named CVE, or the topic call of a resolved, reviewed topic that
+returned evidence. Matches of a search on the question's own words (`cve_search`,
+`fight_direct_search`) give `matches_unassessed`: matches were found and their relevance
+was not assessed, which is not a finding that no relevant evidence exists. The answer
+keeps every match. `matches_unassessed` is open, so for a resolved topic not yet explored
+the policy plans the topic call after it (R2, `topic_after_literal_miss`); with a model
+configured, round 2 consults the model, whose plan may replace that call, and the run
+still cannot end `sufficient` on word matches. For free text no rule applies, and the
+run stops `needs_unmet` without a repeated search. One rule in
+`domain/evidence_needs.py` serves the policy, the validator's stop checks, the audit and
+replay.
+
+So that a topic question reaches the reviewed mapping, the policy explores a resolved
+topic in round 1 in every scope. Under `implementation_only` the topic call never
+consults FiGHT (`count_tool_calls`); a literal search of a topic question is only ever a
+model's plan.
+
+The current version does not judge free-text results sufficient automatically: no
+relevance judge exists for a question no reviewed topic covers, and labelling its
+matches unassessed is the honest output. This is the rule of this version, not a
+permanent bar on free-text sufficiency. Nor is `found` a sufficiency proof: the basis is
+how the evidence was reached, not that a trusted source returned it, and a topic's card
+can list CVEs that do not answer the question, so a topic run can still stop
+`sufficient` wrongly.
+
+Rejected:
+
+- `found` when some listed candidate holds every query term: no baseline candidate does
+  without a longer stopword list, and the ones that do are still lexical matches;
+- matching the question's product name against stored vendor and product names: stored
+  names include ordinary words (`known`, `service`, `free`, `core`, `network`, `gtp`),
+  and `smf` names Simple Machines Forum;
+- searching the question's literal words first for a topic under `implementation_only`:
+  its hits would be `matches_unassessed` and need the topic anyway, and a spelled-out
+  phrase can return a response over the byte cap that is then discarded whole.
 
 ## Consequences
 
@@ -704,8 +744,15 @@ Rejected:
   before any call ran.
 - Any CVE ID or active filter under `protocol_context_only` is `policy_blocked`
   rather than ignored.
-- A literal-first topic search under `implementation_only` costs one extra call
-  for a compact alias (`5gaka`) and saves four for a spelled-out one (`5G-AKA`).
+- A topic question under `implementation_only` costs the card's template count (4 for
+  5G-AKA) where a literal search would cost 1. Under a `max_tool_calls` below that count
+  the policy's plan is over budget and the run stops `budget_exhausted` with no answer;
+  no literal search stands in.
+- A free-text answer ends `needs_unmet` / `partial` with its needs `matches_unassessed`
+  and the matches listed; only a named CVE or a reviewed topic can end `sufficient`. On
+  the 13 baseline cases this is measured as 4 of the 5 gold-sufficient cases reported
+  `partial` with unchanged answers (`false_gap` 4/5), the price of no longer calling
+  lexical matches sufficient (`wrong_stop` 4/13 to 2/13).
 - `mixed` free text whose words may go to FiGHT plans two round-1 calls over two
   sources, so under `max_sources: 1` or `max_tool_calls: 1` it stops
   `budget_exhausted` with no answer, as a `mixed` topic query does.

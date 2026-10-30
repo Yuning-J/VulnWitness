@@ -20,9 +20,11 @@ B changes when a run stops and whether it refines. It never removes or reorders 
 
 A need has a kind, a subject and an outcome. Kinds: `named_cve` (subject: the ID),
 `implementation_cves`, `protocol_context`, `affectedness` (subject: the filter value or the
-product and version the text names). Outcomes: `found`, `not_found`,
-`source_unavailable`, `unsupported`, `not_evaluated`. The needs are derived by code from the request and its
-interpretation, never from gold, in this order:
+product and version the text names). Outcomes: `found`, `matches_unassessed`,
+`not_found`, `source_unavailable`, `unsupported`, `not_evaluated`. `not_evaluated`,
+`not_found` and `matches_unassessed` are open; `source_unavailable` and `unsupported` are
+final. The needs are derived by code from the request and its interpretation, never from
+gold, in this order:
 
 1. One `named_cve` per CVE ID the query names.
 2. A text target. Without IDs, the query's search terms or a resolved topic are one. With
@@ -56,6 +58,21 @@ implementation CVEs and protocol context, `fight_direct_search` protocol context
 topic resolved ([`m7b-c-fight-direct-search.md`](m7b-c-fight-direct-search.md)), no tool
 affectedness.
 
+**The rule.** A need is `found` only through an exact correspondence or a reviewed
+mapping: an exact lookup that returned the named CVE, or the topic call of a resolved,
+reviewed topic that returned evidence. Matches of a search on the question's own words
+(`cve_search` or `fight_direct_search`) give `matches_unassessed`: matches were found and
+their relevance was not assessed. It is not a finding that no relevant evidence exists,
+and the answer keeps every match. The current version does not judge free-text results
+sufficient automatically; it has no relevance judge for a question no reviewed topic
+covers, so it says that the matches are unassessed rather than calling them enough.
+
+The basis of `found` is how the evidence was reached, not proof that the answer is
+sufficient: "a trusted source returned it" does not make an answer complete. A topic's
+card maps the topic to its searches and techniques, and that mapping can still list CVEs
+that do not answer the question, or miss ones that do, so a topic run can stop
+`sufficient` wrongly. Nothing here judges the relevance of what a topic call lists.
+
 Every need but affectedness is `not_evaluated` when no admitted step of a tool that
 serves it has a result: no such step ran, or none was admitted (`timed_out`, discarded
 after the deadline or over the context budget, or `rejected_invalid_evidence`). Whether
@@ -75,9 +92,9 @@ source failed gives `source_unavailable`, never `not_evaluated`.
   serving steps are the admitted direct FiGHT searches (`fight_direct_search`). Then
   `not_evaluated` without a serving step; without a topic, `not_found` when a serving
   step warned `term_not_indexed` for a sent word the interpretation does not explain
-  (the FiGHT term-coverage rule below); `found` when the answer lists a technique a
-  serving step returned; `source_unavailable` when a serving step's FiGHT source failed;
-  else `not_found`.
+  (the FiGHT term-coverage rule below); when the answer lists a technique a serving step
+  returned, `found` from a topic step and `matches_unassessed` from a direct search;
+  `source_unavailable` when a serving step's FiGHT source failed; else `not_found`.
 - **affectedness**: `source_unavailable`, since no deployment serves it (ADR 0003); the
   answer carries `applicability_unknown` for the subject.
 - **implementation_cves**: `not_evaluated` without an admitted CVE search or topic
@@ -86,22 +103,25 @@ source failed gives `source_unavailable`, never `not_evaluated`.
   or context term, and those words written together, explain a term, so `5GAKA` and
   `5G-AKA` judge alike; so do, in a question whether a product version is affected, the
   words of the version and the word that asks it. Otherwise, with a
-  resolved topic, `found` when the answer lists a CVE an admitted topic or search step
-  found, at whatever relevance tier the card gave it. Without a topic, `found` when the
-  admitted searches together sent every search term and one of them returned a CVE.
-  `source_unavailable` when a CVE source failed; else `not_found`.
+  resolved topic, `found` when the answer lists a CVE an admitted topic step found, at
+  whatever relevance tier the card gave it, and `matches_unassessed` when only an
+  admitted search of words (a model's plan) found the listed CVEs. Without a topic,
+  `matches_unassessed` when the admitted searches together sent every search term and
+  one of them returned a CVE. `source_unavailable` when a CVE source failed; else
+  `not_found`.
 
-The rule for implementation CVEs is a limited check of the retrieval process, not proof
-that the answer is relevant: it catches a word no record holds and a plan that dropped a
-word, but a query whose every word some record holds is met by whatever matches them
-("srs ran vulnerabilities").
+The term-coverage check is a conservative check of the retrieval process: it catches a
+word no record holds and a plan that dropped a word. It judges no relevance, so a query
+whose every word some record holds ("srs ran vulnerabilities") is not thereby met; its
+matches stay `matches_unassessed`.
 
 The protocol need of a direct FiGHT search has the same term-coverage check. FiGHT's
 `term_not_indexed` is a topic warning a direct search raises for each sent word no
 technique holds (a topic's card search never raises it); the explanation rule is the
 CVE side's (`list_explained_terms`). It is a conservative check of what the retrieval
 covered, not a judgement of relevance: `not_found` says the evidence does not meet the
-whole protocol need, never that FiGHT holds nothing relevant; it removes no technique,
+whole protocol need, never that FiGHT holds nothing relevant, and a direct search whose
+every word some technique holds gives `matches_unassessed`; it removes no technique,
 and the warning names the uncovered word (`catcher` in `IMSI catcher threats`). FiGHT's
 warning never reaches the implementation need, whose rule reads search warnings only.
 
@@ -114,17 +134,20 @@ The state machine is unchanged; assess, refine and the stop rules change.
   every need `found` (`sufficient`, `answer_found`); an answer whose only unmet needs are
   affectedness (`source_unavailable`, `affectedness_unavailable`); otherwise the run moves
   to refine (`needs_open`).
-- **Refine** plans at most one call for an open (`not_found` or `not_evaluated`)
-  implementation or protocol need, never retrying a call already issued; a named CVE no lookup found is met by no other call, so an unknown ID beside plain
-  text refines nothing. With a resolved topic not yet called and such a need open, the
-  topic call (`topic_after_unknown_ids` when every named ID is unknown,
-  `topic_after_literal_miss` after a literal search of a topic query, else
-  `topic_for_open_need`); else, with implementation
-  CVEs open, search terms the admitted searches did not all send and no unexplained
-  unindexed term, the search of all of them (`query_terms_for_open_need`). With no such
-  call the run stops (`no_refinement_available`); under `max_rounds` 1 a call breaches the
-  round cap. Round 2 runs, and a configured model is consulted for it, only when there is
-  a call.
+- **Refine** plans at most one call for an open (`not_found`, `not_evaluated` or
+  `matches_unassessed`) implementation or protocol need, never retrying a call already
+  issued; a named CVE no lookup found is met by no other call, so an unknown ID beside
+  plain text refines nothing. With a resolved topic not yet called and such a need open,
+  the topic call (`topic_after_unknown_ids` when every named ID is unknown,
+  `topic_after_literal_miss` when a literal search of a topic query, which only a
+  model's plan issues, did not meet the need, else `topic_for_open_need`); else, with
+  implementation CVEs open, search terms the admitted searches did not all send and no
+  unexplained unindexed term, the search of all of them (`query_terms_for_open_need`).
+  With no such call the run stops (`no_refinement_available`); under `max_rounds` 1 a
+  call breaches the round cap. Round 2 runs, and a configured model is consulted for it,
+  only when there is a call. Free text whose matches are unassessed has none: every
+  search term was sent and no rule plans FiGHT, so the run ends without a repeated
+  search.
 - **Stopping with open needs**: an answer gives `needs_unmet` (status `partial`); no
   answer gives `no_evidence`, or `source_unavailable` when affectedness was needed. After
   round 2 the basis is `needs_open_after_refinement`.
@@ -141,6 +164,8 @@ Contracts move to `2.0.0-dev.28`; the deterministic policy to `m7b.1`.
   `StepReason` gains `topic_for_open_need` and `query_terms_for_open_need`.
 - `EvidenceCatalog.names_product`; `interpret_request` and the decision-path audit take the
   evidence catalog, which both callers already hold.
+- `NeedOutcome.matches_unassessed` (contracts `2.0.0-dev.34`, policy `m7b.4`; package 2 in
+  [`m7b-work-packages.md`](m7b-work-packages.md#package-2--topic-first-and-unassessed-matches)).
 
 ## Verification and replay
 
@@ -164,7 +189,8 @@ whose need kinds equal the case's. `evaluation_format_version` moves to 3.
 - It removes and reorders no answer, and adds no admission rule, word list for products or
   fillers, or frequency threshold.
 - It cannot tell generic matches from relevant ones when every query word is held by some
-  record, nor see a shortfall of relevant evidence (`5g-aka-threats`, `oai-cn5g`,
+  record: it labels them `matches_unassessed` instead. It cannot see a shortfall of
+  relevant evidence in what a topic call lists either (`5g-aka-threats`,
   `5g-aka-implementations` in the first run).
 - It does not search FiGHT without a card. That is C's direct FiGHT search
   ([`m7b-c-fight-direct-search.md`](m7b-c-fight-direct-search.md)), so a protocol need is
@@ -179,7 +205,9 @@ whose need kinds equal the case's. `evaluation_format_version` moves to 3.
 ## Measured on the 13 baseline cases
 
 A deterministic M7b run over the 2026-10-27 store and FiGHT 3.1.0 (`gold-sets --check`
-passed first), against the same run before B. Every case returns the same answers in the
+passed first), against the same run before B. These figures are B's, under policy
+`m7b.1`; package 2's rule moves them (wrong_stop 2/13, false_gap 4/5), see
+[`m7b-work-packages.md`](m7b-work-packages.md#package-2--topic-first-and-unassessed-matches). Every case returns the same answers in the
 same order and keeps its judged sufficiency (5 sufficient, 6 partial, 2 insufficient);
 coverage is unchanged (named CVEs 1.0, implementation CVEs 0.83, protocol context 0.22).
 

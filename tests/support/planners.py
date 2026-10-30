@@ -60,7 +60,7 @@ EXAMPLE_PLANNING_INPUT = PlanningInput.model_validate(
         "topic_version": "1.0.0",
         "review_status": "pending_review",
         "allowed_tools": ["cve_search", "topic_context"],
-        "required_tools": ["cve_search"],
+        "required_tools": ["topic_context"],
         "allowed_terms": ["5g", "aka"],
         "tool_costs": [
             {"tool": "cve_search", "charged_tool_calls": 1},
@@ -96,6 +96,10 @@ def build_text_reply(text: str) -> ModelReply:
 def build_plan_reply(*calls: dict[str, Any]) -> ModelReply:
     """A successful reply whose plan is ``{"steps": calls}``."""
     return build_text_reply(json.dumps({"steps": list(calls)}))
+
+
+# A reply planning the 5G-AKA topic call.
+FIVE_G_AKA_TOPIC_REPLY = build_plan_reply({"tool": "topic_context", "topic_id": "3gpp:5g-aka"})
 
 
 @dataclass

@@ -32,8 +32,9 @@ from tests.support.investigation import (
     build_test_investigation_service,
 )
 
-# "democorp gateway" lists CVE-9999-0001, -0002 and -0007; "5gaka" (mixed) lists
-# CVE-9999-0003 and -0004 and FGT1499.503, FGT5040, FGT5019, FGT5019.005 and FGT5044.
+# "democorp gateway" lists CVE-9999-0001, -0002 and -0007 and stops needs_unmet, its
+# matches unassessed; "5gaka" lists CVE-9999-0003 and -0004 and stops sufficient, under
+# mixed also with FGT1499.503, FGT5040, FGT5019, FGT5019.005 and FGT5044.
 GATEWAY_QUERY = "democorp gateway"
 PROTOCOL_RULES = {
     "relevant": {"technique_any": ["x"]},
@@ -55,6 +56,11 @@ def build_sets(
 @pytest.fixture
 def gateway_set(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
     return run_deterministically(fixture_bundle, GATEWAY_QUERY, "implementation_only")
+
+
+@pytest.fixture
+def topic_set(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    return run_deterministically(fixture_bundle, "5gaka", "implementation_only")
 
 
 @pytest.fixture
@@ -97,20 +103,18 @@ def test_coverage_counts_listed_required_items_over_at_most_twenty(
 def test_lower_request_budget_does_not_lower_the_coverage_bar(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    budget = {"max_results_per_call": 2}
+    budget = {"max_results_per_call": 1}
     low_budget_set = run_deterministically(
-        fixture_bundle, GATEWAY_QUERY, "implementation_only", budget=budget
+        fixture_bundle, "5gaka", "implementation_only", budget=budget
     )
-    case = build_case(
-        request={"query": GATEWAY_QUERY, "scope": "implementation_only", "budget": budget}
-    )
-    required = ("CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0007")
+    case = build_case(request={"query": "5gaka", "scope": "implementation_only", "budget": budget})
+    required = ("CVE-9999-0003", "CVE-9999-0004")
 
     judgement = judge_run(case, {SubjectKind.CVES: build_sets(required)}, low_budget_set)
 
-    assert len(low_budget_set.implementation_candidates) == 2
+    assert len(low_budget_set.implementation_candidates) == 1
     assert low_budget_set.stop_reason is StopReason.SUFFICIENT
-    assert judgement.categories[EvidenceCategory.IMPLEMENTATION_CVES].coverage == 0.6667
+    assert judgement.categories[EvidenceCategory.IMPLEMENTATION_CVES].coverage == 0.5
     assert judgement.judged is JudgedSufficiency.PARTIAL
     assert judgement.wrong_stop
 
@@ -133,7 +137,7 @@ def test_irrelevant_and_unjudged_items_are_counted_apart(
 
 
 def test_empty_required_set_is_never_covered_and_a_sufficient_stop_is_wrong(
-    gateway_set: KnowledgeEvidenceSet,
+    topic_set: KnowledgeEvidenceSet,
 ) -> None:
     case = build_case(
         rules={
@@ -145,11 +149,11 @@ def test_empty_required_set_is_never_covered_and_a_sufficient_stop_is_wrong(
         label={"sufficiency": "insufficient", "reason": "x"},
     )
 
-    judgement = judge_run(case, {SubjectKind.CVES: build_sets(())}, gateway_set)
+    judgement = judge_run(case, {SubjectKind.CVES: build_sets(())}, topic_set)
 
     assert judgement.categories[EvidenceCategory.IMPLEMENTATION_CVES].coverage is None
     assert judgement.judged is JudgedSufficiency.INSUFFICIENT
-    assert gateway_set.stop_reason is StopReason.SUFFICIENT
+    assert topic_set.stop_reason is StopReason.SUFFICIENT
     assert judgement.wrong_stop
 
 
@@ -246,8 +250,12 @@ def build_cve_gap_case() -> LabelledCase:
 
 @pytest.mark.parametrize(
     ("query", "expected_unflagged"),
-    [("zzqx gateway", False), (GATEWAY_QUERY, True)],
-    ids=["implementation_need_not_found", "implementation_need_found"],
+    [("zzqx gateway", False), (GATEWAY_QUERY, False), ("5gaka", True)],
+    ids=[
+        "implementation_need_not_found",
+        "implementation_need_matches_unassessed",
+        "implementation_need_found",
+    ],
 )
 def test_cve_gap_is_flagged_only_when_the_run_leaves_its_implementation_need_unfound(
     fixture_bundle: FixtureBundle, query: str, expected_unflagged: bool
@@ -296,14 +304,14 @@ def test_need_agreement_holds_exactly_when_the_run_needs_the_case_kinds(
 
 
 def test_false_gap_counts_over_the_runs_judged_sufficient(
-    gateway_set: KnowledgeEvidenceSet,
+    topic_set: KnowledgeEvidenceSet, gateway_set: KnowledgeEvidenceSet
 ) -> None:
     case = build_case()
-    case_sets = {SubjectKind.CVES: build_sets(("CVE-9999-0001", "CVE-9999-0002"))}
-    needs_unmet_set = gateway_set.model_copy(update={"stop_reason": StopReason.NEEDS_UNMET})
+    topic_sets = {SubjectKind.CVES: build_sets(("CVE-9999-0003", "CVE-9999-0004"))}
+    gateway_sets = {SubjectKind.CVES: build_sets(("CVE-9999-0001", "CVE-9999-0002"))}
     judgements = (
-        judge_run(case, case_sets, gateway_set),
-        judge_run(case, case_sets, needs_unmet_set),
+        judge_run(case, topic_sets, topic_set),
+        judge_run(case, gateway_sets, gateway_set),
     )
 
     part = build_part([JudgedCase(case, judgements)])
@@ -367,10 +375,10 @@ def test_mixed_run_counts_once_in_run_quality_and_in_each_category(
 
 
 def test_uncertain_case_counts_its_runs_and_affectedness_and_nothing_its_label_decides(
-    gateway_set: KnowledgeEvidenceSet,
+    topic_set: KnowledgeEvidenceSet,
 ) -> None:
     case = build_case(label={"sufficiency": "uncertain", "reason": "x"})
-    judgement = judge_run(case, {SubjectKind.CVES: build_sets(("CVE-9999-0099",))}, gateway_set)
+    judgement = judge_run(case, {SubjectKind.CVES: build_sets(("CVE-9999-0099",))}, topic_set)
 
     part = build_part([JudgedCase(case, (judgement,))])
 

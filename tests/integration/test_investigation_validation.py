@@ -588,6 +588,24 @@ def mark_a_found_need_unmet(
     return update_coverage(evidence_set, needs=(unmet_need,))
 
 
+def relabel_the_unassessed_matches_found(
+    evidence_set: KnowledgeEvidenceSet, fixture_bundle: FixtureBundle
+) -> KnowledgeEvidenceSet:
+    """The free-text run still stops needs_unmet, but its one need, matches whose relevance
+    was not assessed, now reads found."""
+    found_need = evidence_set.coverage.needs[0].model_copy(update={"outcome": NeedOutcome.FOUND})
+    return update_coverage(evidence_set, needs=(found_need,))
+
+
+def report_unassessed_matches_sufficient(
+    evidence_set: KnowledgeEvidenceSet, fixture_bundle: FixtureBundle
+) -> KnowledgeEvidenceSet:
+    """The free-text run claims to stop sufficient on its matches, still unassessed."""
+    return reseal_evidence_set(
+        evidence_set, stop_reason=StopReason.SUFFICIENT, status=ResultStatus.OK
+    )
+
+
 def relabel_a_met_run_needs_unmet(
     evidence_set: KnowledgeEvidenceSet, fixture_bundle: FixtureBundle
 ) -> KnowledgeEvidenceSet:
@@ -791,12 +809,15 @@ PROTOCOL_5GAKA = ("5gaka", "protocol_context_only", {})
 CANONICAL_MIXED = ("5G AKA", "mixed", {})
 CANONICAL_PROTOCOL = ("5G AKA", "protocol_context_only", {})
 MIXED_5GAKA = ("5gaka", "mixed", {})
-IMPLEMENTATION_REFINES = ("5gaka", "implementation_only", {})
 OPEN5GS = ("5gaka", "implementation_only", {"filters": {"products": ["open5gs"]}})
+# The topic finds no open5gs record, so round 2 searches the words: two rounds of one step.
+IMPLEMENTATION_REFINES = OPEN5GS
 F5GC = ("5gaka", "implementation_only", {"filters": {"products": ["f5gc"]}})
 EXACT_ID = ("CVE-9999-0003", "implementation_only", {})
-# A literal miss refines into the topic's four template searches, all capped at 1.
-IMPLEMENTATION_REFINES_CAPPED = (
+# A search on the question's own words: its one need is matches_unassessed.
+FREE_TEXT = ("sql injection gateway", "implementation_only", {})
+# The topic's four template searches under implementation_only, all capped at 1.
+IMPLEMENTATION_TOPIC_CAPPED = (
     "5gaka",
     "implementation_only",
     {"budget": {"max_results_per_call": 1}},
@@ -851,19 +872,19 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
             "asks cve_search for 20 results, more than max_results_per_call",
         ),
         (
-            IMPLEMENTATION_REFINES_CAPPED,
+            IMPLEMENTATION_TOPIC_CAPPED,
             raise_a_template_search_limit,
-            "step 2 asks cve_search for 20 results, more than max_results_per_call",
+            "step 1 asks cve_search for 20 results, more than max_results_per_call",
         ),
         (
-            IMPLEMENTATION_REFINES_CAPPED,
+            IMPLEMENTATION_TOPIC_CAPPED,
             drop_a_template_search,
-            "step 2 is charged 4 tool calls for 3 backend requests",
+            "step 1 is charged 4 tool calls for 3 backend requests",
         ),
         (
-            IMPLEMENTATION_REFINES_CAPPED,
+            IMPLEMENTATION_TOPIC_CAPPED,
             swap_a_template_search_for_fight,
-            "step 2 sends requests to other sources than it names",
+            "step 1 sends requests to other sources than it names",
         ),
         (
             build_exact_id_request(max_tool_calls=1),
@@ -914,6 +935,12 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
         (EXACT_ID, repeat_an_outcome, "names a source more than once"),
         (EXACT_ID, misstate_the_coverage_basis, "coverage.basis must be the basis"),
         (EXACT_ID, mark_a_found_need_unmet, "sufficient needs every need found"),
+        (
+            FREE_TEXT,
+            relabel_the_unassessed_matches_found,
+            "needs_unmet needs an answer and an unmet need other than affectedness",
+        ),
+        (FREE_TEXT, report_unassessed_matches_sufficient, "sufficient needs every need found"),
         (
             EXACT_ID,
             relabel_a_met_run_needs_unmet,
@@ -1022,6 +1049,8 @@ def build_exact_id_request(**budget: int) -> tuple[str, str, dict[str, Any]]:
         "repeated_outcome",
         "misstated_coverage_basis",
         "sufficient_with_an_unmet_need",
+        "unassessed_matches_relabelled_found",
+        "sufficient_on_unassessed_matches",
         "needs_unmet_with_every_need_met",
         "status_not_decided_by_outcomes",
         "transitions_not_starting_at_interpret",
@@ -1121,7 +1150,9 @@ def test_fight_evidence_is_rejected_where_no_snapshot_is_pinned(
 def test_deserialized_set_with_three_rounds_is_rejected_at_the_boundary(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    evidence_set = investigate(fixture_bundle, "5gaka", "implementation_only")
+    evidence_set = investigate(
+        fixture_bundle, "5gaka", "implementation_only", filters={"products": ["open5gs"]}
+    )
     rounds = evidence_set.trajectory.rounds
     forged_set = update_trajectory(evidence_set, rounds=(*rounds, rounds[-1]))
 
@@ -1770,7 +1801,7 @@ def drop_round_one_rejections(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEv
         (
             run_model_accepted,
             drop_the_planner_call,
-            "planner_calls 0 differ from the 1 rounds that consulted the model",
+            "planner_calls 0 differ from the 2 rounds that consulted the model",
         ),
         (
             run_exact_id,

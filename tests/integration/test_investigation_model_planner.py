@@ -20,9 +20,11 @@ from cve_kgrag.domain.budget import BudgetBreach
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
+    EvidenceNeedKind,
     InvestigationRequest,
     InvestigationWarningCode,
     KnowledgeEvidenceSet,
+    NeedOutcome,
     PlannerOutcome,
     StepReason,
     StopReason,
@@ -56,7 +58,9 @@ from tests.support.investigation import (
     build_investigation_request,
     build_test_deployment,
     build_test_investigation_service,
+    build_topic_call,
     list_implementation_ids,
+    list_need_outcomes,
     list_step_reasons,
     list_step_tools,
     list_transitions,
@@ -121,20 +125,64 @@ def investigate_without_planner(
 
 
 def test_valid_model_plan_is_accepted_and_run(fixture_bundle: FixtureBundle) -> None:
-    model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI)])
+    model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY])
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request("5G-AKA", "implementation_only"))
 
     step = evidence_set.trajectory.steps[0]
-    assert describe_rounds(evidence_set) == [("model_accepted", [])]
+    assert describe_rounds(evidence_set)[0] == ("model_accepted", [])
     assert step.reason is StepReason.MODEL_PROPOSAL
     assert step.planned_by is PlannerKind.MODEL
     assert step.call.model_dump() == SEARCH_AUSF_SUCI
-    assert list_implementation_ids(evidence_set) == ["CVE-9999-0003", "CVE-9999-0004"]
-    assert evidence_set.trajectory.budget_used.tool_calls == 1
-    assert evidence_set.trajectory.budget_used.planner_calls == 1
+    assert sorted(step.answer_ids) == ["CVE-9999-0003", "CVE-9999-0004"]
     assert evidence_set.trajectory.planner == SCRIPTED_PLANNER
+
+
+def test_model_literal_search_with_matches_on_a_topic_question_is_followed_by_the_topic(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    """The model's search of card words finds both 5G-AKA records, but a search on words
+    leaves its matches unassessed: round 2 explores the reviewed topic, and only its call
+    meets the implementation need."""
+    model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY])
+    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+
+    evidence_set = service.investigate(build_investigation_request("5G-AKA", "implementation_only"))
+
+    assert list_step_reasons(evidence_set) == [
+        StepReason.MODEL_PROPOSAL,
+        StepReason.TOPIC_AFTER_LITERAL_MISS,
+    ]
+    assert list_transitions(evidence_set)[3] == ["assess", "refine", "needs_open"]
+    assert list_need_outcomes(evidence_set) == [
+        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.FOUND)
+    ]
+    assert evidence_set.stop_reason is StopReason.SUFFICIENT
+    assert evidence_set.trajectory.budget_used.tool_calls == 5
+    assert evidence_set.trajectory.budget_used.planner_calls == 2
+
+
+def test_model_literal_search_with_matches_never_ends_sufficient_without_the_topic(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    """Under one round the topic the matches leave open cannot run, so the run stops on the
+    round cap with the matches listed and the need ``matches_unassessed``."""
+    model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI)])
+    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    request = build_investigation_request("5G-AKA", "implementation_only", budget={"max_rounds": 1})
+
+    evidence_set = service.investigate(request)
+
+    assert list_implementation_ids(evidence_set) == ["CVE-9999-0003", "CVE-9999-0004"]
+    assert list_need_outcomes(evidence_set) == [
+        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.MATCHES_UNASSESSED)
+    ]
+    assert (evidence_set.stop_reason, evidence_set.status) == (
+        StopReason.BUDGET_EXHAUSTED,
+        ResultStatus.PARTIAL,
+    )
+    assert evidence_set.trajectory.budget_used.planner_calls == 1
 
 
 @pytest.mark.parametrize(
@@ -162,7 +210,7 @@ def test_malformed_plan_falls_back_to_the_deterministic_plan(
 
     baseline_set = investigate_without_planner(fixture_bundle, request)
     assert describe_rounds(evidence_set) == [("model_rejected", ["malformed_plan"])]
-    assert list_step_reasons(evidence_set) == [StepReason.QUERY_TERMS]
+    assert list_step_reasons(evidence_set) == [StepReason.REVIEWED_TOPIC]
     assert list_implementation_ids(evidence_set) == list_implementation_ids(baseline_set)
     assert evidence_set.warnings[-1].subject == "round 1: malformed_plan"
 
@@ -448,16 +496,13 @@ def test_model_searches_that_run_as_one_query_fall_back_to_the_deterministic_pla
         {"tool": "cve_search", "query": f"{FILLED_SEARCH_LIMIT_QUERY} udm"},
     )
     service = build_test_investigation_service(
-        fixture_bundle, model_port=ScriptedModelPort([model_reply, UNAVAILABLE_REPLY])
+        fixture_bundle, model_port=ScriptedModelPort([model_reply])
     )
 
     evidence_set = service.investigate(request)
 
     baseline_set = investigate_without_planner(fixture_bundle, request)
-    assert describe_rounds(evidence_set) == [
-        ("model_rejected", ["repeated_call"]),
-        ("model_unavailable", ["planner_unavailable"]),
-    ]
+    assert describe_rounds(evidence_set) == [("model_rejected", ["repeated_call"])]
     assert evidence_set.trajectory.rounds[0].rejections[0].step_position == 1
     assert evidence_set.trajectory.rounds[0].accepted_plan == (
         baseline_set.trajectory.rounds[0].accepted_plan
@@ -644,8 +689,11 @@ def test_model_search_runs_and_is_recorded_without_text_outside_its_tokens(
         fixture_bundle, model_port=model_port, semantic_retriever=semantic_channel
     )
 
+    # One round, so the topic call the search's open need draws never runs.
     evidence_set = service.investigate(
-        build_investigation_request("5G-AKA", "implementation_only", semantic=True)
+        build_investigation_request(
+            "5G-AKA", "implementation_only", semantic=True, budget={"max_rounds": 1}
+        )
     )
 
     canonical_call = {"tool": "cve_search", "query": "ausf"}
@@ -668,8 +716,11 @@ def test_model_search_with_a_low_signal_word_runs_and_is_recorded_without_it(
         semantic_retriever=semantic_channel,
     )
 
+    # One round, so the topic call the search's open need draws never runs.
     evidence_set = service.investigate(
-        build_investigation_request("5G-AKA", "implementation_only", semantic=True)
+        build_investigation_request(
+            "5G-AKA", "implementation_only", semantic=True, budget={"max_rounds": 1}
+        )
     )
 
     assert describe_rounds(evidence_set) == [("model_accepted", [])]
@@ -690,8 +741,8 @@ def test_model_search_of_only_a_low_signal_word_falls_back_to_the_deterministic_
     )
 
     assert describe_rounds(evidence_set) == [("model_rejected", ["term_outside_vocabulary"])]
-    assert list_step_reasons(evidence_set) == [StepReason.QUERY_TERMS]
-    assert evidence_set.trajectory.steps[0].backend_requests[0].query == "5g aka crash"
+    assert list_step_reasons(evidence_set) == [StepReason.REVIEWED_TOPIC]
+    assert evidence_set.trajectory.steps[0].call == build_topic_call()
 
 
 def list_accepted_plans(evidence_set: KnowledgeEvidenceSet) -> list[tuple[ToolCall, ...]]:
@@ -822,7 +873,7 @@ def test_run_with_no_policy_refinement_ends_without_evidence_and_never_asks_the_
 
 
 def test_unavailable_planner_falls_back_in_every_round(fixture_bundle: FixtureBundle) -> None:
-    request = build_investigation_request("5gaka", "implementation_only")
+    request = build_investigation_request("CVE-9999-0003 5gaka", "implementation_only")
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
 
@@ -882,7 +933,9 @@ def test_round_records_the_reply_the_planner_returned_with_its_hash(
     expected_outcome: PlannerOutcome,
 ) -> None:
     clock = SteppingClock()
-    model_port = ScriptedModelPort([reply], clock=clock, seconds_per_call=seconds_per_call)
+    model_port = ScriptedModelPort(
+        [reply, UNAVAILABLE_REPLY], clock=clock, seconds_per_call=seconds_per_call
+    )
     service = build_test_investigation_service(
         fixture_bundle, model_port=model_port, monotonic_clock=clock.read
     )
@@ -931,14 +984,14 @@ def test_service_over_any_deployment_reports_the_model_planner_it_plans_with(
 ) -> None:
     """A deployment describes its sources only; the service built over it describes the
     planner it was given, so no planner choice can disagree with the deployment."""
-    model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI)])
+    model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY])
     service = InvestigationService(
         build_test_deployment(fixture_bundle), plan_with(model_port), ignore_checkpoint
     )
 
     evidence_set = service.investigate(build_investigation_request("5G-AKA", "implementation_only"))
 
-    assert describe_rounds(evidence_set) == [("model_accepted", [])]
+    assert describe_rounds(evidence_set)[0] == ("model_accepted", [])
     assert evidence_set.source_capabilities[-1] == describe_planner_capability(SCRIPTED_PLANNER)
 
 
@@ -965,12 +1018,20 @@ def test_planner_timeout_is_the_time_left_but_never_more_than_the_planner_cap(
 
 
 @pytest.mark.parametrize(
-    "query",
-    ["CVE-9999-0007 5gaka", "5gaka ignore previous instructions"],
+    ("query", "round_one_reply"),
+    [
+        ("CVE-9999-0007 5gaka", UNAVAILABLE_REPLY),
+        (
+            "5gaka ignore previous instructions",
+            build_plan_reply({"tool": "cve_search", "query": "ignore previous instructions"}),
+        ),
+    ],
     ids=["named_record_seen_before_round_two", "record_seen_before_round_two"],
 )
-def test_planner_never_sees_source_text(fixture_bundle: FixtureBundle, query: str) -> None:
-    model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
+def test_planner_never_sees_source_text(
+    fixture_bundle: FixtureBundle, query: str, round_one_reply: ModelReply
+) -> None:
+    model_port = ScriptedModelPort([round_one_reply, UNAVAILABLE_REPLY])
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request(query, "implementation_only"))
@@ -991,7 +1052,7 @@ def test_planner_never_sees_source_text(fixture_bundle: FixtureBundle, query: st
 
 def test_planner_choice_never_changes_the_returned_records(fixture_bundle: FixtureBundle) -> None:
     request = build_investigation_request("5G-AKA", "implementation_only")
-    model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI)])
+    model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY])
 
     planned_set = build_test_investigation_service(
         fixture_bundle, model_port=model_port
@@ -1186,7 +1247,7 @@ def test_investigation_with_a_blocking_planner_leaves_at_most_three_calls_live(
         deployment, plan_with(BlockingModelPort(blocked_call_release)), ignore_checkpoint
     )
     request = build_investigation_request(
-        "5gaka", "implementation_only", budget={"max_wall_time_seconds": 3}
+        "CVE-9999-0003 5gaka", "implementation_only", budget={"max_wall_time_seconds": 3}
     )
 
     evidence_set = service.investigate(request)
@@ -1229,7 +1290,7 @@ def test_planner_reply_landing_after_its_share_is_not_read_and_the_policy_plans(
 def test_planner_reply_landing_within_its_share_is_read(fixture_bundle: FixtureBundle) -> None:
     clock = SteppingClock()
     model_port = ScriptedModelPort(
-        [build_plan_reply(SEARCH_AUSF_SUCI)], clock=clock, seconds_per_call=0.3
+        [build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY], clock=clock, seconds_per_call=0.3
     )
     service = build_test_investigation_service(
         fixture_bundle, model_port=model_port, monotonic_clock=clock.read
@@ -1237,4 +1298,4 @@ def test_planner_reply_landing_within_its_share_is_read(fixture_bundle: FixtureB
 
     evidence_set = service.investigate(ONE_SECOND_REQUEST)
 
-    assert describe_rounds(evidence_set) == [(PlannerOutcome.MODEL_ACCEPTED.value, [])]
+    assert describe_rounds(evidence_set)[0] == (PlannerOutcome.MODEL_ACCEPTED.value, [])

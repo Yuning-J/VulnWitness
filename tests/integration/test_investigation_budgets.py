@@ -41,6 +41,7 @@ from tests.support.investigation import (
     build_deadline_nearing_service,
     build_investigation_request,
     build_test_investigation_service,
+    list_implementation_ids,
     list_step_tools,
     list_transitions,
     list_warning_codes,
@@ -83,11 +84,12 @@ def list_recorded_fight_requests(
     ("query", "scope", "budget", "expected_breach", "expected_tools", "expected_stop_basis"),
     [
         (
-            "5gaka",
+            # The unknown ID leaves the topic to explore, which a second round would run.
+            "CVE-9999-4242 5gaka",
             "implementation_only",
             {"max_rounds": 1},
             BudgetBreach.ROUNDS,
-            ["cve_search"],
+            ["cve_exact_lookup"],
             "round_cap_reached",
         ),
         (
@@ -160,11 +162,17 @@ def test_response_over_the_byte_cap_is_discarded_with_a_warning(
 
 
 @pytest.mark.parametrize(
-    ("query", "scope", "expected_answer_ids"),
+    ("query", "scope", "expected_answer_ids", "expected_status"),
     [
-        ("democorp", "implementation_only", ("CVE-9999-0001",)),
-        ("5gaka", "protocol_context_only", ("CVE-9999-0003", "FGT1499.503")),
-        ("5gaka", "mixed", ("CVE-9999-0003", "FGT1499.503")),
+        # A search on the question's own words leaves its match unassessed.
+        ("democorp", "implementation_only", ("CVE-9999-0001",), ResultStatus.PARTIAL),
+        (
+            "5gaka",
+            "protocol_context_only",
+            ("CVE-9999-0003", "FGT1499.503"),
+            ResultStatus.OK,
+        ),
+        ("5gaka", "mixed", ("CVE-9999-0003", "FGT1499.503"), ResultStatus.OK),
     ],
     ids=["cve_search", "topic_context_protocol", "topic_context_mixed"],
 )
@@ -173,6 +181,7 @@ def test_lowered_result_cap_limits_what_every_tool_returns(
     query: str,
     scope: str,
     expected_answer_ids: tuple[str, ...],
+    expected_status: ResultStatus,
 ) -> None:
     # Uncapped, each of these calls returns two to seven answer IDs.
     service = build_test_investigation_service(fixture_bundle)
@@ -185,18 +194,19 @@ def test_lowered_result_cap_limits_what_every_tool_returns(
     assert len(evidence_set.trajectory.steps) == 1
     assert set(list_backend_limits(evidence_set)) == {1}
     assert step.answer_ids == expected_answer_ids
-    assert evidence_set.status is ResultStatus.OK
+    assert evidence_set.status is expected_status
 
 
 @pytest.mark.parametrize("max_results_per_call", [1, 5, 20])
 @pytest.mark.parametrize(
     ("query", "scope", "expected_tools"),
     [
-        ("5gaka", "implementation_only", ["cve_search", "topic_context"]),
+        ("sql injection gateway", "implementation_only", ["cve_search"]),
+        ("5gaka", "implementation_only", ["topic_context"]),
         ("5gaka", "mixed", ["topic_context"]),
         ("5gaka", "protocol_context_only", ["topic_context"]),
     ],
-    ids=["literal_miss_then_topic", "topic_mixed", "topic_protocol"],
+    ids=["free_text_search", "topic_implementation", "topic_mixed", "topic_protocol"],
 )
 def test_every_backend_request_stays_within_max_results_per_call(
     fixture_bundle: FixtureBundle,
@@ -261,7 +271,9 @@ def test_slow_call_finishing_past_the_deadline_is_discarded_and_nothing_follows(
         fixture_bundle, monotonic_clock=clock.read, lexical_retriever=slow_lexical
     )
 
-    evidence_set = service.investigate(build_investigation_request("5gaka", "implementation_only"))
+    evidence_set = service.investigate(
+        build_investigation_request("sql injection gateway", "implementation_only")
+    )
 
     step = evidence_set.trajectory.steps[0]
     assert list_step_tools(evidence_set) == ["cve_search"]
@@ -280,20 +292,24 @@ def test_slow_refinement_landing_past_the_deadline_discards_only_that_round(
         fixture_bundle, monotonic_clock=clock.read, lexical_retriever=slow_lexical
     )
 
-    evidence_set = service.investigate(build_investigation_request("5gaka", "implementation_only"))
+    # The lookup reads no lexical index; the topic's four template searches take 40 s.
+    evidence_set = service.investigate(
+        build_investigation_request("CVE-9999-0003 5gaka", "implementation_only")
+    )
 
     admissions: list[StepAdmission] = []
     for step in evidence_set.trajectory.steps:
         admissions.append(step.admission)
     assert admissions == [StepAdmission.ADMITTED, StepAdmission.DISCARDED_AFTER_DEADLINE]
     assert evidence_set.trajectory.budget_used.breach is BudgetBreach.WALL_TIME
-    assert evidence_set.has_answer() is False
+    assert list_implementation_ids(evidence_set) == ["CVE-9999-0003"]
 
 
 @pytest.mark.parametrize(
     ("retrievers", "query", "expected_tool_calls"),
     [
-        ({"lexical_retriever": CannedRetriever(build_failure(BackendStatus.ERROR))}, "5gaka", 1),
+        # The topic call charges its four template searches whatever they return.
+        ({"lexical_retriever": CannedRetriever(build_failure(BackendStatus.ERROR))}, "5gaka", 4),
         ({"lexical_retriever": InventingRetriever()}, "crash", 1),
         ({}, "zzqx", 1),
         (
@@ -326,11 +342,16 @@ def test_deadline_reached_before_the_refinement_round_issues_no_further_call(
 ) -> None:
     service = build_deadline_nearing_service(fixture_bundle)
 
-    evidence_set = service.investigate(build_investigation_request("5gaka", "implementation_only"))
+    # The topic finds no open5gs record, so R3 would search the question's own words.
+    evidence_set = service.investigate(
+        build_investigation_request(
+            "5gaka", "implementation_only", filters={"products": ["open5gs"]}
+        )
+    )
 
-    assert list_step_tools(evidence_set) == ["cve_search"]
+    assert list_step_tools(evidence_set) == ["topic_context"]
     assert evidence_set.trajectory.steps[0].admission is StepAdmission.ADMITTED
-    assert evidence_set.trajectory.budget_used.tool_calls == 1
+    assert evidence_set.trajectory.budget_used.tool_calls == 4
     assert evidence_set.trajectory.budget_used.breach is BudgetBreach.WALL_TIME
     assert list_transitions(evidence_set)[-2] == ["refine", "validate", "budget_breached"]
     assert (evidence_set.stop_reason, evidence_set.status) == (
@@ -414,7 +435,7 @@ def test_step_that_ends_the_run_leaves_the_rest_of_its_plan_unissued(
 @pytest.mark.parametrize(
     ("blocking_backend", "query", "scope", "expected_tool", "expected_charge"),
     [
-        ("lexical", "5gaka", "implementation_only", "cve_search", 1),
+        ("lexical", "sql injection gateway", "implementation_only", "cve_search", 1),
         ("fight", "5gaka", "protocol_context_only", "topic_context", 5),
     ],
     ids=["lexical_never_returns", "fight_never_returns"],

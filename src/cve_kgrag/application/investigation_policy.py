@@ -1,4 +1,4 @@
-"""The deterministic investigation policy (version ``m7b.3``): pure functions of the
+"""The deterministic investigation policy (version ``m7b.4``): pure functions of the
 request, its interpretation and the observed steps.
 
 The policy reads a query into an intent, decides whether the query can be answered
@@ -10,9 +10,9 @@ resolved topic card.
 Round 1, by intent and scope:
 
 - an exact CVE ID is looked up directly, never expanded into a topic;
-- a resolved topic is explored with ``topic_context`` under ``mixed`` and
-  ``protocol_context_only``; under ``implementation_only`` the caller's own terms
-  are searched literally first, since one search costs less than a topic's fan-out;
+- a resolved topic is explored with ``topic_context`` in every scope; under
+  ``implementation_only`` the call fans out to the card's CVE searches only, never to
+  FiGHT (``count_tool_calls``);
 - free text is searched literally under ``implementation_only``; under
   ``protocol_context_only`` its words are searched in FiGHT directly
   (``fight_direct_search``), and under ``mixed`` both, the CVE search first, when the
@@ -26,8 +26,9 @@ CVE no lookup found is met by no other call:
 - R1: every ID of a round-1 exact lookup is unknown and the resolved topic names a
   further target, so explore the topic;
 - R2: an implementation or protocol need is open and the resolved topic was not
-  explored, so explore it (after a literal search for a topic query, or for an open
-  need otherwise);
+  explored, so explore it (``topic_after_literal_miss`` when a literal search of a topic
+  query, which only a model's plan issues, did not meet the need; ``topic_for_open_need``
+  otherwise);
 - R3: the implementation need is open and round 1's searches did not send every search
   term, none of which is an unexplained unindexed term, so search all of them.
 
@@ -85,7 +86,7 @@ from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.topics.registry import TopicRegistry
 
-DETERMINISTIC_POLICY_VERSION = "m7b.3"
+DETERMINISTIC_POLICY_VERSION = "m7b.4"
 # An exact lookup or a CVE search is one backend query.
 CVE_TOOL_COST = 1
 # A direct FiGHT search is one backend query.
@@ -345,11 +346,6 @@ def plan_first_round(
         )
         return [PlannedStep(exact_lookup, StepReason.QUERY_CVE_IDS)]
     if interpretation.intent is QueryIntent.TOPIC:
-        is_literal_first = request.scope is QueryScope.IMPLEMENTATION_ONLY and bool(
-            interpretation.search_terms
-        )
-        if is_literal_first:
-            return [PlannedStep(build_search_call(interpretation), StepReason.QUERY_TERMS)]
         return [PlannedStep(build_topic_call(interpretation), StepReason.REVIEWED_TOPIC)]
     fight_step = PlannedStep(build_fight_direct_search_call(), StepReason.QUERY_TERMS_FIGHT)
     if request.scope is QueryScope.PROTOCOL_CONTEXT_ONLY:

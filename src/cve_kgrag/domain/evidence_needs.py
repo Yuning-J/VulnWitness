@@ -3,18 +3,24 @@
 The needs follow from the request and its interpretation alone, never from labelled
 cases, and whether one was met follows from what the run recorded, so the controller, the
 validator and the decision-path audit compute the same needs from a sealed set. Each need
-is met only by the tool that can serve it: an exact lookup a named CVE, a CVE search
-implementation CVEs, a topic call implementation CVEs and protocol context, and with no
-topic a direct FiGHT search protocol context; no tool serves affectedness (ADR 0003). A
-need no admitted step of a serving tool has a result for is ``not_evaluated``: whether it
-is met cannot yet be judged.
+is judged only from the tool that can serve it: an exact lookup a named CVE, a CVE search
+or a topic call implementation CVEs, a topic call or, with no topic, a direct FiGHT search
+protocol context; no tool serves affectedness (ADR 0003). A need no admitted step of a
+serving tool has a result for is ``not_evaluated``: whether it is met cannot yet be judged.
 
-Implementation CVEs and protocol context searched with the query's own words share one
-term-coverage check: a search term a search warned no record holds, and the interpretation
-does not explain (``list_explained_terms``), leaves the need ``not_found``. It is a
-conservative check of what the retrieval covered, not a judgement of relevance: it keeps
-every answer item, and a need whose every word some record holds is met by whatever
-matches them.
+A need is ``found`` only through an exact correspondence or a reviewed mapping: an exact
+lookup that returned the named CVE, or the topic call of a resolved, reviewed topic that
+returned evidence. That is a rule about how the evidence was reached, not proof that the
+answer is sufficient: a topic run can still stop on evidence that does not answer the
+question. Hits of a search on the question's own words (``cve_search``,
+``fight_direct_search``) give ``matches_unassessed``: matches were found and their
+relevance was not assessed, which is not a finding that no relevant evidence exists. The
+current version does not judge such results sufficient automatically, so a free-text run
+ends with the matches listed and the need unmet.
+
+Searches on the query's own words share one term-coverage check: a search term a search
+warned no record holds, and the interpretation does not explain (``list_explained_terms``),
+leaves the need ``not_found``. It keeps every answer item.
 
 ``docs/rebuild/m7b-b-evidence-needs.md`` and ``docs/rebuild/m7b-c-fight-direct-search.md``
 give the rules and their limits.
@@ -50,7 +56,9 @@ from cve_kgrag.domain.topic_context import (
 )
 
 RequiredNeed = tuple[EvidenceNeedKind, str | None]
-OPEN_NEED_OUTCOMES = frozenset({NeedOutcome.NOT_FOUND, NeedOutcome.NOT_EVALUATED})
+OPEN_NEED_OUTCOMES = frozenset(
+    {NeedOutcome.NOT_FOUND, NeedOutcome.NOT_EVALUATED, NeedOutcome.MATCHES_UNASSESSED}
+)
 
 
 def derive_needs(
@@ -202,10 +210,10 @@ def judge_protocol_context(
     FiGHT searches. Unsupported when no topic resolved and the words may not be sent to
     FiGHT (``interpretation.fight_block`` says why); not evaluated without a serving step.
     Without a topic, not found when a direct search warned that no technique holds a word
-    the interpretation does not explain (``list_explained_terms``): a conservative check
-    of term coverage, not a judgement of relevance, so the techniques stay listed and the
-    step's ``term_not_indexed`` names the word. Otherwise found when the answer lists a
-    technique a serving step returned."""
+    the interpretation does not explain (``list_explained_terms``), so the techniques stay
+    listed and the step's ``term_not_indexed`` names the word. Otherwise, when the answer
+    lists a technique a serving step returned: found from a topic call, matches unassessed
+    from a direct search on the question's own words."""
     has_topic = bool(interpretation.resolution.matches)
     if not has_topic and not interpretation.fight_terms:
         return NeedOutcome.UNSUPPORTED
@@ -223,7 +231,9 @@ def judge_protocol_context(
     if not has_topic and list_unexplained_unindexed_fight_terms(interpretation, serving_steps):
         return NeedOutcome.NOT_FOUND
     if any(item.technique_id in serving_answer_ids for item in protocol_context):
-        return NeedOutcome.FOUND
+        if has_topic:
+            return NeedOutcome.FOUND
+        return NeedOutcome.MATCHES_UNASSESSED
     if has_failed_source(serving_steps, KnowledgeSource.MITRE_FIGHT):
         return NeedOutcome.SOURCE_UNAVAILABLE
     return NeedOutcome.NOT_FOUND
@@ -234,14 +244,15 @@ def judge_implementation_cves(
     admitted_steps: Sequence[ToolStep],
     implementation_candidates: Sequence[InvestigationCandidate],
 ) -> NeedOutcome:
-    """A limited check of the retrieval process, not proof that the CVEs are relevant.
+    """How the retrieval reached the listed CVEs, not a judgement of their relevance.
 
     Not evaluated without an admitted CVE search or topic call. Not found when a search
-    term the interpretation does not explain
-    (``list_explained_terms``) is held by no record. With a
-    resolved topic, found when the answer lists a CVE an admitted topic call or search
-    found, at the relevance tier the card gave it. Without one, found when the admitted
-    searches together sent every search term and one of them returned a CVE.
+    term the interpretation does not explain (``list_explained_terms``) is held by no
+    record. With a resolved topic, found when the answer lists a CVE an admitted topic
+    call found, at the relevance tier the card gave it, and matches unassessed when only a
+    search on the question's own words found the listed CVEs. Without a topic, matches
+    unassessed when the admitted searches together sent every search term and one of them
+    returned a CVE.
     """
     serving_steps: list[ToolStep] = []
     for step in admitted_steps:
@@ -252,14 +263,23 @@ def judge_implementation_cves(
     if list_unexplained_unindexed_terms(interpretation, admitted_steps):
         return NeedOutcome.NOT_FOUND
     if interpretation.resolution.matches:
-        serving_step_indices: set[int] = set()
+        topic_step_indices: set[int] = set()
+        search_step_indices: set[int] = set()
         for step in serving_steps:
-            serving_step_indices.add(step.step_index)
+            if isinstance(step.call, TopicContextCall):
+                topic_step_indices.add(step.step_index)
+            else:
+                search_step_indices.add(step.step_index)
         if any(
-            serving_step_indices.intersection(candidate.found_by_steps)
+            topic_step_indices.intersection(candidate.found_by_steps)
             for candidate in implementation_candidates
         ):
             return NeedOutcome.FOUND
+        if any(
+            search_step_indices.intersection(candidate.found_by_steps)
+            for candidate in implementation_candidates
+        ):
+            return NeedOutcome.MATCHES_UNASSESSED
     else:
         has_searched_every_term = set(interpretation.search_terms) <= list_searched_terms(
             admitted_steps
@@ -268,7 +288,7 @@ def judge_implementation_cves(
             isinstance(step.call, CveSearchCall) and step.answer_ids for step in serving_steps
         )
         if has_searched_every_term and has_search_answer:
-            return NeedOutcome.FOUND
+            return NeedOutcome.MATCHES_UNASSESSED
     if has_failed_source(serving_steps, KnowledgeSource.CVE_SEARCH):
         return NeedOutcome.SOURCE_UNAVAILABLE
     return NeedOutcome.NOT_FOUND
@@ -302,8 +322,10 @@ def judge_needs(
 
 
 def is_need_open(needs: Sequence[EvidenceNeed], kind: EvidenceNeedKind) -> bool:
-    """Whether a need of ``kind`` is ``not_found`` or ``not_evaluated``: unmet, and a tool
-    could still meet it. ``source_unavailable`` and ``unsupported`` are final."""
+    """Whether a need of ``kind`` is ``not_found``, ``not_evaluated`` or
+    ``matches_unassessed``: unmet, and a tool could still meet it (the reviewed topic, when
+    one resolved and was not explored). ``source_unavailable`` and ``unsupported`` are
+    final."""
     return any(need.kind is kind and need.outcome in OPEN_NEED_OUTCOMES for need in needs)
 
 

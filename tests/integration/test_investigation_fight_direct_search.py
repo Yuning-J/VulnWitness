@@ -99,12 +99,13 @@ def test_protocol_free_text_searches_fight_with_its_own_words(
     assert not any(
         warning.code is TopicContextWarningCode.TERM_NOT_INDEXED for warning in step.topic_warnings
     )
+    # The techniques match the question's own words; their relevance is not assessed.
     assert (evidence_set.stop_reason, evidence_set.status) == (
-        StopReason.SUFFICIENT,
-        ResultStatus.OK,
+        StopReason.NEEDS_UNMET,
+        ResultStatus.PARTIAL,
     )
     assert list_need_outcomes(evidence_set) == [
-        (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.FOUND)
+        (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.MATCHES_UNASSESSED)
     ]
 
 
@@ -132,7 +133,7 @@ def test_direct_search_of_a_word_no_technique_holds_keeps_its_techniques_and_lea
     )
 
 
-def test_unheld_word_the_affectedness_question_explains_leaves_the_protocol_need_found(
+def test_unheld_word_the_affectedness_question_explains_leaves_the_protocol_need_unassessed(
     fixture_bundle: FixtureBundle,
 ) -> None:
     evidence_set = run_deterministically(
@@ -146,7 +147,7 @@ def test_unheld_word_the_affectedness_question_explains_leaves_the_protocol_need
     assert list_need_outcomes(evidence_set)[1] == (
         EvidenceNeedKind.PROTOCOL_CONTEXT,
         None,
-        NeedOutcome.FOUND,
+        NeedOutcome.MATCHES_UNASSESSED,
     )
 
 
@@ -158,14 +159,14 @@ def test_unheld_word_the_affectedness_question_explains_leaves_the_protocol_need
             "SUCI discovery",
             [
                 (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.NOT_FOUND),
-                (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.FOUND),
+                (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.MATCHES_UNASSESSED),
             ],
         ),
         (
             # Only the FiGHT excerpt lacks ``gateway``.
             "SUCI gateway",
             [
-                (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.FOUND),
+                (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.MATCHES_UNASSESSED),
                 (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.NOT_FOUND),
             ],
         ),
@@ -231,7 +232,7 @@ def test_mixed_free_text_searches_cves_then_fight_in_round_one(
     assert evidence_set.protocol_context != ()
     assert list_need_outcomes(evidence_set) == [
         (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.NOT_FOUND),
-        (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.FOUND),
+        (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.MATCHES_UNASSESSED),
     ]
     assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
 

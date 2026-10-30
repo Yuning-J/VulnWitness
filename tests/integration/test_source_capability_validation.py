@@ -58,7 +58,7 @@ from tests.support.investigation import (
     update_trajectory,
 )
 from tests.support.investigation_runs import run_semantic_hit
-from tests.support.planners import ScriptedModelPort, build_plan_reply
+from tests.support.planners import UNAVAILABLE_REPLY, ScriptedModelPort, build_plan_reply
 from tests.support.services import build_fixture_service
 
 # A genuine set and the FiGHT pin of the deployment that produced it.
@@ -84,7 +84,7 @@ def run_on(
 
 
 def run_five_g_aka(fixture_bundle: FixtureBundle) -> PinnedRun:
-    """The reviewer's base: ``5G-AKA`` finds both records with one CVE search."""
+    """The reviewer's base: ``5G-AKA`` finds both records with one topic call."""
     return run_on(fixture_bundle, build_investigation_request("5G-AKA", "implementation_only"))
 
 
@@ -98,7 +98,9 @@ def run_without_fight(fixture_bundle: FixtureBundle) -> PinnedRun:
 
 
 def run_model_planner(fixture_bundle: FixtureBundle) -> PinnedRun:
-    model_port = ScriptedModelPort([build_plan_reply({"tool": "cve_search", "query": "ausf suci"})])
+    model_port = ScriptedModelPort(
+        [build_plan_reply({"tool": "cve_search", "query": "ausf suci"}), UNAVAILABLE_REPLY]
+    )
     request = build_investigation_request("5G-AKA", "implementation_only")
     return run_on(fixture_bundle, request, model_port=model_port)
 
@@ -119,16 +121,16 @@ def run_pinned_semantic_hit(fixture_bundle: FixtureBundle) -> PinnedRun:
 
 
 def run_semantic_without_hits(fixture_bundle: FixtureBundle) -> PinnedRun:
-    """A wired semantic channel answers, with no match."""
+    """A wired semantic channel answers the free-text search, with no match."""
     semantic_retriever = CannedRetriever(RetrievalOutcome(status=BackendStatus.OK))
-    request = build_investigation_request("5G-AKA", "implementation_only", semantic=True)
+    request = build_investigation_request("ausf suci", "implementation_only", semantic=True)
     return run_on(fixture_bundle, request, semantic_retriever=semantic_retriever)
 
 
 def run_semantic_without_adapter(fixture_bundle: FixtureBundle) -> PinnedRun:
     """A semantic request on a deployment without a semantic adapter: its CVE search runs the
     channel, which reports itself unavailable, so the search is partial."""
-    request = build_investigation_request("5G-AKA", "implementation_only", semantic=True)
+    request = build_investigation_request("ausf suci", "implementation_only", semantic=True)
     return run_on(fixture_bundle, request)
 
 
@@ -136,7 +138,7 @@ def run_semantic_with_an_unusable_adapter(fixture_bundle: FixtureBundle) -> Pinn
     """A semantic request on a deployment whose enabled semantic adapter could not load:
     the capability is unavailable, and the search runs the channel, which reports itself
     unavailable, so the search is partial."""
-    request = build_investigation_request("5G-AKA", "implementation_only", semantic=True)
+    request = build_investigation_request("ausf suci", "implementation_only", semantic=True)
     return run_on(
         fixture_bundle, request, semantic_retriever=SemanticUnavailableDetail.ADAPTER_UNUSABLE
     )
@@ -1020,7 +1022,7 @@ def test_semantic_request_without_an_adapter_validates_as_not_configured(
     pinned_fight_snapshot: KnownFightSnapshot,
     packaged_evidence_catalog: EvidenceCatalog,
 ) -> None:
-    request = build_investigation_request("5G-AKA", "implementation_only", semantic=True)
+    request = build_investigation_request("ausf suci", "implementation_only", semantic=True)
     evidence_set, _ = run_on(fixture_bundle, request)
 
     validate_knowledge_evidence_set(

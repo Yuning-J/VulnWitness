@@ -369,6 +369,102 @@ default budgets, `gold-sets --check` passed). The fix's working-tree diff has SH
   and the accented non-telecom queries (`Café WiFi router overflow`,
   `Müller GmbH gateway`, a Spanish query, `naïve parser crash`) are unchanged.
 
+## Package 2 — topic first and unassessed matches
+
+**Problem.** The README-only acceptance run on real data found free-text answers reported
+`sufficient` on CVEs that only share words with the question ("free 5GC SMF
+vulnerabilities": 11 of the 20 listed are Simple Machines Forum products), and
+`5G AKA` / `5G-AKA` under `implementation_only` ending `budget_exhausted` with no CVE:
+the literal search of the spelled-out alias answered 357,864 bytes, over the byte cap, and
+was discarded whole.
+
+**The rule** (`domain/evidence_needs.py`, `application/investigation_policy.py`; contracts
+`2.0.0-dev.34`, policy `m7b.4`):
+
+- A resolved topic is explored with `topic_context` in round 1 in every scope. Under
+  `implementation_only` the call never consults FiGHT. `topic_after_literal_miss` stays:
+  it follows a literal search of a topic question, which only a model's plan issues, when
+  that search did not meet the need.
+- One rule for both needs: a need is `found` only through an exact lookup of a named CVE
+  or the topic call of a resolved, reviewed topic. Matches of a search on the question's
+  own words (`cve_search`, `fight_direct_search`) give `matches_unassessed`: matches were
+  found and their relevance was not assessed. With a topic, a CVE counts as found only
+  when a topic call found it.
+- `matches_unassessed` is open, so after a model's literal search R2 still explores the
+  topic. For free text no refinement applies (R3 needs an unsent term, and no rule plans
+  FiGHT), so the run ends `needs_unmet` / `partial` (`no_refinement_available`) with its
+  matches listed and no repeated search.
+- The current version does not judge free-text results sufficient automatically; that is
+  this version's rule, not a permanent bar. `matches_unassessed` never means that no
+  relevant evidence exists. The basis of `found` is an exact correspondence or a reviewed
+  topic mapping, not "a trusted source returned it": a topic run can still stop
+  `sufficient` wrongly.
+
+**Measured** (deterministic `eval planner` on 2026-10-30 at contracts `2.0.0-dev.34`,
+policy `m7b.4`, store `nvd-2026-10-27`, FiGHT 3.1.0; baseline split only, no holdout case
+or subject read). The table and the baseline-case bullets are this run; every baseline
+answer and step sequence is identical to 0395d5b's. The acceptance-question and
+topic-first bullets come from applying both parts in memory to 0395d5b and were not
+re-run:
+
+| Figure | 0395d5b | Package 2 |
+|---|---|---|
+| judged (sufficient / partial / insufficient) | 5/6/2 | 5/6/2 |
+| `wrong_stop` | 4/13 | 2/13 |
+| `false_gap` | 0/5 | 4/5 |
+| `premature_no_evidence` | 0 | 0 |
+| `unflagged_gap` | 0 | 0 |
+| `need_agreement` | 13/13 | 13/13 |
+
+- No baseline answer or Coverage@20 changes.
+- `gtp-mobile-core` and `oai-cn5g` no longer stop `sufficient` on partial answers.
+- **Cost, kept as measured:** `open5gs-amf`, `ueransim`, `free5gc` and
+  `suci-deconcealment` end `partial` / `needs_unmet` with `matches_unassessed` and
+  unchanged answers. The M7b labels (`eval/gold/m7b_cases.yaml`, `m7b_sets.json`) are not
+  changed to fit the rule, and `signals_gap` still counts every outcome but `found` as a
+  gap, so `false_gap` shows the cost.
+- `kamailio-version-affected` stops `needs_unmet` instead of `source_unavailable`
+  (`affectedness_unavailable`); it is still partial, as labelled.
+- The two wrong stops left, `5g-aka-threats` and `5g-aka-implementations`, are topic runs;
+  their cause is FiGHT recall and ranking and the card's mapping, outside this package.
+- **Acceptance questions** (judged by one unreviewed pattern per question, a weak
+  proxy): SS7 "location tracking of subscribers" (`mixed`) and "free 5GC SMF
+  vulnerabilities" (`implementation_only`) no longer end `sufficient`; each carries
+  `implementation_cves: matches_unassessed`. The protocol-only SUCI and SS7 questions now
+  end `partial` with `protocol_context: matches_unassessed`; the acceptance reviewer
+  called their protocol context good, so they count as 2 probable false gaps.
+- **Topic first:** `5G AKA` and `5G-AKA` under `implementation_only` answer from the card
+  with no FiGHT call: 20 CVEs instead of a `budget_exhausted` stop with none, and "Which
+  5G core implementations have bugs in 5G AKA handling?" lists 20 CVEs instead of 6. The
+  topic call costs 4 tool calls and 78.8 KB at 20 results, against 1 call for a literal
+  search. The two former budget stops are probably wrong `sufficient` stops: their 20
+  CVEs are those of `5g-aka-implementations`, whose gold implementation coverage is 0.67
+  (partial). That transfers labels from a differently worded case.
+- On the fixture, with a scripted model reply, a literal search of `5G-AKA` that finds
+  both fixture records is followed by the policy's topic call (`topic_after_literal_miss`) rather than ending `sufficient` after one
+  call.
+- **Live model smoke** (2026-10-30, `deepseek-flash`, CLI `investigate` on the real
+  store, two runs each, every set `verified`): a free-text question records
+  `model_not_consulted` and ends `needs_unmet` with both needs `matches_unassessed`; a
+  named CVE is planned as its exact lookup and ends `sufficient`; for `5G-AKA` under
+  `implementation_only` and `mixed` the model plans the topic call (which consults no
+  FiGHT under `implementation_only`) plus a word search beside it. In 3 of those 4 runs
+  that search exceeded the context-bytes budget and was discarded, so the run ended
+  `budget_exhausted` / `partial` with its needs `found` and the deterministic answers; the
+  deterministic plan ends `sufficient`. This was observed before this package and stays
+  open (a step over the byte cap is discarded whole).
+- **Replay:** sets sealed under `m7b.3`, the recorded M7b model runs included, do not
+  replay clean under `m7b.4`, as expected of a policy change; sets sealed under `m7b.4`
+  replay by construction.
+
+**M4 trajectory gold.** `eval/gold/m4_trajectories.yaml` describes the deterministic
+policy, so its header names `m7b.4` and the 8 rows whose behaviour changed are relabelled:
+`impl_5gaka_open5gs` (topic, then an R3 search of the words), `impl_5gaka_f5gc` (topic
+only, 4 calls), `impl_5gaka_topic_first` and `impl_5g_aka_topic_first` (topic only, 4
+calls; formerly a literal search first), and `low_signal_beside_terms`,
+`injection_record`, `protocol_free_text` and `mixed_free_text` (`needs_unmet` / `partial`
+with their answers unchanged).
+
 ## Holdout, evaluated once (2026-10-30)
 
 After the agreed packages (D, A1, A2, B, the round-1 skip, C and its mixed-script

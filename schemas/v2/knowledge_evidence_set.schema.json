@@ -1701,9 +1701,10 @@
       "type": "string"
     },
     "NeedOutcome": {
-      "description": "Whether a need was met. ``unsupported``: no tool can serve it for this\ninterpretation. ``not_evaluated``: no admitted step of a tool that serves it has a\nresult, so whether it is met cannot yet be judged. ``not_evaluated`` and ``not_found``\nare open; ``source_unavailable`` and ``unsupported`` are final.",
+      "description": "Whether a need was met. ``found``: the evidence was reached through an exact\ncorrespondence or a reviewed mapping, an exact lookup that returned the named CVE or the\nreviewed topic call that returned evidence for the resolved topic; it does not prove the\nanswer sufficient. ``matches_unassessed``: a search on the question's own words returned\nmatches whose relevance the run did not assess; it says nothing about whether relevant\nevidence exists. ``unsupported``: no tool can serve it for this interpretation.\n``not_evaluated``: no admitted step of a tool that serves it has a result, so whether it\nis met cannot yet be judged. ``not_evaluated``, ``not_found`` and\n``matches_unassessed`` are open; ``source_unavailable`` and ``unsupported`` are final.",
       "enum": [
         "found",
+        "matches_unassessed",
         "not_found",
         "source_unavailable",
         "unsupported",
@@ -4463,8 +4464,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.33",
-      "default": "2.0.0-dev.33",
+      "const": "2.0.0-dev.34",
+      "default": "2.0.0-dev.34",
       "title": "Schema Version",
       "type": "string"
     },

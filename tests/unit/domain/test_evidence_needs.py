@@ -1,5 +1,6 @@
 """Need outcomes judged from recorded steps: protocol context through the direct FiGHT
-search, and ``not_evaluated`` for a need no admitted serving step has a result for."""
+search, implementation CVEs through a search of the question's own words, and
+``not_evaluated`` for a need no admitted serving step has a result for."""
 
 from typing import Any
 
@@ -95,7 +96,7 @@ def test_protocol_need_without_an_admitted_direct_search_is_not_evaluated(
     assert outcome is NeedOutcome.NOT_EVALUATED
 
 
-def test_protocol_need_is_found_when_the_answer_lists_a_technique_the_direct_search_returned(
+def test_protocol_need_is_matches_unassessed_when_the_answer_lists_a_direct_search_technique(
     topic_registry: TopicRegistry,
 ) -> None:
     technique = find_packaged_technique()
@@ -103,7 +104,7 @@ def test_protocol_need_is_found_when_the_answer_lists_a_technique_the_direct_sea
 
     outcome = judge_protocol_need(topic_registry, "gtp threats", [step], (technique,))
 
-    assert outcome is NeedOutcome.FOUND
+    assert outcome is NeedOutcome.MATCHES_UNASSESSED
 
 
 def test_protocol_need_is_not_found_when_the_direct_search_warned_a_word_no_technique_holds(
@@ -138,7 +139,7 @@ def test_protocol_need_ignores_a_word_only_the_cve_search_warned_no_record_holds
         topic_registry, "gtp threats", [cve_step, fight_step], (technique,)
     )
 
-    assert outcome is NeedOutcome.FOUND
+    assert outcome is NeedOutcome.MATCHES_UNASSESSED
 
 
 def test_protocol_need_is_not_found_when_the_allowed_direct_search_ran_and_found_nothing(
@@ -201,16 +202,66 @@ def test_named_cve_and_implementation_needs_without_a_serving_step_are_not_evalu
     )
 
 
+def judge_implementation_need(
+    topic_registry: TopicRegistry, query: str, steps: list[ToolStep]
+) -> NeedOutcome:
+    request = build_investigation_request(query, "implementation_only")
+    interpretation = interpret_request(request, topic_registry, build_productless_catalog())
+    needs = judge_needs(request, interpretation, steps, (), ())
+    assert len(needs) == 1
+    assert needs[0].kind is EvidenceNeedKind.IMPLEMENTATION_CVES
+    return needs[0].outcome
+
+
+def test_implementation_need_is_matches_unassessed_when_a_search_of_every_word_returned_a_cve(
+    topic_registry: TopicRegistry,
+) -> None:
+    step = build_recorded_step(
+        call={"tool": "cve_search", "query": "gtp threats"},
+        backend_requests=[{"source": "cve_search", "query": "gtp threats", "limit": 20}],
+        status="ok",
+        answer_ids=["CVE-9999-0003"],
+    )
+
+    outcome = judge_implementation_need(topic_registry, "gtp threats", [step])
+
+    assert outcome is NeedOutcome.MATCHES_UNASSESSED
+
+
+def test_implementation_need_is_not_found_when_a_search_warned_a_word_no_record_holds(
+    topic_registry: TopicRegistry,
+) -> None:
+    step = build_recorded_step(
+        call={"tool": "cve_search", "query": "gtp threats"},
+        backend_requests=[{"source": "cve_search", "query": "gtp threats", "limit": 20}],
+        status="ok",
+        answer_ids=["CVE-9999-0003"],
+        search_warnings=[{"code": "term_not_indexed", "subject": "threats"}],
+    )
+
+    outcome = judge_implementation_need(topic_registry, "gtp threats", [step])
+
+    assert outcome is NeedOutcome.NOT_FOUND
+
+
 @pytest.mark.parametrize(
     ("outcome", "expected_open"),
     [
         (NeedOutcome.NOT_EVALUATED, True),
         (NeedOutcome.NOT_FOUND, True),
+        (NeedOutcome.MATCHES_UNASSESSED, True),
         (NeedOutcome.UNSUPPORTED, False),
         (NeedOutcome.SOURCE_UNAVAILABLE, False),
         (NeedOutcome.FOUND, False),
     ],
-    ids=["not_evaluated", "not_found", "unsupported", "source_unavailable", "found"],
+    ids=[
+        "not_evaluated",
+        "not_found",
+        "matches_unassessed",
+        "unsupported",
+        "source_unavailable",
+        "found",
+    ],
 )
 def test_need_is_open_while_a_tool_could_still_meet_it(
     outcome: NeedOutcome, expected_open: bool
