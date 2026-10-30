@@ -14,7 +14,7 @@ milestone once its exit criterion is met and the offline lane is green.
 | M5 | Trustify port + disabled adapter (real adapter BLOCKED_UNVERIFIED, ADR 0003), read-only stdio MCP server with eight bounded tools, evidence-set verification (`cve-kgrag verify`), server-owned text at the MCP boundary (typed affectedness and backend failures, vouched match explanations), search-tool boundary below; contracts `2.0.0-dev.16` | done |
 | M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, loopback, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; WP4 offline CI; WP5 full CLI and the verification report contract, with bounded violations in the server's own words; WP6 HTTP guard, HTTP settings and MCP over Streamable HTTP; WP7 v2 REST API with set verification over HTTP; WP9 read-only legacy-data importer, ADR 0008; WP10 store activation and serving, the operator FiGHT snapshot, visible truncation and the M6 exit audit, ADR 0009; contracts `2.0.0-dev.26`); exit audit in [`m6-exit-audit.md`](m6-exit-audit.md) | done |
 | M7a | Planner behaviour baseline before WP9: `cve-kgrag eval planner`, a pure analyzer over the evidence sets' trajectories (outcomes, fallbacks, divergence from the policy's plans, run stability), the deterministic baseline on the M4 gold file; no agent, vocabulary, round or contract change; [`m7a-planner-baseline.md`](m7a-planner-baseline.md) | done offline; live model runs are started by hand, outside CI |
-| M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | in progress: gold cases and the M7b evaluation done; the first model run, its causes and the planned work order in [`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md); A1 and A2 done, A2 as the `term_not_indexed` warning without the measured admission rule ([`m7b-work-packages.md`](m7b-work-packages.md)); B, evidence needs deciding stop and refinement ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)); C, FiGHT protocol threat context from the question's own words with one shared phrase-BM25 FiGHT order ([`m7b-c-fight-direct-search.md`](m7b-c-fight-direct-search.md), contracts `2.0.0-dev.30`, policy `m7b.2`), implemented and awaiting owner review; C follow-up, mixed-script words read as the CVE side reads them ([`m7b-work-packages.md`](m7b-work-packages.md#c-follow-up--mixed-script-words), contracts `2.0.0-dev.31`, policy `m7b.3`), implemented and awaiting owner review |
+| M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | in progress: gold cases and the M7b evaluation done; the first model run, its causes and the planned work order in [`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md); A1 and A2 done, A2 as the `term_not_indexed` warning without the measured admission rule ([`m7b-work-packages.md`](m7b-work-packages.md)); B, evidence needs deciding stop and refinement ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)); C, FiGHT protocol threat context from the question's own words with one shared phrase-BM25 FiGHT order ([`m7b-c-fight-direct-search.md`](m7b-c-fight-direct-search.md), contracts `2.0.0-dev.30`, policy `m7b.2`), implemented and awaiting owner review; C follow-up, mixed-script words read as the CVE side reads them ([`m7b-work-packages.md`](m7b-work-packages.md#c-follow-up--mixed-script-words), contracts `2.0.0-dev.31`, policy `m7b.3`), implemented and awaiting owner review; free text planned by the policy, the model planning only questions that name a CVE ID or resolve a reviewed topic (ADR 0005 §3, contracts `2.0.0-dev.32`, policy `m7b.3`, report format 5), implemented and awaiting owner review |
 
 ## M5 acceptance: the search-tool boundary
 
@@ -35,17 +35,24 @@ tests and opt-in live tests (ADR 0005, m6 doc). Done. The owner ran the live tes
 2026-10-21 against `https://api.deepseek.com` with `deepseek-flash` and reasoning effort
 `none`: 2 passed.
 
-A configured model is not consulted in two cases: round 2 when the policy has no
-refinement for an open need ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)), so
-`CVE-9999-4242` under `implementation_only` makes one planner call; and round 1 when the
-policy's own plan is over the source budget (`5G-AKA`, or `mixed` free text whose words
-may go to FiGHT, under `max_sources: 1`), since a round-1
-model plan must consult the same sources. In every other round it is consulted, whether or
-not some plan could pass the gate; over the tool-call budget alone, a search may reach a
-topic call's sources with fewer calls. The skipped round 1 records `model_not_consulted` with the policy plan's rejections; the
-controller and the audit decide it by one rule (`is_model_consultable`). Contracts move
-to `2.0.0-dev.29` for that outcome, and `evaluation_format_version` to 4, whose round
-outcome counts include it.
+A configured model plans only questions that name a CVE ID or resolve a reviewed topic.
+It is not consulted in three cases, each decided by one rule the controller and the audit
+share (`is_model_consultable`, or the refinement table for round 2):
+- free text (no kept CVE ID, no resolved topic), in every scope: the policy plans it, with
+  the question's search terms as its baseline. That is product policy, not a completeness
+  or sufficiency guarantee; query rewriting by a model may be reopened by evaluation.
+- round 1 when the policy's own plan is over the source budget (`5G-AKA` under
+  `max_sources: 1`), since a round-1 model plan must consult the same sources.
+- round 2 when the policy has no refinement for an open need
+  ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)), so `CVE-9999-4242` under
+  `implementation_only` makes one planner call.
+
+In every other round it is consulted, whether or not some plan could pass the gate; over
+the tool-call budget alone, a search may reach a topic call's sources with fewer calls.
+A round 1 not given to the model records `model_not_consulted`: no reply and no planner
+call; it runs the policy's plan, or records the gate's rejections of it and runs nothing.
+Contracts `2.0.0-dev.32`; `evaluation_format_version` 5, whose round outcome counts include
+`model_not_consulted` and whose model rates leave those rounds out.
 
 ## Live lane (opt-in)
 

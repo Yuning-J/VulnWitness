@@ -95,6 +95,7 @@ from tests.support.investigation_runs import (
     run_fight_direct_search_of_an_unindexed_word,
     run_five_g_aka,
     run_five_g_aka_mixed,
+    run_free_text_under_a_model_planner,
     run_mixed_fight_direct_search,
     run_model_accepted,
     run_model_not_consulted,
@@ -2023,6 +2024,21 @@ def drop_the_policy_rejections(evidence_set: KnowledgeEvidenceSet) -> KnowledgeE
     return update_round(evidence_set, 0, rejections=())
 
 
+def drop_the_policy_rejections_at_the_deadline(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    """A deadline before planning records ``model_skipped_at_deadline`` when a model is
+    configured, so it never excuses a ``model_not_consulted`` round that runs nothing."""
+    return update_usage(drop_the_policy_rejections(evidence_set), breach=BudgetBreach.WALL_TIME)
+
+
+def record_a_policy_rejection(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """Round 1, whose policy plan ran, also records the gate rejecting that plan."""
+    return update_round(
+        evidence_set, 0, rejections=(PlanRejection(code=PlanRejectionCode.OVER_TOOL_CALL_BUDGET),)
+    )
+
+
 def relabel_round_two_not_consulted(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
     """Round 2, whose model replied unavailable, claims it was never consulted."""
     return update_round(
@@ -2038,21 +2054,34 @@ def relabel_round_two_not_consulted(evidence_set: KnowledgeEvidenceSet) -> Knowl
     ("run", "forgery", "expected_violation"),
     [
         (
-            run_model_not_consulted,
-            drop_the_policy_rejections,
-            "round 1 is model_not_consulted: only round 1 is, recording the policy plan's "
-            "rejections and running nothing",
-        ),
-        (
             run_model_refinement_unavailable,
             relabel_round_two_not_consulted,
-            "round 2 is model_not_consulted: only round 1 is, recording the policy plan's "
-            "rejections and running nothing",
+            "round 2 is model_not_consulted: only round 1 is",
+        ),
+        (
+            run_free_text_under_a_model_planner,
+            record_a_policy_rejection,
+            "round 1 is model_not_consulted and runs its plan, but records rejections",
+        ),
+        (
+            run_model_not_consulted,
+            drop_the_policy_rejections,
+            "round 1 is model_not_consulted and runs no plan, though its plan was not rejected",
+        ),
+        (
+            run_model_not_consulted,
+            drop_the_policy_rejections_at_the_deadline,
+            "round 1 is model_not_consulted and runs no plan, though its plan was not rejected",
         ),
     ],
-    ids=["without_the_policy_rejections", "in_round_two"],
+    ids=[
+        "in_round_two",
+        "running_its_plan_with_rejections",
+        "running_nothing_unrejected",
+        "running_nothing_unrejected_at_the_deadline",
+    ],
 )
-def test_round_not_consulting_its_model_is_rejected_unless_it_is_round_one_with_rejections(
+def test_round_not_consulting_its_model_is_rejected_unless_it_is_round_one_of_the_policy_plan(
     fixture_bundle: FixtureBundle,
     pinned_fight_snapshot: KnownFightSnapshot,
     packaged_evidence_catalog: EvidenceCatalog,

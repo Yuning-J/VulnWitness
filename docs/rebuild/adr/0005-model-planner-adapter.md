@@ -85,21 +85,35 @@ policy, so ADR 0003 §8's bound on their abandoned calls stands.
   `cve_ids` in one lookup, search words only from `allowed_terms`, the tool costs within
   `remaining_tool_calls`, nothing from `issued_calls` repeated. The shape lists
   `{"tool": "fight_direct_search"}`, with the rule that it takes no arguments, searches
-  MITRE FiGHT with the question's own words and is offered only when no topic resolved;
-  the planning input offers it only when, in addition, the scope is not
-  `implementation_only` and the interpretation lets the words go to FiGHT
-  (`fight_terms`). `quoted_query` is the caller's text and never instructs the model.
+  MITRE FiGHT with the question's own words and is offered only when no topic resolved.
+  The planning input never offers it: only free text has `fight_terms`, and the policy
+  plans free text without the model (below). The gate still parses and rejects the tool
+  (`fight_direct_search_blocked`) when a model proposes it. `quoted_query` is the
+  caller's text and never instructs the model.
 - `PlanningInput.required_tools` is new: the tools of the policy's round-1 plan, so a
   round-1 model plan that includes them consults every baseline source the gate requires;
   empty in round 2. A planner was otherwise left to guess the baseline.
 - `allowed_tools` and `tool_costs` leave out a tool that on its own would consult more
   sources than the run may, and `required_tools` names only offered tools, so the model is
   never asked for a tool it is not offered. Two offered tools can still exceed the budget
-  together, and the gate then falls back. When the policy's own round-1 plan is over the
-  source budget, no plan passes the gate, since a round-1 plan must consult the policy's
-  sources: the model is not called, and the round records `model_not_consulted` with the
-  policy plan's rejections (`is_model_consultable`). Over the tool-call budget alone the
-  model is consulted, since fewer calls may reach the same sources.
+  together, and the gate then falls back.
+- The model is called only for a question that names a CVE ID the policy keeps or
+  resolves a reviewed topic (`is_model_consultable`). Free text (`QueryIntent.FREE_TEXT`:
+  no kept CVE ID, no resolved topic) is planned by the policy, in every scope, with the
+  question's search terms as its baseline. That is product policy: it is not a
+  completeness or sufficiency guarantee, and it is not a safety rule. The model is not
+  called either when the policy's own round-1 plan is over the source budget, since a
+  round-1 plan must consult the policy's sources and so no plan passes the gate. Over the
+  tool-call budget alone a topic or exact-ID round is consulted, since fewer calls may
+  reach the same sources.
+- A round the policy planned without calling a configured model records
+  `model_not_consulted`: round 1, no reply and no planner call. Its steps are planned by
+  the policy (`deterministic`). When the policy's plan passes the gate it runs; when the
+  gate rejects it, the round records the rejections and runs nothing. The deadline is
+  checked before this rule, so a free-text round whose deadline passed before planning
+  records `model_skipped_at_deadline`. The decision-path audit re-derives whether the
+  model should have been called, so a set that relabels a consulted round
+  `model_not_consulted`, or records a free-text round as `model_accepted`, is rejected.
 
 ### 4. The answer
 
@@ -147,7 +161,12 @@ and are never run with `--showlocals`. `tests/live` is linted with the offline l
   `2.0.0.dev0`.
 - Offline tests use a recording transport and loopback servers on 127.0.0.1, never an
   outside network; https is not exercised offline.
-- The model is not consulted in round 1 when the policy's own plan is over the source
-  budget, which no round-1 plan can meet (`model_not_consulted`), nor in round 2 without a
-  policy refinement for an open need. Otherwise it is consulted, whether or not some
-  plan could pass the gate.
+- With the planner enabled, the model plans only questions that name a CVE ID or resolve
+  a reviewed topic. Free text is planned by the policy (`model_not_consulted`), as is a
+  round 1 whose policy plan is over the source budget, and round 2 runs only for a policy
+  refinement for an open need. Otherwise the model is consulted, whether or not some plan
+  could pass the gate.
+- A free-text run under a configured model equals the deterministic run apart from its
+  planner identity and outcome labels, so an evaluation learns about the model only from
+  its topic and exact-ID cases. Query rewriting by a model (searching fewer words, or the
+  same words in more calls) is out of the product path; evaluation may reopen it.

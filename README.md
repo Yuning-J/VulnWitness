@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.31` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.32` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 ## What it does
@@ -23,7 +23,9 @@ without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/re
   context, keeping protocol context and implementation vulnerabilities apart.
 - **Bounded investigation**: a state machine with budgets, a hard wall time and a
   replayable trajectory, planned by a deterministic policy or by an optional model planner
-  behind a plan gate that falls back to the policy.
+  behind a plan gate that falls back to the policy. With the planner enabled, the model
+  plans only questions that name a CVE ID or resolve a reviewed topic; free text is
+  planned by the policy.
 - **Evidence sets** that can be verified and replayed offline (`cve-kgrag verify`).
 - **A read-only MCP server** with eight bounded tools, over stdio or over Streamable
   HTTP on a loopback address behind a bearer token.
@@ -116,7 +118,10 @@ optional capabilities are off by default:
 
 - the model planner (an OpenAI-compatible endpoint), `CVE_KGRAG_PLANNER_*`
   ([ADR 0004](docs/rebuild/adr/0004-settings-and-secrets.md),
-  [ADR 0005](docs/rebuild/adr/0005-model-planner-adapter.md));
+  [ADR 0005](docs/rebuild/adr/0005-model-planner-adapter.md)). It plans only questions
+  that name a CVE ID or resolve a reviewed topic; free text is planned by the policy, and
+  its rounds record `model_not_consulted` (`model_skipped_at_deadline` when the deadline
+  passed before planning);
 - the semantic channel, `CVE_KGRAG_SEMANTIC_*`. It reads a Chroma store in the format
   CVE-KGRAG's pipeline writes, from a directory the operator names; this repository does
   not build that store ([ADR 0006](docs/rebuild/adr/0006-repository-split.md)).

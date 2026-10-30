@@ -48,7 +48,6 @@ from cve_kgrag.application.investigation_decisions import (
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
 from cve_kgrag.application.investigation_policy import (
     CVE_TOOL_COST,
-    FIGHT_DIRECT_SEARCH_COST,
     PlannedStep,
     count_tool_calls,
     find_interpretation_stop,
@@ -172,8 +171,8 @@ def build_planning_input(
 ) -> PlanningInput:
     """What a planner sees: the quoted query, codes, counts, the vocabulary, the tools the
     budgets allow and those a round-1 plan includes, never source records. A direct FiGHT
-    search is offered only when the interpretation allows one (``fight_terms``) and the
-    scope admits threat context."""
+    search is never offered: only free text has ``fight_terms``, and the policy plans free
+    text without a model (``is_model_consultable``)."""
     interpretation = run.interpretation
     scope = run.request.scope
     tool_costs: list[ToolCost] = []
@@ -193,10 +192,6 @@ def build_planning_input(
                 tool=ToolName.TOPIC_CONTEXT,
                 charged_tool_calls=count_tool_calls(topic_call, scope, topic_registry),
             )
-        )
-    if scope is not QueryScope.IMPLEMENTATION_ONLY and interpretation.fight_terms:
-        tool_costs.append(
-            ToolCost(tool=ToolName.FIGHT_DIRECT_SEARCH, charged_tool_calls=FIGHT_DIRECT_SEARCH_COST)
         )
     # A tool that alone would consult more sources than the run may is never offered.
     budget = run.request.budget
@@ -374,8 +369,10 @@ class InvestigationService:
 
         Past the deadline no plan is chosen: neither the planner nor any step may start, and
         a configured model planner is recorded as not consulted (``model_skipped_at_deadline``).
-        Nor is a model consulted for a round it could not plan (``is_model_consultable``:
-        round 1 under a policy plan over budget), which records ``model_not_consulted``.
+        Nor is a model consulted for a round the policy plans alone (``is_model_consultable``:
+        free text, or round 1 under a policy plan over the source budget), which records
+        ``model_not_consulted``. The deadline is checked first, so a free-text round whose
+        deadline passed before planning records ``model_skipped_at_deadline``.
         A planner that has not replied by the deadline is abandoned (``model_timed_out``); a
         reply that lands at or after it is recorded but never read
         (``model_reply_after_deadline``). A planner call gets at most its share of the run's
@@ -400,7 +397,9 @@ class InvestigationService:
             self._topic_registry,
         )
         model_reply: ModelReply | None = None
-        if self._model_port is not None and is_model_consultable(round_number, policy_rejections):
+        if self._model_port is not None and is_model_consultable(
+            round_number, run.interpretation.intent, policy_rejections
+        ):
             planning_input = build_planning_input(
                 run,
                 round_number,

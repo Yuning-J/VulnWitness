@@ -1,6 +1,7 @@
 """Fake model planners: a scripted one that replays canned replies and records what it was
-shown, one that never replies while a test runs, one that raises and one that answers
-something other than a reply; and the identity and settings of the scripted adapter."""
+shown, one that fails the test when consulted, one that never replies while a test runs,
+one that raises and one that answers something other than a reply; and the identity and
+settings of the scripted adapter."""
 
 import json
 import threading
@@ -114,6 +115,17 @@ class ScriptedModelPort:
         if self.clock is not None:
             self.clock.advance(self.seconds_per_call)
         return self.replies[len(self.planning_inputs) - 1]
+
+
+class FailingModelPort:
+    """A planner the policy must never consult: a call fails the test. The test service
+    calls it without the adapter guard, so the error reaches the test unrecorded."""
+
+    def propose_plan(self, planning_input: PlanningInput, timeout_seconds: float) -> ModelReply:
+        raise AssertionError(
+            f"the model planner was consulted for round {planning_input.round_number} of "
+            f"{planning_input.quoted_query!r}"
+        )
 
 
 @dataclass

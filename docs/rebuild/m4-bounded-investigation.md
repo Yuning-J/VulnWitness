@@ -173,12 +173,14 @@ An exact ID is never expanded into a topic or a semantic search. Under
 costs 1 and the topic's fan-out costs 4. A direct FiGHT search has reason
 `query_terms_fight`. Both needs of a `mixed` question are known before planning and
 neither search depends on the other's results, so both run in round 1 under one
-budget pre-check. Under `max_sources: 1` that plan consults 2 sources, so no model
-is consulted and the run stops `budget_exhausted` (`plan_over_budget`) with no
-answer; under `max_tool_calls: 1` it costs 2, the gate rejects it
-`over_tool_call_budget` and the run stops the same way, since any round-1 plan a
-configured model proposes must reach both sources. A `mixed` topic query, whose
-`topic_context` consults both sources, behaves the same.
+budget pre-check. The policy plans free text without a configured model (see Model
+planner). Under `max_sources: 1` that plan consults 2 sources, and under
+`max_tool_calls: 1` it costs 2: the gate rejects it (`over_source_budget` or
+`over_tool_call_budget`) and the run stops `budget_exhausted` (`plan_over_budget`) with
+no answer. A `mixed` topic query, whose `topic_context` consults both sources, stops the
+same way under `max_sources: 1`, where no model is consulted either; under
+`max_tool_calls: 1` its model is consulted, but any round-1 plan it proposes must reach
+both sources, so the gate rejects it too.
 
 Refinement, at most one rule, for a need round 1 left open (evidence needs:
 [`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)):
@@ -260,10 +262,17 @@ without retrying it: a failed call's key is already issued and is never reissued
 Optional and off by default: `build_investigation_service(..., planner_setup=...)`
 defaults to `DeterministicPlanning()`, and `discover_planner_setup` builds the planner
 the settings configure (ADR 0004).
-For each round the core builds a `PlanningInput`: the caller's query as a quoted
+A configured model plans only a question that names a CVE ID the policy keeps or
+resolves a reviewed topic (`is_model_consultable` in
+`application/investigation_decisions.py`). Free text (intent `free_text`: no kept CVE ID,
+no resolved topic) is planned by the policy in every scope, with the question's search
+terms as its baseline; that is product policy, not a completeness or sufficiency
+guarantee and not a safety rule. A round 1 whose policy plan is over the source budget
+is not given to the model either (see the table below).
+For each round the model plans, the core builds a `PlanningInput`: the caller's query as a quoted
 JSON string, the scope, intent, CVE IDs, topic ID, version and review status, the
-allowed tools with their costs (`fight_direct_search` only when the scope is not
-`implementation_only` and the interpretation has `fight_terms`), the sorted search
+allowed tools with their costs (never `fight_direct_search`: only free text has
+`fight_terms`), the sorted search
 vocabulary (the query's terms
 plus the resolved card's terms), the remaining tool calls and sources, the issued
 calls, and per executed step only its tool, status, answer count and warning
@@ -322,12 +331,17 @@ two searches that differ only in such a token run as one query and the second is
 | no reply by the deadline | `model_timed_out`, rejection `planner_timed_out`, no reply | nothing; `budget_exhausted` |
 | any reply finishing after the deadline | `model_reply_after_deadline`, rejection `reply_after_deadline`; the reply is recorded but never parsed | nothing; `budget_exhausted` |
 | not called: the deadline had passed before the round was planned | `model_skipped_at_deadline`, no rejection, no reply | nothing; `budget_exhausted` |
+| not called: the question is free text, and the policy plans it | `model_not_consulted`, no reply | the policy's plan, reasons `query_terms` and `query_terms_fight`; or, when the gate rejects that plan (`mixed` free text under `max_tool_calls: 1`), its rejections and nothing (`budget_exhausted`, `plan_over_budget`) |
 | not called: the policy's own round-1 plan is over the source budget, and a round-1 model plan must consult the policy's sources, so none could pass the gate | `model_not_consulted`, the policy plan's rejections, no reply | nothing; `budget_exhausted` (`plan_over_budget`) |
 
 Without a model planner every round's outcome is `deterministic`, including a round
 the deadline stopped before planning; with one, no round is `deterministic`. Once
 the deadline has passed the planner is not called, and the round stops with
-`budget_breached`. The planner call runs under the call runner (see Budgets), so a
+`budget_breached`; the deadline is checked first, so a free-text round whose deadline
+passed before planning records `model_skipped_at_deadline`, not `model_not_consulted`.
+A `model_not_consulted` round is always round 1: after a free-text round 1 the policy
+planned, no refinement rule fires (R1 and R2 need a topic, and R3 needs a term the
+admitted searches left unsent). The planner call runs under the call runner (see Budgets), so a
 planner that never replies is abandoned at the deadline. The planner's identity is
 built once, by discovery from the settings and the installed entry point, before the
 service is built (ADR 0004 §5); it gives both the `model_planner` capability's version
@@ -336,7 +350,7 @@ planner's identity (`ModelPlannerIdentity`) names its model, adapter, adapter ve
 and endpoint fingerprint and no policy version, and a
 deterministic planner's (`DeterministicPlannerIdentity`) names the policy version,
 `m7b.3`, and no model; neither shape has the other's field, so a set handed back with
-one fails to parse. The service consults the model exactly when a port is
+one fails to parse. The service has a model to consult exactly when a port is
 configured, so `ModelPlanning` pairs the port with a `ModelPlannerIdentity` and
 never with the policy's. The planner chooses
 which allowlisted calls run; the records, claims, evidence and applicability are
@@ -472,15 +486,16 @@ controller defect and raises instead of returning. It checks:
   `model_timed_out` or `model_reply_after_deadline` round records its own code
   first, a `model_rejected` round never starts with one of those codes, a
   `model_accepted` or `model_skipped_at_deadline` round records none, a
-  `model_not_consulted` round is round 1 and records the policy plan's rejections and
-  runs nothing, and a `deterministic` round records them only when the policy's plan
-  was rejected, nothing ran and the run stopped `policy_blocked` or `budget_exhausted`; model-reply codes (`malformed_plan`, the
+  `model_not_consulted` round is round 1, and a `deterministic` or `model_not_consulted`
+  round records the policy plan's rejections only when that plan was rejected, nothing
+  ran and the run stopped `policy_blocked` or `budget_exhausted`; model-reply codes (`malformed_plan`, the
   three fixed first codes, `missing_baseline_source`, `missing_named_cve_id`) only
-  under a rejected model outcome; a `deterministic` round that runs no plan and records no
-  rejection reached the deadline;
+  under a rejected model outcome; a `deterministic` round that runs no plan and records
+  no rejection reached the deadline, and a `model_not_consulted` round runs the policy's
+  plan unless the gate rejected it (a deadline before planning records
+  `model_skipped_at_deadline`);
 - the model's reply exactly when the model replied (every model outcome but
-  `model_timed_out`, `model_skipped_at_deadline` and `model_not_consulted`, which
-  records the policy plan's rejections and runs nothing), with `model_reply_sha256`
+  `model_timed_out`, `model_skipped_at_deadline` and `model_not_consulted`), with `model_reply_sha256`
   recomputed from it, never trusted, and `budget_used.rounds`,
   `planner_calls`, the number of planner durations in the timings and the number
   of `plan_accepted` transitions counted from the rounds;
@@ -596,7 +611,10 @@ to say exactly that:
   gate rejects `model_rejected`, so neither can be relabelled `model_accepted`, and
   an accepted plan cannot be swapped for another plan the gate would also accept. A
   model's accepted lookup of one ID resealed as the run for a query naming two
-  re-derives `model_rejected` (`missing_named_cve_id`);
+  re-derives `model_rejected` (`missing_named_cve_id`). Whether a configured model was
+  to be called (`is_model_consultable`) is re-derived too, so a topic or exact-ID round
+  relabelled `model_not_consulted` re-derives `deterministic`, and a free-text round
+  recorded as `model_accepted` re-derives `model_not_consulted`;
 - a round the deadline stopped records exactly the rejection its outcome fixes
   (`plan_deadline_round`: `planner_timed_out`, `reply_after_deadline`, or none) and
   runs nothing;

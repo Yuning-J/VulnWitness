@@ -182,11 +182,12 @@ def test_round_outcomes_are_counted_over_their_stated_denominators(
         PlannerOutcome.MODEL_NOT_CONSULTED: 1,
     }
     assert round_one.gate_acceptance == Proportion(count=1, of=3, rate=0.3333)
-    assert round_one.fallback_attempt == Proportion(count=4, of=9, rate=0.4444)
+    # Eight of the nine rounds were left to the model; the unconsulted one is not.
+    assert round_one.fallback_attempt == Proportion(count=4, of=8, rate=0.5)
     assert round_one.fallback_executed == Proportion(count=3, of=4, rate=0.75)
-    assert round_one.timed_out_fallback == Proportion(count=1, of=9, rate=0.1111)
-    assert round_one.deadline_no_execution == Proportion(count=2, of=9, rate=0.2222)
-    assert round_one.skipped_before_planning == Proportion(count=1, of=9, rate=0.1111)
+    assert round_one.timed_out_fallback == Proportion(count=1, of=8, rate=0.125)
+    assert round_one.deadline_no_execution == Proportion(count=2, of=8, rate=0.25)
+    assert round_one.skipped_before_planning == Proportion(count=1, of=8, rate=0.125)
     assert keep_counted(round_one.unavailable_details) == {
         "unreachable": 1,
         "timed_out": 1,
@@ -199,6 +200,31 @@ def test_round_outcomes_are_counted_over_their_stated_denominators(
     assert model_section.round_two.rounds == 0
     assert model_section.round_two.fallback_attempt == Proportion(count=0, of=0, rate=None)
     assert model_section.all_rounds == round_one
+
+
+def test_model_rates_are_null_when_the_policy_left_no_round_to_the_model(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    """Free text is planned by the policy alone: its rounds are counted, under
+    ``model_not_consulted``, but measure nothing of the model."""
+    deterministic_set = run_deterministically(
+        fixture_bundle, "sql injection gateway", "implementation_only"
+    )
+    model_set = run_with_replies(fixture_bundle, "sql injection gateway", "implementation_only")
+
+    all_rounds = require_model_section(analyze(build_case(deterministic_set, model_set))).all_rounds
+
+    no_round = Proportion(count=0, of=0, rate=None)
+    assert all_rounds.rounds == 1
+    assert keep_counted(all_rounds.outcomes) == {PlannerOutcome.MODEL_NOT_CONSULTED: 1}
+    assert all_rounds.gate_acceptance == no_round
+    assert all_rounds.fallback_attempt == no_round
+    assert all_rounds.fallback_executed == no_round
+    assert all_rounds.timed_out_fallback == no_round
+    assert all_rounds.deadline_no_execution == no_round
+    assert all_rounds.skipped_before_planning == no_round
+    assert keep_counted(all_rounds.unavailable_details) == {}
+    assert keep_counted(all_rounds.rejection_codes) == {}
 
 
 def test_every_outcome_detail_and_code_is_listed_even_when_none_occurred(

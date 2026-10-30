@@ -14,12 +14,16 @@ from cve_kgrag.domain.investigation import (
     StepReason,
     StopReason,
 )
+from cve_kgrag.domain.planning import CveSearchCall, ToolName
 from cve_kgrag.domain.taxonomy import ResultStatus
 from tests.support.evaluation import run_deterministically, run_with_replies
 from tests.support.investigation import list_need_outcomes, list_step_reasons
 from tests.support.planners import UNAVAILABLE_REPLY, build_plan_reply
 
 SEARCH_GATEWAY = {"tool": "cve_search", "query": "zzqx gateway"}
+TOPIC_5G_AKA = {"tool": "topic_context", "topic_id": "3gpp:5g-aka"}
+# A severity no fixture record carries: every CVE search and topic call answers nothing.
+NO_RECORD_FILTERS = {"severities": ["LOW"]}
 
 
 def test_answer_beside_a_word_no_record_holds_stops_needs_unmet_and_keeps_the_answer(
@@ -40,9 +44,9 @@ def test_open_need_without_a_policy_refinement_consults_no_model_in_round_two(
 ) -> None:
     evidence_set = run_with_replies(
         fixture_bundle,
-        "zzqx gateway",
+        "5gaka zzqx gateway",
         "implementation_only",
-        build_plan_reply(SEARCH_GATEWAY),
+        build_plan_reply(TOPIC_5G_AKA, {"tool": "cve_search", "query": "5gaka zzqx gateway"}),
         build_plan_reply(SEARCH_GATEWAY),
     )
 
@@ -154,20 +158,29 @@ def test_version_after_a_word_no_record_names_as_a_product_is_no_affectedness_qu
 def test_model_search_that_dropped_a_word_is_followed_by_the_search_of_every_term(
     fixture_bundle: FixtureBundle,
 ) -> None:
+    """The model explores the topic and searches one of the query's four words. A filter no
+    record matches leaves both without an answer, so the implementation need is open after
+    round 1 and R3 searches every term."""
     evidence_set = run_with_replies(
         fixture_bundle,
-        "sql injection gateway",
+        "5gaka sql injection gateway",
         "implementation_only",
-        build_plan_reply({"tool": "cve_search", "query": "gateway"}),
+        build_plan_reply(TOPIC_5G_AKA, {"tool": "cve_search", "query": "5gaka"}),
         UNAVAILABLE_REPLY,
+        filters=NO_RECORD_FILTERS,
     )
 
     assert list_step_reasons(evidence_set) == [
         StepReason.MODEL_PROPOSAL,
+        StepReason.MODEL_PROPOSAL,
         StepReason.QUERY_TERMS_FOR_OPEN_NEED,
     ]
+    assert evidence_set.trajectory.steps[2].call == CveSearchCall(
+        tool=ToolName.CVE_SEARCH, query="5gaka sql injection gateway"
+    )
+    assert evidence_set.coverage.basis is DecisionBasis.NEEDS_OPEN_AFTER_REFINEMENT
     assert list_need_outcomes(evidence_set) == [
-        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.FOUND)
+        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.NOT_FOUND)
     ]
 
 
@@ -176,9 +189,9 @@ def test_word_no_record_holds_vetoes_the_search_of_every_term(
 ) -> None:
     evidence_set = run_with_replies(
         fixture_bundle,
-        "zzqx gateway",
+        "5gaka zzqx gateway",
         "implementation_only",
-        build_plan_reply({"tool": "cve_search", "query": "zzqx"}),
+        build_plan_reply(TOPIC_5G_AKA, {"tool": "cve_search", "query": "zzqx"}),
         build_plan_reply(SEARCH_GATEWAY),
     )
 

@@ -1779,7 +1779,7 @@
       "type": "string"
     },
     "PlannerOutcome": {
-      "description": "How a round's plan was chosen.\n\n``deterministic``: no model planner is configured, so the policy planned the round.\n``model_accepted``: the model's plan passed the gate and runs. ``model_rejected`` and\n``model_unavailable``: the model's reply failed the gate or carried no plan, so the\nround falls back to the policy's plan. ``model_reply_after_deadline`` and\n``model_timed_out``: the model replied at or after the deadline, or not at all, so\nnothing runs. ``model_skipped_at_deadline``: a model is configured, but the deadline\nhad passed before the round was planned, so it was never consulted.\n``model_not_consulted``: a model is configured, but the policy's own round-1 plan is over\nthe source budget; a round-1 model plan must consult the policy's sources, so no plan the\ngate accepts exists, the model is not called and the round records the policy's\nrejections.\nEvery outcome but ``deterministic``, ``model_timed_out``, ``model_skipped_at_deadline``\nand ``model_not_consulted`` has a reply, which the round records.",
+      "description": "How a round's plan was chosen.\n\n``deterministic``: no model planner is configured, so the policy planned the round.\n``model_accepted``: the model's plan passed the gate and runs. ``model_rejected`` and\n``model_unavailable``: the model's reply failed the gate or carried no plan, so the\nround falls back to the policy's plan. ``model_reply_after_deadline`` and\n``model_timed_out``: the model replied at or after the deadline, or not at all, so\nnothing runs. ``model_skipped_at_deadline``: a model is configured, but the deadline\nhad passed before the round was planned, so it was never consulted.\n``model_not_consulted``: a model is configured, but the policy planned round 1 without\ncalling it. Either the question is free text (no CVE ID, no resolved topic), which the\npolicy plans alone with the question's search terms as its baseline, or the policy's\nown round-1 plan is over the source budget, which no round-1 model plan can meet since\nit must consult the policy's sources. The round runs the policy's plan, or records the\npolicy plan's rejections and runs nothing.\nEvery outcome but ``deterministic``, ``model_timed_out``, ``model_skipped_at_deadline``\nand ``model_not_consulted`` has a reply, which the round records.",
       "enum": [
         "deterministic",
         "model_accepted",
@@ -2137,12 +2137,6 @@
           },
           "then": {
             "properties": {
-              "accepted_plan": {
-                "maxItems": 0
-              },
-              "rejections": {
-                "minItems": 1
-              },
               "round_number": {
                 "const": 1
               }
@@ -2156,7 +2150,10 @@
                 "minItems": 1
               },
               "planner_outcome": {
-                "const": "deterministic"
+                "enum": [
+                  "deterministic",
+                  "model_not_consulted"
+                ]
               }
             },
             "required": [
@@ -4461,8 +4458,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.31",
-      "default": "2.0.0-dev.31",
+      "const": "2.0.0-dev.32",
+      "default": "2.0.0-dev.32",
       "title": "Schema Version",
       "type": "string"
     },

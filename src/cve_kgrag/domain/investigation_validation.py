@@ -103,6 +103,7 @@ from cve_kgrag.domain.investigation import (
     FIXED_FIRST_REJECTION_CODES,
     MODEL_REPLY_REJECTION_CODES,
     PLANNER_OUTCOMES_BY_KIND,
+    POLICY_PLANNED_OUTCOMES,
     POLICY_STEP_TOOL_AND_ROUND,
     REJECTED_MODEL_OUTCOMES,
     REPLIED_MODEL_OUTCOMES,
@@ -794,9 +795,9 @@ def find_round_step_violations(
 
 def find_rejection_violations(round_record: RoundRecord) -> list[str]:
     """A rejection is recorded exactly when the outcome says a plan was rejected: a rejected
-    model reply records why, first; a round a model was not consulted for records the
-    policy's rejections and runs nothing; an accepted, skipped or deterministic plan records
-    none, unless the policy's own plan was rejected and the round runs nothing."""
+    model reply records why, first; an accepted, skipped or policy-planned round
+    (``deterministic`` or ``model_not_consulted``, which is round 1 only) records none,
+    unless the policy's own plan was rejected and the round runs nothing."""
     violations: list[str] = []
     round_number = round_record.round_number
     planner_outcome = round_record.planner_outcome
@@ -825,18 +826,10 @@ def find_rejection_violations(round_record: RoundRecord) -> list[str]:
                 f"{planner_outcome} rejected no model reply"
             )
     runs_no_plan = not round_record.accepted_plan
-    is_policy_planned = planner_outcome in (
-        PlannerOutcome.DETERMINISTIC,
-        PlannerOutcome.MODEL_NOT_CONSULTED,
-    )
+    is_policy_planned = planner_outcome in POLICY_PLANNED_OUTCOMES
     is_policy_plan_rejected = is_policy_planned and runs_no_plan
-    if planner_outcome is PlannerOutcome.MODEL_NOT_CONSULTED and not (
-        round_number == 1 and rejection_codes and runs_no_plan
-    ):
-        violations.append(
-            f"round {round_number} is {planner_outcome}: only round 1 is, recording the "
-            "policy plan's rejections and running nothing"
-        )
+    if planner_outcome is PlannerOutcome.MODEL_NOT_CONSULTED and round_number != 1:
+        violations.append(f"round {round_number} is {planner_outcome}: only round 1 is")
     if rejection_codes and not is_policy_plan_rejected:
         violations.append(
             f"round {round_number} is {planner_outcome} and runs its plan, but records rejections"
@@ -952,13 +945,16 @@ def find_round_transition_violations(evidence_set: KnowledgeEvidenceSet) -> list
 
 
 def find_policy_round_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
-    """A round the policy planned runs its plan, unless the gate rejected that plan (and the
-    run stopped ``policy_blocked`` or ``budget_exhausted``) or the deadline was reached."""
+    """A round the policy planned (``deterministic`` or ``model_not_consulted``) runs its
+    plan, unless the gate rejected that plan (and the run stopped ``policy_blocked`` or
+    ``budget_exhausted``) or, for ``deterministic`` only, the deadline was reached: a round
+    whose deadline passed before planning records ``model_skipped_at_deadline`` when a
+    model is configured, so a ``model_not_consulted`` round always planned."""
     violations: list[str] = []
     trajectory = evidence_set.trajectory
     is_wall_time_breach = trajectory.budget_used.breach is BudgetBreach.WALL_TIME
     for round_record in trajectory.rounds:
-        if round_record.planner_outcome is not PlannerOutcome.DETERMINISTIC:
+        if round_record.planner_outcome not in POLICY_PLANNED_OUTCOMES:
             continue
         round_number = round_record.round_number
         if round_record.rejections and evidence_set.stop_reason not in REJECTED_POLICY_PLAN_STOPS:
@@ -967,11 +963,20 @@ def find_policy_round_violations(evidence_set: KnowledgeEvidenceSet) -> list[str
                 f"{evidence_set.stop_reason}"
             )
         runs_no_plan = not round_record.accepted_plan
-        if runs_no_plan and not round_record.rejections and not is_wall_time_breach:
-            violations.append(
-                f"round {round_number} runs no plan, though its plan was not rejected and the "
-                "deadline was not reached"
-            )
+        is_deadline_exempt = (
+            is_wall_time_breach and round_record.planner_outcome is PlannerOutcome.DETERMINISTIC
+        )
+        if runs_no_plan and not round_record.rejections and not is_deadline_exempt:
+            if round_record.planner_outcome is PlannerOutcome.DETERMINISTIC:
+                violations.append(
+                    f"round {round_number} runs no plan, though its plan was not rejected and "
+                    "the deadline was not reached"
+                )
+            else:
+                violations.append(
+                    f"round {round_number} is model_not_consulted and runs no plan, though its "
+                    "plan was not rejected"
+                )
     return violations
 
 

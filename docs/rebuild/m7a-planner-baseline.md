@@ -73,7 +73,7 @@ hash of its request and FiGHT source; a plan by the hash of its call keys
 
 ## The report
 
-The report is the evaluation's own format (`evaluation_format_version: 4`), not part of
+The report is the evaluation's own format (`evaluation_format_version: 5`), not part of
 the v2 knowledge contract, so it is not under `schemas/v2`. It is JSON with sorted keys,
 and the analysis is a pure function of the sets: equal sets give byte-equal reports.
 [`m7b-planner-evaluation.md`](m7b-planner-evaluation.md) describes the dataset identity
@@ -114,19 +114,27 @@ and reason is listed, zero included, so two reports compare key by key.
 ### Round outcomes
 
 `round_one`, `round_two` and `all_rounds` count the model runs' rounds. Unless stated, a
-rate is over every round in the group.
+rate is over the rounds the policy left to the model: every round in the group except
+the `model_not_consulted` ones. A rate is null, not 0, when the policy left no round of
+the group to the model.
 
 | Field | Counts | Over |
 |---|---|---|
 | `gate_acceptance` | `model_accepted` | rounds whose reply held plan text in time: `model_accepted` and `model_rejected` |
-| `fallback_attempt` | `model_rejected` and `model_unavailable`: the policy's plan was tried | every round |
+| `fallback_attempt` | `model_rejected` and `model_unavailable`: the policy's plan was tried | rounds left to the model |
 | `fallback_executed` | fallback rounds that executed at least one step | the fallback rounds |
-| `timed_out_fallback` | `model_unavailable` whose reply detail is `timed_out` | every round |
-| `deadline_no_execution` | `model_timed_out` and `model_reply_after_deadline`: nothing ran | every round |
-| `skipped_before_planning` | `model_skipped_at_deadline`: the model was never called | every round |
+| `timed_out_fallback` | `model_unavailable` whose reply detail is `timed_out` | rounds left to the model |
+| `deadline_no_execution` | `model_timed_out` and `model_reply_after_deadline`: nothing ran | rounds left to the model |
+| `skipped_before_planning` | `model_skipped_at_deadline`: the model was never called | rounds left to the model |
 
-`outcomes` counts every planner outcome, `model_not_consulted` included: a round 1 whose
-policy plan is over the source budget, for which the model was not called and nothing ran.
+`rounds` and `outcomes` count every round, `model_not_consulted` included: a round 1 the
+policy planned without calling the model, because the question is free text (the policy
+plans it, and its plan runs unless the gate rejects it) or because the policy's plan is
+over the source budget (nothing runs). Such a round says nothing of how the model
+behaves, so the model rates leave it out; it counts in no fallback, rejection code or
+failure detail. A free-text round whose deadline passed before planning is recorded
+`model_skipped_at_deadline` and counts in `skipped_before_planning`, since the deadline
+is checked before the rule that leaves free text to the policy.
 `timed_out_fallback` is a subset of `fallback_attempt`. It joins two causes the sets do not
 tell apart: the planner's share of the run ending (`PLANNER_CAP_REPLY`) and the adapter
 reporting a timeout, an HTTP 408, 504 or 524. Telling them apart would need a new failure
@@ -156,7 +164,11 @@ figure counts rounds in which some call could pass the gate.
 ### Runs and cases
 
 `executed_model_step` is the share of model runs that executed at least one step the model
-planned. An accepted plan that the deadline stopped before its first step does not count.
+planned. The run-level figures (`executed_model_step`, `tool_calls_against_deterministic`,
+and in M7b the sufficiency and coverage of the model runs) count every case, including
+free-text cases the policy planned alone. A free-text case's model runs equal its
+deterministic run, so their agreement is a routing check, not a model-quality result;
+only the per-case figures of topic and exact-ID cases say something about the model. An accepted plan that the deadline stopped before its first step does not count.
 `tool_calls_against_deterministic` counts the model runs that charged fewer, as many or
 more tool calls than the deterministic run of the same case. `planner_durations` gives
 the count, minimum, lower median and maximum planner call time in milliseconds. These

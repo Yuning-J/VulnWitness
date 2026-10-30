@@ -194,6 +194,9 @@ def measure_rounds(round_records: Sequence[RoundRecord]) -> RoundOutcomeMetrics:
             for rejection in round_record.rejections:
                 rejection_codes[rejection.code.value] += 1
     round_count = len(round_records)
+    # A round the policy planned without consulting the model says nothing of how the
+    # model behaves, so the per-round model rates leave it out of their denominator.
+    model_left_rounds = round_count - outcomes[PlannerOutcome.MODEL_NOT_CONSULTED]
     fallback_rounds = sum(outcomes[outcome] for outcome in FALLBACK_OUTCOMES)
     return RoundOutcomeMetrics(
         rounds=round_count,
@@ -202,14 +205,14 @@ def measure_rounds(round_records: Sequence[RoundRecord]) -> RoundOutcomeMetrics:
             outcomes[PlannerOutcome.MODEL_ACCEPTED],
             sum(outcomes[outcome] for outcome in GATED_OUTCOMES),
         ),
-        fallback_attempt=measure_proportion(fallback_rounds, round_count),
+        fallback_attempt=measure_proportion(fallback_rounds, model_left_rounds),
         fallback_executed=measure_proportion(fallback_executed_rounds, fallback_rounds),
-        timed_out_fallback=measure_proportion(timed_out_fallback_rounds, round_count),
+        timed_out_fallback=measure_proportion(timed_out_fallback_rounds, model_left_rounds),
         deadline_no_execution=measure_proportion(
-            sum(outcomes[outcome] for outcome in DEADLINE_OUTCOMES), round_count
+            sum(outcomes[outcome] for outcome in DEADLINE_OUTCOMES), model_left_rounds
         ),
         skipped_before_planning=measure_proportion(
-            outcomes[PlannerOutcome.MODEL_SKIPPED_AT_DEADLINE], round_count
+            outcomes[PlannerOutcome.MODEL_SKIPPED_AT_DEADLINE], model_left_rounds
         ),
         unavailable_details=unavailable_details,
         rejection_codes=rejection_codes,

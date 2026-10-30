@@ -106,9 +106,19 @@ degrades to the production baseline instead of blocking the question; the round
 records the model plan's rejections followed by any of the fallback plan's. A reply
 that arrives after the deadline, or no reply by it, stops the run; a round the
 deadline stops before its configured model is consulted is recorded as
-`model_skipped_at_deadline`, and a round 1 whose policy plan is over the source budget, which no
-model plan could pass since it must consult the same sources, as `model_not_consulted`,
-so a round's outcome always says which planner kind the run was configured with.
+`model_skipped_at_deadline`, and a round the policy plans without calling the configured
+model as `model_not_consulted`, so a round's outcome always says which planner kind the
+run was configured with.
+
+A configured model plans only a question that names a CVE ID or resolves a reviewed
+topic. Free text (no kept CVE ID, no resolved topic) is planned by the policy in every
+scope, with the question's search terms as its baseline: product policy, not a
+completeness or sufficiency guarantee and not a safety rule. A round 1 whose policy plan
+is over the source budget is not given to the model either, since a round-1 model plan
+must consult the same sources and so none could pass. Such a round is round 1, records
+no reply and no planner call, and runs the policy's plan, or records the gate's
+rejections of it and runs nothing. A free-text round whose deadline passed before
+planning records `model_skipped_at_deadline`, since the deadline is checked first.
 
 The vocabulary check reads only search terms, so an accepted call is rewritten into
 its canonical form before it runs or is recorded: a search keeps its search terms,
@@ -415,7 +425,10 @@ plan, `choose_round_plan`, given the model reply the round records. A
 decision-path audit (`application/decision_path_audit.py`) runs on every sealed
 set after the validator and calls the same functions over the set and the topic
 registry: it recomputes the interpretation and requires equality, recomputes the
-interpretation stop, and every round's plan: it parses and gates the recorded reply
+interpretation stop, and every round's plan: it decides again whether a configured
+model was to be consulted (`is_model_consultable`), so a topic or exact-ID round cannot
+be relabelled `model_not_consulted` nor a free-text round recorded as the model's, and
+parses and gates the recorded reply
 again in the context rebuilt from the earlier steps, so the planner outcome, the
 rejection codes in order, the accepted plan (the model's in canonical form, or the
 policy's fallback), each step's planner and reason, and the `model_plan_rejected`
@@ -568,7 +581,9 @@ server rejects. The published schemas state these rules:
   outcome's fixed code first (`FIRST_REJECTION_BY_OUTCOME`), and a `model_rejected`
   round never starts with such a code; every other round records no rejection,
   except a policy plan the gate rejected, and never a code only a model reply
-  produces (`MODEL_REPLY_REJECTION_CODES`); the stop reason fixes the statuses
+  produces (`MODEL_REPLY_REJECTION_CODES`); a `model_not_consulted` round is round 1,
+  and, like a `deterministic` one, records rejections only when it runs nothing
+  (`POLICY_PLANNED_OUTCOMES`); the stop reason fixes the statuses
   (`STATUSES_BY_STOP_REASON`); and the requested and applied scope are the
   request's. These constants live in `domain/investigation.py`, beside the models
   whose schema states them.

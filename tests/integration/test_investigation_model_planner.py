@@ -17,9 +17,11 @@ from cve_kgrag.application.investigate import PLANNER_CAP_REPLY, InvestigationSe
 from cve_kgrag.application.planner_setup import ModelPlanning
 from cve_kgrag.application.trajectory_replay import ReplayCompleted, replay_evidence_set
 from cve_kgrag.domain.budget import BudgetBreach
+from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
     InvestigationRequest,
+    InvestigationWarningCode,
     KnowledgeEvidenceSet,
     PlannerOutcome,
     StepReason,
@@ -29,12 +31,16 @@ from cve_kgrag.domain.investigation import (
 from cve_kgrag.domain.planning import (
     ModelReply,
     PlannerKind,
+    QueryIntent,
+    ToolCall,
     ToolName,
     compute_model_reply_sha256,
 )
 from cve_kgrag.domain.search import RetrievalOutcome
 from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus
+from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.ports.planning import ModelPort
+from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.clocks import (
     LATE_START_SECONDS,
     ONE_SECOND_RUN_REAL_SECONDS,
@@ -43,6 +49,7 @@ from tests.support.clocks import (
 )
 from tests.support.fakes import RecordingRetriever, SlowRetriever
 from tests.support.investigation import (
+    FIGHT_FREE_TEXT_QUERY,
     FILLED_SEARCH_LIMIT_QUERY,
     ONE_SECOND_REQUEST,
     build_exact_lookup_call,
@@ -53,12 +60,15 @@ from tests.support.investigation import (
     list_step_reasons,
     list_step_tools,
     list_transitions,
+    list_warning_codes,
+    verify_as_sealed,
 )
 from tests.support.planners import (
     SCRIPTED_PLANNER,
     UNAVAILABLE_REPLY,
     AdapterAbort,
     BlockingModelPort,
+    FailingModelPort,
     KeyQuotingStatus,
     MisansweringModelPort,
     RaisingModelPort,
@@ -73,6 +83,7 @@ PLANNER_KEY = "sk-test-planner-key-0123456789"
 SEARCH_AUSF_SUCI = {"tool": "cve_search", "query": "ausf suci"}
 TOPIC_5G_AKA = {"tool": "topic_context", "topic_id": "3gpp:5g-aka"}
 BOTH_NAMED_IDS = ["CVE-9999-0003", "CVE-9999-0004"]
+LOOKUP_UNKNOWN_ID = {"tool": "cve_exact_lookup", "cve_ids": ["CVE-9999-4242"]}
 # The one place a set holds the planner's own text: each round's recorded reply.
 RECORDED_REPLY_FIELDS: dict[str, Any] = {"trajectory": {"rounds": {"__all__": {"model_reply"}}}}
 # Real seconds past the wall-time cap a run that waits on nothing may take.
@@ -225,7 +236,7 @@ def test_malformed_plan_falls_back_to_the_deterministic_plan(
             ["missing_baseline_source"],
         ),
         (
-            "ausf CVE.9999.0003",
+            "5G-AKA ausf CVE.9999.0003",
             "implementation_only",
             [{"tool": "cve_search", "query": "0003 cve 9999 ausf"}],
             ["term_outside_vocabulary"],
@@ -675,36 +686,126 @@ def test_model_search_of_only_a_low_signal_word_falls_back_to_the_deterministic_
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(
-        build_investigation_request("cve ausf crash", "implementation_only")
+        build_investigation_request("5G-AKA cve crash", "implementation_only")
     )
 
     assert describe_rounds(evidence_set) == [("model_rejected", ["term_outside_vocabulary"])]
     assert list_step_reasons(evidence_set) == [StepReason.QUERY_TERMS]
-    assert evidence_set.trajectory.steps[0].backend_requests[0].query == "ausf crash"
+    assert evidence_set.trajectory.steps[0].backend_requests[0].query == "5g aka crash"
+
+
+def list_accepted_plans(evidence_set: KnowledgeEvidenceSet) -> list[tuple[ToolCall, ...]]:
+    accepted_plans: list[tuple[ToolCall, ...]] = []
+    for round_record in evidence_set.trajectory.rounds:
+        accepted_plans.append(round_record.accepted_plan)
+    return accepted_plans
+
+
+def list_step_planners(evidence_set: KnowledgeEvidenceSet) -> list[PlannerKind]:
+    step_planners: list[PlannerKind] = []
+    for step in evidence_set.trajectory.steps:
+        step_planners.append(step.planned_by)
+    return step_planners
 
 
 @pytest.mark.parametrize(
-    ("query", "round_one_call", "expected_tools"),
+    ("query", "scope"),
     [
+        ("sql injection gateway", "implementation_only"),
+        (FIGHT_FREE_TEXT_QUERY, "mixed"),
+        ("EPS AKA crash", "mixed"),
+        (FIGHT_FREE_TEXT_QUERY, "protocol_context_only"),
+    ],
+    ids=[
+        "implementation_only",
+        "mixed_with_fight_terms",
+        "mixed_with_an_excluded_term",
+        "protocol_context_only",
+    ],
+)
+def test_free_text_question_is_planned_by_the_policy_without_consulting_the_model(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+    topic_registry: TopicRegistry,
+    query: str,
+    scope: str,
+) -> None:
+    request = build_investigation_request(query, scope)
+    service = build_test_investigation_service(fixture_bundle, model_port=FailingModelPort())
+
+    evidence_set = service.investigate(request)
+
+    deterministic_set = investigate_without_planner(fixture_bundle, request)
+    assert evidence_set.interpretation.intent is QueryIntent.FREE_TEXT
+    assert evidence_set.trajectory.budget_used.planner_calls == 0
+    assert describe_rounds(evidence_set) == [("model_not_consulted", [])]
+    assert evidence_set.trajectory.rounds[0].model_reply is None
+    assert list_accepted_plans(evidence_set) == list_accepted_plans(deterministic_set)
+    assert set(list_step_planners(evidence_set)) == {PlannerKind.DETERMINISTIC}
+    assert InvestigationWarningCode.MODEL_PLAN_REJECTED not in list_warning_codes(evidence_set)
+    verify_as_sealed(
+        evidence_set,
+        pinned_fight_snapshot,
+        packaged_evidence_catalog,
+        evidence_set.source_capabilities,
+        topic_registry,
+    )
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_intent"),
+    [("5G-AKA", QueryIntent.TOPIC), ("CVE-9999-0003", QueryIntent.EXACT_ID)],
+    ids=["topic", "exact_id"],
+)
+def test_question_naming_a_reviewed_topic_or_a_cve_id_consults_the_model_once(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+    topic_registry: TopicRegistry,
+    query: str,
+    expected_intent: QueryIntent,
+) -> None:
+    model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
+    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+
+    evidence_set = service.investigate(build_investigation_request(query, "implementation_only"))
+
+    assert evidence_set.interpretation.intent is expected_intent
+    assert len(model_port.planning_inputs) == 1
+    assert evidence_set.trajectory.budget_used.planner_calls == 1
+    assert describe_rounds(evidence_set) == [("model_unavailable", ["planner_unavailable"])]
+    verify_as_sealed(
+        evidence_set,
+        pinned_fight_snapshot,
+        packaged_evidence_catalog,
+        evidence_set.source_capabilities,
+        topic_registry,
+    )
+
+
+@pytest.mark.parametrize(
+    ("query", "round_one_calls", "expected_tools"),
+    [
+        ("CVE-9999-4242", [LOOKUP_UNKNOWN_ID], ["cve_exact_lookup"]),
         (
-            "CVE-9999-4242",
-            {"tool": "cve_exact_lookup", "cve_ids": ["CVE-9999-4242"]},
-            ["cve_exact_lookup"],
+            "CVE-9999-4242 zzqx",
+            [LOOKUP_UNKNOWN_ID, {"tool": "cve_search", "query": "zzqx"}],
+            ["cve_exact_lookup", "cve_search"],
         ),
-        ("zzqx", {"tool": "cve_search", "query": "zzqx"}, ["cve_search"]),
     ],
     ids=["unknown_id_alone", "unindexed_term"],
 )
 def test_run_with_no_policy_refinement_ends_without_evidence_and_never_asks_the_model_again(
     fixture_bundle: FixtureBundle,
     query: str,
-    round_one_call: dict[str, Any],
+    round_one_calls: list[dict[str, Any]],
     expected_tools: list[str],
 ) -> None:
     """Round 2 runs only for a policy refinement call; with none left, the model is not
     consulted for a round no call could run in."""
     model_port = ScriptedModelPort(
-        [build_plan_reply(round_one_call), build_plan_reply(round_one_call)]
+        [build_plan_reply(*round_one_calls), build_plan_reply(*round_one_calls)]
     )
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
 

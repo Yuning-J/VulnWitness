@@ -76,6 +76,7 @@ from tests.support.investigation_runs import (
     run_fight_direct_search_over_the_byte_cap,
     run_five_g_aka,
     run_five_g_aka_mixed,
+    run_free_text_under_a_model_planner,
     run_model_accepted,
     run_model_low_signal_search,
     run_model_not_consulted,
@@ -115,12 +116,17 @@ def run_refinement_under_one_round(fixture_bundle: FixtureBundle) -> KnowledgeEv
 def run_search_of_every_term_after_a_dropped_word(
     fixture_bundle: FixtureBundle,
 ) -> KnowledgeEvidenceSet:
-    """The model's round 1 searches one of three words; round 2 falls back to the policy's
-    search of all of them (R3)."""
+    """The model's round 1 explores the topic and searches one of four words, and the
+    filters leave both empty; round 2 falls back to the policy's search of all of them (R3)."""
     return investigate_with_model_replies(
         fixture_bundle,
-        build_investigation_request("sql injection gateway", "implementation_only"),
-        build_plan_reply({"tool": "cve_search", "query": "gateway"}),
+        build_investigation_request(
+            "5gaka sql injection gateway", "implementation_only", filters=LOW_SEVERITY_FILTERS
+        ),
+        build_plan_reply(
+            {"tool": "topic_context", "topic_id": "3gpp:5g-aka"},
+            {"tool": "cve_search", "query": "5gaka"},
+        ),
         UNAVAILABLE_REPLY,
     )
 
@@ -307,8 +313,11 @@ def blame_the_filters(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSe
 
 
 def search_fewer_terms_in_round_two(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
-    """Round 2 searches fewer of the query's terms than R3 gives."""
-    return replace_call(evidence_set, 2, build_search_call("sql injection"))
+    """Round 2 searches fewer of the query's terms than R3 gives, without the warning that
+    the dropped ``5gaka`` is unindexed."""
+    return rewrite_step(
+        replace_call(evidence_set, 3, build_search_call("sql injection")), 3, search_warnings=()
+    )
 
 
 def give_the_refinement_another_reason(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
@@ -1072,6 +1081,63 @@ def claim_the_model_was_consulted(evidence_set: KnowledgeEvidenceSet) -> Knowled
     return reseal_evidence_set(forged_set, timings=timings)
 
 
+def run_topic_model_unavailable(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """A topic question whose model planner fails, so the policy's search runs."""
+    return investigate_with_model_replies(
+        fixture_bundle,
+        build_investigation_request("5G-AKA", "implementation_only"),
+        UNAVAILABLE_REPLY,
+    )
+
+
+def claim_the_model_was_not_consulted(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """Round 1, whose topic question the model must plan, claims the policy planned it
+    alone: no reply, no hash, no rejection, no planner call, duration or warning."""
+    round_one = evidence_set.trajectory.rounds[0]
+    unconsulted_round = round_one.model_copy(
+        update={
+            "planner_outcome": PlannerOutcome.MODEL_NOT_CONSULTED,
+            "rejections": (),
+            "model_reply": None,
+            "model_reply_sha256": None,
+        }
+    )
+    budget_used = evidence_set.trajectory.budget_used.model_copy(update={"planner_calls": 0})
+    timings = evidence_set.timings.model_copy(update={"planner_durations_ms": ()})
+    forged_set = update_trajectory(
+        evidence_set, rounds=(unconsulted_round,), budget_used=budget_used
+    )
+    forged_set = drop_warning(forged_set, InvestigationWarningCode.MODEL_PLAN_REJECTED)
+    return reseal_evidence_set(forged_set, timings=timings)
+
+
+def claim_the_model_planned_free_text(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """Round 1, which the policy plans alone for free text, claims the model proposed the
+    policy's own search: the reply, its hash, the planner call and its duration are
+    recorded, and the step is credited to the model."""
+    round_one = evidence_set.trajectory.rounds[0]
+    model_reply = build_plan_reply(round_one.accepted_plan[0].model_dump())
+    accepted_round = round_one.model_copy(
+        update={
+            "planner_outcome": PlannerOutcome.MODEL_ACCEPTED,
+            "model_reply": model_reply,
+            "model_reply_sha256": compute_model_reply_sha256(model_reply),
+        }
+    )
+    steps: list[ToolStep] = []
+    for step in evidence_set.trajectory.steps:
+        credited_step = step.model_copy(
+            update={"planned_by": PlannerKind.MODEL, "reason": StepReason.MODEL_PROPOSAL}
+        )
+        steps.append(credited_step)
+    budget_used = evidence_set.trajectory.budget_used.model_copy(update={"planner_calls": 1})
+    timings = evidence_set.timings.model_copy(update={"planner_durations_ms": (0,)})
+    forged_set = update_trajectory(
+        evidence_set, rounds=(accepted_round,), steps=tuple(steps), budget_used=budget_used
+    )
+    return reseal_evidence_set(forged_set, timings=timings)
+
+
 def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
     """Round 2, which the deadline stopped before its planner ran, is dropped from the
     record, so the run appears to have stopped at refine without planning it."""
@@ -1125,6 +1191,18 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
             "reply give model_not_consulted",
         ),
         (
+            run_topic_model_unavailable,
+            claim_the_model_was_not_consulted,
+            "round 1 is model_not_consulted, but the controller's decisions over its recorded "
+            "reply give deterministic",
+        ),
+        (
+            run_free_text_under_a_model_planner,
+            claim_the_model_planned_free_text,
+            "round 1 is model_accepted, but the controller's decisions over its recorded reply "
+            "give model_not_consulted",
+        ),
+        (
             run_mixed_free_text_with_an_excluded_term,
             claim_protocol_context_searchable,
             "coverage.needs are not the needs the request gives, judged over the admitted "
@@ -1168,6 +1246,8 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
         "accepted_plan_omitting_a_named_cve_id",
         "planned_round_two_erased",
         "unconsultable_round_claims_a_model_reply",
+        "topic_round_claims_the_model_was_not_consulted",
+        "free_text_round_claims_a_model_plan",
         "need_outcome_rewritten",
         "unevaluated_need_relabelled_not_found",
         "unevaluated_need_relabelled_found",

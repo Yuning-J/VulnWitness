@@ -117,6 +117,14 @@ Present for an M7b evaluation only, with a `deterministic` part and a `model` pa
 without model runs), never averaged together. Each part holds `cases`,
 `evidence_quality` and `run_quality`.
 
+The `model` part counts every case. With a model configured, the policy still plans free
+text alone (no kept CVE ID, no resolved topic; ADR 0005 §3), so a free-text case's model
+runs repeat its deterministic run, and their rounds are `model_not_consulted`, which the
+planner section's model rates leave out ([`m7a-planner-baseline.md`](m7a-planner-baseline.md#round-outcomes)).
+Free-text cases agreeing with the deterministic run is a routing check, not a
+model-quality result. Only the topic and exact-ID cases, 4 of the 13 baseline cases, say
+anything about the model, and the per-case figures are where they can be read apart.
+
 ### What a run is judged on
 
 Only what the answer lists: the CVE IDs of `implementation_candidates` and the technique

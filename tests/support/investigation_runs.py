@@ -23,7 +23,12 @@ from tests.support.investigation import (
     rewrite_step,
 )
 from tests.support.marker_sweep import ECHO_MARKER
-from tests.support.planners import UNAVAILABLE_REPLY, ScriptedModelPort, build_plan_reply
+from tests.support.planners import (
+    UNAVAILABLE_REPLY,
+    FailingModelPort,
+    ScriptedModelPort,
+    build_plan_reply,
+)
 
 
 def investigate(
@@ -198,6 +203,15 @@ def run_model_not_consulted(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceS
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
     return service.investigate(
         build_investigation_request("5G-AKA", "mixed", budget={"max_sources": 1})
+    )
+
+
+def run_free_text_under_a_model_planner(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """Free text with a model configured: the policy plans ``cve_search("sql injection
+    gateway")`` without consulting the model, and the search runs."""
+    service = build_test_investigation_service(fixture_bundle, model_port=FailingModelPort())
+    return service.investigate(
+        build_investigation_request("sql injection gateway", "implementation_only")
     )
 
 

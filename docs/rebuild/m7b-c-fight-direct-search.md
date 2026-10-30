@@ -87,14 +87,14 @@ Mutual exclusion holds by construction. `topic_context` is admitted only when a 
 | mixed, `fight_terms` non-empty | `[cve_search, fight_direct_search]` |
 | mixed, `fight_terms` empty | `[cve_search]` (unchanged) |
 
-  Both needs of a `mixed` question are known before planning, and the FiGHT search does not depend on what the CVE search returns, so nothing is gained by waiting for round 2. `cve_search` stays step 1. The plan is one complete round-1 plan under the existing budget pre-check: when it is over the source budget, dev.29's rule applies (no model is consulted); over the tool-call budget alone a configured model is consulted, but any round-1 plan it can pass must include both required tools. A `mixed` topic query, whose `topic_context` consults both sources in round 1, behaves the same, as a consequence. A round-2 rule was rejected because:
+  Both needs of a `mixed` question are known before planning, and the FiGHT search does not depend on what the CVE search returns, so nothing is gained by waiting for round 2. `cve_search` stays step 1. The plan is one complete round-1 plan under the existing budget pre-check. A configured model is never consulted for it: the policy plans free text alone (ADR 0005 §3), and the round records `model_not_consulted`. Over the source or the tool-call budget the gate rejects the plan and nothing runs. A `mixed` topic query, whose `topic_context` consults both sources in round 1, stops the same way over the source budget; over the tool-call budget alone its model is consulted, but any round-1 plan it can pass must reach both sources. A round-2 rule was rejected because:
   - it would always fire, since the protocol need is always open after a CVE-only round;
   - it adds a reason;
   - under `max_rounds` 1 the round-2 FiGHT search cannot run.
 
   **Behaviour change under `max_sources: 1`.** A `mixed` free-text query whose `fight_terms` are non-empty has a round-1 plan of 2 sources, so the pre-check fails: no model is consulted, nothing runs, and the run stops `budget_exhausted` with no answer. Under dev.29 it ran `cve_search` and stopped `needs_unmet` with its CVEs. A regression test pins the new behaviour; the default `max_sources` of 4 does not hide it.
 
-  **Behaviour change under `max_tool_calls: 1`.** The same plan costs 2 tool calls, so the gate rejects it `over_tool_call_budget` and the run stops `budget_exhausted` (`plan_over_budget`) with no answer, where dev.29 ran `cve_search`. A configured model is consulted once, but any round-1 plan it proposes must reach both baseline sources, costs at least 2, and is rejected the same way. A regression test pins this too.
+  **Behaviour change under `max_tool_calls: 1`.** The same plan costs 2 tool calls, so the gate rejects it `over_tool_call_budget` and the run stops `budget_exhausted` (`plan_over_budget`) with no answer, where dev.29 ran `cve_search`. A configured model is not consulted (`model_not_consulted`, with the `over_tool_call_budget` rejection, no planner call). A regression test pins this too.
 - **Refinement R1-R3 is unchanged.** No rule plans `fight_direct_search`. If it ran and the need stayed open, nothing else can serve it, so unless R3 serves an open implementation need the run stops with basis `no_refinement_available` and the reason `decide_open_stop` gives any open need: `needs_unmet` when the answer lists something (CVEs, or techniques C1b judged insufficient), else `no_evidence`.
 - **Version.** `DETERMINISTIC_POLICY_VERSION = "m7b.2"`. The module docstring and m4 doc gain the round-1 row: one call, or two for `mixed` free text.
 
@@ -122,11 +122,9 @@ The rest of the pipeline already reads any `topic_response`, so it is unchanged:
 
 ### 2.5 Planner
 
-- `build_planning_input` (investigate.py) offers `ToolCost(FIGHT_DIRECT_SEARCH, 1)` when the scope is not `implementation_only` and `fight_terms` is non-empty. The existing filter that drops a tool alone over `max_sources` applies.
-- `required_tools` picks the tool up from the policy's round-1 plan, so a model's round-1 plan must include it (`missing_baseline_source`).
-- `PLANNER_INSTRUCTIONS` (adapters/planner/openai_compatible.py) adds the shape `{"tool": "fight_direct_search"}` and one rule: "fight_direct_search takes no arguments; it searches MITRE FiGHT with the question's own words and is offered only when no topic resolved".
-- The model can use the tool only through the gate.
-- Interplay with dev.29: under `max_sources: 1` a mixed free-text plan whose `fight_terms` are non-empty uses 2 sources, so the model is not consulted and the run stops `budget_exhausted`. That is what a mixed topic query does. The default `max_sources` is 4.
+- The model is never offered `fight_direct_search`. Only free text has `fight_terms`, and the policy plans free text without the model (ADR 0005 §3), so `build_planning_input` never lists the tool and no round the model plans requires it.
+- `PLANNER_INSTRUCTIONS` (adapters/planner/openai_compatible.py) keeps the shape `{"tool": "fight_direct_search"}` and its rule: "fight_direct_search takes no arguments; it searches MITRE FiGHT with the question's own words and is offered only when no topic resolved". The gate still parses the tool, and rejects it `fight_direct_search_blocked` when a model proposes it for a question with a CVE ID or a topic.
+- Under `max_sources: 1` a mixed free-text plan whose `fight_terms` are non-empty uses 2 sources, so the gate rejects it and the run stops `budget_exhausted`, as a mixed topic query does. The default `max_sources` is 4.
 
 ## 3. Exclusions and provenance
 
@@ -285,7 +283,7 @@ Each stage is measured on its own, before the next is added, against the dev.29 
 4. A **pre-registered synthetic table**, copied into the C section of `m7b-work-packages.md` and frozen before any run. Its queries come from the C probe list, with no NAS, Diameter or PJSIP subjects. Per query it reports `fight_terms`, matched count, subject@10 and @20, `term_not_indexed` subjects and the need outcome per row. Preliminary probe figures (phrase BM25, subject techniques in the top 20):
    - SS7 8, fake base station 18, network slicing 5, NRF 9, SEPP 7, authentication vector theft 10, LTE downgrade 4, GTP-U TEID 4, GTP and UPF 8, UPF user plane 20, UDM 17, AMF 16, IMSI catcher 14.
    - No-subject probes: PFCP 38, Bluetooth 28, MQTT 3, WPA3 29.
-5. An **exclusion table**. These issue no FiGHT step, and each row states the expected `fight_block` reason and subject: `aka attacks`, `EPS AKA crash` (both scopes), `EAP-AKA' threats` and `5G, aka NR GTP threats` (`excluded_term`); `5Géaka threats` (`term_reads_as_topic`, `aka`); `CVE-x GTP threats` under `mixed` (`cve_id_named`). A model plan that adds `fight_direct_search` to them is rejected `fight_direct_search_blocked`.
+5. An **exclusion table**. These issue no FiGHT step, and each row states the expected `fight_block` reason and subject: `aka attacks`, `EPS AKA crash` (both scopes), `EAP-AKA' threats` and `5G, aka NR GTP threats` (`excluded_term`); `5Géaka threats` (`term_reads_as_topic`, `aka`); `CVE-x GTP threats` under `mixed` (`cve_id_named`). A model plan that adds `fight_direct_search` to a question the model plans (one with a CVE ID or a topic) is rejected `fight_direct_search_blocked`; the free-text rows are planned by the policy.
 
 No DeepSeek run is needed to land C. A later model run is its own step.
 
@@ -416,8 +414,8 @@ set or assertion was weakened. Each gold file states the order rule in a comment
 - Unit:
   - `find_fight_block` and `list_fight_terms` over the exclusion table, each block's reason and subject;
   - gate (topic resolved, excluded term, CVE ID, a word read alone as a topic (`5Géaka threats`), `implementation_only`, repeated);
-  - planning input: `fight_direct_search` offered only when `fight_terms` is non-empty and the scope is not `implementation_only`;
-  - `max_tool_calls: 1` with `mixed` free text: `budget_exhausted`, no step;
+  - planning input: `fight_direct_search` never offered to the model;
+  - `max_tool_calls: 1` with `mixed` free text: `budget_exhausted`, no model call, no step;
   - round 1 per scope;
   - `max_sources: 1` with `mixed` free text: `budget_exhausted`, no model call, no step;
   - needs outcomes;

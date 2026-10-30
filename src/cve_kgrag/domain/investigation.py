@@ -380,10 +380,12 @@ class PlannerOutcome(StrEnum):
     ``model_timed_out``: the model replied at or after the deadline, or not at all, so
     nothing runs. ``model_skipped_at_deadline``: a model is configured, but the deadline
     had passed before the round was planned, so it was never consulted.
-    ``model_not_consulted``: a model is configured, but the policy's own round-1 plan is over
-    the source budget; a round-1 model plan must consult the policy's sources, so no plan the
-    gate accepts exists, the model is not called and the round records the policy's
-    rejections.
+    ``model_not_consulted``: a model is configured, but the policy planned round 1 without
+    calling it. Either the question is free text (no CVE ID, no resolved topic), which the
+    policy plans alone with the question's search terms as its baseline, or the policy's
+    own round-1 plan is over the source budget, which no round-1 model plan can meet since
+    it must consult the policy's sources. The round runs the policy's plan, or records the
+    policy plan's rejections and runs nothing.
     Every outcome but ``deterministic``, ``model_timed_out``, ``model_skipped_at_deadline``
     and ``model_not_consulted`` has a reply, which the round records.
     """
@@ -413,6 +415,11 @@ PLANNER_OUTCOMES_BY_KIND: dict[PlannerKind, frozenset[PlannerOutcome]] = {
     PlannerKind.MODEL: CONSULTED_MODEL_OUTCOMES
     | {PlannerOutcome.MODEL_SKIPPED_AT_DEADLINE, PlannerOutcome.MODEL_NOT_CONSULTED},
 }
+# Outcomes of a round the policy planned: its steps are the policy's, and a rejection it
+# records is the gate's verdict on the policy's own plan.
+POLICY_PLANNED_OUTCOMES = frozenset(
+    {PlannerOutcome.DETERMINISTIC, PlannerOutcome.MODEL_NOT_CONSULTED}
+)
 # Outcomes of a round whose model reply was rejected: each records at least one rejection.
 REJECTED_MODEL_OUTCOMES = frozenset(
     {
@@ -467,8 +474,9 @@ def describe_round_shape() -> JsonDict:
     ``find_rejection_violations``) as JSON Schema: a round records the reply and its hash
     exactly when the model replied; a rejected model reply records its rejections, the
     outcome's fixed one first; every other round records none, except a policy plan the
-    gate rejected, which a deterministic round that runs nothing and a
-    ``model_not_consulted`` round record, and never a code only a model reply produces."""
+    gate rejected, which a ``deterministic`` or ``model_not_consulted`` round that runs
+    nothing records, and never a code only a model reply produces. A
+    ``model_not_consulted`` round is round 1."""
     no_rejections: JsonDict = {"properties": {"rejections": {"maxItems": 0}}}
     rules: list[JsonValue] = [
         {
@@ -526,27 +534,19 @@ def describe_round_shape() -> JsonDict:
         },
         {
             "if": require_outcome_in(
-                set(PlannerOutcome)
-                - REJECTED_MODEL_OUTCOMES
-                - {PlannerOutcome.DETERMINISTIC, PlannerOutcome.MODEL_NOT_CONSULTED}
+                set(PlannerOutcome) - REJECTED_MODEL_OUTCOMES - POLICY_PLANNED_OUTCOMES
             ),
             "then": no_rejections,
         },
         {
             "if": require_outcome_in({PlannerOutcome.MODEL_NOT_CONSULTED}),
-            "then": {
-                "properties": {
-                    "round_number": {"const": 1},
-                    "rejections": {"minItems": 1},
-                    "accepted_plan": {"maxItems": 0},
-                }
-            },
+            "then": {"properties": {"round_number": {"const": 1}}},
         },
         {
             "if": {
                 "required": ["accepted_plan"],
                 "properties": {
-                    "planner_outcome": {"const": PlannerOutcome.DETERMINISTIC.value},
+                    "planner_outcome": {"enum": list_enum_values(POLICY_PLANNED_OUTCOMES)},
                     "accepted_plan": {"minItems": 1},
                 },
             },

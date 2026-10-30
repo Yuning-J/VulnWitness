@@ -42,7 +42,13 @@ from cve_kgrag.domain.investigation import (
     ToolStep,
     list_answer_sources,
 )
-from cve_kgrag.domain.planning import ModelReply, PlannerKind, PlanRejection, PlanRejectionCode
+from cve_kgrag.domain.planning import (
+    ModelReply,
+    PlannerKind,
+    PlanRejection,
+    PlanRejectionCode,
+    QueryIntent,
+)
 from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import SERVED_STATUSES, KnowledgeSource
 from cve_kgrag.topics.registry import TopicRegistry
@@ -214,35 +220,25 @@ def find_policy_plan_rejections(
     )
 
 
-def is_model_consultable(round_number: int, policy_rejections: Sequence[PlanRejection]) -> bool:
-    """Whether a configured model may plan the round: not round 1 when the policy's own plan
-    is over the source budget, since a round-1 model plan must consult the policy's sources.
-    A plan over the tool-call budget does not decide it: a model may reach the same sources
-    with fewer calls (one search instead of a topic's template searches), and in round 2 it
-    may propose any cheaper call."""
+def is_model_consultable(
+    round_number: int, intent: QueryIntent, policy_rejections: Sequence[PlanRejection]
+) -> bool:
+    """Whether a configured model may plan the round.
+
+    Not for free text (``QueryIntent.FREE_TEXT``: no kept CVE ID, no resolved topic), in
+    any round: the policy plans free text alone, with the question's search terms as its
+    baseline. That is product policy, not a completeness or sufficiency guarantee and not
+    a safety rule. Nor round 1 when the policy's own plan is over the source budget, since
+    a round-1 model plan must consult the policy's sources. A plan over the tool-call
+    budget does not decide it: a model may reach the same sources with fewer calls (one
+    search instead of a topic's template searches), and in round 2 it may propose any
+    cheaper call."""
+    if intent is QueryIntent.FREE_TEXT:
+        return False
     is_over_source_budget = any(
         rejection.code is PlanRejectionCode.OVER_SOURCE_BUDGET for rejection in policy_rejections
     )
     return not (round_number == 1 and is_over_source_budget)
-
-
-def plan_unconsulted_round(policy_rejections: tuple[PlanRejection, ...]) -> RoundPlan:
-    """The round a configured model was not consulted for (``model_not_consulted``): it
-    records the policy's rejections and runs nothing, stopping as the rejected plan does."""
-    stop = decide_rejected_plan_stop(policy_rejections)
-    breach: BudgetBreach | None = None
-    if stop == PLAN_OVER_BUDGET_STOP:
-        breach = decide_over_budget_breach(policy_rejections)
-    return RoundPlan(
-        planned_steps=(),
-        planned_by=PlannerKind.MODEL,
-        planner_outcome=PlannerOutcome.MODEL_NOT_CONSULTED,
-        rejections=policy_rejections,
-        model_reply=None,
-        warnings=(),
-        stop=stop,
-        breach=breach,
-    )
 
 
 def choose_round_plan(
@@ -266,17 +262,21 @@ def choose_round_plan(
     ``decide_rejected_plan_stop`` says. The policy's plan is never empty: round 1 plans a
     call for every intent that reaches planning, and round 2 is planned only for one. A
     configured model (``consults_model``) the round may not consult
-    (``is_model_consultable``) is not consulted, whatever reply the round records.
+    (``is_model_consultable``) is not consulted, whatever reply the round records: the
+    round is the policy's, recorded ``model_not_consulted`` with no reply.
     """
     policy_rejections = find_policy_plan_rejections(
         request, interpretation, topic, issued_steps, policy_steps, topic_registry
     )
-    if consults_model and not is_model_consultable(round_number, policy_rejections):
-        return plan_unconsulted_round(policy_rejections)
     model_rejections: tuple[PlanRejection, ...] = ()
     planner_outcome = PlannerOutcome.DETERMINISTIC
     warnings: tuple[InvestigationWarning, ...] = ()
-    if model_reply is not None:
+    if consults_model and not is_model_consultable(
+        round_number, interpretation.intent, policy_rejections
+    ):
+        planner_outcome = PlannerOutcome.MODEL_NOT_CONSULTED
+        model_reply = None
+    elif model_reply is not None:
         baseline_sources: frozenset[KnowledgeSource] | None = None
         if round_number == 1:
             baseline_sources = list_plan_sources(list_calls(policy_steps), request.scope)

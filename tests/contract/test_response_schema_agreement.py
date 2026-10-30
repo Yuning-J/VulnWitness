@@ -66,8 +66,10 @@ from tests.support.investigation_runs import (
     run_cve_under_protocol_scope,
     run_exact_id,
     run_five_g_aka_mixed,
+    run_free_text_under_a_model_planner,
     run_model_accepted,
     run_model_not_consulted,
+    run_model_refinement_unavailable,
     run_model_rejected,
     run_model_unavailable,
     run_open5gs_product_question,
@@ -231,6 +233,7 @@ GENUINE_PAYLOADS: list[tuple[str, PayloadBuilder]] = [
     ("knowledge_evidence_set", run_model_rejected),
     ("knowledge_evidence_set", run_model_unavailable),
     ("knowledge_evidence_set", run_model_not_consulted),
+    ("knowledge_evidence_set", run_free_text_under_a_model_planner),
     ("knowledge_evidence_set", run_with_invalid_evidence),
     ("knowledge_evidence_set", run_policy_plan_over_budget),
     ("knowledge_evidence_set", run_open5gs_product_question),
@@ -1038,6 +1041,23 @@ def credit_a_policy_step_to_the_model(payload: JsonObject) -> None:
     payload["trajectory"]["steps"][0].update({"planned_by": "model", "reason": "model_proposal"})
 
 
+def reject_the_unconsulted_round_s_running_plan(payload: JsonObject) -> None:
+    payload["trajectory"]["rounds"][0]["rejections"] = [
+        {"step_position": None, "code": "over_tool_call_budget"}
+    ]
+
+
+def leave_round_two_unconsulted(payload: JsonObject) -> None:
+    payload["trajectory"]["rounds"][1].update(
+        {
+            "planner_outcome": "model_not_consulted",
+            "rejections": [],
+            "model_reply": None,
+            "model_reply_sha256": None,
+        }
+    )
+
+
 def report_no_match_for_a_sufficient_stop(payload: JsonObject) -> None:
     payload["status"] = "no_match"
 
@@ -1101,6 +1121,16 @@ VALIDATOR_REJECTED_PAYLOADS: list[tuple[EvidenceSetRun, PayloadForgery, str]] = 
         run_model_unavailable,
         blame_the_gate_for_the_unavailable_planner,
         "so its first rejection is planner_unavailable",
+    ),
+    (
+        run_free_text_under_a_model_planner,
+        reject_the_unconsulted_round_s_running_plan,
+        "round 1 is model_not_consulted and runs its plan, but records rejections",
+    ),
+    (
+        run_model_refinement_unavailable,
+        leave_round_two_unconsulted,
+        "round 2 is model_not_consulted: only round 1 is",
     ),
     (run_exact_id, credit_a_policy_step_to_the_model, "step 1 is planned by model"),
     (

@@ -4,12 +4,12 @@ past a resolved topic, an excluded term, a CVE ID or a word the registry reads a
 
 import threading
 from collections.abc import Sequence
-from typing import Any
 
 import pytest
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.domain.budget import BudgetBreach
+from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
     EvidenceNeedKind,
@@ -26,11 +26,13 @@ from cve_kgrag.domain.investigation import (
 )
 from cve_kgrag.domain.planning import PlanRejection, PlanRejectionCode, QueryIntent, ToolName
 from cve_kgrag.domain.taxonomy import ResultStatus
+from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import (
     KnowledgeSource,
     TopicContextWarning,
     TopicContextWarningCode,
 )
+from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.collect import list_technique_ids
 from tests.support.evaluation import run_deterministically, run_with_replies
 from tests.support.investigation import (
@@ -43,6 +45,7 @@ from tests.support.investigation import (
     list_step_reasons,
     list_step_tools,
     list_warning_codes,
+    verify_as_sealed,
 )
 from tests.support.investigation_runs import (
     run_fight_direct_search,
@@ -52,7 +55,12 @@ from tests.support.investigation_runs import (
     run_mixed_fight_direct_search,
     run_mixed_free_text_over_the_source_budget,
 )
-from tests.support.planners import UNAVAILABLE_REPLY, ScriptedModelPort, build_plan_reply
+from tests.support.planners import (
+    UNAVAILABLE_REPLY,
+    FailingModelPort,
+    ScriptedModelPort,
+    build_plan_reply,
+)
 
 FIGHT_DIRECT_SEARCH = {"tool": "fight_direct_search"}
 
@@ -354,7 +362,12 @@ def test_excluded_alias_written_against_a_non_ascii_letter_stops_protocol_scope_
 
 @pytest.mark.parametrize(
     "query",
-    ["EPS AKA crash", "5Géaka threats", "CVE-9999-0003 GTP threats", "5G-AKA threats"],
+    [
+        "CVE-9999-0003 EPS AKA crash",
+        "CVE-9999-0003 5Géaka threats",
+        "CVE-9999-0003 GTP threats",
+        "5G-AKA threats",
+    ],
     ids=[
         "excluded_term",
         "excluded_term_written_against_a_non_ascii_letter",
@@ -400,32 +413,34 @@ def test_mixed_free_text_under_one_source_stops_over_budget_without_a_model_call
     assert evidence_set.has_answer() is False
 
 
-@pytest.mark.parametrize(
-    "model_plan",
-    [
-        [{"tool": "cve_search", "query": "suci discovery"}],
-        [{"tool": "cve_search", "query": "suci discovery"}, FIGHT_DIRECT_SEARCH],
-    ],
-    ids=["one_search_missing_fight", "both_searches_over_one_call"],
-)
-def test_mixed_free_text_under_one_tool_call_stops_over_budget_after_one_model_call(
-    fixture_bundle: FixtureBundle, model_plan: list[dict[str, Any]]
+def test_mixed_free_text_under_one_tool_call_stops_over_budget_without_a_model_call(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+    topic_registry: TopicRegistry,
 ) -> None:
-    evidence_set = run_with_replies(
-        fixture_bundle,
-        FIGHT_FREE_TEXT_QUERY,
-        "mixed",
-        build_plan_reply(*model_plan),
-        budget={"max_tool_calls": 1},
+    service = build_test_investigation_service(fixture_bundle, model_port=FailingModelPort())
+
+    evidence_set = service.investigate(
+        build_investigation_request(FIGHT_FREE_TEXT_QUERY, "mixed", budget={"max_tool_calls": 1})
     )
 
-    assert evidence_set.trajectory.rounds[0].planner_outcome is PlannerOutcome.MODEL_REJECTED
-    assert evidence_set.trajectory.budget_used.planner_calls == 1
+    round_one = evidence_set.trajectory.rounds[0]
+    assert round_one.planner_outcome is PlannerOutcome.MODEL_NOT_CONSULTED
+    assert round_one.rejections == (PlanRejection(code=PlanRejectionCode.OVER_TOOL_CALL_BUDGET),)
+    assert evidence_set.trajectory.budget_used.planner_calls == 0
     assert evidence_set.trajectory.steps == ()
     assert evidence_set.trajectory.budget_used.breach is BudgetBreach.TOOL_CALLS
     assert (evidence_set.stop_reason, evidence_set.coverage.basis) == (
         StopReason.BUDGET_EXHAUSTED,
         DecisionBasis.PLAN_OVER_BUDGET,
+    )
+    verify_as_sealed(
+        evidence_set,
+        pinned_fight_snapshot,
+        packaged_evidence_catalog,
+        evidence_set.source_capabilities,
+        topic_registry,
     )
 
 
@@ -445,36 +460,24 @@ def test_mixed_free_text_under_one_tool_call_runs_nothing_deterministically(
 
 
 @pytest.mark.parametrize(
-    ("scope", "expected_offered", "expected_required"),
-    [
-        ("protocol_context_only", True, True),
-        ("mixed", True, True),
-        ("implementation_only", False, False),
-    ],
-    ids=["protocol", "mixed", "implementation"],
+    "query",
+    ["CVE-9999-0003 EPS AKA crash", "CVE-9999-0003 GTP threats", "5G-AKA threats"],
+    ids=["excluded_term", "cve_id_named", "topic_resolved"],
 )
-def test_planner_is_offered_the_direct_search_only_where_the_scope_and_words_allow_it(
-    fixture_bundle: FixtureBundle, scope: str, expected_offered: bool, expected_required: bool
+def test_planner_is_never_offered_the_direct_search(
+    fixture_bundle: FixtureBundle, query: str
 ) -> None:
+    """Only free text may search FiGHT with its own words, and the policy plans free text
+    without the model; every question the model plans has a block that bars the search."""
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
     service = build_test_investigation_service(fixture_bundle, model_port=model_port)
 
-    service.investigate(build_investigation_request(FIGHT_FREE_TEXT_QUERY, scope))
+    evidence_set = service.investigate(build_investigation_request(query, "mixed"))
 
     planning_input = model_port.planning_inputs[0]
-    assert (ToolName.FIGHT_DIRECT_SEARCH in planning_input.allowed_tools) is expected_offered
-    assert (ToolName.FIGHT_DIRECT_SEARCH in planning_input.required_tools) is expected_required
-
-
-def test_planner_is_not_offered_the_direct_search_when_a_block_bars_it(
-    fixture_bundle: FixtureBundle,
-) -> None:
-    model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
-
-    service.investigate(build_investigation_request("EPS AKA crash", "mixed"))
-
-    assert ToolName.FIGHT_DIRECT_SEARCH not in model_port.planning_inputs[0].allowed_tools
+    assert evidence_set.interpretation.fight_block is not None
+    assert ToolName.FIGHT_DIRECT_SEARCH not in planning_input.allowed_tools
+    assert ToolName.FIGHT_DIRECT_SEARCH not in planning_input.required_tools
 
 
 def test_needs_of_a_round_one_plan_over_the_source_budget_are_not_evaluated(
