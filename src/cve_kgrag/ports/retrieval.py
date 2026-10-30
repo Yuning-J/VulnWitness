@@ -27,6 +27,10 @@ class StructuredRetriever(Protocol):
         """Every record satisfying the filters, ordered by CVE ID, with per-field reasons."""
         ...
 
+    def holds_package_urls(self) -> bool:
+        """Whether any record names a package URL a ``purls`` filter could match."""
+        ...
+
 
 class GraphRetriever(Protocol):
     def expand(

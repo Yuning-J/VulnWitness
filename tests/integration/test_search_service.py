@@ -10,6 +10,8 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
 from cve_kgrag.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
 from cve_kgrag.adapters.semantic.vector_retriever import VectorSemanticRetriever
+from cve_kgrag.adapters.store.corpus_store import load_corpus_store
+from cve_kgrag.application.knowledge_lookup import lookup_cve
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.composition import build_search_service
 from cve_kgrag.domain.cve import CveRecord
@@ -25,6 +27,7 @@ from cve_kgrag.domain.search import (
     SearchResponse,
     SearchWarning,
     SearchWarningCode,
+    UnsupportedFilter,
 )
 from cve_kgrag.domain.taxonomy import (
     BackendFailureDetail,
@@ -34,7 +37,8 @@ from cve_kgrag.domain.taxonomy import (
     RetrievalChannel,
 )
 from cve_kgrag.domain.validation import EvidenceValidationError, validate_search_response
-from tests.support.collect import list_candidate_cve_ids
+from tests.support.collect import list_candidate_cve_ids, list_codes
+from tests.support.corpus_stores import COMPATIBILITY_STORE
 from tests.support.fakes import (
     CannedRetriever,
     RecordedChannels,
@@ -53,6 +57,9 @@ class CannedStructuredIndex:
 
     def search(self, filters: SearchFilters) -> RetrievalOutcome:
         return self.outcome
+
+    def holds_package_urls(self) -> bool:
+        return True
 
 
 def test_exact_id_ranks_first_even_when_lexical_terms_favor_another_record(
@@ -1043,3 +1050,109 @@ def test_graph_expansion_is_off_unless_a_request_asks_for_it() -> None:
 
     assert SearchRequest(query="gateway").graph_expand is False
     assert request_schema["properties"]["graph_expand"]["default"] is False
+
+
+# --- Filters the dataset cannot execute, and the result limit ---------------------------
+
+
+def test_purl_filter_over_records_naming_no_package_url_is_refused_naming_the_filter() -> None:
+    store_service = build_search_service(load_corpus_store(COMPATIBILITY_STORE))
+    request = SearchRequest(query="gateway", filters=SearchFilters(purls=("pkg:pypi/example",)))
+
+    with pytest.raises(UnsupportedFilter) as raised:
+        store_service.search(request)
+
+    assert store_service.serves_purl_filter() is False
+    assert raised.value.filter_name == "purls"
+    assert "pkg:pypi/example" not in str(raised.value)
+
+
+def test_purl_filter_over_records_naming_package_urls_is_executed(
+    search_service: SearchService,
+) -> None:
+    request = SearchRequest(
+        query="parser", filters=SearchFilters(purls=("pkg:pypi/example-parser",))
+    )
+
+    response = search_service.search(request)
+
+    assert search_service.serves_purl_filter() is True
+    assert list_candidate_cve_ids(response.candidates) == ["CVE-9999-0006"]
+
+
+def test_other_filters_over_records_naming_no_package_url_are_executed() -> None:
+    store_service = build_search_service(load_corpus_store(COMPATIBILITY_STORE))
+
+    response = store_service.search(
+        SearchRequest(query="gateway", filters=SearchFilters(vendors=("democorp",)))
+    )
+
+    assert RetrievalChannel.STRUCTURED in response.channels_executed
+
+
+def test_search_listing_as_many_candidates_as_its_limit_warns_the_limit_was_reached(
+    search_service: SearchService,
+) -> None:
+    response = search_service.search(
+        SearchRequest(query="democorp fictional5g examplenet", limit=2)
+    )
+
+    assert len(response.candidates) == 2
+    assert response.warnings[-1] == SearchWarning(
+        code=SearchWarningCode.RESULT_LIMIT_REACHED, subject="2"
+    )
+
+
+def test_search_listing_fewer_candidates_than_its_limit_gives_no_limit_warning(
+    search_service: SearchService,
+) -> None:
+    response = search_service.search(SearchRequest(query="ausf crash", limit=20))
+
+    assert 0 < len(response.candidates) < 20
+    assert SearchWarningCode.RESULT_LIMIT_REACHED not in list_codes(response.warnings)
+
+
+def test_search_whose_channels_returned_fewer_than_their_top_k_gives_no_limit_warning(
+    search_service: SearchService,
+) -> None:
+    """An exact hit and two lexical matches fill a limit of three, yet the lexical channel
+    returned fewer than its top-k, so nothing lies beyond the three listed."""
+    response = search_service.search(SearchRequest(query="CVE-9999-0003 gateway", limit=3))
+
+    assert list_candidate_cve_ids(response.candidates) == [
+        "CVE-9999-0003",
+        "CVE-9999-0001",
+        "CVE-9999-0002",
+    ]
+    assert SearchWarningCode.RESULT_LIMIT_REACHED not in list_codes(response.warnings)
+
+
+def test_exact_lookup_filling_its_limit_gives_no_limit_warning(
+    search_service: SearchService,
+) -> None:
+    """The exact-ID channel answers only the IDs named, so nothing lies beyond them."""
+    response = lookup_cve(search_service, "CVE-9999-0003")
+
+    assert len(response.candidates) == 1
+    assert SearchWarningCode.RESULT_LIMIT_REACHED not in list_codes(response.warnings)
+
+
+def test_limit_warning_naming_another_limit_than_the_candidates_listed_is_rejected(
+    search_service: SearchService, packaged_evidence_catalog: EvidenceCatalog
+) -> None:
+    response = search_service.search(SearchRequest(query="ausf crash", limit=20))
+    forged_warnings = (
+        *response.warnings,
+        SearchWarning(code=SearchWarningCode.RESULT_LIMIT_REACHED, subject="20"),
+    )
+    forged_draft = response.model_copy(update={"warnings": forged_warnings})
+    forged_response = forged_draft.model_copy(
+        update={"result_sha256": forged_draft.compute_result_sha256()}
+    )
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        validate_search_response(forged_response, packaged_evidence_catalog)
+
+    assert raised.value.violations == (
+        "the result_limit_reached warning names another limit than the candidates listed",
+    )

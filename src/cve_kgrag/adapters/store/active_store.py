@@ -8,6 +8,7 @@ configured real data must not be served synthetic data instead.
 """
 
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 from cve_kgrag.adapters.store.active_record import (
@@ -24,10 +25,24 @@ from cve_kgrag.domain.store_status import (
 )
 
 
-def load_active_store(store_root: Path) -> CorpusStore:
+def ignore_store_name(store_name: str) -> None:
+    """Announces nothing: for a caller that has no one to tell a store is loading."""
+
+
+def announce_and_load(announce_loading: Callable[[str], None], store_dir: Path) -> CorpusStore:
+    """Tell ``announce_loading`` the store's name, then load it (``load_corpus_store``)."""
+    announce_loading(store_dir.name)
+    return load_corpus_store(store_dir)
+
+
+def load_active_store(
+    store_root: Path, announce_loading: Callable[[str], None] = ignore_store_name
+) -> CorpusStore:
     """The store ``ACTIVE`` names, loaded and verified under the manifest digest it
-    records. Raises ``StoreUnavailable``."""
-    return read_active_store(store_root, load_corpus_store)
+    records. ``announce_loading`` is told the store's name once the root, ``ACTIVE`` and
+    the store's manifest digest have passed their checks, just before the store, which
+    can take minutes, is read. Raises ``StoreUnavailable``."""
+    return read_active_store(store_root, partial(announce_and_load, announce_loading))
 
 
 def read_active_store(store_root: Path, read_store: Callable[[Path], ReadStoreT]) -> ReadStoreT:

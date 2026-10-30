@@ -17,10 +17,12 @@ from cve_kgrag.domain.search import (
     RetrievalMatch,
     RetrievalOutcome,
     ScopeAssessment,
+    SearchFilters,
     SearchRequest,
     SearchResponse,
     SearchWarningCode,
     SemanticUnavailableDetail,
+    UnsupportedFilter,
 )
 from cve_kgrag.domain.taxonomy import (
     BackendFailure,
@@ -61,9 +63,13 @@ class SearchService:
     words ``cve`` and ``cves``, and run only when that text holds a search term. Active
     filters constrain every channel and never supply a candidate themselves. If the
     structured backend fails, the search returns no candidates rather than unfiltered
-    ones. Raises ``EvidenceValidationError`` instead of returning a response that cites
-    a record the repository does not hold, or serves a record or anchor that differs
-    from the evidence catalog's.
+    ones. A response whose channels matched more candidates than the request's limit, or
+    one of whose ranked channels (lexical, semantic or graph) returned that many, its own
+    top-k, warns ``result_limit_reached``. Raises
+    ``UnsupportedFilter`` for a ``purls`` filter when no record names a package URL
+    (``require_executable_filters``), and ``EvidenceValidationError`` instead of returning
+    a response that cites a record the repository does not hold, or serves a record or
+    anchor that differs from the evidence catalog's.
     """
 
     def __init__(
@@ -95,7 +101,19 @@ class SearchService:
             return self._semantic_retriever
         return None
 
+    def serves_purl_filter(self) -> bool:
+        """Whether a ``purls`` filter can be executed: some record names a package URL."""
+        return self._structured_retriever.holds_package_urls()
+
+    def require_executable_filters(self, filters: SearchFilters) -> None:
+        """Raise ``UnsupportedFilter`` for a ``purls`` filter over records that name no
+        package URL: it could match nothing, and an answer of no match would read as no
+        vulnerability for that package."""
+        if filters.purls and not self.serves_purl_filter():
+            raise UnsupportedFilter("purls")
+
     def search(self, request: SearchRequest) -> SearchResponse:
+        self.require_executable_filters(request.filters)
         normalized_query = normalize_query(request.query)
         requested_cve_ids = find_cve_ids(request.query)
         search_text = extract_search_text(request.query)
@@ -148,7 +166,14 @@ class SearchService:
                 self._require_admissible_graph(graph_outcome, allowed_cve_ids, seed_ids),
             )
 
-        fused = fuse_channel_results(channel_log.channel_results)[: request.limit]
+        all_fused = fuse_channel_results(channel_log.channel_results)
+        # Matches beyond the limit are cut here, and a channel that returned its whole
+        # top-k may have cut further ones it never counts, so the warning says only that
+        # the limit was reached. A channel that returned fewer than its top-k, like an
+        # exact lookup, has nothing beyond what it returned.
+        if len(all_fused) > request.limit or channel_log.fills_top_k(request.limit):
+            channel_log.warn(SearchWarningCode.RESULT_LIMIT_REACHED, str(request.limit))
+        fused = all_fused[: request.limit]
         return self._seal(request, normalized_query, channel_log, self._build_candidates(fused))
 
     def _require_admissible(

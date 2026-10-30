@@ -138,7 +138,7 @@ trajectories:
       claims: []
       applicability:
         - {product: "open5gs", status: unknown}
-      warning_codes: [topic_pending_review, applicability_unknown]
+      warning_codes: [topic_pending_review, term_not_indexed, applicability_unknown]
       tool_calls: 5
       rounds: 2
 
@@ -169,7 +169,7 @@ trajectories:
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
       applicability:
         - {product: "f5gc", status: unknown}
-      warning_codes: [topic_pending_review, applicability_unknown]
+      warning_codes: [topic_pending_review, term_not_indexed, applicability_unknown]
       tool_calls: 5
       rounds: 2
 
@@ -251,7 +251,7 @@ trajectories:
       protocol_context: []
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
       applicability: []
-      warning_codes: [topic_pending_review]
+      warning_codes: [topic_pending_review, term_not_indexed]
       tool_calls: 5
       rounds: 2
 

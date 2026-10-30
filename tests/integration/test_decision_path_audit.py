@@ -333,12 +333,13 @@ def look_up_another_id_on_fallback(evidence_set: KnowledgeEvidenceSet) -> Knowle
 
 def search_5g_aka_in_round_one(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
     """Round 1's search becomes ``cve_search("5g aka")``, a call the gate accepts, with its
-    call key, accepted plan, backend request and search warnings to match: on a fallback it
-    replaces the policy's search, and on an accepted model plan it swaps that plan for
-    another."""
-    return rewrite_step(
+    call key, accepted plan, backend request, search warnings and the answer's
+    ``term_not_indexed`` warnings to match: on a fallback it replaces the policy's search,
+    and on an accepted model plan it swaps that plan for another."""
+    forged_set = rewrite_step(
         replace_call(evidence_set, 1, build_search_call("5g aka")), 1, search_warnings=()
     )
+    return drop_warning(forged_set, InvestigationWarningCode.TERM_NOT_INDEXED)
 
 
 def blame_the_source_cap(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:

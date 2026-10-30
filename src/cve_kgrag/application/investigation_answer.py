@@ -53,6 +53,7 @@ from cve_kgrag.domain.investigation import (
     list_answer_sources,
     list_named_products,
     list_record_evidence_ids,
+    list_step_notices,
 )
 from cve_kgrag.domain.planning import CveExactLookupCall
 from cve_kgrag.domain.search import Candidate, ChannelOutcome, SearchFilters
@@ -81,6 +82,8 @@ ANSWER_WARNING_CODES = frozenset(
     {
         InvestigationWarningCode.UNRELATED_CANDIDATES_DROPPED,
         InvestigationWarningCode.ANSWER_TRUNCATED,
+        InvestigationWarningCode.RESULT_LIMIT_REACHED,
+        InvestigationWarningCode.TERM_NOT_INDEXED,
         InvestigationWarningCode.APPLICABILITY_UNKNOWN,
     }
 )
@@ -494,10 +497,12 @@ def list_admitted_executions(
 
 
 def list_answer_warnings(
-    answer: AssembledAnswer, product_applicability: Sequence[ProductApplicability]
+    answer: AssembledAnswer,
+    step_notices: Sequence[InvestigationWarning],
+    product_applicability: Sequence[ProductApplicability],
 ) -> tuple[InvestigationWarning, ...]:
-    """The dropped and truncated counts, then one warning per product of unknown
-    applicability."""
+    """The dropped and truncated counts, then the ``step_notices`` the adopted steps raise
+    (``list_step_notices``), then one warning per product of unknown applicability."""
     warnings: list[InvestigationWarning] = []
     if answer.dropped_count:
         warnings.append(
@@ -513,6 +518,7 @@ def list_answer_warnings(
                 subject=str(answer.truncated_count),
             )
         )
+    warnings.extend(step_notices)
     for applicability in product_applicability:
         warnings.append(
             InvestigationWarning(
@@ -584,5 +590,9 @@ def assemble_returned_answer(
             ),
         ),
         status=decide_investigation_status(stop_reason, answer.has_answer(), outcome_statuses),
-        warnings=list_answer_warnings(answer, product_applicability),
+        warnings=list_answer_warnings(
+            answer,
+            list_step_notices(admitted_steps, request),
+            product_applicability,
+        ),
     )

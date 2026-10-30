@@ -5,7 +5,7 @@ failure every tool answers with when it cannot answer."""
 from enum import StrEnum
 from typing import Self
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, StrictBool, model_validator
 
 from cve_kgrag.domain.contract_model import ContractModel, describe_fixed_messages
 from cve_kgrag.domain.cve import CveId
@@ -34,12 +34,21 @@ class CapabilitiesRequest(ContractModel):
 
 
 class KnowledgeCapabilities(ContractModel):
-    """What the deployment serves, in the shape every evidence set reports it."""
+    """What the deployment serves, in the shape every evidence set reports it, and which
+    search filters its dataset can execute."""
 
     schema_version: SchemaVersion = SCHEMA_VERSION
     source_capabilities: tuple[SourceCapability, ...] = Field(
         description=CAPABILITY_ORDER_DESCRIPTION,
         json_schema_extra=pin_capability_order,
+    )
+    purl_filter_available: StrictBool = Field(
+        description=(
+            "Whether a search or investigation may filter by package URL (filters.purls): "
+            "only a dataset whose records name package URLs can execute it, and an NVD "
+            "import names none. Without it, a request with a purls filter is refused "
+            "(filter_unsupported) instead of answered as if nothing matched."
+        )
     )
 
     @model_validator(mode="after")
@@ -97,6 +106,7 @@ class ToolFailureCode(StrEnum):
     RESPONSE_TOO_LARGE = "response_too_large"
     INTEGRITY_CHECK_FAILED = "integrity_check_failed"
     INTERNAL_ERROR = "internal_error"
+    FILTER_UNSUPPORTED = "filter_unsupported"
 
 
 # The one sentence a failure of each code carries; it never quotes the caller's input.
@@ -111,12 +121,17 @@ TOOL_FAILURE_MESSAGES: dict[ToolFailureCode, str] = {
     ),
     ToolFailureCode.INTEGRITY_CHECK_FAILED: "The service rejected its own result as invalid.",
     ToolFailureCode.INTERNAL_ERROR: "The call failed with an internal error.",
+    ToolFailureCode.FILTER_UNSUPPORTED: (
+        "A filter cannot be executed on this dataset, which holds no value it could match; "
+        "invalid_fields names it."
+    ),
 }
 
 
 class InvalidField(ContractModel):
-    """One argument that failed to parse: where it is and the parser's error type, never
-    the value sent."""
+    """One argument that failed to parse, or a filter the dataset cannot execute: where it
+    is and the error type (the parser's, or ``filter_unsupported``), never the value
+    sent."""
 
     location: str = Field(min_length=1, max_length=MAX_INVALID_FIELD_LOCATION_CHARS)
     error_type: str = Field(pattern=r"^[a-z_]+$", max_length=64)

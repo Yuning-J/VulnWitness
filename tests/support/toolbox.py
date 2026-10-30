@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
+from cve_kgrag.adapters.store.corpus_store import load_corpus_store
 from cve_kgrag.application.threaded_call_runner import CALL_THREAD_NAME
 from cve_kgrag.composition import (
     build_knowledge_toolbox,
@@ -21,6 +22,7 @@ from cve_kgrag.ports.affectedness import TrustifyPort
 from cve_kgrag.ports.sources import FightSource
 from tests.support.affectedness import build_affectedness_request
 from tests.support.clocks import ONE_SECOND_RUN_REAL_SECONDS, SteppingClock, read_fixed_clock
+from tests.support.corpus_stores import COMPATIBILITY_STORE
 from tests.support.services import build_fixture_service
 
 # Well formed, but no anchor of the fixture or the FiGHT excerpt has it.
@@ -36,6 +38,8 @@ BLOCKED_AFFECTEDNESS_CAPABILITY: dict[str, Any] = {
     "coverage": None,
     "detail": AffectednessDetail.BLOCKED_UNVERIFIED.value,
 }
+# A package URL a fixture record names: a purls filter the fixture executes.
+FIXTURE_PURL = "pkg:generic/fictional5g/f5gc"
 # One genuine request per tool.
 TOOL_ARGUMENTS: dict[KnowledgeToolName, dict[str, Any]] = {
     KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES: {},
@@ -77,6 +81,16 @@ def build_test_toolbox(
         monotonic_clock=monotonic_clock or SteppingClock().read,
         tool_clock=tool_clock,
         limits=limits,
+    )
+
+
+def build_compatibility_store_toolbox() -> KnowledgeToolbox:
+    """The production toolbox over the format-1 compatibility store, whose records, like an
+    NVD import's, name no package URL, so a purls filter cannot be executed on it."""
+    return build_knowledge_toolbox(
+        build_serving_data_plane(load_corpus_store(COMPATIBILITY_STORE)),
+        wall_clock=read_fixed_clock,
+        monotonic_clock=SteppingClock().read,
     )
 
 

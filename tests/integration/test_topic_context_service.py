@@ -617,6 +617,53 @@ def test_sections_within_their_limit_carry_no_truncation_warning(
     assert exploration.omitted_cve_ids == ()
 
 
+def test_card_search_that_fills_its_per_search_limit_warns_the_limit_was_reached(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    service = build_topic_context_service(fixture_bundle)
+
+    response = service.explore(
+        TopicContextRequest(
+            query="5G-AKA", scope=QueryScope.IMPLEMENTATION_ONLY, max_results_per_search=1
+        )
+    )
+
+    assert describe_warnings(response)[-1] == ("result_limit_reached", "1")
+    assert response.status is ResultStatus.OK
+
+
+def test_card_searches_within_their_per_search_limit_give_no_limit_warning(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    exploration = explore_five_g_aka(fixture_bundle, QueryScope.MIXED, 20)
+
+    warning_codes: list[str] = []
+    for code, _ in describe_warnings(exploration.response):
+        warning_codes.append(code)
+    assert "result_limit_reached" not in warning_codes
+
+
+def test_limit_warning_on_a_query_that_resolves_no_topic_is_refused(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    pinned_source, pinned_snapshot = load_packaged_fight_source(read_fixed_clock)
+    response = build_topic_context_service(fixture_bundle).explore(
+        TopicContextRequest(query="gateway", scope=QueryScope.MIXED)
+    )
+    forged_response = reseal_topic_response(
+        response,
+        warnings=(
+            *response.warnings,
+            build_warning(TopicContextWarningCode.RESULT_LIMIT_REACHED, "20"),
+        ),
+    )
+
+    with pytest.raises(EvidenceValidationError, match="result_limit_reached needs a resolved"):
+        validate_topic_context_response(
+            forged_response, pinned_snapshot, build_evidence_catalog(fixture_bundle, pinned_source)
+        )
+
+
 @dataclass(frozen=True)
 class UndercountingFightSource:
     """The packaged source, its every outcome copied unvalidated to claim no match."""

@@ -129,7 +129,7 @@
     },
     "limit": {
       "default": 10,
-      "description": "Candidates the response lists: the best-ranked of the top-k each channel cut on its own, never a complete list, and with no count of what lies beyond.",
+      "description": "Candidates the response lists: the best-ranked of the top-k each channel cut on its own, never a complete list, and with no count of what lies beyond. A response whose channels matched more than this many, or whose lexical, semantic or graph channel returned this many, warns result_limit_reached: more matches may exist.",
       "maximum": 20,
       "minimum": 1,
       "title": "Limit",

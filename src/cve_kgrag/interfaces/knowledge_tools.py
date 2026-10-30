@@ -107,8 +107,9 @@ KNOWLEDGE_TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name=KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES,
         description=(
-            "What each knowledge source of this deployment can serve, and why an unavailable "
-            "one is unavailable. It carries no source text."
+            "What each knowledge source of this deployment can serve, why an unavailable "
+            "one is unavailable, and whether its dataset can execute a purls filter "
+            "(purl_filter_available). It carries no source text."
         ),
         request_model=CapabilitiesRequest,
         response_model=KnowledgeCapabilities,
@@ -135,7 +136,11 @@ KNOWLEDGE_TOOL_SPECS: tuple[ToolSpec, ...] = (
         name=KnowledgeToolName.SEARCH_VULNERABILITIES,
         description=(
             "Ranked, evidence-anchored CVE candidates for a query; filters only narrow what "
-            f"the query finds. {PUBLISHER_AFFECTED_STATEMENT} {UNTRUSTED_RECORD_TEXT}"
+            "the query finds, and a purls filter the dataset cannot execute is refused "
+            "(filter_unsupported). A response that matched more candidates than its limit, "
+            "or whose lexical, semantic or graph channel returned as many as the limit, "
+            "warns result_limit_reached: more matches may exist, uncounted. "
+            f"{PUBLISHER_AFFECTED_STATEMENT} {UNTRUSTED_RECORD_TEXT}"
         ),
         request_model=SearchRequest,
         response_model=SearchResponse,
@@ -175,7 +180,11 @@ KNOWLEDGE_TOOL_SPECS: tuple[ToolSpec, ...] = (
         name=KnowledgeToolName.INVESTIGATE_TELECOM_TOPIC,
         description=(
             "A bounded investigation of a telecom question, sealed with its trajectory, "
-            f"evidence and budgets. {PUBLISHER_AFFECTED_STATEMENT} "
+            "evidence and budgets. Its warnings repeat result_limit_reached when a CVE search "
+            "whose CVEs can be in the answer reached max_results_per_call (so never under "
+            "protocol_context_only), and term_not_indexed once per search word "
+            "no record or technique holds; a purls filter the dataset cannot execute is "
+            f"refused (filter_unsupported). {PUBLISHER_AFFECTED_STATEMENT} "
             f"{UNTRUSTED_RECORD_AND_TECHNIQUE_TEXT} {UNTRUSTED_MODEL_OUTPUT}"
         ),
         request_model=InvestigationRequest,

@@ -46,3 +46,16 @@ def find_capability(
         if capability.source == source:
             return capability
     raise LookupError(source)
+
+
+class HasWarningCode(Protocol):
+    @property
+    def code(self) -> str: ...
+
+
+def list_codes(warnings: Iterable[HasWarningCode]) -> list[str]:
+    """The code of each warning, in order."""
+    warning_codes: list[str] = []
+    for warning in warnings:
+        warning_codes.append(warning.code)
+    return warning_codes

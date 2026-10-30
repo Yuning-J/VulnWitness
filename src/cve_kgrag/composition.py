@@ -37,7 +37,11 @@ from cve_kgrag.adapters.provenance.source_registry import (
     load_source_registry,
 )
 from cve_kgrag.adapters.store.active_record_writer import OsActiveRecordFiles
-from cve_kgrag.adapters.store.active_store import load_active_store, read_active_store
+from cve_kgrag.adapters.store.active_store import (
+    ignore_store_name,
+    load_active_store,
+    read_active_store,
+)
 from cve_kgrag.adapters.store.corpus_store import ignore_model, verify_store_files
 from cve_kgrag.adapters.store.store_activation import StoreActivation
 from cve_kgrag.adapters.structured.in_memory_filter import InMemoryStructuredIndex
@@ -98,15 +102,19 @@ def load_packaged_fixture() -> FixtureBundle:
     return load_fixture_bundle(default_fixture_dir())
 
 
-def load_served_corpus(store_root: Path | None) -> ServedCorpus:
+def load_served_corpus(
+    store_root: Path | None, announce_loading: Callable[[str], None] = ignore_store_name
+) -> ServedCorpus:
     """The CVE records and evidence anchors every serving surface serves: the packaged
-    fixture when no store root is configured, otherwise the store its ``ACTIVE`` names.
-    A configured root that cannot be served raises ``StoreUnavailable``; there is no
-    fallback to the fixture (ADR 0009 §9). A process builds its services on this one
-    corpus, so no surface serves different records from another."""
+    fixture when no store root is configured, otherwise the store its ``ACTIVE`` names,
+    whose name ``announce_loading`` is told just before it is read
+    (``load_active_store``). A configured root that cannot be served raises
+    ``StoreUnavailable``; there is no fallback to the fixture (ADR 0009 §9). A process
+    builds its services on this one corpus, so no surface serves different records from
+    another."""
     if store_root is None:
         return load_packaged_fixture()
-    return load_active_store(store_root)
+    return load_active_store(store_root, announce_loading)
 
 
 def build_trustify_port() -> TrustifyPort:

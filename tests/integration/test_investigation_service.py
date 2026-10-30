@@ -14,6 +14,7 @@ from cve_kgrag.application.investigation_policy import describe_deterministic_pl
 from cve_kgrag.composition import load_packaged_fight_source
 from cve_kgrag.domain.affectedness import AffectednessDetail, AffectednessFailure
 from cve_kgrag.domain.evidence import EvidenceAnchor
+from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.hashing import canonical_sha256, sha256_hex
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
@@ -26,10 +27,21 @@ from cve_kgrag.domain.investigation import (
     StepReason,
     StopReason,
 )
+from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
 from cve_kgrag.domain.planning import QueryIntent
-from cve_kgrag.domain.search import RetrievalOutcome
+from cve_kgrag.domain.search import (
+    RetrievalOutcome,
+    SearchWarning,
+    SearchWarningCode,
+    UnsupportedFilter,
+)
 from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus, SourceType
-from cve_kgrag.domain.topic_context import KnowledgeSource
+from cve_kgrag.domain.threat_context import KnownFightSnapshot
+from cve_kgrag.domain.topic_context import (
+    KnowledgeSource,
+    TopicContextWarning,
+    TopicContextWarningCode,
+)
 from cve_kgrag.domain.validation import index_anchors
 from tests.support.builders import build_bundle_with
 from tests.support.clocks import read_fixed_clock
@@ -52,6 +64,11 @@ from tests.support.investigation import (
     list_transitions,
     list_warning_codes,
 )
+from tests.support.investigation_runs import (
+    investigate,
+    run_fight_direct_search_of_an_unindexed_word,
+)
+from tests.support.services import build_purl_free_structured_index
 
 OPEN5GS_CVE_ID = "CVE-9999-0101"
 BOTH_NAMED_IDS = ["CVE-9999-0003", "CVE-9999-0004"]
@@ -775,3 +792,122 @@ def test_id_with_a_hidden_character_inside_is_refused_before_any_run(
 ) -> None:
     with pytest.raises(ValidationError):
         build_investigation_request(query, scope)
+
+
+# --- What the answer repeats from its steps -------------------------------------------
+
+
+def describe_answer_warnings(evidence_set: KnowledgeEvidenceSet) -> list[tuple[str, str]]:
+    answer_warnings: list[tuple[str, str]] = []
+    for warning in evidence_set.warnings:
+        answer_warnings.append((warning.code.value, warning.subject))
+    return answer_warnings
+
+
+def test_search_filling_the_per_call_limit_warns_at_the_top_that_the_limit_was_reached(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    evidence_set = investigate(
+        fixture_bundle, "gateway", "implementation_only", budget={"max_results_per_call": 1}
+    )
+
+    assert describe_answer_warnings(evidence_set) == [("result_limit_reached", "1")]
+    assert (evidence_set.status, evidence_set.stop_reason) == (
+        ResultStatus.OK,
+        StopReason.SUFFICIENT,
+    )
+
+
+def test_protocol_context_only_topic_filling_the_per_call_limit_gives_no_top_level_limit_warning(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+) -> None:
+    """The topic card's CVE searches reach the limit, but none of their CVEs can be in a
+    protocol_context_only answer, so only the topic step says so."""
+    evidence_set = investigate(
+        fixture_bundle, "5gaka", "protocol_context_only", budget={"max_results_per_call": 1}
+    )
+
+    validate_knowledge_evidence_set(
+        evidence_set,
+        pinned_fight_snapshot,
+        packaged_evidence_catalog,
+        evidence_set.source_capabilities,
+    )
+    assert "result_limit_reached" not in list_warning_codes(evidence_set)
+    topic_step_warnings: list[TopicContextWarning] = []
+    for step in evidence_set.trajectory.steps:
+        topic_step_warnings.extend(step.topic_warnings)
+    assert (
+        TopicContextWarning(code=TopicContextWarningCode.RESULT_LIMIT_REACHED, subject="1")
+        in topic_step_warnings
+    )
+
+
+def test_search_within_the_per_call_limit_gives_no_limit_warning(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    evidence_set = investigate(fixture_bundle, "gateway", "implementation_only")
+
+    assert len(evidence_set.trajectory.steps[0].answer_ids) == 2
+    assert "result_limit_reached" not in list_warning_codes(evidence_set)
+
+
+def test_cve_search_term_no_record_holds_is_named_at_the_top(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    evidence_set = investigate(fixture_bundle, "gatewy crash", "implementation_only")
+
+    assert describe_answer_warnings(evidence_set) == [("term_not_indexed", "gatewy")]
+    assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
+
+
+def test_direct_fight_search_term_no_technique_holds_is_named_at_the_top(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    evidence_set = run_fight_direct_search_of_an_unindexed_word(fixture_bundle)
+
+    assert ("term_not_indexed", "threats") in describe_answer_warnings(evidence_set)
+    assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
+
+
+def test_term_both_the_cve_and_the_fight_search_warn_about_is_named_once_at_the_top(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    evidence_set = investigate(fixture_bundle, "SUCI threats", "mixed")
+
+    unindexed_terms: list[str] = []
+    for code, subject in describe_answer_warnings(evidence_set):
+        if code == "term_not_indexed":
+            unindexed_terms.append(subject)
+    cve_step, fight_step = evidence_set.trajectory.steps
+    cve_side_warning = SearchWarning(code=SearchWarningCode.TERM_NOT_INDEXED, subject="threats")
+    fight_side_warning = TopicContextWarning(
+        code=TopicContextWarningCode.TERM_NOT_INDEXED, subject="threats"
+    )
+    assert cve_side_warning in cve_step.search_warnings
+    assert fight_side_warning in fight_step.topic_warnings
+    assert unindexed_terms == ["threats"]
+
+
+# --- Filters the served dataset cannot execute ----------------------------------------
+
+
+def test_purl_filter_over_records_naming_no_package_url_is_refused_naming_the_filter(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    service = build_test_investigation_service(
+        fixture_bundle, structured_retriever=build_purl_free_structured_index(fixture_bundle)
+    )
+    request = build_investigation_request(
+        "suci memory",
+        "implementation_only",
+        filters={"purls": ["pkg:generic/fictional5g/f5gc"]},
+    )
+
+    with pytest.raises(UnsupportedFilter) as raised:
+        service.investigate(request)
+
+    assert raised.value.filter_name == "purls"
+    assert "pkg:generic" not in str(raised.value)

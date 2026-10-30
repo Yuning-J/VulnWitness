@@ -26,6 +26,7 @@ from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
 from cve_kgrag.domain.search import SearchResponse
 from cve_kgrag.domain.tool_contracts import (
     EvidenceLookup,
+    InvalidField,
     KnowledgeCapabilities,
     ToolFailure,
     ToolFailureCode,
@@ -63,8 +64,10 @@ from tests.support.process_servers import (
 )
 from tests.support.toolbox import (
     FIXTURE_EVIDENCE_ID,
+    FIXTURE_PURL,
     SECRET_ERROR_TEXT,
     UNKNOWN_EVIDENCE_ID,
+    build_compatibility_store_toolbox,
     build_test_toolbox,
 )
 
@@ -83,6 +86,7 @@ EXPECTED_FAILURE_STATUSES = {
     ToolFailureCode.RESPONSE_TOO_LARGE: 500,
     ToolFailureCode.INTEGRITY_CHECK_FAILED: 500,
     ToolFailureCode.INTERNAL_ERROR: 500,
+    ToolFailureCode.FILTER_UNSUPPORTED: 422,
 }
 
 
@@ -160,6 +164,48 @@ async def test_search_route_answers_the_search_contract(api_client: httpx2.Async
     assert answer.status_code == 200
     search_response = SearchResponse.model_validate_json(answer.content)
     assert search_response.query == "ausf crash"
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/v2/search", {"query": "gateway", "filters": {"purls": [FIXTURE_PURL]}}),
+        (
+            "/api/v2/investigate",
+            {
+                "query": "gateway",
+                "scope": "implementation_only",
+                "filters": {"purls": [FIXTURE_PURL]},
+            },
+        ),
+    ],
+    ids=["search", "investigate"],
+)
+async def test_purl_filter_over_a_dataset_naming_no_package_url_is_refused_422_naming_the_filter(
+    fixture_bundle: FixtureBundle, path: str, body: dict[str, Any]
+) -> None:
+    store_api = build_test_api(fixture_bundle, toolbox=build_compatibility_store_toolbox())
+
+    answer = await call_api(store_api, "POST", path, json=body)
+
+    tool_failure = read_tool_failure(answer)
+    assert answer.status_code == 422
+    assert tool_failure.code is ToolFailureCode.FILTER_UNSUPPORTED
+    assert tool_failure.invalid_fields == (
+        InvalidField(location="filters.purls", error_type="filter_unsupported"),
+    )
+    assert FIXTURE_PURL not in answer.text
+
+
+async def test_capabilities_route_reports_purl_filtering_unavailable_over_a_dataset_naming_none(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    store_api = build_test_api(fixture_bundle, toolbox=build_compatibility_store_toolbox())
+
+    answer = await call_api(store_api, "GET", "/api/v2/capabilities")
+
+    assert answer.status_code == 200
+    assert KnowledgeCapabilities.model_validate_json(answer.content).purl_filter_available is False
 
 
 async def test_evidence_route_reads_the_evidence_id_from_the_path(

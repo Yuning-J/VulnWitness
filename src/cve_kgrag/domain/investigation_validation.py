@@ -14,9 +14,12 @@ Beyond the anchor, record, threat-context and claim rules of ``validation``:
 - a step that got a response records one outcome per source it consulted; a lookup
   warns ``unknown_cve_id`` for exactly the IDs it looked up that the catalog lacks
   and ``excluded_by_filters`` only for ones it holds and did not return; a search warns
-  ``term_not_indexed`` only for a search term its lexical channel was sent; and only a
-  CVE search under a semantic request runs the semantic channel, always beside the
-  lexical one;
+  ``term_not_indexed`` only for a search term its lexical channel was sent and
+  ``result_limit_reached`` only when it returned as many CVEs as the limit it sent, naming
+  that limit; and only a CVE search under a semantic request runs the semantic channel,
+  always beside the lexical one;
+- the set's ``result_limit_reached`` and ``term_not_indexed`` warnings are exactly those
+  the adopted steps raise (``list_step_notices``);
 - relevance is assessed for every candidate once a topic resolved, except a CVE the
   caller named by ID, which is kept whether or not it relates to the topic;
 - each named product has an ``unknown`` applicability entry and its warning;
@@ -120,6 +123,7 @@ from cve_kgrag.domain.investigation import (
     InvestigationCandidate,
     InvestigationRequest,
     InvestigationState,
+    InvestigationWarning,
     InvestigationWarningCode,
     KnowledgeEvidenceSet,
     NeedOutcome,
@@ -141,6 +145,7 @@ from cve_kgrag.domain.investigation import (
     list_answer_sources,
     list_named_products,
     list_record_evidence_ids,
+    list_step_notices,
 )
 from cve_kgrag.domain.planning import (
     CveExactLookupCall,
@@ -203,6 +208,10 @@ from cve_kgrag.domain.validation import (
     read_count_subject,
 )
 
+# The answer warnings that repeat what the adopted steps warned (``list_step_notices``).
+STEP_NOTICE_CODES = frozenset(
+    {InvestigationWarningCode.RESULT_LIMIT_REACHED, InvestigationWarningCode.TERM_NOT_INDEXED}
+)
 # The warning a search records for a semantic channel it ran without an adapter.
 UNCONFIGURED_SEMANTIC_WARNING = SearchWarning(
     code=SearchWarningCode.BACKEND_UNAVAILABLE, subject=RetrievalChannel.SEMANTIC.value
@@ -475,8 +484,9 @@ def find_search_warning_violations(step: ToolStep, evidence_catalog: EvidenceCat
     it looked up that the catalog does not hold, in lookup order; it warns
     ``excluded_by_filters`` only for an ID it looked up that the catalog holds and it did
     not return, and ``term_not_indexed`` only for one of the search terms its lexical
-    channel was sent. A term the warning leaves out, or one a record does hold, shows only on
-    replay."""
+    channel was sent, and ``result_limit_reached`` only naming the limit it sent when it
+    returned that many CVEs. A term the warning leaves out, or one a record does hold, shows
+    only on replay."""
     looked_up_ids: list[str] = []
     if isinstance(step.call, CveExactLookupCall | CveSearchCall):
         looked_up_ids = find_cve_ids(format_cve_tool_query(step.call))
@@ -484,6 +494,12 @@ def find_search_warning_violations(step: ToolStep, evidence_catalog: EvidenceCat
     if isinstance(step.call, CveSearchCall):
         search_terms = list_query_terms(step.call.query)
     ran_lexical = RetrievalChannel.LEXICAL in step.channels_executed
+    # The limit a CVE tool's one search sent, as its warning names it, when the step
+    # returned that many CVEs.
+    reached_limits: list[str] = []
+    for backend_request in step.backend_requests:
+        if len(step.answer_ids) == backend_request.limit:
+            reached_limits.append(str(backend_request.limit))
     unknown_ids: list[str] = []
     for looked_up_id in looked_up_ids:
         if evidence_catalog.get_cve(looked_up_id) is None:
@@ -517,6 +533,12 @@ def find_search_warning_violations(step: ToolStep, evidence_catalog: EvidenceCat
             violations.append(
                 f"{warning_label}: warns of an unindexed term that is not one of the search "
                 "terms its lexical channel was sent"
+            )
+        is_limit_warning = search_warning.code is SearchWarningCode.RESULT_LIMIT_REACHED
+        if is_limit_warning and subject not in reached_limits:
+            violations.append(
+                f"{warning_label}: warns the result limit was reached, but the step did not "
+                "return as many CVEs as the limit it sent"
             )
     ran_exact_id = RetrievalChannel.EXACT_ID in step.channels_executed
     if ran_exact_id and warned_unknown_ids != unknown_ids:
@@ -589,6 +611,28 @@ def find_applicability_violations(evidence_set: KnowledgeEvidenceSet) -> list[st
     if unknown_subjects != expected_subjects:
         violations.append("each assessed product needs one applicability_unknown warning")
     return violations
+
+
+def find_step_notice_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
+    """The set's ``result_limit_reached`` and ``term_not_indexed`` warnings are exactly the
+    ones the adopted steps raise, in order (``list_step_notices``); an ``invalid_evidence``
+    run adopts no step."""
+    adopted_steps: list[ToolStep] = []
+    if evidence_set.stop_reason is not StopReason.INVALID_EVIDENCE:
+        for step in evidence_set.trajectory.steps:
+            if step.admission is StepAdmission.ADMITTED:
+                adopted_steps.append(step)
+    expected_notices = list_step_notices(adopted_steps, evidence_set.request)
+    recorded_notices: list[InvestigationWarning] = []
+    for warning in evidence_set.warnings:
+        if warning.code in STEP_NOTICE_CODES:
+            recorded_notices.append(warning)
+    if recorded_notices != expected_notices:
+        return [
+            "the result_limit_reached and term_not_indexed warnings are not the ones the "
+            "adopted steps raise"
+        ]
+    return []
 
 
 def find_stop_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
@@ -1683,6 +1727,7 @@ def validate_knowledge_evidence_set(
     violations.extend(find_step_evidence_violations(evidence_set, evidence_catalog))
     violations.extend(find_step_observation_violations(evidence_set, evidence_catalog))
     violations.extend(find_applicability_violations(evidence_set))
+    violations.extend(find_step_notice_violations(evidence_set))
     violations.extend(find_stop_violations(evidence_set))
     violations.extend(find_trajectory_violations(evidence_set))
     violations.extend(find_round_violations(evidence_set))

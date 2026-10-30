@@ -31,6 +31,7 @@ TOOL_FAILURE_STATUSES: dict[ToolFailureCode, int] = {
     ToolFailureCode.RESPONSE_TOO_LARGE: 500,
     ToolFailureCode.INTEGRITY_CHECK_FAILED: 500,
     ToolFailureCode.INTERNAL_ERROR: 500,
+    ToolFailureCode.FILTER_UNSUPPORTED: 422,
 }
 
 ToolArguments = dict[str, object]

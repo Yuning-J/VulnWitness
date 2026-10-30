@@ -29,10 +29,11 @@ from cve_kgrag.domain.taxonomy import (
 from cve_kgrag.domain.tool_contracts import (
     ConceptResolution,
     EvidenceLookup,
-    KnowledgeCapabilities,
+    InvalidField,
     ToolFailure,
     ToolFailureCode,
 )
+from cve_kgrag.interfaces.knowledge_toolbox import describe_knowledge_capabilities
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolAnswer, ToolLimits
 from tests.support.affectedness import build_affectedness_request
 from tests.support.builders import build_anchor
@@ -61,9 +62,11 @@ from tests.support.investigation import (
 from tests.support.services import build_fixture_service
 from tests.support.toolbox import (
     BLOCKED_AFFECTEDNESS_CAPABILITY,
+    FIXTURE_PURL,
     SECRET_ERROR_TEXT,
     TOOL_ARGUMENTS,
     UNKNOWN_EVIDENCE_ID,
+    build_compatibility_store_toolbox,
     build_test_toolbox,
     join_abandoned_calls,
     list_affectedness_capabilities,
@@ -211,8 +214,8 @@ def answer_directly(
     match tool_name:
         case KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES:
             investigation_service = build_test_investigation_service(bundle)
-            return KnowledgeCapabilities(
-                source_capabilities=investigation_service.describe_capabilities()
+            return describe_knowledge_capabilities(
+                deployment, investigation_service.describe_capabilities()
             )
         case KnowledgeToolName.RESOLVE_TELECOM_CONCEPT:
             return ConceptResolution(
@@ -338,6 +341,85 @@ def test_unknown_evidence_id_returns_unknown_evidence_id(fixture_bundle: Fixture
     )
 
     assert tool_failure.code is ToolFailureCode.UNKNOWN_EVIDENCE_ID
+
+
+# A search and an investigation of CVE-9999-0004, each filtering by the package URL it names.
+PURL_FILTERED_ARGUMENTS = [
+    (
+        KnowledgeToolName.SEARCH_VULNERABILITIES,
+        {"query": "suci memory", "filters": {"purls": [FIXTURE_PURL]}},
+    ),
+    (
+        KnowledgeToolName.INVESTIGATE_TELECOM_TOPIC,
+        {
+            "query": "suci memory",
+            "scope": "implementation_only",
+            "filters": {"purls": [FIXTURE_PURL]},
+        },
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"), PURL_FILTERED_ARGUMENTS, ids=["search", "investigate"]
+)
+def test_purl_filter_over_a_dataset_naming_no_package_url_is_filter_unsupported_naming_the_filter(
+    tool_name: KnowledgeToolName, arguments: dict[str, Any]
+) -> None:
+    toolbox = build_compatibility_store_toolbox()
+
+    tool_failure = require_failure(toolbox.call(tool_name, arguments))
+
+    assert tool_failure.code is ToolFailureCode.FILTER_UNSUPPORTED
+    assert tool_failure.invalid_fields == (
+        InvalidField(location="filters.purls", error_type="filter_unsupported"),
+    )
+    assert FIXTURE_PURL not in tool_failure.model_dump_json()
+
+
+def test_purl_filtered_search_over_a_dataset_naming_package_urls_lists_the_record_naming_it(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    toolbox = build_test_toolbox(fixture_bundle)
+    tool_name, arguments = PURL_FILTERED_ARGUMENTS[0]
+
+    tool_answer = require_answer(toolbox.call(tool_name, arguments))
+
+    listed_ids: list[str] = []
+    for candidate in tool_answer.structured_content["candidates"]:
+        listed_ids.append(candidate["record"]["cve_id"])
+    assert listed_ids == ["CVE-9999-0004"]
+
+
+def test_purl_filtered_investigation_over_a_dataset_naming_package_urls_answers_the_record(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    toolbox = build_test_toolbox(fixture_bundle)
+    tool_name, arguments = PURL_FILTERED_ARGUMENTS[1]
+
+    tool_answer = require_answer(toolbox.call(tool_name, arguments))
+
+    answered_ids: list[str] = []
+    for investigation_candidate in tool_answer.structured_content["implementation_candidates"]:
+        answered_ids.append(investigation_candidate["candidate"]["record"]["cve_id"])
+    assert answered_ids == ["CVE-9999-0004"]
+
+
+def test_capabilities_report_purl_filtering_only_over_a_dataset_naming_package_urls(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    fixture_toolbox = build_test_toolbox(fixture_bundle)
+    store_toolbox = build_compatibility_store_toolbox()
+
+    fixture_capabilities = require_answer(
+        fixture_toolbox.call(KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES, None)
+    )
+    store_capabilities = require_answer(
+        store_toolbox.call(KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES, None)
+    )
+
+    assert fixture_capabilities.structured_content["purl_filter_available"] is True
+    assert store_capabilities.structured_content["purl_filter_available"] is False
 
 
 def build_forged_anchors() -> list[EvidenceAnchor]:

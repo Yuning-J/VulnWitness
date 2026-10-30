@@ -865,6 +865,7 @@
     },
     "SearchWarning": {
       "additionalProperties": false,
+      "description": "What a search could not do or may have left out. ``result_limit_reached``: the\nresponse lists as many candidates as the request's limit, its subject, and its\nchannels matched more, or one that cuts its own top-k (lexical, semantic or graph)\nreturned that many, so more matches may exist; it never counts them.",
       "properties": {
         "code": {
           "$ref": "#/$defs/SearchWarningCode"
@@ -889,7 +890,8 @@
         "term_not_indexed",
         "backend_unavailable",
         "backend_incomplete",
-        "backend_error"
+        "backend_error",
+        "result_limit_reached"
       ],
       "title": "SearchWarningCode",
       "type": "string"
@@ -1124,8 +1126,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.32",
-      "default": "2.0.0-dev.32",
+      "const": "2.0.0-dev.33",
+      "default": "2.0.0-dev.33",
       "title": "Schema Version",
       "type": "string"
     },

@@ -16,7 +16,9 @@ topic resolved (``search_fight_directly``): one FiGHT search under
 A cut is never silent (ADR 0009 §11a): ``protocol_context_truncated`` counts the
 techniques the snapshot matched that the protocol section does not list, and
 ``candidates_truncated`` the relevant CVEs the candidate section does not list because
-of its limit. Neither changes the status.
+of its limit. A card's CVE search that warned it reached ``max_results_per_search`` may
+have cut further matches it cannot count: ``result_limit_reached`` says so, without a
+count. None of them changes the status.
 """
 
 from collections.abc import Sequence
@@ -31,6 +33,7 @@ from cve_kgrag.domain.search import (
     ChannelOutcome,
     SearchRequest,
     SearchResponse,
+    SearchWarningCode,
 )
 from cve_kgrag.domain.taxonomy import (
     BackendStatus,
@@ -165,6 +168,13 @@ def require_matched_count(fight_outcome: ThreatContextOutcome) -> ThreatContextO
     return fight_outcome
 
 
+def reaches_result_limit(cve_search: SearchResponse) -> bool:
+    """Whether the search warned that it reached its limit."""
+    return any(
+        warning.code is SearchWarningCode.RESULT_LIMIT_REACHED for warning in cve_search.warnings
+    )
+
+
 def list_channel_failures(cve_searches: list[SearchResponse]) -> tuple[ChannelOutcome, ...]:
     """Each failing channel outcome of ``cve_searches``, once, in the order first seen."""
     channel_failures: list[ChannelOutcome] = []
@@ -294,6 +304,13 @@ class TopicContextService:
                 TopicContextWarning(
                     code=TopicContextWarningCode.CANDIDATES_TRUNCATED,
                     subject=str(len(omitted_cve_ids)),
+                )
+            )
+        if any(map(reaches_result_limit, cve_searches)):
+            warnings.append(
+                TopicContextWarning(
+                    code=TopicContextWarningCode.RESULT_LIMIT_REACHED,
+                    subject=str(request.max_results_per_search),
                 )
             )
         evidence = self._collect_evidence(fight_evidence, cve_searches, kept_candidates)

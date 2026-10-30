@@ -21,8 +21,12 @@ from cve_kgrag.application.threaded_call_runner import (
 )
 from cve_kgrag.domain.affectedness import AffectednessCheck, AffectednessRequest
 from cve_kgrag.domain.contract_model import ContractModel
-from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
-from cve_kgrag.domain.search import SearchRequest, SearchResponse
+from cve_kgrag.domain.investigation import (
+    InvestigationRequest,
+    KnowledgeEvidenceSet,
+    SourceCapability,
+)
+from cve_kgrag.domain.search import SearchRequest, SearchResponse, UnsupportedFilter
 from cve_kgrag.domain.served_dataset import ServedDataset
 from cve_kgrag.domain.tool_contracts import (
     CapabilitiesRequest,
@@ -32,6 +36,7 @@ from cve_kgrag.domain.tool_contracts import (
     EvidenceLookup,
     EvidenceLookupRequest,
     FightSearchRequest,
+    InvalidField,
     KnowledgeCapabilities,
     ToolFailure,
     ToolFailureCode,
@@ -48,6 +53,8 @@ from cve_kgrag.interfaces.knowledge_tools import (
     seconds_until,
 )
 
+# The error type a ``filter_unsupported`` failure gives the filter it names.
+UNSUPPORTED_FILTER_ERROR = "filter_unsupported"
 # A tool body takes the request its tool's request contract parsed; the dispatch table
 # pairs each body with that contract, so the argument is always of the declared type.
 ToolHandler = Callable[[Any], ContractModel]
@@ -55,6 +62,29 @@ ToolHandler = Callable[[Any], ContractModel]
 
 class UnknownEvidenceId(LookupError):
     """``get_evidence`` named an evidence ID the deployment's catalog does not hold."""
+
+
+def describe_knowledge_capabilities(
+    deployment: InvestigationDeployment, source_capabilities: tuple[SourceCapability, ...]
+) -> KnowledgeCapabilities:
+    """The capabilities a service over ``deployment`` reports: its ``source_capabilities``,
+    and whether the deployment's dataset can execute a ``purls`` filter."""
+    return KnowledgeCapabilities(
+        source_capabilities=source_capabilities,
+        purl_filter_available=deployment.search_service.serves_purl_filter(),
+    )
+
+
+def build_unsupported_filter_failure(error: UnsupportedFilter) -> ToolFailure:
+    """The ``filter_unsupported`` failure naming the filter's field, never its values."""
+    return build_tool_failure(
+        ToolFailureCode.FILTER_UNSUPPORTED,
+        (
+            InvalidField(
+                location=f"filters.{error.filter_name}", error_type=UNSUPPORTED_FILTER_ERROR
+            ),
+        ),
+    )
 
 
 class KnowledgeToolbox:
@@ -94,8 +124,8 @@ class KnowledgeToolbox:
         self._call_runner = ThreadedCallRunner(max_live_calls=limits.max_calls_in_flight)
         self._monotonic_clock = monotonic_clock
         self._limits = limits
-        self._capabilities = KnowledgeCapabilities(
-            source_capabilities=investigation_service.describe_capabilities()
+        self._capabilities = describe_knowledge_capabilities(
+            deployment, investigation_service.describe_capabilities()
         )
         self._request_models: dict[KnowledgeToolName, type[ContractModel]] = {}
         for tool_spec in KNOWLEDGE_TOOL_SPECS:
@@ -134,8 +164,9 @@ class KnowledgeToolbox:
     ) -> ToolAnswer | ToolFailure:
         """The answer of ``tool_name`` to ``arguments`` (``None`` means none), or why it has
         none: arguments that do not serialize, are too large or do not parse; no free worker;
-        the time limit; an unknown evidence ID; a result its service rejected; a response
-        too large; or any other exception, which is logged and answered ``internal_error``.
+        the time limit; an unknown evidence ID; a filter the dataset cannot execute; a result
+        its service rejected; a response too large; or any other exception, which is logged
+        and answered ``internal_error``.
         """
         try:
             argument_bytes = json.dumps(
@@ -176,6 +207,8 @@ class KnowledgeToolbox:
             return build_tool_failure(ToolFailureCode.SERVER_BUSY)
         except UnknownEvidenceId:
             return build_tool_failure(ToolFailureCode.UNKNOWN_EVIDENCE_ID)
+        except UnsupportedFilter as error:
+            return build_unsupported_filter_failure(error)
         except EvidenceValidationError:
             return build_tool_failure(ToolFailureCode.INTEGRITY_CHECK_FAILED)
         except Exception:

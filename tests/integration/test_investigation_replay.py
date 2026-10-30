@@ -143,6 +143,9 @@ REPLAY_OF_ONE_ROUND_AGAINST_TWO = ReplayCompleted(
         ReplayDifference(None, "implementation_candidates"),
         ReplayDifference(None, "claims"),
         ReplayDifference(None, "evidence"),
+        # Only the recorded run's step warned that no record holds "5gaka", and the answer
+        # repeats that as a term_not_indexed warning.
+        ReplayDifference(None, "warnings"),
         ReplayDifference(None, "trajectory.transitions"),
         ReplayDifference(None, "trajectory.rounds"),
         ReplayDifference(None, "trajectory.evidence_ids"),
@@ -639,6 +642,8 @@ def test_replay_whose_first_round_now_answers_runs_no_refinement_round(
             ReplayDifference(None, "implementation_candidates"),
             ReplayDifference(None, "claims"),
             ReplayDifference(None, "evidence"),
+            # The answer's term_not_indexed warning for "5gaka" follows the step's.
+            ReplayDifference(None, "warnings"),
             ReplayDifference(None, "trajectory.transitions"),
             ReplayDifference(None, "trajectory.rounds"),
             ReplayDifference(None, "trajectory.evidence_ids"),
@@ -675,6 +680,8 @@ def test_replay_that_stops_before_the_recorded_deadline_point_names_the_breach(
             ReplayDifference(None, "implementation_candidates"),
             ReplayDifference(None, "claims"),
             ReplayDifference(None, "evidence"),
+            # The answer's term_not_indexed warning for "5gaka" follows the step's.
+            ReplayDifference(None, "warnings"),
             ReplayDifference(None, "trajectory.transitions"),
             ReplayDifference(None, "trajectory.rounds"),
             ReplayDifference(None, "trajectory.evidence_ids"),

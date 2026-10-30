@@ -7,7 +7,8 @@ address, the local planner evaluation (``eval planner``), the legacy-data import
 
 The serving commands serve the served corpus: the store ``CVE_KGRAG_STORE_ROOT``'s
 ``ACTIVE`` names, or the packaged synthetic fixture when no root is configured
-(ADR 0009 §9, §10).
+(ADR 0009 §9, §10). Loading a configured store is announced on stderr, and once more when
+it is ready, so stdout carries only a command's JSON or the MCP protocol.
 
 Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
 a query that resolves to a topic, an evidence ID the catalogue serves, every
@@ -21,13 +22,14 @@ without a usable server runner, for an HTTP server on a port it cannot bind, for
 runs whose enabled planner cannot plan, for evaluation results that cannot be written,
 for an evaluation stopped before its report, for a failed import, for ``migrate legacy``
 without the ``migration`` extra and for a failed ``store`` operation, named by its
-reason code. 2 for invalid usage: an argument a contract rejects, invalid settings, a
-``store`` command without a store root or with a name that is no store name, an HTTP
-server without a token, a configured store root or FiGHT snapshot that cannot be served
-(one line naming the reason), model runs without an enabled planner, an evaluation
-``--out`` inside the package or the store root, an input manifest that is not valid, a
-``verify`` file that cannot be read or is larger than ``MAX_EVIDENCE_SET_BYTES``, and a
-gold file that cannot be read or is no investigation gold file.
+reason code. 2 for invalid usage: an argument a contract rejects, a filter the served
+dataset cannot execute (a ``--purl`` over records that name no package URL), invalid
+settings, a ``store`` command without a store root or with a name that is no store name,
+an HTTP server without a token, a configured store root or FiGHT snapshot that cannot be
+served (one line naming the reason), model runs without an enabled planner, an
+evaluation ``--out`` inside the package or the store root, an input manifest that is not
+valid, a ``verify`` file that cannot be read or is larger than ``MAX_EVIDENCE_SET_BYTES``,
+and a gold file that cannot be read or is no investigation gold file.
 """
 
 import argparse
@@ -36,11 +38,12 @@ import logging
 import os
 import re
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, NoReturn, TypeVar
 
 from pydantic import SecretStr, ValidationError
 
@@ -115,7 +118,9 @@ from cve_kgrag.domain.search import (
     MAX_RESULTS_PER_CALL,
     SearchRequest,
     SearchResponse,
+    UnsupportedFilter,
 )
+from cve_kgrag.domain.served_dataset import ServedDataset
 from cve_kgrag.domain.store_status import (
     STORE_OPERATION_FAILURE_MESSAGES,
     ActiveStoreCondition,
@@ -168,6 +173,10 @@ from cve_kgrag.evaluation.planner_runner import (
     run_planner_evaluation,
 )
 from cve_kgrag.evaluation.result_directory import ResultDirectory
+from cve_kgrag.interfaces.knowledge_toolbox import (
+    UNSUPPORTED_FILTER_ERROR,
+    describe_knowledge_capabilities,
+)
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.ports.sources import FightSource
@@ -271,6 +280,12 @@ EVAL_FIXTURE_NOTICE = (
     "fixture, not the store root, and the FiGHT source each gold case names, not a "
     "configured snapshot"
 )
+# Written to stderr, never stdout, around loading a configured store: stdout carries a
+# command's JSON or the MCP protocol. A real NVD store takes minutes to load.
+STORE_LOADING_NOTICE = (
+    "cve-kgrag {command}: loading store {store_name}; a full NVD store takes minutes"
+)
+STORE_READY_NOTICE = "cve-kgrag {command}: {cve_search_version} ready after {seconds:.0f} s"
 UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
 UNSERVED_EVIDENCE_MESSAGE = (
     "the anchor catalogued under {evidence_id} fails the anchor rules, so it is not served"
@@ -793,17 +808,71 @@ def run_evidence_lookup(evidence_id: str, deployment: InvestigationDeployment) -
     return 0
 
 
+def announce_store_loading(command: str, store_name: str) -> None:
+    """One line on stderr naming the store ``command`` is about to load."""
+    print(STORE_LOADING_NOTICE.format(command=command, store_name=store_name), file=sys.stderr)
+
+
 def load_served_corpus_or_exit(command: str, store_root: Path | None) -> ServedCorpus:
-    """The served corpus (``load_served_corpus``). A configured store root that cannot be
+    """The served corpus (``load_served_corpus``), a configured store announced on stderr
+    once its checks passed and it starts loading. A configured store root that cannot be
     served ends the run with exit 2 and one line naming the reason, never a path."""
     try:
-        return load_served_corpus(store_root)
+        return load_served_corpus(store_root, partial(announce_store_loading, command))
     except StoreUnavailable as error:
         print(
             f"cve-kgrag {command} cannot start: store unavailable: {error.reason.value}",
             file=sys.stderr,
         )
         raise SystemExit(2) from None
+
+
+def announce_store_ready(
+    command: str,
+    store_root: Path | None,
+    served_dataset: ServedDataset,
+    loading_seconds: float,
+) -> None:
+    """One line on stderr naming the configured store's dataset and how long loading it
+    and building its indexes took; nothing for the packaged fixture."""
+    if store_root is None:
+        return
+    print(
+        STORE_READY_NOTICE.format(
+            command=command,
+            cve_search_version=served_dataset.cve_search_version,
+            seconds=loading_seconds,
+        ),
+        file=sys.stderr,
+    )
+
+
+def load_search_service_or_exit(
+    command: str,
+    store_root: Path | None,
+    semantic_settings: SemanticSettings | None = None,
+    monotonic_clock: Callable[[], float] = time.monotonic,
+) -> SearchService:
+    """The search service over the served corpus (``load_served_corpus_or_exit``), saying
+    on stderr when a configured store is ready."""
+    started_at = monotonic_clock()
+    served_corpus = load_served_corpus_or_exit(command, store_root)
+    search_service = build_search_service(served_corpus, semantic_settings)
+    announce_store_ready(
+        command,
+        store_root,
+        served_corpus.describe_served_dataset(),
+        monotonic_clock() - started_at,
+    )
+    return search_service
+
+
+def refuse_unsupported_filter(
+    parser: argparse.ArgumentParser, error: UnsupportedFilter
+) -> NoReturn:
+    """A usage error (exit 2) naming the filter the served dataset cannot execute, never
+    its values."""
+    parser.error(f"filters.{error.filter_name}: {UNSUPPORTED_FILTER_ERROR}: {error}")
 
 
 def load_fight_source_or_exit(
@@ -826,19 +895,29 @@ def load_data_plane_or_exit(
     command: str,
     settings: ServiceSettings,
     semantic_settings: SemanticSettings | None = None,
+    monotonic_clock: Callable[[], float] = time.monotonic,
 ) -> ServingDataPlane:
     """The data plane a command that uses FiGHT serves from: the served corpus, then the
-    FiGHT source, so a broken store is reported before a broken snapshot (ADR 0009 §9)."""
+    FiGHT source, so a broken store is reported before a broken snapshot (ADR 0009 §9).
+    A configured store is announced on stderr while it loads and once it is ready."""
+    started_at = monotonic_clock()
     served_corpus = load_served_corpus_or_exit(command, settings.store_root)
     fight_source, pinned_fight_snapshot = load_fight_source_or_exit(
         command, settings.fight_snapshot
     )
-    return build_serving_data_plane(
+    data_plane = build_serving_data_plane(
         served_corpus,
         fight_source=fight_source,
         pinned_fight_snapshot=pinned_fight_snapshot,
         semantic_settings=semantic_settings,
     )
+    announce_store_ready(
+        command,
+        settings.store_root,
+        data_plane.served_dataset,
+        monotonic_clock() - started_at,
+    )
+    return data_plane
 
 
 def run_mcp_server(
@@ -1397,15 +1476,20 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
 
     if arguments.command == "lookup":
         lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)
-        served_corpus = load_served_corpus_or_exit("lookup", settings.store_root)
         return print_response(
-            lookup_cve(build_search_service(served_corpus), lookup_request.cve_id)
+            lookup_cve(
+                load_search_service_or_exit("lookup", settings.store_root), lookup_request.cve_id
+            )
         )
     if arguments.command == "search":
         search_request = build_search_request(parser, arguments)
-        served_corpus = load_served_corpus_or_exit("search", settings.store_root)
-        service = build_search_service(served_corpus, choose_semantic_settings(settings, arguments))
-        return print_response(service.search(search_request))
+        service = load_search_service_or_exit(
+            "search", settings.store_root, choose_semantic_settings(settings, arguments)
+        )
+        try:
+            return print_response(service.search(search_request))
+        except UnsupportedFilter as error:
+            refuse_unsupported_filter(parser, error)
     if arguments.command == "verify":
         evidence_set_bytes = read_evidence_set_file(parser, arguments.evidence_set_path)
         if settings.semantic is not None:
@@ -1422,7 +1506,10 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         investigation_service = build_investigation_service(
             data_plane, planner_setup=discover_planner_setup(settings.model_planner)
         )
-        return print_response(investigation_service.investigate(investigation_request))
+        try:
+            return print_response(investigation_service.investigate(investigation_request))
+        except UnsupportedFilter as error:
+            refuse_unsupported_filter(parser, error)
     if arguments.command == "topic":
         topic_request = build_contract(
             parser,
@@ -1443,11 +1530,11 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         data_plane = load_data_plane_or_exit(
             "capabilities", settings, choose_semantic_settings(settings, arguments)
         )
+        deployment = build_investigation_deployment(data_plane)
         source_capabilities = describe_service_capabilities(
-            build_investigation_deployment(data_plane),
-            discover_planner_setup(settings.model_planner),
+            deployment, discover_planner_setup(settings.model_planner)
         )
-        return print_capabilities(KnowledgeCapabilities(source_capabilities=source_capabilities))
+        return print_capabilities(describe_knowledge_capabilities(deployment, source_capabilities))
     evidence_request = build_contract(
         parser, EvidenceLookupRequest, evidence_id=arguments.evidence_id
     )

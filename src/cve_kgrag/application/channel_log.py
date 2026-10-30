@@ -11,6 +11,11 @@ from cve_kgrag.domain.search import (
 )
 from cve_kgrag.domain.taxonomy import BackendStatus, RetrievalChannel, describe_backend_failure
 
+# The channels that answer with their own top-k of what they matched; the exact-ID channel
+# answers the named IDs and the structured channel only constrains.
+RANKED_SEARCH_CHANNELS = frozenset(
+    {RetrievalChannel.LEXICAL, RetrievalChannel.SEMANTIC, RetrievalChannel.GRAPH}
+)
 WARNING_CODE_BY_FAILURE = {
     BackendStatus.UNAVAILABLE: SearchWarningCode.BACKEND_UNAVAILABLE,
     BackendStatus.INCOMPLETE_INDEX: SearchWarningCode.BACKEND_INCOMPLETE,
@@ -42,6 +47,15 @@ class ChannelLog:
 
     def warn(self, code: SearchWarningCode, subject: str) -> None:
         self.warnings.append(SearchWarning(code=code, subject=subject))
+
+    def fills_top_k(self, top_k: int) -> bool:
+        """Whether a channel that cuts its own top-k (``RANKED_SEARCH_CHANNELS``) answered
+        with ``top_k`` matches or more, so it may have cut further ones."""
+        return any(
+            channel_result.channel in RANKED_SEARCH_CHANNELS
+            and len(channel_result.matches) >= top_k
+            for channel_result in self.channel_results
+        )
 
     def list_seed_ids(self) -> tuple[str, ...]:
         """Records matched by the exact-ID, lexical or semantic channel, in first-match order."""

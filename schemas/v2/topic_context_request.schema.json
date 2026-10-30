@@ -142,7 +142,7 @@
     },
     "max_results_per_search": {
       "default": 20,
-      "description": "Results any one backend search may return: each template CVE search, and the FiGHT search, which also asks for no more than limit. Each CVE search's own top-k is uncounted, so more matches may exist unseen; the FiGHT search counts every technique it matched (protocol_context_truncated).",
+      "description": "Results any one backend search may return: each template CVE search, and the FiGHT search, which also asks for no more than limit. Each CVE search's own top-k is uncounted, so more matches may exist unseen, which a result_limit_reached warning says when a CVE search reached this limit; the FiGHT search counts every technique it matched (protocol_context_truncated).",
       "maximum": 20,
       "minimum": 1,
       "title": "Max Results Per Search",

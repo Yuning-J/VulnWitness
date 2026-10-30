@@ -2,7 +2,7 @@
   "$defs": {
     "InvalidField": {
       "additionalProperties": false,
-      "description": "One argument that failed to parse: where it is and the parser's error type, never\nthe value sent.",
+      "description": "One argument that failed to parse, or a filter the dataset cannot execute: where it\nis and the error type (the parser's, or ``filter_unsupported``), never the value\nsent.",
       "properties": {
         "error_type": {
           "maxLength": 64,
@@ -33,7 +33,8 @@
         "timed_out",
         "response_too_large",
         "integrity_check_failed",
-        "internal_error"
+        "internal_error",
+        "filter_unsupported"
       ],
       "title": "ToolFailureCode",
       "type": "string"
@@ -169,6 +170,22 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "filter_unsupported"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "A filter cannot be executed on this dataset, which holds no value it could match; invalid_fields names it."
+          }
+        }
+      }
     }
   ],
   "description": "Why a tool call gave no answer. Keys the request contract does not declare are\ncounted, never named.",
@@ -191,8 +208,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.32",
-      "default": "2.0.0-dev.32",
+      "const": "2.0.0-dev.33",
+      "default": "2.0.0-dev.33",
       "title": "Schema Version",
       "type": "string"
     },

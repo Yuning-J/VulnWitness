@@ -28,6 +28,7 @@ from cve_kgrag.domain.evidence_set_verification_report import (
 )
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet, SourceCapability
 from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
+from cve_kgrag.domain.search import UnsupportedFilter
 from cve_kgrag.domain.validation import EvidenceValidationError
 
 # The largest evidence set a surface hands to ``check_evidence_set``: the file
@@ -51,7 +52,9 @@ def verify_evidence_set(
     when that is one of them, as a service requires at seal; a set reporting any other
     planner is checked against the first accepted one, and the validator names the
     difference. Raises ``EvidenceValidationError`` when the validator or the audit rejects
-    the set, or when the replayed set fails the checks the controller runs at seal;
+    the set, when its request filters on something the deployment's dataset cannot
+    execute, so it cannot be replayed, or when the replayed set fails the checks the
+    controller runs at seal;
     otherwise returns the replay's outcome, whose ``ReplayCompleted.differences`` is empty
     only when the deployment's sources give back the recorded set.
     """
@@ -66,6 +69,12 @@ def verify_evidence_set(
         (*deployment.source_capabilities, expected_planner_capability),
     )
     audit_decision_path(evidence_set, deployment.topic_registry, deployment.evidence_catalog)
+    try:
+        deployment.search_service.require_executable_filters(evidence_set.request.filters)
+    except UnsupportedFilter as error:
+        raise EvidenceValidationError(
+            [f"the request's {error.filter_name} filter cannot be executed on this dataset"]
+        ) from None
     return replay_evidence_set(evidence_set, deployment)
 
 

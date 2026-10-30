@@ -66,8 +66,9 @@ class TopicContextRequest(ContractModel):
         description=(
             "Results any one backend search may return: each template CVE search, and the "
             "FiGHT search, which also asks for no more than limit. Each CVE search's own "
-            "top-k is uncounted, so more matches may exist unseen; the FiGHT search counts "
-            "every technique it matched (protocol_context_truncated)."
+            "top-k is uncounted, so more matches may exist unseen, which a "
+            "result_limit_reached warning says when a CVE search reached this limit; the "
+            "FiGHT search counts every technique it matched (protocol_context_truncated)."
         ),
     )
     semantic: StrictBool = Field(
@@ -318,6 +319,7 @@ class TopicContextWarningCode(StrEnum):
     TERM_NOT_INDEXED = "term_not_indexed"
     PROTOCOL_CONTEXT_TRUNCATED = "protocol_context_truncated"
     CANDIDATES_TRUNCATED = "candidates_truncated"
+    RESULT_LIMIT_REACHED = "result_limit_reached"
 
 
 # The order warnings appear in; codes of one position may interleave among themselves.
@@ -330,12 +332,15 @@ TOPIC_WARNING_ORDER = {
     TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED: 4,
     TopicContextWarningCode.UNRELATED_CANDIDATES_DROPPED: 5,
     TopicContextWarningCode.CANDIDATES_TRUNCATED: 6,
+    TopicContextWarningCode.RESULT_LIMIT_REACHED: 7,
 }
-# The codes whose subject is a positive decimal count, each given at most once.
+# The codes whose subject is a positive decimal number, each given at most once: a count,
+# or for result_limit_reached the per-search limit.
 TOPIC_COUNT_WARNING_CODES = (
     TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED,
     TopicContextWarningCode.UNRELATED_CANDIDATES_DROPPED,
     TopicContextWarningCode.CANDIDATES_TRUNCATED,
+    TopicContextWarningCode.RESULT_LIMIT_REACHED,
 )
 
 
@@ -346,7 +351,9 @@ class TopicContextWarning(ContractModel):
     held that the candidate section does not list only because of its limit, never a
     backend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the
     relevance rule removed. ``term_not_indexed`` names a word a direct FiGHT search sent
-    that no technique holds; a topic's card search never raises it. A cut changes no
+    that no technique holds; a topic's card search never raises it.
+    ``result_limit_reached`` names ``max_results_per_search`` when a card's CVE search
+    warned it reached that limit, so more matches may exist; it never counts them. A cut changes no
     status."""
 
     code: TopicContextWarningCode

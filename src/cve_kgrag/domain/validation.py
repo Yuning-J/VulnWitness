@@ -29,7 +29,9 @@ The rules, checked on every response before it leaves the application layer:
   vulnerability and never a formal finding;
 - a CVE candidate is scoped ``implementation_vulnerability``, cites only
   ``implementation_vulnerability`` evidence, and has an anchor whose
-  authoritative record is that CVE, so no candidate ID is invented.
+  authoritative record is that CVE, so no candidate ID is invented;
+- a search warns ``result_limit_reached`` at most once, naming the number of candidates
+  it lists, and a topic response at most once, beside a resolved topic.
 """
 
 import re
@@ -38,7 +40,13 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from cve_kgrag.domain.cve import CVE_ID_PATTERN, CveRecord
 from cve_kgrag.domain.evidence import Claim, EvidenceAnchor, derive_evidence_id
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.search import SCHEMA_VERSION, Candidate, SearchResponse
+from cve_kgrag.domain.search import (
+    SCHEMA_VERSION,
+    Candidate,
+    SearchResponse,
+    SearchWarning,
+    SearchWarningCode,
+)
 from cve_kgrag.domain.taxonomy import (
     AssertionKind,
     BackendStatus,
@@ -345,10 +353,32 @@ def validate_search_response(response: SearchResponse, evidence_catalog: Evidenc
     violations.extend(
         find_status_violations(response.status, bool(response.candidates), has_backend_failure)
     )
+    violations.extend(find_result_limit_violations(response.warnings, len(response.candidates)))
     if response.result_sha256 != response.compute_result_sha256():
         violations.append("result_sha256 does not match the response content")
     if violations:
         raise EvidenceValidationError(violations)
+
+
+def find_result_limit_violations(
+    warnings: Sequence[SearchWarning], listed_candidate_count: int
+) -> list[str]:
+    """``result_limit_reached`` appears at most once, naming the number of candidates the
+    search lists, which is its limit. Whether the limit was the request's is replay's to
+    prove: the response does not carry the request."""
+    limit_subjects: list[str] = []
+    for warning in warnings:
+        if warning.code is SearchWarningCode.RESULT_LIMIT_REACHED:
+            limit_subjects.append(warning.subject)
+    violations: list[str] = []
+    if len(limit_subjects) > 1:
+        violations.append("the result_limit_reached warning appears more than once")
+    for limit_subject in limit_subjects:
+        if limit_subject != str(listed_candidate_count):
+            violations.append(
+                "the result_limit_reached warning names another limit than the candidates listed"
+            )
+    return violations
 
 
 def has_pinned_provenance(anchor: EvidenceAnchor, pinned_snapshot: KnownFightSnapshot) -> bool:
@@ -554,7 +584,8 @@ def find_topic_warning_violations(
     once, with a positive decimal subject; ``protocol_context_truncated`` only beside an
     ``ok`` FiGHT outcome (``fight_status``), the techniques listed plus its count at most
     the pinned snapshot's technique count; ``candidates_truncated`` only beside a
-    non-empty candidate section; ``term_not_indexed`` as
+    non-empty candidate section; ``result_limit_reached`` only beside a resolved topic,
+    whose card searched CVEs; ``term_not_indexed`` as
     ``find_unindexed_term_violations`` says, over the ``sent_terms`` of a direct FiGHT
     search and the ``listed_matched_terms`` of the techniques listed. No count can be
     checked against its truth here: a response does not carry the inputs that derive it,
@@ -599,6 +630,8 @@ def find_topic_warning_violations(
     has_candidate_cut = TopicContextWarningCode.CANDIDATES_TRUNCATED in counts_by_code
     if has_candidate_cut and listed_candidate_count == 0:
         violations.append("candidates_truncated needs a candidate section that lists some")
+    if TopicContextWarningCode.RESULT_LIMIT_REACHED in counts_by_code and not is_resolved:
+        violations.append("result_limit_reached needs a resolved topic whose card searched CVEs")
     return violations
 
 

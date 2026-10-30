@@ -490,11 +490,16 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "What the deployment serves, in the shape every evidence set reports it.",
+  "description": "What the deployment serves, in the shape every evidence set reports it, and which\nsearch filters its dataset can execute.",
   "properties": {
+    "purl_filter_available": {
+      "description": "Whether a search or investigation may filter by package URL (filters.purls): only a dataset whose records name package URLs can execute it, and an NVD import names none. Without it, a request with a purls filter is refused (filter_unsupported) instead of answered as if nothing matched.",
+      "title": "Purl Filter Available",
+      "type": "boolean"
+    },
     "schema_version": {
-      "const": "2.0.0-dev.32",
-      "default": "2.0.0-dev.32",
+      "const": "2.0.0-dev.33",
+      "default": "2.0.0-dev.33",
       "title": "Schema Version",
       "type": "string"
     },
@@ -580,7 +585,8 @@
   },
   "required": [
     "schema_version",
-    "source_capabilities"
+    "source_capabilities",
+    "purl_filter_available"
   ],
   "title": "KnowledgeCapabilities",
   "type": "object"

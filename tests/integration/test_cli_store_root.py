@@ -13,7 +13,7 @@ import pytest
 
 from cve_kgrag.adapter_discovery import InterfaceUnavailable
 from cve_kgrag.adapters.store.corpus_store import load_corpus_store
-from cve_kgrag.cli import main, run_mcp_server
+from cve_kgrag.cli import load_search_service_or_exit, main, run_mcp_server
 from cve_kgrag.domain.investigation import (
     KnowledgeEvidenceSet,
     SourceCapability,
@@ -26,6 +26,7 @@ from cve_kgrag.domain.taxonomy import BackendFailureDetail
 from cve_kgrag.domain.tool_contracts import KnowledgeCapabilities
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.settings import ServiceSettings, load_settings
+from tests.support.clocks import SteppingClock
 from tests.support.collect import find_capability
 from tests.support.corpus_stores import import_store
 from tests.support.evaluation import SMALL_GOLD_ROWS, write_gold_file
@@ -40,6 +41,8 @@ from tests.support.legacy_inputs import (
 
 STORE_MARKER = "storemarker"
 STORE_DESCRIPTION = f"SYNTHETIC: {STORE_MARKER} gateway mishandles input."
+# A package URL no imported record names: an NVD import names none.
+REQUESTED_PURL = "pkg:pypi/requested-package"
 
 
 class RecordingMcpServerRunner:
@@ -330,6 +333,118 @@ def test_mcp_on_a_root_without_active_refuses_to_start(
     assert capsys.readouterr().err == (
         "cve-kgrag mcp cannot start: store unavailable: no_active_store\n"
     )
+
+
+# --- Filters the store cannot execute -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["search", "gateway", "--purl", REQUESTED_PURL],
+        ["investigate", "gateway", "--scope", "implementation_only", "--purl", REQUESTED_PURL],
+    ],
+    ids=["search", "investigate"],
+)
+def test_purl_filter_over_a_store_naming_no_package_url_is_a_usage_error_naming_the_filter(
+    active_settings: dict[str, str], arguments: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = run_usage_error(arguments, active_settings)
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "filters.purls: filter_unsupported: " in captured.err
+    assert REQUESTED_PURL not in captured.err
+
+
+def test_capabilities_of_a_store_naming_no_package_url_report_purl_filtering_unavailable(
+    active_settings: dict[str, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main(["capabilities"], active_settings)
+
+    capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert capabilities.purl_filter_available is False
+
+
+def test_capabilities_of_the_fixture_report_purl_filtering_available(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(["capabilities"], {})
+
+    capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
+    assert exit_code == 0
+    assert capabilities.purl_filter_available is True
+
+
+# --- Loading notices on stderr ----------------------------------------------------------
+
+
+def test_loading_a_store_names_it_and_the_seconds_to_ready_on_stderr(
+    active_settings: dict[str, str], store_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    loading_clock = SteppingClock(seconds_per_read=12.0)
+
+    load_search_service_or_exit("search", store_root, monotonic_clock=loading_clock.read)
+
+    captured = capsys.readouterr()
+    cve_search_version = (
+        load_corpus_store(store_root / "second").describe_served_dataset().cve_search_version
+    )
+    assert captured.out == ""
+    assert captured.err == (
+        "cve-kgrag search: loading store second; a full NVD store takes minutes\n"
+        f"cve-kgrag search: {cve_search_version} ready after 12 s\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [["search", "gateway"], ["lookup", "CVE-9999-0003"], ["capabilities"]],
+    ids=["search", "lookup", "capabilities"],
+)
+def test_command_over_a_store_announces_loading_on_stderr_and_prints_only_json(
+    active_settings: dict[str, str], arguments: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main(arguments, active_settings)
+
+    captured = capsys.readouterr()
+    notice_lines = captured.err.splitlines()
+    assert exit_code == 0
+    assert json.loads(captured.out)
+    assert notice_lines[0] == (
+        f"cve-kgrag {arguments[0]}: loading store second; a full NVD store takes minutes"
+    )
+    assert notice_lines[1].startswith(f"cve-kgrag {arguments[0]}: corpus-store-v1@sha256:")
+    assert " ready after " in notice_lines[1]
+
+
+def test_command_over_the_fixture_announces_no_loading(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(["search", "gateway"], {})
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "loading store" not in captured.err
+    assert "ready after" not in captured.err
+
+
+def test_mcp_over_a_store_announces_loading_on_stderr_and_writes_nothing_to_stdout(
+    active_settings: dict[str, str], store_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runner = RecordingMcpServerRunner()
+
+    exit_code = run_mcp_server(runner, ServiceSettings(store_root=store_root))
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == ""
+    assert captured.err.startswith(
+        "cve-kgrag mcp: loading store second; a full NVD store takes minutes\n"
+    )
+    assert " ready after " in captured.err
 
 
 # --- Commands that load no served corpus ----------------------------------------------

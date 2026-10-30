@@ -272,6 +272,7 @@ class InvestigationService:
         reach_checkpoint: Callable[[DeadlineCheckpoint], None],
     ) -> None:
         self._topic_registry = deployment.topic_registry
+        self._search_service = deployment.search_service
         self._tool_executor = deployment.tool_executor
         self._source_capabilities = describe_service_capabilities(deployment, planner_setup)
         self._affectedness_detail = find_affectedness_detail(deployment.source_capabilities)
@@ -291,6 +292,10 @@ class InvestigationService:
         return self._source_capabilities
 
     def investigate(self, request: InvestigationRequest) -> KnowledgeEvidenceSet:
+        """The sealed evidence set of a run of ``request``. Raises ``UnsupportedFilter``
+        before anything runs for a filter the served dataset cannot execute
+        (``SearchService.require_executable_filters``)."""
+        self._search_service.require_executable_filters(request.filters)
         interpretation = interpret_request(request, self._topic_registry, self._evidence_catalog)
         run = InvestigationRun(
             request=request,

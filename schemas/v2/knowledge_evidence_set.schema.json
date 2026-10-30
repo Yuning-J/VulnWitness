@@ -1387,7 +1387,7 @@
     },
     "InvestigationWarning": {
       "additionalProperties": false,
-      "description": "What the run could not do or left out. ``answer_truncated`` counts, each once, the\nitems the adopted steps knew and the answer does not list: the CVEs they kept (a CVE\nthe caller named always kept), those the topic step kept and left out at its limit\nincluded, less the CVEs the answer lists, plus the techniques the step that searched\nFiGHT (a topic step or a direct FiGHT search) matched and did not list.\n``unrelated_candidates_dropped`` counts search-step candidates the\nrelevance rule removed, never one ``answer_truncated`` counts.",
+      "description": "What the run could not do or left out. ``answer_truncated`` counts, each once, the\nitems the adopted steps knew and the answer does not list: the CVEs they kept (a CVE\nthe caller named always kept), those the topic step kept and left out at its limit\nincluded, less the CVEs the answer lists, plus the techniques the step that searched\nFiGHT (a topic step or a direct FiGHT search) matched and did not list.\n``unrelated_candidates_dropped`` counts search-step candidates the\nrelevance rule removed, never one ``answer_truncated`` counts.\n``result_limit_reached`` names ``max_results_per_call`` once when a CVE search of an\nadopted step warned it reached that limit, so more matches may exist; it never counts\nthem. It covers only searches whose CVEs can be in the answer, so a\n``protocol_context_only`` run never raises it. ``term_not_indexed`` names, once each, a\nsearch term an adopted step warned no CVE record (or, for a direct FiGHT search, no\ntechnique) holds; the step's own warning says which source.",
       "properties": {
         "code": {
           "$ref": "#/$defs/InvestigationWarningCode"
@@ -1414,7 +1414,9 @@
         "model_plan_rejected",
         "evidence_discarded",
         "unrelated_candidates_dropped",
-        "answer_truncated"
+        "answer_truncated",
+        "result_limit_reached",
+        "term_not_indexed"
       ],
       "title": "InvestigationWarningCode",
       "type": "string"
@@ -2516,6 +2518,7 @@
     },
     "SearchWarning": {
       "additionalProperties": false,
+      "description": "What a search could not do or may have left out. ``result_limit_reached``: the\nresponse lists as many candidates as the request's limit, its subject, and its\nchannels matched more, or one that cuts its own top-k (lexical, semantic or graph)\nreturned that many, so more matches may exist; it never counts them.",
       "properties": {
         "code": {
           "$ref": "#/$defs/SearchWarningCode"
@@ -2540,7 +2543,8 @@
         "term_not_indexed",
         "backend_unavailable",
         "backend_incomplete",
-        "backend_error"
+        "backend_error",
+        "result_limit_reached"
       ],
       "title": "SearchWarningCode",
       "type": "string"
@@ -3716,7 +3720,7 @@
     },
     "TopicContextWarning": {
       "additionalProperties": false,
-      "description": "What a response leaves out or could not do. ``protocol_context_truncated`` counts\nthe techniques the snapshot matched that the protocol section does not list because\nof the response's bounds; ``candidates_truncated`` the relevant CVEs topic context\nheld that the candidate section does not list only because of its limit, never a\nbackend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the\nrelevance rule removed. ``term_not_indexed`` names a word a direct FiGHT search sent\nthat no technique holds; a topic's card search never raises it. A cut changes no\nstatus.",
+      "description": "What a response leaves out or could not do. ``protocol_context_truncated`` counts\nthe techniques the snapshot matched that the protocol section does not list because\nof the response's bounds; ``candidates_truncated`` the relevant CVEs topic context\nheld that the candidate section does not list only because of its limit, never a\nbackend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the\nrelevance rule removed. ``term_not_indexed`` names a word a direct FiGHT search sent\nthat no technique holds; a topic's card search never raises it.\n``result_limit_reached`` names ``max_results_per_search`` when a card's CVE search\nwarned it reached that limit, so more matches may exist; it never counts them. A cut changes no\nstatus.",
       "properties": {
         "code": {
           "$ref": "#/$defs/TopicContextWarningCode"
@@ -3742,7 +3746,8 @@
         "source_snapshot_is_excerpt",
         "term_not_indexed",
         "protocol_context_truncated",
-        "candidates_truncated"
+        "candidates_truncated",
+        "result_limit_reached"
       ],
       "title": "TopicContextWarningCode",
       "type": "string"
@@ -4458,8 +4463,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.32",
-      "default": "2.0.0-dev.32",
+      "const": "2.0.0-dev.33",
+      "default": "2.0.0-dev.33",
       "title": "Schema Version",
       "type": "string"
     },

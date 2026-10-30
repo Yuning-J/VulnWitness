@@ -1,4 +1,5 @@
-"""Search services over the synthetic fixture with individual channels replaced."""
+"""Search services over the synthetic fixture with individual channels replaced, and a
+structured channel over the fixture records that name no package URL."""
 
 from typing import Any
 
@@ -7,7 +8,10 @@ from cve_kgrag.adapters.graph.in_memory_graph import InMemoryRelationGraph
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
 from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
 from cve_kgrag.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
-from cve_kgrag.adapters.structured.in_memory_filter import InMemoryStructuredIndex
+from cve_kgrag.adapters.structured.in_memory_filter import (
+    InMemoryStructuredIndex,
+    names_package_url,
+)
 from cve_kgrag.application.search import SearchService
 
 
@@ -23,3 +27,13 @@ def build_fixture_service(bundle: FixtureBundle, **retrievers: Any) -> SearchSer
     channels.update(retrievers)
     evidence_catalog = InMemoryEvidenceCatalog(bundle.evidence, bundle.records)
     return SearchService(repository, evidence_catalog, **channels)
+
+
+def build_purl_free_structured_index(bundle: FixtureBundle) -> InMemoryStructuredIndex:
+    """The structured channel over the fixture records that name no package URL: like an
+    NVD import's, it cannot execute a purls filter."""
+    purl_free_records = []
+    for record in bundle.records:
+        if not names_package_url(record):
+            purl_free_records.append(record)
+    return InMemoryStructuredIndex(purl_free_records)

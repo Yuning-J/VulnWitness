@@ -48,6 +48,7 @@ from tests.support.investigation import (
 )
 from tests.support.investigation_runs import (
     forge_set_whose_replay_differs,
+    investigate,
     run_every_record,
     run_every_record_under_filters,
     run_excluded_term_with_a_product,
@@ -74,6 +75,7 @@ from tests.support.planners import (
     SCRIPTED_PLANNER_SETTINGS,
     reconfigure_planner,
 )
+from tests.support.services import build_purl_free_structured_index
 
 NO_DIFFERENCE = ReplayCompleted(())
 SCRIPTED_REGISTRY = FakeAdapterRegistry([SCRIPTED_ENTRY_POINT])
@@ -205,6 +207,33 @@ def test_rejected_set_raises_its_violations_without_calling_a_source_again(
         verify_evidence_set(forged_set, deployment, DETERMINISTIC_VERIFIER)
 
     assert expected_violation in raised.value.violations
+    assert lexical_retriever.query_texts == []
+
+
+def test_purl_filtered_set_on_a_deployment_whose_records_name_no_package_url_is_rejected(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    """The set cannot be replayed where its purls filter cannot be executed, so it is
+    rejected before replay calls the deployment's lexical channel."""
+    evidence_set = investigate(
+        fixture_bundle,
+        "suci memory",
+        "implementation_only",
+        filters={"purls": ["pkg:generic/fictional5g/f5gc"]},
+    )
+    lexical_retriever = RecordingRetriever(RetrievalOutcome(status=BackendStatus.OK))
+    deployment = build_test_deployment(
+        fixture_bundle,
+        lexical_retriever=lexical_retriever,
+        structured_retriever=build_purl_free_structured_index(fixture_bundle),
+    )
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        verify_evidence_set(evidence_set, deployment, DETERMINISTIC_VERIFIER)
+
+    assert raised.value.violations == (
+        "the request's purls filter cannot be executed on this dataset",
+    )
     assert lexical_retriever.query_texts == []
 
 

@@ -21,6 +21,7 @@ from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_c
 from cve_kgrag.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
 from cve_kgrag.application.affectedness import check_affectedness
 from cve_kgrag.application.evidence_set_verification import check_evidence_set
+from cve_kgrag.application.investigate import InvestigationService
 from cve_kgrag.composition import (
     build_search_service,
     build_topic_context_service,
@@ -52,6 +53,7 @@ from cve_kgrag.domain.tool_contracts import (
 from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import TopicContextRequest
 from cve_kgrag.domain.validation import EvidenceValidationError
+from cve_kgrag.interfaces.knowledge_toolbox import describe_knowledge_capabilities
 from cve_kgrag.schema_snapshots import REQUEST_CONTRACTS, RESPONSE_CONTRACTS
 from tests.support.affectedness import build_affectedness_request
 from tests.support.clocks import read_fixed_clock
@@ -140,12 +142,21 @@ def load_reviewed_topic_card(fixture_bundle: FixtureBundle) -> BaseModel:
     return ProtocolTopic.model_validate(card_fields)
 
 
+def describe_fixture_capabilities(
+    fixture_bundle: FixtureBundle, service: InvestigationService
+) -> KnowledgeCapabilities:
+    """The capabilities a toolbox reports for ``service`` over the fixture deployment."""
+    return describe_knowledge_capabilities(
+        build_test_deployment(fixture_bundle), service.describe_capabilities()
+    )
+
+
 def describe_capabilities_with(
     fixture_bundle: FixtureBundle, fight_choice: FightChoice
 ) -> KnowledgeCapabilities:
     """The capabilities of a deterministic service over the fixture and ``fight_choice``."""
     service = build_test_investigation_service(fixture_bundle, fight=fight_choice)
-    return KnowledgeCapabilities(source_capabilities=service.describe_capabilities())
+    return describe_fixture_capabilities(fixture_bundle, service)
 
 
 def describe_packaged_capabilities(fixture_bundle: FixtureBundle) -> BaseModel:
@@ -162,7 +173,7 @@ def describe_capabilities_without_a_planner_key(fixture_bundle: FixtureBundle) -
     service = build_test_investigation_service(
         fixture_bundle, planner_unavailable_detail=ModelPlannerUnavailableDetail.MISSING_API_KEY
     )
-    return KnowledgeCapabilities(source_capabilities=service.describe_capabilities())
+    return describe_fixture_capabilities(fixture_bundle, service)
 
 
 def describe_capabilities_with_an_unusable_semantic_adapter(
@@ -172,7 +183,7 @@ def describe_capabilities_with_an_unusable_semantic_adapter(
     service = build_test_investigation_service(
         fixture_bundle, semantic_retriever=SemanticUnavailableDetail.ADAPTER_UNUSABLE
     )
-    return KnowledgeCapabilities(source_capabilities=service.describe_capabilities())
+    return describe_fixture_capabilities(fixture_bundle, service)
 
 
 def resolve_five_g_aka(fixture_bundle: FixtureBundle) -> BaseModel:

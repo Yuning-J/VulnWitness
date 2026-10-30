@@ -11,9 +11,11 @@ import pytest
 from mcp import Client, StdioServerParameters
 from mcp.types import LATEST_PROTOCOL_VERSION
 
+from cve_kgrag.cli import main
 from cve_kgrag.domain.investigation import SourceCapabilityState
 from cve_kgrag.domain.tool_contracts import KnowledgeCapabilities
 from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName
+from tests.support.corpus_stores import import_store
 from tests.support.toolbox import (
     BLOCKED_AFFECTEDNESS_CAPABILITY,
     TOOL_ARGUMENTS,
@@ -37,6 +39,18 @@ def build_server_environment() -> dict[str, str]:
             server_environment[variable_name] = value
     return server_environment
 
+
+# The initialize request a raw stdio client sends first.
+INITIALIZE_FRAME = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": LATEST_PROTOCOL_VERSION,
+        "capabilities": {},
+        "clientInfo": {"name": "raw-stdio-test", "version": "1"},
+    },
+}
 
 # Frames the SDK's stdio transport cannot decode: malformed JSON, a truncated request, and
 # a request whose arguments nest deeper than the SDK's JSON parser goes.
@@ -89,18 +103,8 @@ def test_cve_kgrag_mcp_with_stdin_closed_exits_zero_and_writes_nothing() -> None
 def test_undecodable_frames_get_no_reply_and_later_requests_are_answered() -> None:
     """The SDK drops a frame it cannot decode without a JSON-RPC error or a word on stderr
     (ADR 0003 §7); the server keeps answering."""
-    initialize_frame = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": LATEST_PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": {"name": "raw-stdio-test", "version": "1"},
-        },
-    }
     frames = [
-        json.dumps(initialize_frame),
+        json.dumps(INITIALIZE_FRAME),
         json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         *UNDECODABLE_FRAMES,
         json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
@@ -129,18 +133,7 @@ def test_json_rpc_errors_carry_no_data_and_repeat_nothing_sent() -> None:
     fail its request model."""
     marked_method = "zzechomarkerzz/list"
     frames = [
-        json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": LATEST_PROTOCOL_VERSION,
-                    "capabilities": {},
-                    "clientInfo": {"name": "raw-stdio-test", "version": "1"},
-                },
-            }
-        ),
+        json.dumps(INITIALIZE_FRAME),
         json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         json.dumps({"jsonrpc": "2.0", "id": 2, "method": marked_method}),
         json.dumps(
@@ -211,3 +204,48 @@ async def test_cve_kgrag_mcp_never_serves_the_semantic_channel_whatever_the_sett
     assert semantic_capability.state is SourceCapabilityState.NOT_CONFIGURED
     assert semantic_capability.detail is None
     assert not (tmp_path / "vectors").exists()
+
+
+def test_cve_kgrag_mcp_over_a_store_announces_loading_on_stderr_and_keeps_stdout_protocol_only(
+    tmp_path: Path,
+) -> None:
+    store_root = tmp_path / "stores"
+    store_root.mkdir()
+    import_store(store_root, "first")
+    root_settings = {"CVE_KGRAG_STORE_ROOT": str(store_root)}
+    assert main(["store", "activate", "first"], root_settings) == 0
+    frames = [
+        json.dumps(INITIALIZE_FRAME),
+        json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+    ]
+
+    server_process = subprocess.Popen(
+        [str(CVE_KGRAG_SCRIPT), "mcp"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**build_server_environment(), **root_settings},
+    )
+    assert server_process.stdin is not None
+    assert server_process.stdout is not None
+    server_process.stdin.write(("\n".join(frames) + "\n").encode())
+    server_process.stdin.flush()
+    # stdin stays open until both answers arrived: the server may stop reading at end of
+    # input before it answers a request still queued.
+    answer_lines = [server_process.stdout.readline(), server_process.stdout.readline()]
+    trailing_stdout, stderr_bytes = server_process.communicate(timeout=60)
+
+    answered_ids: list[object] = []
+    for answer_line in answer_lines:
+        message = json.loads(answer_line)
+        assert message["jsonrpc"] == "2.0"
+        answered_ids.append(message["id"])
+    notice_lines = stderr_bytes.decode().splitlines()
+    assert server_process.returncode == 0
+    assert answered_ids == [1, 2]
+    assert trailing_stdout == b""
+    assert notice_lines[0] == "cve-kgrag mcp: loading store first; a full NVD store takes minutes"
+    assert notice_lines[1].startswith("cve-kgrag mcp: corpus-store-v1@sha256:")
+    assert " ready after " in notice_lines[1]
+    assert len(notice_lines) == 2

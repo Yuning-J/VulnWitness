@@ -12,6 +12,11 @@ def first_shared_value(record_values: Set[str], filter_values: Iterable[str]) ->
     return min((value for value in filter_values if value in record_values), default=None)
 
 
+def names_package_url(record: CveRecord) -> bool:
+    """Whether one of the record's implicated products names a package URL."""
+    return any(product.purl is not None for product in record.list_implicated_products())
+
+
 def fold_values(values: Iterable[str]) -> list[str]:
     folded_values: list[str] = []
     for value in values:
@@ -24,6 +29,12 @@ class InMemoryStructuredIndex:
 
     def __init__(self, records: Iterable[CveRecord]) -> None:
         self._records = tuple(sorted(records, key=lambda record: record.cve_id))
+        self._holds_package_urls = any(map(names_package_url, self._records))
+
+    def holds_package_urls(self) -> bool:
+        """Decided once, when the index is built: whether any record names a package URL
+        among its implicated products, the ones a ``purls`` filter compares."""
+        return self._holds_package_urls
 
     def search(self, filters: SearchFilters) -> RetrievalOutcome:
         matches: list[RetrievalMatch] = []

@@ -32,7 +32,7 @@ from cve_kgrag.domain.taxonomy import (
 
 # v2 is pre-release until the M7 review freezes it; every bump is a reviewed
 # change to the committed snapshots under schemas/v2/.
-SCHEMA_VERSION = "2.0.0-dev.32"
+SCHEMA_VERSION = "2.0.0-dev.33"
 # The matched term a structured match names for the KEV filter.
 KEV_MATCH_TERM = "listed"
 MAX_QUERY_CHARS = 512
@@ -206,7 +206,10 @@ class SearchRequest(ContractModel):
         le=MAX_RESULTS_PER_CALL,
         description=(
             "Candidates the response lists: the best-ranked of the top-k each channel cut "
-            "on its own, never a complete list, and with no count of what lies beyond."
+            "on its own, never a complete list, and with no count of what lies beyond. A "
+            "response whose channels matched more than this many, or whose lexical, "
+            "semantic or graph channel returned this many, warns result_limit_reached: "
+            "more matches may exist."
         ),
     )
     filters: SearchFilters = Field(default_factory=SearchFilters)
@@ -398,11 +401,30 @@ class SearchWarningCode(StrEnum):
     BACKEND_UNAVAILABLE = "backend_unavailable"
     BACKEND_INCOMPLETE = "backend_incomplete"
     BACKEND_ERROR = "backend_error"
+    RESULT_LIMIT_REACHED = "result_limit_reached"
 
 
 class SearchWarning(ContractModel):
+    """What a search could not do or may have left out. ``result_limit_reached``: the
+    response lists as many candidates as the request's limit, its subject, and its
+    channels matched more, or one that cuts its own top-k (lexical, semantic or graph)
+    returned that many, so more matches may exist; it never counts them."""
+
     code: SearchWarningCode
     subject: str
+
+
+class UnsupportedFilter(ValueError):
+    """A request filters on ``filter_name``, a ``SearchFilters`` field the served dataset
+    holds no value for, so the filter cannot be executed: a request using it is refused
+    rather than answered as if nothing matched."""
+
+    def __init__(self, filter_name: str) -> None:
+        super().__init__(
+            f"the {filter_name} filter cannot be executed on this dataset, which holds no "
+            "value it could match"
+        )
+        self.filter_name = filter_name
 
 
 class SearchResponse(ContractModel):

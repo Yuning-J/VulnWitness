@@ -148,12 +148,22 @@ FiGHT snapshot
 ([`m7b-planner-evaluation.md`](rebuild/m7b-planner-evaluation.md#the-command)).
 
 A server loads its store before it answers: health probes see connection refused while
-it loads, and an MCP client on stdio waits for its initialize answer through the load.
-The figures below are from synthetic records of one CPE and a short description each, so
-real NVD records need more time and memory; they are lower bounds, not a sizing.
+it loads, and an MCP client on stdio waits for its initialize answer through the load,
+which can exceed the client's initialize timeout. Every command that loads a configured
+store writes `cve-kgrag <command>: loading store <name>; ...` to standard error once the
+store's checks pass, and `cve-kgrag <command>: <dataset version> ready after <N> s` once
+its indexes are built; standard output stays the command's JSON or the MCP protocol.
 
-Measured by `scripts/operator/serving_scale.sh` on 250,000 synthetic records (a synthetic
-store) , one run on 2026-10-26:
+**Real data.** The figures for a full NVD store (the store of 2026-10-27)
+ are in the README's
+[Running on real data](../README.md#running-on-real-data) section: store loading
+and peak resident memory. Size a host from those.
+
+**Synthetic data.** The table below is from 250,000 synthetic records of one CPE and a
+short description each, measured by `scripts/operator/serving_scale.sh` (a synthetic store)
+on the same machine, one run on 2026-10-26. It compares builds against each other; it is
+no sizing: loading the real store alone (`load_served_corpus`) differs from
+the synthetic store:
 
 | What | Wall time | Peak resident memory |
 |---|---|---|
@@ -163,8 +173,7 @@ store) , one run on 2026-10-26:
 
 Sharing the data plane saves the second index build; it does not
 lower the peak, which is reached while the store loads. `mcp` builds one deployment, as
-the shared `api` build does once. Plan for more than these figures with real records,
-and run the lane again on the host that will serve.
+the shared `api` build does once.
 
 ## The semantic channel against a store
 

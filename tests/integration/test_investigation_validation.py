@@ -57,6 +57,7 @@ from cve_kgrag.domain.planning import (
     compute_call_key,
     compute_model_reply_sha256,
 )
+from cve_kgrag.domain.search import SearchWarning, SearchWarningCode
 from cve_kgrag.domain.taxonomy import ResultStatus, SourceType
 from cve_kgrag.domain.threat_context import (
     KnownFightSnapshot,
@@ -2264,6 +2265,155 @@ def test_truncation_in_a_run_with_no_adopted_step_is_rejected(
     assert any(
         "needs a step the answer was assembled from" in found for found in raised.value.violations
     )
+
+
+# --- What the answer repeats from its steps -------------------------------------------
+
+STEP_NOTICE_VIOLATION = (
+    "the result_limit_reached and term_not_indexed warnings are not the ones the adopted "
+    "steps raise"
+)
+
+
+def run_cut_search_of_an_unindexed_word(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """``gateway gatewy`` at a cap of one: its search fills the cap and warns that no record
+    holds ``gatewy``, so the answer warns ``result_limit_reached`` then ``term_not_indexed``."""
+    return investigate(fixture_bundle, "gateway gatewy", "implementation_only", **ONE_RESULT_BUDGET)
+
+
+def drop_the_unindexed_term_notice(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    kept_warnings: list[InvestigationWarning] = []
+    for warning in evidence_set.warnings:
+        if warning.code is not InvestigationWarningCode.TERM_NOT_INDEXED:
+            kept_warnings.append(warning)
+    return reseal_evidence_set(evidence_set, warnings=tuple(kept_warnings))
+
+
+def repeat_the_unindexed_term_notice(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    return reseal_evidence_set(
+        evidence_set, warnings=(*evidence_set.warnings, evidence_set.warnings[-1])
+    )
+
+
+def swap_the_step_notices(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    limit_notice, term_notice = evidence_set.warnings
+    return reseal_evidence_set(evidence_set, warnings=(term_notice, limit_notice))
+
+
+def run_cut_protocol_context_of_five_g_aka(
+    fixture_bundle: FixtureBundle,
+) -> KnowledgeEvidenceSet:
+    """``5gaka`` under protocol_context_only at a cap of one: the topic card's CVE searches
+    reach the limit, and the answer, which can list none of their CVEs, does not warn it."""
+    return investigate(fixture_bundle, "5gaka", "protocol_context_only", **ONE_RESULT_BUDGET)
+
+
+def warn_the_answer_reached_the_limit(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    return reseal_evidence_set(
+        evidence_set,
+        warnings=(
+            *evidence_set.warnings,
+            InvestigationWarning(code=InvestigationWarningCode.RESULT_LIMIT_REACHED, subject="1"),
+        ),
+    )
+
+
+def warn_an_unfilled_search_reached_its_limit(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    """The search returned two CVEs under a limit of 20, yet warns, and so does the answer,
+    that it reached its limit."""
+    search_step = evidence_set.trajectory.steps[0]
+    forged_set = rewrite_step(
+        evidence_set,
+        search_step.step_index,
+        search_warnings=(
+            *search_step.search_warnings,
+            SearchWarning(code=SearchWarningCode.RESULT_LIMIT_REACHED, subject="20"),
+        ),
+    )
+    return reseal_evidence_set(
+        forged_set,
+        warnings=(
+            *forged_set.warnings,
+            InvestigationWarning(code=InvestigationWarningCode.RESULT_LIMIT_REACHED, subject="20"),
+        ),
+    )
+
+
+def test_set_whose_answer_repeats_its_step_notices_validates(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+) -> None:
+    evidence_set = run_cut_search_of_an_unindexed_word(fixture_bundle)
+
+    validate_knowledge_evidence_set(
+        evidence_set,
+        pinned_fight_snapshot,
+        packaged_evidence_catalog,
+        evidence_set.source_capabilities,
+    )
+
+    answer_warnings: list[tuple[str, str]] = []
+    for warning in evidence_set.warnings:
+        answer_warnings.append((warning.code.value, warning.subject))
+    assert answer_warnings == [("result_limit_reached", "1"), ("term_not_indexed", "gatewy")]
+
+
+@pytest.mark.parametrize(
+    ("run", "forge", "violation"),
+    [
+        (
+            run_cut_search_of_an_unindexed_word,
+            drop_the_unindexed_term_notice,
+            STEP_NOTICE_VIOLATION,
+        ),
+        (
+            run_cut_search_of_an_unindexed_word,
+            repeat_the_unindexed_term_notice,
+            STEP_NOTICE_VIOLATION,
+        ),
+        (run_cut_search_of_an_unindexed_word, swap_the_step_notices, STEP_NOTICE_VIOLATION),
+        (
+            lambda fixture_bundle: investigate(fixture_bundle, "gateway", "implementation_only"),
+            warn_an_unfilled_search_reached_its_limit,
+            "warns the result limit was reached, but the step did not return as many CVEs as "
+            "the limit it sent",
+        ),
+        (
+            run_cut_protocol_context_of_five_g_aka,
+            warn_the_answer_reached_the_limit,
+            STEP_NOTICE_VIOLATION,
+        ),
+    ],
+    ids=[
+        "term_notice_missing",
+        "term_notice_repeated",
+        "notices_reordered",
+        "limit_warned_on_an_unfilled_search",
+        "limit_warned_on_a_protocol_context_only_answer",
+    ],
+)
+def test_forged_step_notice_is_rejected(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+    run: TrajectoryRun,
+    forge: Callable[[KnowledgeEvidenceSet], KnowledgeEvidenceSet],
+    violation: str,
+) -> None:
+    evidence_set = run(fixture_bundle)
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        validate_knowledge_evidence_set(
+            forge(evidence_set),
+            pinned_fight_snapshot,
+            packaged_evidence_catalog,
+            evidence_set.source_capabilities,
+        )
+
+    assert any(violation in found for found in raised.value.violations)
 
 
 def drop_a_fight_term(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:

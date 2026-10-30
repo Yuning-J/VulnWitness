@@ -44,6 +44,7 @@ from cve_kgrag.domain.search import (
     SchemaVersion,
     SearchFilters,
     SearchWarning,
+    SearchWarningCode,
     SemanticUnavailableDetail,
 )
 from cve_kgrag.domain.taxonomy import ResultStatus, RetrievalChannel
@@ -56,6 +57,7 @@ from cve_kgrag.domain.topic_context import (
     QueryScope,
     SourceOutcome,
     TopicContextWarning,
+    TopicContextWarningCode,
     summarize_statuses,
 )
 
@@ -968,6 +970,8 @@ class InvestigationWarningCode(StrEnum):
     EVIDENCE_DISCARDED = "evidence_discarded"
     UNRELATED_CANDIDATES_DROPPED = "unrelated_candidates_dropped"
     ANSWER_TRUNCATED = "answer_truncated"
+    RESULT_LIMIT_REACHED = "result_limit_reached"
+    TERM_NOT_INDEXED = "term_not_indexed"
 
 
 class InvestigationWarning(ContractModel):
@@ -977,10 +981,74 @@ class InvestigationWarning(ContractModel):
     included, less the CVEs the answer lists, plus the techniques the step that searched
     FiGHT (a topic step or a direct FiGHT search) matched and did not list.
     ``unrelated_candidates_dropped`` counts search-step candidates the
-    relevance rule removed, never one ``answer_truncated`` counts."""
+    relevance rule removed, never one ``answer_truncated`` counts.
+    ``result_limit_reached`` names ``max_results_per_call`` once when a CVE search of an
+    adopted step warned it reached that limit, so more matches may exist; it never counts
+    them. It covers only searches whose CVEs can be in the answer, so a
+    ``protocol_context_only`` run never raises it. ``term_not_indexed`` names, once each, a
+    search term an adopted step warned no CVE record (or, for a direct FiGHT search, no
+    technique) holds; the step's own warning says which source."""
 
     code: InvestigationWarningCode
     subject: str
+
+
+def reaches_result_limit(step: ToolStep) -> bool:
+    """Whether the step's CVE search, or one of its topic's card searches, warned that it
+    reached its limit."""
+    return any(
+        warning.code is SearchWarningCode.RESULT_LIMIT_REACHED for warning in step.search_warnings
+    ) or any(
+        warning.code is TopicContextWarningCode.RESULT_LIMIT_REACHED
+        for warning in step.topic_warnings
+    )
+
+
+def list_unindexed_terms(steps: Sequence[ToolStep]) -> list[str]:
+    """Each term the steps warned ``term_not_indexed`` about, a CVE search's or a direct
+    FiGHT search's, once, in the order first warned."""
+    warned_terms: list[str] = []
+    for step in steps:
+        for search_warning in step.search_warnings:
+            if search_warning.code is SearchWarningCode.TERM_NOT_INDEXED:
+                warned_terms.append(search_warning.subject)
+        for topic_warning in step.topic_warnings:
+            if topic_warning.code is TopicContextWarningCode.TERM_NOT_INDEXED:
+                warned_terms.append(topic_warning.subject)
+    unindexed_terms: list[str] = []
+    for warned_term in warned_terms:
+        if warned_term not in unindexed_terms:
+            unindexed_terms.append(warned_term)
+    return unindexed_terms
+
+
+def list_step_notices(
+    adopted_steps: Sequence[ToolStep], request: InvestigationRequest
+) -> list[InvestigationWarning]:
+    """What the answer repeats from the steps it was assembled from, so a reader sees it
+    without the trajectory: ``result_limit_reached`` naming ``max_results_per_call`` when
+    one of them reached its limit, then one ``term_not_indexed`` per unindexed term.
+
+    A ``protocol_context_only`` answer lists no CVE, and its only CVE searches are a topic
+    card's (the gate refuses CVE tools under that scope), so a limit they reached hides
+    nothing the answer could list: the topic step keeps its own warning and the answer
+    raises none."""
+    step_notices: list[InvestigationWarning] = []
+    lists_cves = request.scope is not QueryScope.PROTOCOL_CONTEXT_ONLY
+    if lists_cves and any(map(reaches_result_limit, adopted_steps)):
+        step_notices.append(
+            InvestigationWarning(
+                code=InvestigationWarningCode.RESULT_LIMIT_REACHED,
+                subject=str(request.budget.max_results_per_call),
+            )
+        )
+    for unindexed_term in list_unindexed_terms(adopted_steps):
+        step_notices.append(
+            InvestigationWarning(
+                code=InvestigationWarningCode.TERM_NOT_INDEXED, subject=unindexed_term
+            )
+        )
+    return step_notices
 
 
 STATUSES_BY_STOP_REASON: dict[StopReason, frozenset[ResultStatus]] = {
