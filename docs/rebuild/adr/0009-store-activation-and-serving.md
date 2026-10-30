@@ -387,8 +387,9 @@ visible; the cap of 20 stays and may be revisited later.
 - `TopicContextWarningCode` gains two codes, each with a decimal subject, the
   convention of `unrelated_candidates_dropped`:
   - `protocol_context_truncated`: the techniques of the loaded snapshot that matched
-    the topic's terms and are not listed because of this response's bounds; listed
-    plus subject is every technique the snapshot matched.
+    the terms the FiGHT search sent (a topic's terms, or a direct FiGHT search's
+    `fight_terms`) and are not listed because of this response's bounds; listed plus
+    subject is every technique the snapshot matched.
   - `candidates_truncated`: the CVEs topic context already holds, after dedupe and the
     relevance rule, that the section (`implementation_candidates`, or
     `excluded_implementation_candidates` under `protocol_context_only`) does not list,
@@ -398,8 +399,9 @@ visible; the cap of 20 stays and may be revisited later.
 - `unrelated_candidates_dropped` counts the candidates the relevance rule removed, and
   `candidates_truncated` the relevant candidates kept and left out by the limit; the
   two never share a CVE. The warnings come in the order `excluded_term`,
-  `additional_topic_not_explored`, `source_snapshot_is_excerpt`,
-  `protocol_context_truncated`, `unrelated_candidates_dropped`, `candidates_truncated`.
+  `topic_not_resolved` or `additional_topic_not_explored`, `source_snapshot_is_excerpt`,
+  `term_not_indexed` (a direct FiGHT search's only), `protocol_context_truncated`,
+  `unrelated_candidates_dropped`, `candidates_truncated`.
 - A warning is given whenever the snapshot matched more techniques, or topic context
   holds more relevant candidates, than the section lists, whatever bound cut it: the
   limit, explicit or default, `max_results_per_search` for FiGHT, or the 20-item
@@ -429,12 +431,14 @@ answer does not list, each once:
   topic step kept and left out at its limit, which topic context hands the investigation
   internally, beside the sealed response. Let L be the CVEs the answer lists, in
   `implementation_candidates` or, under `protocol_context_only`,
-  `excluded_implementation_candidates`, and F the techniques the adopted topic step
-  matched and did not list. The count is |K| − |L| + F. A CVE left out by the topic step
+  `excluded_implementation_candidates`, and F the techniques the adopted step that
+  searched FiGHT (the topic step or a direct FiGHT search) matched and did not list. The
+  count is |K| − |L| + F. A CVE left out by the topic step
   and found again by a search step is one member of K, so it counts once whether or not
   the answer is cut again when it is assembled, and not at all if the answer lists it.
-- A run issues at most one topic step, and that step's limit is the per-call cap the
-  answer also uses, so techniques have one source and F is exact.
+- A run issues at most one topic step and at most one step that searches FiGHT, and
+  that step's limit is the per-call cap the answer also uses, so techniques have one
+  source and F is exact.
 - The count never includes what a CVE tool's own top-k or a retrieval channel cut. The
   answer's `unrelated_candidates_dropped` counts search-step relevance drops that are
   not in K, so it never shares a CVE with `answer_truncated`. The planner observes the
@@ -443,16 +447,16 @@ answer does not list, each once:
 - The evidence-set validator applies the topic-response rules to each step's topic
   warnings, allows `answer_truncated` at most once with a positive subject and never in
   a run with no adopted step, and checks the relations a set does carry: the count is at
-  least the adopted topic step's two subjects together, and when the answer lists fewer
-  CVEs than the per-call cap, it equals the FiGHT subject (the topic step then left no
-  CVE out). Replay requires the same counts from the sources now.
+  least the adopted steps' cut subjects together, and when the answer lists fewer
+  CVEs than the per-call cap, it equals the FiGHT subject of the step that searched
+  FiGHT (the topic step then left no CVE out). Replay requires the same counts from the sources now.
 
 A `search` response is the best-ranked bounded result of the top-k each channel cut on
 its own: never a complete list, and with no count of what lies beyond, since a count
 would need every retriever port to change and a lexical match is any shared token.
 `candidates_truncated` counts only candidates topic context already held, and
-`answer_truncated` only the CVEs the adopted steps kept and the techniques the topic step
-matched. The descriptions of `SearchRequest.limit`, of
+`answer_truncated` only the CVEs the adopted steps kept and the techniques the step that
+searched FiGHT matched. The descriptions of `SearchRequest.limit`, of
 `TopicContextRequest.limit` and `max_results_per_search`, and of
 `FightSearchRequest.limit` say which of these holds for each, and a follow-up records a
 matched count for `search`. §15 lists the schemas this section changes.

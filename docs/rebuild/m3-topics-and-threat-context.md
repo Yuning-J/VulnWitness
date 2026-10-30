@@ -78,8 +78,16 @@ source, CVE relevance tiers and a scoped topic-context service.
   `source_status` and maps it to `theoretical`, `proof_of_concept`, `observed` or
   `observed_outside_5g` (observed in enterprise IT or earlier 3GPP generations).
   An unknown status fails the load so its meaning is reviewed first.
-- Search matches the given terms against a technique's name, BLUF, description,
-  procedure examples and tactic names; the score is the number of distinct terms.
+- Search matches each given term as a phrase against a technique's name, BLUF,
+  description, procedure examples and tactic names. The techniques it matches are
+  ordered by phrase-unit Okapi BM25 (`domain/bm25.py`, k1 1.2, b 0.75, shared with
+  the CVE index): spellings with one alias key count once; a term's tf is its spans
+  over the five fields, weighted alike, its df the techniques holding it, and a
+  technique's length its word count over those fields. Scores are rounded to 6
+  places, best first, ties by technique ID. The order decides which matches the
+  limit keeps, never which techniques match, and is the same for a topic's search
+  and an investigation's direct search (`fight_direct_search`). An outcome also
+  names the sent terms no technique holds.
   Each item cites one anchor per technique: source `mitre_fight_yaml`,
   `protocol_threat_context`, authoritative, versioned
   `<data version>@<commit>+sha256:<snapshot SHA-256>`, with the BLUF as excerpt.
@@ -112,7 +120,13 @@ keeps; `max_results_per_search` (default and maximum 20) bounds every backend
 search the exploration sends.
 
 1. Resolve the topic. An unresolved query consults no source and returns
-   `no_match` with `topic_not_resolved` and any `excluded_term` warnings.
+   `no_match` with `topic_not_resolved` and any `excluded_term` warnings. Only an
+   investigation searches FiGHT without a topic, with the question's own words
+   (`fight_direct_search`, `search_fight_directly`, `m4-bounded-investigation.md`):
+   one FiGHT search under `protocol_context_only`, never for a query that names an
+   excluded term or a CVE ID or holds a word the registry reads alone as a topic or
+   excluded term, and its response names each sent word no technique holds
+   (`term_not_indexed`). `explore` keeps the rule above.
 2. Unless the scope is `implementation_only`, search FiGHT with the topic's name,
    aliases and entities, for at most `limit` and at most `max_results_per_search`
    techniques. Results count only from a source that names the verified

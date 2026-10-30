@@ -33,7 +33,7 @@ The rules, checked on every response before it leaves the application layer:
 """
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 
 from cve_kgrag.domain.cve import CVE_ID_PATTERN, CveRecord
 from cve_kgrag.domain.evidence import Claim, EvidenceAnchor, derive_evidence_id
@@ -56,6 +56,7 @@ from cve_kgrag.domain.threat_context import (
     format_fight_locator,
 )
 from cve_kgrag.domain.topic_context import (
+    SERVED_STATUSES,
     TOPIC_COUNT_WARNING_CODES,
     TOPIC_WARNING_ORDER,
     KnowledgeSource,
@@ -507,6 +508,36 @@ def find_source_status(
     return None
 
 
+def find_unindexed_term_violations(
+    warnings: Sequence[TopicContextWarning],
+    *,
+    is_resolved: bool,
+    fight_status: ResultStatus | None,
+    sent_terms: Sequence[str],
+    listed_matched_terms: Collection[str],
+) -> list[str]:
+    """``term_not_indexed`` appears only on a direct FiGHT search (no topic resolved)
+    whose FiGHT outcome is served, each subject once, one of the terms it sent and none a
+    listed technique matched."""
+    violations: list[str] = []
+    named_subjects: list[str] = []
+    for warning in warnings:
+        if warning.code is not TopicContextWarningCode.TERM_NOT_INDEXED:
+            continue
+        if is_resolved or fight_status not in SERVED_STATUSES:
+            violations.append(
+                "term_not_indexed needs a direct FiGHT search whose FiGHT outcome was served"
+            )
+        if warning.subject in named_subjects:
+            violations.append("term_not_indexed names a term more than once")
+        named_subjects.append(warning.subject)
+        if warning.subject not in sent_terms:
+            violations.append("term_not_indexed names a term the FiGHT search did not send")
+        if warning.subject in listed_matched_terms:
+            violations.append("term_not_indexed names a term a listed technique holds")
+    return violations
+
+
 def find_topic_warning_violations(
     warnings: Sequence[TopicContextWarning],
     *,
@@ -514,15 +545,27 @@ def find_topic_warning_violations(
     listed_technique_count: int,
     listed_candidate_count: int,
     pinned_snapshot: KnownFightSnapshot | None,
+    is_resolved: bool,
+    sent_terms: Sequence[str],
+    listed_matched_terms: Collection[str],
 ) -> list[str]:
     """Topic warnings' structure and their relations to what the response lists (ADR 0009
     §11a): the warnings come in their fixed order; each count warning appears at most
     once, with a positive decimal subject; ``protocol_context_truncated`` only beside an
     ``ok`` FiGHT outcome (``fight_status``), the techniques listed plus its count at most
     the pinned snapshot's technique count; ``candidates_truncated`` only beside a
-    non-empty candidate section. No count can be checked against its truth here: a
-    response does not carry the inputs that derive it, which replay re-runs."""
-    violations: list[str] = []
+    non-empty candidate section; ``term_not_indexed`` as
+    ``find_unindexed_term_violations`` says, over the ``sent_terms`` of a direct FiGHT
+    search and the ``listed_matched_terms`` of the techniques listed. No count can be
+    checked against its truth here: a response does not carry the inputs that derive it,
+    which replay re-runs."""
+    violations = find_unindexed_term_violations(
+        warnings,
+        is_resolved=is_resolved,
+        fight_status=fight_status,
+        sent_terms=sent_terms,
+        listed_matched_terms=listed_matched_terms,
+    )
     previous_position = 0
     for warning in warnings:
         position = TOPIC_WARNING_ORDER[warning.code]
@@ -559,21 +602,39 @@ def find_topic_warning_violations(
     return violations
 
 
+def is_direct_fight_search(response: TopicContextResponse) -> bool:
+    """Whether the response is a direct FiGHT search's: no topic resolved and no excluded
+    term was named, under ``protocol_context_only``, with FiGHT its only source outcome."""
+    outcome_sources: list[KnowledgeSource] = []
+    for outcome in response.source_outcomes:
+        outcome_sources.append(outcome.source)
+    return (
+        not response.resolution.matches
+        and not response.resolution.excluded_terms
+        and response.requested_scope is QueryScope.PROTOCOL_CONTEXT_ONLY
+        and tuple(outcome_sources) == (KnowledgeSource.MITRE_FIGHT,)
+    )
+
+
 def find_topic_status_violations(
     response: TopicContextResponse, candidates: list[Candidate]
 ) -> list[str]:
-    """Outcomes name exactly the consulted sources, agree with the sections, and the
-    status is the one ``decide_topic_status`` gives for them."""
+    """Outcomes name exactly the consulted sources (a resolved topic's, or for an
+    unresolved query none, or FiGHT alone for a direct search), agree with the sections,
+    and the status is the one ``decide_topic_status`` gives for them."""
     violations: list[str] = []
     outcome_sources: list[KnowledgeSource] = []
     outcomes_by_source: dict[KnowledgeSource, SourceOutcome] = {}
     for outcome in response.source_outcomes:
         outcome_sources.append(outcome.source)
         outcomes_by_source[outcome.source] = outcome
-    expected_sources = (
-        list_consulted_sources(response.requested_scope) if response.resolution.matches else ()
-    )
-    if tuple(outcome_sources) != expected_sources:
+    if response.resolution.matches:
+        is_expected_sources = tuple(outcome_sources) == list_consulted_sources(
+            response.requested_scope
+        )
+    else:
+        is_expected_sources = not outcome_sources or is_direct_fight_search(response)
+    if not is_expected_sources:
         violations.append("source_outcomes do not name exactly the consulted sources")
     fight_outcome = outcomes_by_source.get(KnowledgeSource.MITRE_FIGHT)
     if response.protocol_context and (
@@ -600,10 +661,20 @@ def find_topic_status_violations(
     return violations
 
 
+def collect_matched_terms(items: Iterable[ThreatContextItem]) -> set[str]:
+    """Every term a listed technique matched."""
+    listed_matched_terms: set[str] = set()
+    for item in items:
+        listed_matched_terms.update(item.matched_terms)
+    return listed_matched_terms
+
+
 def validate_topic_context_response(
     response: TopicContextResponse,
     pinned_fight_snapshot: KnownFightSnapshot | None,
     evidence_catalog: EvidenceCatalog,
+    *,
+    sent_fight_terms: Sequence[str] = (),
 ) -> None:
     """Raise ``EvidenceValidationError`` if the response mixes scopes or cites bad evidence.
 
@@ -612,7 +683,9 @@ def validate_topic_context_response(
     implementation_only answer holds no threat context, every anchor in the response
     is cited, and the status follows from the source outcomes. ``evidence_catalog``
     holds what the service's sources hold; every anchor, record and technique the
-    response serves must equal the catalog's.
+    response serves must equal the catalog's. ``sent_fight_terms`` are the words a
+    direct FiGHT search sent, none for a topic's exploration: a ``term_not_indexed``
+    warning names one of them.
     """
     anchors_by_id = index_anchors(response.evidence)
     candidates: list[Candidate] = []
@@ -658,6 +731,9 @@ def validate_topic_context_response(
             listed_technique_count=len(response.protocol_context),
             listed_candidate_count=len(candidates),
             pinned_snapshot=pinned_fight_snapshot,
+            is_resolved=bool(response.resolution.matches),
+            sent_terms=sent_fight_terms,
+            listed_matched_terms=collect_matched_terms(response.protocol_context),
         )
     )
     if response.result_sha256 != response.compute_result_sha256():

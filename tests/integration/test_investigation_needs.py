@@ -7,27 +7,19 @@ from cve_kgrag.domain.investigation import (
     DecisionBasis,
     EvidenceNeed,
     EvidenceNeedKind,
+    FightBlock,
+    FightBlockReason,
     InvestigationWarningCode,
-    KnowledgeEvidenceSet,
     NeedOutcome,
     StepReason,
     StopReason,
 )
 from cve_kgrag.domain.taxonomy import ResultStatus
 from tests.support.evaluation import run_deterministically, run_with_replies
-from tests.support.investigation import list_step_reasons
+from tests.support.investigation import list_need_outcomes, list_step_reasons
 from tests.support.planners import UNAVAILABLE_REPLY, build_plan_reply
 
 SEARCH_GATEWAY = {"tool": "cve_search", "query": "zzqx gateway"}
-
-
-def list_need_outcomes(
-    evidence_set: KnowledgeEvidenceSet,
-) -> list[tuple[EvidenceNeedKind, str | None, NeedOutcome]]:
-    need_outcomes: list[tuple[EvidenceNeedKind, str | None, NeedOutcome]] = []
-    for need in evidence_set.coverage.needs:
-        need_outcomes.append((need.kind, need.subject, need.outcome))
-    return need_outcomes
 
 
 def test_answer_beside_a_word_no_record_holds_stops_needs_unmet_and_keeps_the_answer(
@@ -89,11 +81,15 @@ def test_found_cve_id_beside_a_resolved_topic_explores_the_topic_for_its_needs(
     ]
 
 
-def test_mixed_free_text_without_a_topic_stops_with_protocol_context_unsupported(
+def test_mixed_free_text_naming_an_excluded_term_stops_with_protocol_context_unsupported(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    evidence_set = run_deterministically(fixture_bundle, "sql injection gateway", "mixed")
+    evidence_set = run_deterministically(fixture_bundle, "EPS AKA crash", "mixed")
 
+    assert evidence_set.interpretation.fight_block == FightBlock(
+        reason=FightBlockReason.EXCLUDED_TERM, subject="EPS AKA"
+    )
+    assert list_step_reasons(evidence_set) == [StepReason.QUERY_TERMS]
     assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
     assert list_need_outcomes(evidence_set) == [
         (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.FOUND),

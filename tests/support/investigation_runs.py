@@ -16,6 +16,7 @@ from tests.support.fakes import (
     build_lexical_match,
 )
 from tests.support.investigation import (
+    FIGHT_FREE_TEXT_QUERY,
     build_deadline_nearing_service,
     build_investigation_request,
     build_test_investigation_service,
@@ -321,3 +322,55 @@ def run_marked_free_text(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
     """A question carrying ``ECHO_MARKER`` that names no topic, so the audit derives a
     ``topic_not_resolved`` warning about the query."""
     return investigate(fixture_bundle, f"{ECHO_MARKER} crash", "mixed")
+
+
+def run_fight_direct_search(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """Protocol-only free text no topic resolves: one ``fight_direct_search`` of its own
+    words lists the excerpt's techniques that hold them."""
+    return investigate(fixture_bundle, FIGHT_FREE_TEXT_QUERY, "protocol_context_only")
+
+
+def run_mixed_fight_direct_search(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """Mixed free text no topic resolves: round 1 runs ``cve_search`` then
+    ``fight_direct_search`` of the same words."""
+    return investigate(fixture_bundle, FIGHT_FREE_TEXT_QUERY, "mixed")
+
+
+def run_fight_direct_search_of_an_unindexed_word(
+    fixture_bundle: FixtureBundle,
+) -> KnowledgeEvidenceSet:
+    """The protocol-only direct FiGHT search of ``suci threats``: its step's last topic
+    warning is ``term_not_indexed:threats``, so the protocol need is ``not_found`` beside
+    the techniques ``suci`` matched and the run stops ``needs_unmet``."""
+    return investigate(fixture_bundle, "SUCI threats", "protocol_context_only")
+
+
+def run_fight_direct_search_fight_failing(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """The protocol-only direct FiGHT search on the deployment ``wire_fight_failing``
+    describes: its one step's FiGHT outcome failed."""
+    service = build_test_investigation_service(fixture_bundle, **wire_fight_failing())
+    return service.investigate(
+        build_investigation_request(FIGHT_FREE_TEXT_QUERY, "protocol_context_only")
+    )
+
+
+def run_fight_direct_search_over_the_byte_cap(
+    fixture_bundle: FixtureBundle,
+) -> KnowledgeEvidenceSet:
+    """The protocol-only direct FiGHT search under a byte cap one byte below its response:
+    the step is discarded, so the protocol need is ``not_evaluated``."""
+    step_bytes = run_fight_direct_search(fixture_bundle).trajectory.steps[0].context_bytes
+    return investigate(
+        fixture_bundle,
+        FIGHT_FREE_TEXT_QUERY,
+        "protocol_context_only",
+        budget={"max_context_bytes": step_bytes - 1},
+    )
+
+
+def run_mixed_free_text_over_the_source_budget(
+    fixture_bundle: FixtureBundle,
+) -> KnowledgeEvidenceSet:
+    """Mixed free text with one source allowed: the policy's round-1 plan consults two, so
+    nothing runs and every need is ``not_evaluated``."""
+    return investigate(fixture_bundle, FIGHT_FREE_TEXT_QUERY, "mixed", budget={"max_sources": 1})

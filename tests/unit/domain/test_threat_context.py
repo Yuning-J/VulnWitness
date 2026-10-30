@@ -63,7 +63,7 @@ def test_outcome_whose_evidence_comes_from_another_snapshot_is_rejected() -> Non
 
 
 def test_failed_outcome_naming_a_snapshot_is_rejected() -> None:
-    with pytest.raises(ValidationError, match="cannot carry items or a snapshot"):
+    with pytest.raises(ValidationError, match="cannot carry items, unindexed terms or a snapshot"):
         ThreatContextOutcome(
             status=BackendStatus.ERROR, failure=BackendFailure.SEARCH_FAILED, snapshot=SNAPSHOT
         )

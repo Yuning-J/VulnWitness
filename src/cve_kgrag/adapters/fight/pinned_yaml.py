@@ -6,6 +6,13 @@ reviewed snapshot catalog, which alone states its coverage and expected contents
 It is parsed once, with a safe loader that also rejects duplicate and merge keys;
 any mismatch or shape violation raises ``FightSnapshotError`` and nothing from the
 file is served. Queries never touch the network or the file system.
+
+A search orders the techniques it matches by phrase-unit Okapi BM25: each sent term is
+matched as a phrase, as an alias is, and scores only where it matches. Its tf is its
+spans summed over a technique's five fields, weighted alike; its df the techniques
+holding it; a technique's length its word count over those fields. Scores are rounded to
+``SCORE_DECIMALS`` places, best first, ties by technique ID. The order decides which
+matches the limit keeps, never which techniques match.
 """
 
 import re
@@ -18,6 +25,12 @@ import yaml
 from pydantic import ValidationError
 
 from cve_kgrag.adapters.strict_yaml import load_strict_yaml
+from cve_kgrag.domain.bm25 import (
+    SCORE_DECIMALS,
+    compute_inverse_document_frequency,
+    compute_length_saturation,
+    compute_term_weight,
+)
 from cve_kgrag.domain.evidence import (
     MAX_EXCERPT_CHARS,
     UNSEALED_EVIDENCE_ID,
@@ -70,9 +83,23 @@ class FightSnapshotError(ValueError):
 
 @dataclass(frozen=True)
 class IndexedTechnique:
+    """A technique as searched: ``word_count`` is its words over the five fields, the
+    ``TERM_BOUNDARY`` markers between them excluded, which is its BM25 length."""
+
     item: ThreatContextItem
     anchor: EvidenceAnchor
     terms_by_field: dict[TechniqueField, list[str]]
+    word_count: int
+
+
+@dataclass(frozen=True)
+class TechniqueMatch:
+    """A technique naming at least one sent term; ``span_counts`` maps each term's
+    ``alias_key`` to its spans summed over the five fields, its BM25 tf."""
+
+    indexed_technique: IndexedTechnique
+    item: ThreatContextItem
+    span_counts: dict[str, int]
 
 
 def require_text(entry: Mapping[str, Any], key: str, owner: str) -> str:
@@ -181,6 +208,59 @@ def split_field_terms(texts: Sequence[str]) -> list[str]:
     return field_terms
 
 
+def count_words(terms_by_field: Mapping[TechniqueField, list[str]]) -> int:
+    word_count = 0
+    for field_terms in terms_by_field.values():
+        for term in field_terms:
+            if term != TERM_BOUNDARY:
+                word_count += 1
+    return word_count
+
+
+def list_term_keys(terms: Sequence[str]) -> list[tuple[str, str]]:
+    """Each sent term with its ``alias_key``; spellings with one key (5G-AKA, 5G AKA,
+    5gaka) count once, as the first given, and a term with no words is dropped."""
+    term_keys: list[tuple[str, str]] = []
+    known_keys: set[str] = set()
+    for term in terms:
+        term_key = alias_key(term)
+        if term_key and term_key not in known_keys:
+            known_keys.add(term_key)
+            term_keys.append((term, term_key))
+    return term_keys
+
+
+def match_technique(
+    indexed_technique: IndexedTechnique, term_keys: Sequence[tuple[str, str]]
+) -> TechniqueMatch | None:
+    """The terms and fields ``indexed_technique`` names, or ``None`` when it names none.
+
+    ``matched_terms`` follow the order of ``term_keys``; ``matched_fields`` the order
+    name, bluf, description, procedureexamples, tactics.
+    """
+    matched_field_names: set[TechniqueField] = set()
+    matched_terms: list[str] = []
+    span_counts: dict[str, int] = {}
+    for term, term_key in term_keys:
+        for field_name, field_terms in indexed_technique.terms_by_field.items():
+            spans = find_spans(field_terms, term_key)
+            if spans:
+                matched_field_names.add(field_name)
+                span_counts[term_key] = span_counts.get(term_key, 0) + len(spans)
+                if term not in matched_terms:
+                    matched_terms.append(term)
+    if not matched_terms:
+        return None
+    matched_fields: list[TechniqueField] = []
+    for field_name in indexed_technique.terms_by_field:
+        if field_name in matched_field_names:
+            matched_fields.append(field_name)
+    item = indexed_technique.item.model_copy(
+        update={"matched_fields": tuple(matched_fields), "matched_terms": tuple(matched_terms)}
+    )
+    return TechniqueMatch(indexed_technique=indexed_technique, item=item, span_counts=span_counts)
+
+
 class PinnedFightYamlSource:
     """Implements ``FightSource`` over one verified snapshot."""
 
@@ -212,6 +292,11 @@ class PinnedFightYamlSource:
         tactic_names = read_tactic_names(root)
         self._techniques = self._index(root, tactic_names)
         check_catalogued_contents(known_snapshot, set(tactic_names), self._techniques)
+        # A catalogued snapshot holds at least one technique, so the average is defined.
+        total_word_count = 0
+        for indexed_technique in self._techniques:
+            total_word_count += indexed_technique.word_count
+        self._average_word_count = total_word_count / len(self._techniques)
         self._snapshot_info = FightSnapshotInfo(
             repository_url=known_snapshot.repository_url,
             commit=known_snapshot.commit,
@@ -241,54 +326,66 @@ class PinnedFightYamlSource:
         return tuple(indexed_items)
 
     def search(self, terms: Sequence[str], limit: int) -> ThreatContextOutcome:
-        """Techniques naming any term, by number of distinct terms named, then by ID.
+        """Up to ``limit`` techniques naming any term, best phrase-unit BM25 score first.
 
+        Each distinct ``alias_key`` among ``terms`` is one BM25 term, matched as a phrase.
+        A technique's score sums the weights of the terms it names in ascending
+        ``alias_key`` order, so the order of ``terms`` never changes it; scores are
+        rounded to ``SCORE_DECIMALS`` places and ties go to technique ID, ascending.
+        ``matched_count`` counts every technique naming a term, before the limit.
         ``matched_terms`` follow the order of ``terms``; ``matched_fields`` the order
-        name, bluf, description, procedureexamples, tactics.
+        name, bluf, description, procedureexamples, tactics. ``unindexed_terms`` are the
+        terms no technique names, in the order of ``terms``.
         """
-        # Spellings with one key (5G-AKA, 5G AKA, 5gaka) count once, as the first given.
-        term_keys: list[tuple[str, str]] = []
-        known_keys: set[str] = set()
-        for term in terms:
-            term_key = alias_key(term)
-            if term_key and term_key not in known_keys:
-                known_keys.add(term_key)
-                term_keys.append((term, term_key))
-        scored_hits: list[tuple[int, IndexedTechnique, ThreatContextItem]] = []
+        term_keys = list_term_keys(terms)
+        technique_matches: list[TechniqueMatch] = []
+        document_frequencies: dict[str, int] = {}
         for indexed_technique in self._techniques:
-            matched_field_names: set[TechniqueField] = set()
-            matched_terms: list[str] = []
-            for term, term_key in term_keys:
-                for field_name, field_terms in indexed_technique.terms_by_field.items():
-                    if find_spans(field_terms, term_key):
-                        matched_field_names.add(field_name)
-                        if term not in matched_terms:
-                            matched_terms.append(term)
-            matched_fields: list[TechniqueField] = []
-            for field_name in indexed_technique.terms_by_field:
-                if field_name in matched_field_names:
-                    matched_fields.append(field_name)
-            if matched_terms:
-                item = indexed_technique.item.model_copy(
-                    update={
-                        "matched_fields": tuple(matched_fields),
-                        "matched_terms": tuple(matched_terms),
-                    }
-                )
-                scored_hits.append((len(matched_terms), indexed_technique, item))
-        scored_hits.sort(key=lambda hit: (-hit[0], hit[2].technique_id))
+            technique_match = match_technique(indexed_technique, term_keys)
+            if technique_match is None:
+                continue
+            technique_matches.append(technique_match)
+            for term_key in technique_match.span_counts:
+                document_frequencies[term_key] = document_frequencies.get(term_key, 0) + 1
+        scored_matches: list[tuple[float, TechniqueMatch]] = []
+        for technique_match in technique_matches:
+            score = self._score(technique_match, document_frequencies)
+            scored_matches.append((round(score, SCORE_DECIMALS), technique_match))
+        scored_matches.sort(key=lambda scored: (-scored[0], scored[1].item.technique_id))
+        unindexed_terms: list[str] = []
+        for term, term_key in term_keys:
+            if term_key not in document_frequencies:
+                unindexed_terms.append(term)
         items: list[ThreatContextItem] = []
         anchors: list[EvidenceAnchor] = []
-        for _, indexed_technique, item in scored_hits[:limit]:
-            items.append(item)
-            anchors.append(indexed_technique.anchor)
+        for _, technique_match in scored_matches[:limit]:
+            items.append(technique_match.item)
+            anchors.append(technique_match.indexed_technique.anchor)
         return ThreatContextOutcome(
             status=BackendStatus.OK,
             items=tuple(items),
-            matched_count=len(scored_hits),
+            matched_count=len(scored_matches),
+            unindexed_terms=tuple(unindexed_terms),
             evidence=tuple(anchors),
             snapshot=self._snapshot_info,
         )
+
+    def _score(
+        self, technique_match: TechniqueMatch, document_frequencies: Mapping[str, int]
+    ) -> float:
+        """The match's unrounded BM25 score over the snapshot's techniques."""
+        length_saturation = compute_length_saturation(
+            technique_match.indexed_technique.word_count, self._average_word_count
+        )
+        score = 0.0
+        for term_key in sorted(technique_match.span_counts):
+            inverse_document_frequency = compute_inverse_document_frequency(
+                len(self._techniques), document_frequencies[term_key]
+            )
+            score += compute_term_weight(
+                inverse_document_frequency, technique_match.span_counts[term_key], length_saturation
+            )
+        return score
 
     def _index(
         self, document: Mapping[str, Any], tactic_names: Mapping[str, str]
@@ -348,7 +445,12 @@ class PinnedFightYamlSource:
             ),
             TechniqueField.TACTICS: split_field_terms(technique_tactic_names),
         }
-        return IndexedTechnique(item=item, anchor=anchor, terms_by_field=terms_by_field)
+        return IndexedTechnique(
+            item=item,
+            anchor=anchor,
+            terms_by_field=terms_by_field,
+            word_count=count_words(terms_by_field),
+        )
 
     def _build_anchor(self, technique_id: str, content_sha256: str, bluf: str) -> EvidenceAnchor:
         known_snapshot = self._known_snapshot

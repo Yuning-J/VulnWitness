@@ -243,9 +243,10 @@ def collect_sightings(
 def count_topic_cuts(
     admitted_executions: Sequence[tuple[ToolStep, ToolExecution]],
 ) -> tuple[set[str], int]:
-    """What the adopted topic step left out at its limit: the CVE IDs it kept and did not
-    list, and the techniques it matched and did not list. A run issues at most one topic
-    step, and its limit is the per-call cap the answer uses, so these are exact."""
+    """What the adopted topic or direct FiGHT step left out at its limit: the CVE IDs a
+    topic step kept and did not list, and the techniques the step matched and did not
+    list. A run issues at most one topic step and at most one step that searches FiGHT,
+    and its limit is the per-call cap the answer uses, so these are exact."""
     omitted_cve_ids: set[str] = set()
     unlisted_technique_count = 0
     for _, execution in admitted_executions:
@@ -261,7 +262,8 @@ def count_topic_cuts(
 def collect_protocol_context(
     admitted_executions: Sequence[tuple[ToolStep, ToolExecution]],
 ) -> list[ThreatContextItem]:
-    """Threat-context items in first-seen order, each technique once."""
+    """Threat-context items in first-seen order, each technique once: those of the one
+    step that searches FiGHT, a topic step or a direct FiGHT search."""
     items_by_technique: dict[str, ThreatContextItem] = {}
     for _, execution in admitted_executions:
         if execution.topic_response is None:
@@ -318,8 +320,8 @@ def assemble_answer(
         )
     protocol_context = tuple(collect_protocol_context(admitted_executions))
     # |K| - |L| + F (ADR 0009 §11a): K the CVEs the adopted steps kept, the topic step's
-    # cuts included; L those the answer lists; F the techniques the topic step matched
-    # and did not list.
+    # cuts included; L those the answer lists; F the techniques the step that searched
+    # FiGHT (a topic step or a direct FiGHT search) matched and did not list.
     omitted_topic_cve_ids, unlisted_technique_count = count_topic_cuts(admitted_executions)
     known_cve_ids: set[str] = set(omitted_topic_cve_ids)
     for sighting in sightings:

@@ -21,7 +21,7 @@ B changes when a run stops and whether it refines. It never removes or reorders 
 A need has a kind, a subject and an outcome. Kinds: `named_cve` (subject: the ID),
 `implementation_cves`, `protocol_context`, `affectedness` (subject: the filter value or the
 product and version the text names). Outcomes: `found`, `not_found`,
-`source_unavailable`, `unsupported`. The needs are derived by code from the request and its
+`source_unavailable`, `unsupported`, `not_evaluated`. The needs are derived by code from the request and its
 interpretation, never from gold, in this order:
 
 1. One `named_cve` per CVE ID the query names.
@@ -52,17 +52,36 @@ under `mixed`, `protocol_context`.
 
 Judged from the admitted steps and the answer only. Which tool can serve a need is fixed:
 `cve_exact_lookup` the named CVEs, `cve_search` implementation CVEs, `topic_context`
-implementation CVEs and protocol context, no tool affectedness.
+implementation CVEs and protocol context, `fight_direct_search` protocol context when no
+topic resolved ([`m7b-c-fight-direct-search.md`](m7b-c-fight-direct-search.md)), no tool
+affectedness.
 
-- **named_cve(ID)**: `found` when an admitted exact lookup returned the ID;
-  `source_unavailable` when such a lookup's CVE source failed; else `not_found`, and the
-  step's `unknown_cve_id` or `excluded_by_filters` warning says why.
-- **protocol_context**: `unsupported` without a resolved topic (C adds FiGHT search
-  without a card); `found` when the answer lists a technique an admitted topic step
-  returned; `source_unavailable` when a topic step's FiGHT source failed; else `not_found`.
+Every need but affectedness is `not_evaluated` when no admitted step of a tool that
+serves it has a result: no such step ran, or none was admitted (`timed_out`, discarded
+after the deadline or over the context budget, or `rejected_invalid_evidence`). Whether
+it is met cannot yet be judged; the outcome does not claim that no call was made. It is
+checked after `unsupported` and before every other outcome, so an admitted step whose
+source failed gives `source_unavailable`, never `not_evaluated`.
+
+- **named_cve(ID)**: `not_evaluated` without an admitted exact lookup naming the ID;
+  `found` when such a lookup returned the ID; `source_unavailable` when its CVE source
+  failed; else `not_found`, and the step's `unknown_cve_id` or `excluded_by_filters`
+  warning says why.
+- **protocol_context**: with a resolved topic, the serving steps are the admitted topic
+  steps. Without one, `unsupported` when the query's words may not enter a FiGHT search
+  without a reviewed topic (`interpretation.fight_terms` is empty and
+  `interpretation.fight_block` records the reason and its subject: an excluded term, a CVE
+  ID, or a word the registry reads alone as a topic or excluded term); otherwise the
+  serving steps are the admitted direct FiGHT searches (`fight_direct_search`). Then
+  `not_evaluated` without a serving step; without a topic, `not_found` when a serving
+  step warned `term_not_indexed` for a sent word the interpretation does not explain
+  (the FiGHT term-coverage rule below); `found` when the answer lists a technique a
+  serving step returned; `source_unavailable` when a serving step's FiGHT source failed;
+  else `not_found`.
 - **affectedness**: `source_unavailable`, since no deployment serves it (ADR 0003); the
   answer carries `applicability_unknown` for the subject.
-- **implementation_cves**: `not_found` when an admitted search warned `term_not_indexed`
+- **implementation_cves**: `not_evaluated` without an admitted CVE search or topic
+  step; `not_found` when an admitted search warned `term_not_indexed`
   for a search term the interpretation does not explain. The words of a matched alias
   or context term, and those words written together, explain a term, so `5GAKA` and
   `5G-AKA` judge alike; so do, in a question whether a product version is affected, the
@@ -77,6 +96,15 @@ that the answer is relevant: it catches a word no record holds and a plan that d
 word, but a query whose every word some record holds is met by whatever matches them
 ("srs ran vulnerabilities").
 
+The protocol need of a direct FiGHT search has the same term-coverage check. FiGHT's
+`term_not_indexed` is a topic warning a direct search raises for each sent word no
+technique holds (a topic's card search never raises it); the explanation rule is the
+CVE side's (`list_explained_terms`). It is a conservative check of what the retrieval
+covered, not a judgement of relevance: `not_found` says the evidence does not meet the
+whole protocol need, never that FiGHT holds nothing relevant; it removes no technique,
+and the warning names the uncovered word (`catcher` in `IMSI catcher threats`). FiGHT's
+warning never reaches the implementation need, whose rule reads search warnings only.
+
 ## Control flow
 
 The state machine is unchanged; assess, refine and the stop rules change.
@@ -86,8 +114,8 @@ The state machine is unchanged; assess, refine and the stop rules change.
   every need `found` (`sufficient`, `answer_found`); an answer whose only unmet needs are
   affectedness (`source_unavailable`, `affectedness_unavailable`); otherwise the run moves
   to refine (`needs_open`).
-- **Refine** plans at most one call for an open (`not_found`) implementation or protocol
-  need; a named CVE no lookup found is met by no other call, so an unknown ID beside plain
+- **Refine** plans at most one call for an open (`not_found` or `not_evaluated`)
+  implementation or protocol need, never retrying a call already issued; a named CVE no lookup found is met by no other call, so an unknown ID beside plain
   text refines nothing. With a resolved topic not yet called and such a need open, the
   topic call (`topic_after_unknown_ids` when every named ID is unknown,
   `topic_after_literal_miss` after a literal search of a topic query, else
@@ -138,7 +166,9 @@ whose need kinds equal the case's. `evaluation_format_version` moves to 3.
 - It cannot tell generic matches from relevant ones when every query word is held by some
   record, nor see a shortfall of relevant evidence (`5g-aka-threats`, `oai-cn5g`,
   `5g-aka-implementations` in the first run).
-- Without a card no tool reaches FiGHT, so protocol needs stay `unsupported` until C.
+- It does not search FiGHT without a card. That is C's direct FiGHT search
+  ([`m7b-c-fight-direct-search.md`](m7b-c-fight-direct-search.md)), so a protocol need is
+  `unsupported` only when the query's words may not enter a FiGHT search.
 - It misses versions written with a word between ("kamailio version 5.8.2"), multi-word
   products ("linux kernel 5.10.1") and hyphenated forms.
 - "What is CVE-X" searches no residual words; text B cannot recognise as a target is

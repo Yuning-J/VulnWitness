@@ -26,8 +26,10 @@ from cve_kgrag.composition import (
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.investigation import (
+    EvidenceNeedKind,
     InvestigationRequest,
     KnowledgeEvidenceSet,
+    NeedOutcome,
     SourceCapability,
     StepReason,
 )
@@ -58,6 +60,10 @@ from tests.support.services import build_fixture_service
 FightChoice = Literal["packaged", "unavailable", "failing"]
 BlockingBackend = Literal["lexical", "fight"]
 FIVE_G_AKA_TOPIC_ID = "3gpp:5g-aka"
+# Free text no topic resolves whose words the packaged FiGHT excerpt holds (FGT5019,
+# FGT5040, FGT1499.503 and FGT5019.005 name SUCI or discovery) and whose CVE search finds
+# CVE-9999-0004: its words may go to FiGHT.
+FIGHT_FREE_TEXT_QUERY = "SUCI discovery"
 # "5G-AKA", then 72 words written with the ﬃ ligature (one character, "ffi" once
 # normalized): 366 characters as typed, whose search terms fill 510 of a search's 512
 # characters once normalized, so a search adding a card term to them runs without it.
@@ -276,6 +282,15 @@ def update_trajectory(evidence_set: KnowledgeEvidenceSet, **changes: Any) -> Kno
     )
 
 
+def update_interpretation(
+    evidence_set: KnowledgeEvidenceSet, **changes: Any
+) -> KnowledgeEvidenceSet:
+    """``evidence_set`` with ``changes`` applied to its interpretation, resealed."""
+    return reseal_evidence_set(
+        evidence_set, interpretation=evidence_set.interpretation.model_copy(update=changes)
+    )
+
+
 def rewrite_step(
     evidence_set: KnowledgeEvidenceSet, step_index: int, **changes: Any
 ) -> KnowledgeEvidenceSet:
@@ -338,6 +353,15 @@ def list_warning_codes(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     for warning in evidence_set.warnings:
         warning_codes.append(warning.code.value)
     return warning_codes
+
+
+def list_need_outcomes(
+    evidence_set: KnowledgeEvidenceSet,
+) -> list[tuple[EvidenceNeedKind, str | None, NeedOutcome]]:
+    need_outcomes: list[tuple[EvidenceNeedKind, str | None, NeedOutcome]] = []
+    for need in evidence_set.coverage.needs:
+        need_outcomes.append((need.kind, need.subject, need.outcome))
+    return need_outcomes
 
 
 def build_productless_catalog() -> InMemoryEvidenceCatalog:

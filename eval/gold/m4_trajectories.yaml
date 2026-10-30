@@ -1,6 +1,6 @@
 # Hand-labelled investigation trajectories over the packaged 5G-AKA topic card, the
 # FiGHT 3.1.0 excerpt and the synthetic CVE fixture, with the deterministic policy
-# m7b.1 and no model planner. Edit only when the labelled truth changes; tests compare
+# m7b.2 and no model planner. Edit only when the labelled truth changes; tests compare
 # against this file and never regenerate it.
 #
 # Each row names the request, which FiGHT source the deployment serves
@@ -9,7 +9,8 @@
 # the per-product applicability, the warning codes in emitted order, the backend
 # queries charged and the rounds run. A step's `channels`, when given, are the
 # retrieval channels its CVE search executed. Implementation candidates carry their
-# relevance tier, null when no topic resolved.
+# relevance tier, null when no topic resolved. Protocol context is in the FiGHT search
+# order: phrase-unit BM25 score over the sent terms, best first, ties by technique ID.
 trajectories:
   - id: exact_id
     request: {query: "CVE-9999-0003", scope: implementation_only}
@@ -98,7 +99,7 @@ trajectories:
       status: ok
       implementation_candidates: []
       excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
-      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
+      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
       claims:
         - "fight:FGT1499.503"
         - "fight:FGT5019"
@@ -477,3 +478,81 @@ trajectories:
       warning_codes: []
       tool_calls: 1
       rounds: 1
+
+  # Protocol-only free text no topic resolves: FiGHT is searched once with the question's
+  # own words (suci, discovery). FGT5019 and FGT5040 hold both words, FGT1499.503 only
+  # suci and FGT5019.005 only discovery; no CVE source is consulted.
+  - id: protocol_free_text
+    request: {query: "SUCI discovery", scope: protocol_context_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: free_text
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: fight_direct_search, reason: query_terms_fight, charged_tool_calls: 1, admission: admitted, status: ok}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: ["FGT5040", "FGT5019", "FGT5019.005", "FGT1499.503"]
+      claims: ["fight:FGT1499.503", "fight:FGT5019", "fight:FGT5019.005", "fight:FGT5040"]
+      applicability: []
+      warning_codes: [topic_not_resolved]
+      tool_calls: 1
+      rounds: 1
+
+  # Mixed free text no topic resolves: round 1 searches the CVEs, then FiGHT, with the
+  # same words. CVE-9999-0004 names SUCI; FGT1499.503, FGT5019 and FGT5040 hold both
+  # suci and concealment.
+  - id: mixed_free_text
+    request: {query: "SUCI concealment", scope: mixed}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: free_text
+      transitions:
+        - [interpret, plan, query_interpreted]
+        - [plan, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, answer_found]
+        - [validate, return, answer_validated]
+      steps:
+        - {round: 1, tool: cve_search, reason: query_terms, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
+        - {round: 1, tool: fight_direct_search, reason: query_terms_fight, charged_tool_calls: 1, admission: admitted, status: ok}
+      stop_reason: sufficient
+      status: ok
+      implementation_candidates:
+        - {cve_id: "CVE-9999-0004", tier: null}
+      excluded_implementation_candidates: []
+      protocol_context: ["FGT5040", "FGT5019", "FGT1499.503"]
+      claims: ["cve:CVE-9999-0004", "fight:FGT1499.503", "fight:FGT5019", "fight:FGT5040"]
+      applicability: []
+      warning_codes: [topic_not_resolved]
+      tool_calls: 2
+      rounds: 1
+
+  # An excluded term bars the direct FiGHT search: the words are never stripped and sent
+  # around it, so protocol-only free text naming one stops before any call.
+  - id: excluded_term_protocol
+    request: {query: "EPS AKA crash", scope: protocol_context_only}
+    sources: {mitre_fight: packaged}
+    expected:
+      intent: free_text
+      transitions:
+        - [interpret, validate, protocol_scope_needs_topic]
+        - [validate, return, answer_validated]
+      steps: []
+      stop_reason: no_evidence
+      status: no_match
+      implementation_candidates: []
+      excluded_implementation_candidates: []
+      protocol_context: []
+      claims: []
+      applicability: []
+      warning_codes: [excluded_term, topic_not_resolved]
+      tool_calls: 0
+      rounds: 0

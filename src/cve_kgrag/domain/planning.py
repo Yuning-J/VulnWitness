@@ -12,7 +12,7 @@ re-checks the recorded one derive them with the same code.
 """
 
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal, Self, assert_never
 
 from pydantic import ConfigDict, Field, model_validator
 
@@ -41,6 +41,7 @@ class ToolName(StrEnum):
     CVE_EXACT_LOOKUP = "cve_exact_lookup"
     CVE_SEARCH = "cve_search"
     TOPIC_CONTEXT = "topic_context"
+    FIGHT_DIRECT_SEARCH = "fight_direct_search"
 
 
 class QueryIntent(StrEnum):
@@ -66,22 +67,37 @@ class TopicContextCall(ContractModel):
     topic_id: str = Field(pattern=TOPIC_ID_PATTERN)
 
 
+class FightDirectSearchCall(ContractModel):
+    """One MITRE FiGHT search with the question's own words, when no topic resolved. It
+    takes no arguments, so no planner chooses its words: the interpretation's
+    ``fight_terms`` are what it sends."""
+
+    tool: Literal[ToolName.FIGHT_DIRECT_SEARCH]
+
+
 ToolCall = Annotated[
-    CveExactLookupCall | CveSearchCall | TopicContextCall, Field(discriminator="tool")
+    CveExactLookupCall | CveSearchCall | TopicContextCall | FightDirectSearchCall,
+    Field(discriminator="tool"),
 ]
 
 
 def compute_call_key(call: ToolCall) -> str:
-    """Hash of what the backend query depends on: the set of IDs looked up, or the set
-    of search terms (``list_query_terms``: lexical retrieval ignores their order and
-    repeats, and a search never sends a stopword or low-signal word). Scope, filters,
-    the semantic flag and the limit are fixed for a run, so they stay out of the key."""
+    """Hash of what the backend query depends on: the set of IDs looked up, the set of
+    search terms (``list_query_terms``: lexical retrieval ignores their order and
+    repeats, and a search never sends a stopword or low-signal word), or the topic. A
+    direct FiGHT search sends the interpretation's words, fixed for a run, so its key is
+    constant and a run holds at most one. Scope, filters, the semantic flag and the limit
+    are fixed for a run, so they stay out of the key."""
     if isinstance(call, CveExactLookupCall):
         return canonical_sha256({"tool": call.tool.value, "cve_ids": sorted(set(call.cve_ids))})
     if isinstance(call, CveSearchCall):
         search_terms = sorted(set(list_query_terms(call.query)))
         return canonical_sha256({"tool": call.tool.value, "query_tokens": search_terms})
-    return canonical_sha256({"tool": call.tool.value, "topic_id": call.topic_id})
+    if isinstance(call, TopicContextCall):
+        return canonical_sha256({"tool": call.tool.value, "topic_id": call.topic_id})
+    if isinstance(call, FightDirectSearchCall):
+        return canonical_sha256({"tool": call.tool.value})
+    assert_never(call)
 
 
 def format_cve_tool_query(call: CveExactLookupCall | CveSearchCall) -> str:
@@ -93,9 +109,15 @@ def format_cve_tool_query(call: CveExactLookupCall | CveSearchCall) -> str:
 
 def is_tool_permitted(call: ToolCall, scope: QueryScope) -> bool:
     """Whether ``scope`` permits the call's tool: no CVE tool runs under
-    ``protocol_context_only``, whose answer holds no CVE."""
-    is_cve_tool = isinstance(call, CveExactLookupCall | CveSearchCall)
-    return not (is_cve_tool and scope is QueryScope.PROTOCOL_CONTEXT_ONLY)
+    ``protocol_context_only``, whose answer holds no CVE, and no direct FiGHT search under
+    ``implementation_only``, whose answer holds no threat context."""
+    if isinstance(call, CveExactLookupCall | CveSearchCall):
+        return scope is not QueryScope.PROTOCOL_CONTEXT_ONLY
+    if isinstance(call, FightDirectSearchCall):
+        return scope is not QueryScope.IMPLEMENTATION_ONLY
+    if isinstance(call, TopicContextCall):
+        return True
+    assert_never(call)
 
 
 def list_tool_name_sources(tool: ToolName, scope: QueryScope) -> tuple[KnowledgeSource, ...]:
@@ -103,7 +125,11 @@ def list_tool_name_sources(tool: ToolName, scope: QueryScope) -> tuple[Knowledge
     sends to them."""
     if tool is ToolName.TOPIC_CONTEXT:
         return list_consulted_sources(scope)
-    return (KnowledgeSource.CVE_SEARCH,)
+    if tool is ToolName.FIGHT_DIRECT_SEARCH:
+        return (KnowledgeSource.MITRE_FIGHT,)
+    if tool is ToolName.CVE_EXACT_LOOKUP or tool is ToolName.CVE_SEARCH:
+        return (KnowledgeSource.CVE_SEARCH,)
+    assert_never(tool)
 
 
 def list_tool_sources(call: ToolCall, scope: QueryScope) -> tuple[KnowledgeSource, ...]:
@@ -250,6 +276,8 @@ class PlanRejectionCode(StrEnum):
     CVE_ID_IN_SEARCH_TEXT = "cve_id_in_search_text"
     TERM_OUTSIDE_VOCABULARY = "term_outside_vocabulary"
     TOPIC_NOT_RESOLVED = "topic_not_resolved"
+    # The interpretation does not allow a direct FiGHT search; its fight_block says why.
+    FIGHT_DIRECT_SEARCH_BLOCKED = "fight_direct_search_blocked"
     REPEATED_CALL = "repeated_call"
     MISSING_BASELINE_SOURCE = "missing_baseline_source"
     MISSING_NAMED_CVE_ID = "missing_named_cve_id"

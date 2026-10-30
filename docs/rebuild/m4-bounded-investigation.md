@@ -3,7 +3,7 @@
 Schema version `2.0.0-dev.11`. Adds an investigation service that interprets a
 question, chooses allowlisted tools, observes what they return, refines at most
 once, and returns a validated `KnowledgeEvidenceSet` with a replayable
-trajectory. The deterministic policy `m7b.1` is the production planner; a model
+trajectory. The deterministic policy `m7b.2` is the production planner; a model
 planner is optional and untrusted. Design rationale: ADR 0002.
 
 ## Contracts
@@ -22,8 +22,10 @@ planner is optional and untrusted. Design rationale: ADR 0002.
   each template search a `topic_context` call fans out to (FiGHT is never
   filtered). Its vendors, products and purls are the product context, with each
   product version the query asks affectedness of.
-- A tool call is one of `cve_exact_lookup(cve_ids)`, `cve_search(query)` or
-  `topic_context(topic_id)`. Scope, filters, limits, the semantic flag, URLs,
+- A tool call is one of `cve_exact_lookup(cve_ids)`, `cve_search(query)`,
+  `topic_context(topic_id)` or `fight_direct_search()`, which takes no arguments:
+  it searches MITRE FiGHT with the interpretation's `fight_terms`, so no planner
+  chooses its words. Scope, filters, limits, the semantic flag, URLs,
   claims and evidence are not part of a call, so a closed model rejects a plan
   that tries to carry them.
 - The evidence set keeps implementation candidates (CVEs), excluded candidates
@@ -123,6 +125,19 @@ excluded tokens keeps an ambiguous alias out of free text: `EPS AKA crash` searc
 An ID longer than 32 characters is one the CVE program never assigns: it is neither
 looked up nor searched.
 
+`fight_block` says why the query's words may not go to FiGHT without a reviewed
+topic (`find_fight_block` in `application/investigation_policy.py`), checked in
+order: `topic_resolved` (the card's terms reach FiGHT through `topic_context`),
+`excluded_term` (an excluded term is named; its words are never stripped and sent
+around it), `cve_id_named` (a CVE ID the interpretation keeps is named), and
+`term_reads_as_topic` (one search term the registry reads alone as a topic or an
+excluded term, as `aka` in `5Géaka threats`, which the Unicode matcher does not
+report). Its `subject` is the first matched topic ID, excluded term or CVE ID, or that
+term.
+`fight_terms` are every search term when there is no block and none otherwise, never
+a subset (`list_fight_terms`, the one source of the words a direct FiGHT search
+sends).
+
 Intent, first match wins: `exact_id` (a CVE ID), `topic` (a topic resolved),
 `free_text` (search terms remain), `excluded_terms_only`, `unsearchable`.
 
@@ -137,21 +152,30 @@ than one lookup can return is blocked rather than cut short:
 | more CVE IDs than `max_results_per_call` (at most 20) | `policy_blocked` | `cve_ids_over_lookup_cap` |
 | intent `excluded_terms_only` | `no_evidence` | `excluded_terms_only` |
 | intent `unsearchable` | `no_evidence` | `no_searchable_terms` |
-| `protocol_context_only` with intent `free_text` | `no_evidence` | `protocol_scope_needs_topic` |
+| `protocol_context_only` with intent `free_text` and no `fight_terms` | `no_evidence` | `protocol_scope_needs_topic` |
 
-## Policy m7b.1
+## Policy m7b.2
 
-Round 1 plans one call:
+Round 1 plans one call, or two for `mixed` free text whose words may go to FiGHT:
 
 | Intent | `implementation_only` | `mixed` | `protocol_context_only` |
 |---|---|---|---|
 | `exact_id` | `cve_exact_lookup(ids)` | `cve_exact_lookup(ids)` | stopped |
 | `topic` | `cve_search(terms)`, literal first | `topic_context(topic)` | `topic_context(topic)` |
-| `free_text` | `cve_search(terms)` | `cve_search(terms)` | stopped |
+| `free_text` with `fight_terms` | `cve_search(terms)` | `cve_search(terms)`, then `fight_direct_search` | `fight_direct_search` |
+| `free_text` without `fight_terms` | `cve_search(terms)` | `cve_search(terms)` | stopped |
 
 An exact ID is never expanded into a topic or a semantic search. Under
 `implementation_only` a topic is searched literally first, because one search
-costs 1 and the topic's fan-out costs 4.
+costs 1 and the topic's fan-out costs 4. A direct FiGHT search has reason
+`query_terms_fight`. Both needs of a `mixed` question are known before planning and
+neither search depends on the other's results, so both run in round 1 under one
+budget pre-check. Under `max_sources: 1` that plan consults 2 sources, so no model
+is consulted and the run stops `budget_exhausted` (`plan_over_budget`) with no
+answer; under `max_tool_calls: 1` it costs 2, the gate rejects it
+`over_tool_call_budget` and the run stops the same way, since any round-1 plan a
+configured model proposes must reach both sources. A `mixed` topic query, whose
+`topic_context` consults both sources, behaves the same.
 
 Refinement, at most one rule, for a need round 1 left open (evidence needs:
 [`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)):
@@ -168,6 +192,10 @@ Refinement, at most one rule, for a need round 1 left open (evidence needs:
 - **R3, terms not searched.** The implementation need is open, round 1's admitted
   searches did not send every search term, and no unexplained term is unindexed.
   Search all of them (`query_terms_for_open_need`).
+
+No rule plans `fight_direct_search`: round 1 plans it wherever it may run, and a
+run holds at most one. No other call serves a protocol need it left open, so unless
+R3 serves an open implementation need, the run stops `no_refinement_available`.
 
 The policy never invents an ID or a term, and `plan_refinement` drops a
 refinement whose call round 1 already ran (a model's round-1 plan may have run it).
@@ -231,7 +259,9 @@ defaults to `DeterministicPlanning()`, and `discover_planner_setup` builds the p
 the settings configure (ADR 0004).
 For each round the core builds a `PlanningInput`: the caller's query as a quoted
 JSON string, the scope, intent, CVE IDs, topic ID, version and review status, the
-allowed tools with their costs, the sorted search vocabulary (the query's terms
+allowed tools with their costs (`fight_direct_search` only when the scope is not
+`implementation_only` and the interpretation has `fight_terms`), the sorted search
+vocabulary (the query's terms
 plus the resolved card's terms), the remaining tool calls and sources, the issued
 calls, and per executed step only its tool, status, answer count and warning
 codes. It never contains source records or their text.
@@ -240,7 +270,10 @@ The port returns `ModelReply`: raw plan text, or a typed failure. The core parse
 the text into a `QueryPlan` and passes it through `application/plan_gate.py`, the
 same gate as the policy's plan. Per call, in order: `tool_not_permitted_by_scope`,
 `invented_cve_id`, `cve_id_in_search_text`, `term_outside_vocabulary`,
-`topic_not_resolved`, `repeated_call`. Over the whole plan: `missing_baseline_source`
+`topic_not_resolved` or `fight_direct_search_blocked` (a direct FiGHT search the
+interpretation gives no `fight_terms`; `fight_block` says why), `repeated_call`.
+A direct FiGHT search is not permitted under `implementation_only`, and its call key
+is constant, so a run holds at most one. Over the whole plan: `missing_baseline_source`
 (a round-1 plan skipping a source the policy's round-1 plan consults),
 `missing_named_cve_id`, `over_tool_call_budget`, `over_source_budget`. Any rejection
 rejects the whole plan.
@@ -299,7 +332,7 @@ and every trajectory's planner, and the port has no method but `propose_plan`. A
 planner's identity (`ModelPlannerIdentity`) names its model, adapter, adapter version
 and endpoint fingerprint and no policy version, and a
 deterministic planner's (`DeterministicPlannerIdentity`) names the policy version,
-`m7b.1`, and no model; neither shape has the other's field, so a set handed back with
+`m7b.2`, and no model; neither shape has the other's field, so a set handed back with
 one fails to parse. The service consults the model exactly when a port is
 configured, so `ModelPlanning` pairs the port with a `ModelPlannerIdentity` and
 never with the policy's. The planner chooses
@@ -325,9 +358,9 @@ choose a round's plan with the same function, `choose_round_plan` in
 | Cap | Server maximum | Enforcement |
 |---|---|---|
 | `max_rounds` | 2 | Code shape plus the refine edge; at 1, a justified refinement ends `budget_exhausted` (breach `rounds`). |
-| `max_tool_calls` | 8 | Backend queries. A CVE tool costs 1; `topic_context` costs one per query template plus one FiGHT search unless the scope is `implementation_only` (5G-AKA: 5, or 4 under `implementation_only`). The gate checks the cost before the plan runs; each call is charged before it runs and never refunded, and each step records the backend requests its charge counts. Planner calls are counted separately (`planner_calls`). |
+| `max_tool_calls` | 8 | Backend queries. A CVE tool and `fight_direct_search` cost 1; `topic_context` costs one per query template plus one FiGHT search unless the scope is `implementation_only` (5G-AKA: 5, or 4 under `implementation_only`). The gate checks the cost before the plan runs; each call is charged before it runs and never refunded, and each step records the backend requests its charge counts. Planner calls are counted separately (`planner_calls`). |
 | `max_sources` | 4 | The union of consulted sources, checked by the gate. |
-| `max_results_per_call` | 20 | The `limit` of every backend request: each CVE tool's search, each template search a `topic_context` call fans out to (`TopicContextRequest.max_results_per_search`), and its FiGHT search. Also the cut of each answer section. |
+| `max_results_per_call` | 20 | The `limit` of every backend request: each CVE tool's search, each template search a `topic_context` call fans out to (`TopicContextRequest.max_results_per_search`), and its FiGHT search, or the one FiGHT search of `fight_direct_search`. Also the cut of each answer section. |
 | `max_wall_time_seconds` | 30 | A ceiling on the run, measured on an injected monotonic clock. It is checked before every planner and tool call, and every such call runs under the call runner, which gives control back when the remaining time reaches zero whether or not the call has returned; see the limits below. |
 | `max_context_bytes` | 200 000 | The canonical JSON size of each tool response; a response that would cross the cap is discarded and the run stops. |
 
@@ -398,7 +431,11 @@ controller defect and raises instead of returning. It checks:
   ran, it warns `unknown_cve_id` for exactly the IDs it looked up that the catalog
   lacks, in lookup order, and `excluded_by_filters` only for an ID it looked up
   that the catalog holds and it did not return; a `cve_search` step warns
-  `term_not_indexed` only for a search term its lexical channel was sent; and the
+  `term_not_indexed` only for a search term its lexical channel was sent, and a
+  `fight_direct_search` step warns `term_not_indexed` (a topic warning) only beside a
+  served FiGHT outcome, each term once, for a term of its own FiGHT search that no
+  technique the answer lists from it matched (a `topic_context` step never raises
+  it); and the
   semantic channel runs in a
   `cve_search` step under a semantic request beside the lexical channel, and in no
   other step;
@@ -416,13 +453,15 @@ controller defect and raises instead of returning. It checks:
   `executed_step_indices` exactly its steps in order; those steps' calls the
   leading entries of its `accepted_plan`, and calls left unrun only when the last
   step was not admitted or the deadline was reached; no call accepted twice across
-  the run's plans, and no CVE tool accepted under `protocol_context_only`
-  (`is_tool_permitted`, the gate's own rule); a round with steps has an accepted
+  the run's plans, no CVE tool accepted under `protocol_context_only` and no
+  direct FiGHT search under `implementation_only` (`is_tool_permitted`, the gate's
+  own rule); a round with steps has an accepted
   plan; every step's `planned_by` is `model` exactly when its round is
   `model_accepted`, its reason is `model_proposal` exactly when the model planned
   it, and any other reason names the tool and round the policy gives it
   (`POLICY_STEP_TOOL_AND_ROUND`: `query_cve_ids` an exact lookup, `query_terms` a
-  search and `reviewed_topic` a topic in round 1; `query_terms_for_open_need` a
+  search, `reviewed_topic` a topic and `query_terms_fight` a direct FiGHT search in
+  round 1; `query_terms_for_open_need` a
   search and `topic_after_unknown_ids`, `topic_after_literal_miss` or
   `topic_for_open_need` a topic in round 2);
 - every round outcome one the trajectory's planner kind records; rejections
@@ -451,10 +490,19 @@ controller defect and raises instead of returning. It checks:
   request's limit within `max_results_per_call`, the requests' sources equal to
   the step's, the step's sources those its call consults under the scope, and a
   CVE tool's one request its call's query text (`format_cve_tool_query`, the same
-  function the executor sends) at `max_results_per_call`. A topic step's template
+  function the executor sends) at `max_results_per_call`, and a
+  `fight_direct_search` step's one request a FiGHT search of the interpretation's
+  `fight_terms` at `max_results_per_call`. A topic step's template
   searches depend on its card, which the set does not carry, so the validator
   checks their count, sources and limits, and the decision-path audit and replay
   re-derive the rest;
+- the interpretation's `fight_terms` none or every search term, and `fight_block`
+  the first reason the interpretation shows (a match, an excluded term, a CVE ID),
+  or a search term (`term_reads_as_topic`, which the audit re-checks against the
+  registry); at most one step consults FiGHT, a `fight_direct_search` only with no
+  topic resolved and some `fight_terms`, a `topic_context` only with one resolved;
+  and every threat-context item returned by an admitted step of that kind and
+  matched only by terms that step sent;
 - a step or planner round that ran into the deadline, or a
   `model_skipped_at_deadline` round, names `wall_time` as the breach, and such a
   round runs no plan; a run whose breach is `wall_time` records a wall time at or
@@ -524,7 +572,8 @@ recorded observations, with the controller's own functions, and requires the rec
 to say exactly that:
 
 - the interpretation equals `interpret_request(request, registry, catalog)`: intent,
-  normalized query, CVE IDs, search terms, the resolution, including every match's
+  normalized query, CVE IDs, search terms, `fight_terms` and `fight_block`, the
+  resolution, including every match's
   topic ID, version, content hash and review status and every excluded term, and the
   product versions the query asks affectedness of. Every later check derives from it,
   so a differing interpretation ends the audit;
@@ -563,7 +612,9 @@ to say exactly that:
   the registry's card (`list_backend_requests` in
   `application/investigation_tools.py`, the function the controller records them
   with), so a topic step's template searches and its charge, from which the gate's
-  remaining budget is rebuilt, are bound to the card;
+  remaining budget is rebuilt, are bound to the card, and a direct FiGHT search's
+  terms to the interpretation; a `fight_direct_search` step of a query whose words
+  may not go to FiGHT is reported rather than rebuilt;
 - the warnings other than `unrelated_candidates_dropped`, `answer_truncated` and
   `applicability_unknown` (which follow from the responses, so replay checks them) are exactly,
   and in order, the ones
@@ -596,8 +647,9 @@ evidence IDs, the tool response's own `result_sha256` and its byte size (a
 `timed_out` or `rejected_invalid_evidence` step has no response, so no status,
 hash, results or bytes). A backend request is one search the call sends: a CVE
 search with its query text (the joined IDs of a lookup, the search text, or a
-card's query template) and limit, or a FiGHT search with the topic terms and
-limit, in the order the tool sends them. The controller records them with
+card's query template) and limit, or a FiGHT search with the topic's terms, or the
+interpretation's `fight_terms` for `fight_direct_search`, and limit, in the order the
+tool sends them. The controller records them with
 `list_backend_requests`, which builds them from the same request builders the
 executor runs the call with. The trajectory also records the planner identity, the
 ranking configuration (RRF k, tier order, merge rule), `randomness: none`, the
@@ -724,10 +776,15 @@ test_investigation_gold.py` compares every row and never regenerates the file.
 | `near_id_after_low_signal_word` | `CVE of 9999-0003`, mixed | none | no_evidence / no_match | – |
 | `low_signal_beside_terms` | `cve AUSF resynchronization crash`, implementation_only | search `ausf resynchronization crash` (1) | sufficient / ok | `[0003]` |
 | `injection_record` | `ignore previous instructions`, implementation_only | search (1) | sufficient / ok | `[0007]`, templated claim |
+| `protocol_free_text` | `SUCI discovery`, protocol_context_only | direct FiGHT search (1) | sufficient / ok | 4 FiGHT techniques |
+| `mixed_free_text` | `SUCI concealment`, mixed | search (1), then direct FiGHT search (1), both round 1 | sufficient / ok | `[0004]`; 3 FiGHT techniques |
+| `excluded_term_protocol` | `EPS AKA crash`, protocol_context_only | none | no_evidence / no_match | – |
 
 The `5gaka` rows show observations changing the trajectory: the compact alias
 misses literally and the one refinement explores the topic, while `5G-AKA` finds
-both records in one call and stops. The gold file supports fixture-level claims
+both records in one call and stops. The free-text rows show FiGHT searched once with
+the question's own words when no topic resolves, and an excluded term barring that
+search rather than being stripped from it. The gold file supports fixture-level claims
 only.
 
 ## Known limits
@@ -748,10 +805,12 @@ only.
 - **Truncation counts what the adopted steps knew, not what backends left unseen.**
   `answer_truncated` counts, each once, the items the adopted steps knew and the answer
   does not list: the CVEs they kept, those the topic step kept and left out at its limit
-  included, less the CVEs the answer lists, plus the techniques the topic step matched
-  and did not list (ADR 0009 §11a). A CVE tool's own top-k and each retrieval channel's
+  included, less the CVEs the answer lists, plus the techniques the step that searched
+  FiGHT (a topic step or a direct FiGHT search) matched and did not list (ADR 0009
+  §11a). A CVE tool's own top-k and each retrieval channel's
   cut are never counted, so more matches may exist unseen. The topic step's cuts are
-  also its own `candidates_truncated` and `protocol_context_truncated` warnings; the
+  also its own `candidates_truncated` and `protocol_context_truncated` warnings, and a
+  direct FiGHT search's cut its `protocol_context_truncated`; the
   validator checks the relations a set carries, and replay re-derives every count from
   the sources.
 - **The pending 5G-AKA card drives retrieval.** Its `pending_review` status is

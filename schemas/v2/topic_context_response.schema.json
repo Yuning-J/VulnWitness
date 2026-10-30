@@ -1284,7 +1284,7 @@
           "type": "array"
         },
         "matched_terms": {
-          "description": "Terms of the topic the server searched for; the search checks each.",
+          "description": "Terms the server sent to FiGHT that the technique holds: a resolved topic's name, aliases and entities, or with no topic the question's own words.",
           "items": {
             "type": "string"
           },
@@ -1399,7 +1399,7 @@
     },
     "TopicContextWarning": {
       "additionalProperties": false,
-      "description": "What a response leaves out or could not do. ``protocol_context_truncated`` counts\nthe techniques the snapshot matched that the protocol section does not list because\nof the response's bounds; ``candidates_truncated`` the relevant CVEs topic context\nheld that the candidate section does not list only because of its limit, never a\nbackend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the\nrelevance rule removed. A cut changes no status.",
+      "description": "What a response leaves out or could not do. ``protocol_context_truncated`` counts\nthe techniques the snapshot matched that the protocol section does not list because\nof the response's bounds; ``candidates_truncated`` the relevant CVEs topic context\nheld that the candidate section does not list only because of its limit, never a\nbackend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the\nrelevance rule removed. ``term_not_indexed`` names a word a direct FiGHT search sent\nthat no technique holds; a topic's card search never raises it. A cut changes no\nstatus.",
       "properties": {
         "code": {
           "$ref": "#/$defs/TopicContextWarningCode"
@@ -1423,6 +1423,7 @@
         "additional_topic_not_explored",
         "unrelated_candidates_dropped",
         "source_snapshot_is_excerpt",
+        "term_not_indexed",
         "protocol_context_truncated",
         "candidates_truncated"
       ],
@@ -1747,8 +1748,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.29",
-      "default": "2.0.0-dev.29",
+      "const": "2.0.0-dev.30",
+      "default": "2.0.0-dev.30",
       "title": "Schema Version",
       "type": "string"
     },

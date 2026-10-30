@@ -27,6 +27,13 @@ Beyond the anchor, record, threat-context and claim rules of ``validation``:
   and no step runs after one that was not admitted;
 - each step's ``call_key`` is recomputed from its call, and its sources are those
   the call consults under the scope;
+- the interpretation's ``fight_terms`` are none or every search term, and ``fight_block``
+  gives the first reason the interpretation itself shows (a resolved topic, an excluded
+  term, a CVE ID), or a search term read alone as a topic; at most one step searches
+  FiGHT, a ``fight_direct_search`` only with no topic and some ``fight_terms``, which it
+  sends at the result cap, and a ``topic_context`` only with a resolved topic; every
+  threat-context item was returned by an admitted step of that kind, explained only by
+  terms that step sent;
 - rounds and steps describe one run: each round lists exactly its own steps, which
   run the leading calls of its accepted plan in order, planned by the planner its
   outcome names, with a reason the policy gives that tool in that round (or
@@ -106,6 +113,9 @@ from cve_kgrag.domain.investigation import (
     CapabilitySubject,
     CveBackendRequest,
     DecisionBasis,
+    FightBackendRequest,
+    FightBlockReason,
+    Interpretation,
     InvestigationCandidate,
     InvestigationRequest,
     InvestigationState,
@@ -134,10 +144,13 @@ from cve_kgrag.domain.investigation import (
 from cve_kgrag.domain.planning import (
     CveExactLookupCall,
     CveSearchCall,
+    FightDirectSearchCall,
     ModelPlannerUnavailableDetail,
     PlannerKind,
     PlanRejectionCode,
+    QueryIntent,
     ToolCall,
+    TopicContextCall,
     compute_call_key,
     compute_model_reply_sha256,
     format_cve_tool_query,
@@ -161,7 +174,11 @@ from cve_kgrag.domain.taxonomy import (
     SourceType,
 )
 from cve_kgrag.domain.text import find_cve_ids, list_query_terms, normalize_query
-from cve_kgrag.domain.threat_context import FIGHT_TECHNIQUE_ID_PATTERN, KnownFightSnapshot
+from cve_kgrag.domain.threat_context import (
+    FIGHT_TECHNIQUE_ID_PATTERN,
+    KnownFightSnapshot,
+    ThreatContextItem,
+)
 from cve_kgrag.domain.topic_context import (
     SERVED_STATUSES,
     KnowledgeSource,
@@ -171,6 +188,7 @@ from cve_kgrag.domain.topic_context import (
 )
 from cve_kgrag.domain.validation import (
     EvidenceValidationError,
+    collect_matched_terms,
     find_claim_violations,
     find_pinned_fight_violations,
     find_record_violations,
@@ -974,12 +992,15 @@ def find_accepted_plan_violations(evidence_set: KnowledgeEvidenceSet) -> list[st
     return violations
 
 
-def find_backend_request_violations(step: ToolStep, request: InvestigationRequest) -> list[str]:
+def find_backend_request_violations(
+    step: ToolStep, request: InvestigationRequest, interpretation: Interpretation
+) -> list[str]:
     """One charged tool call per backend request, each within the result cap; the
     requests' sources, in first-sent order, are the step's sources, which are those its
-    call consults under the scope; and a CVE tool sends one search, its call's query at
-    the result cap. A topic step's searches come from its card, which the set does not
-    carry; the decision-path audit rebuilds them from the registry."""
+    call consults under the scope; a CVE tool sends one search, its call's query at the
+    result cap; and a direct FiGHT search sends one search of the interpretation's
+    ``fight_terms`` at the result cap. A topic step's searches come from its card, which
+    the set does not carry; the decision-path audit rebuilds them from the registry."""
     violations: list[str] = []
     max_results_per_call = request.budget.max_results_per_call
     request_sources: list[KnowledgeSource] = []
@@ -1012,7 +1033,131 @@ def find_backend_request_violations(step: ToolStep, request: InvestigationReques
             violations.append(
                 f"step {step.step_index} records other backend requests than its call sends"
             )
+    if isinstance(step.call, FightDirectSearchCall):
+        sent_requests: tuple[FightBackendRequest, ...] = ()
+        if interpretation.fight_terms:
+            sent_requests = (
+                FightBackendRequest(
+                    source=KnowledgeSource.MITRE_FIGHT,
+                    terms=interpretation.fight_terms,
+                    limit=max_results_per_call,
+                ),
+            )
+        if step.backend_requests != sent_requests:
+            violations.append(
+                f"step {step.step_index} records other backend requests than its call sends"
+            )
     return violations
+
+
+def find_interpretation_fight_violations(interpretation: Interpretation) -> list[str]:
+    """``fight_terms`` are none or every search term, never a subset: every search term
+    exactly when ``fight_block`` is null, and non-empty only for ``free_text``.
+    ``fight_block`` gives the first reason the interpretation shows, in
+    ``find_fight_block``'s order: the first matched topic, the first excluded term, the
+    first CVE ID; without one, it is null or names a search term the registry reads alone
+    as a topic, which only the audit, holding the registry, can re-check."""
+    violations: list[str] = []
+    resolution = interpretation.resolution
+    fight_block = interpretation.fight_block
+    expected_block: tuple[FightBlockReason, str] | None = None
+    if resolution.matches:
+        expected_block = (FightBlockReason.TOPIC_RESOLVED, resolution.matches[0].topic_id)
+    elif resolution.excluded_terms:
+        expected_block = (FightBlockReason.EXCLUDED_TERM, resolution.excluded_terms[0].term)
+    elif interpretation.cve_ids:
+        expected_block = (FightBlockReason.CVE_ID_NAMED, interpretation.cve_ids[0])
+    if expected_block is not None:
+        if fight_block is None or (fight_block.reason, fight_block.subject) != expected_block:
+            violations.append(
+                "interpretation.fight_block does not give the first reason the interpretation shows"
+            )
+    elif fight_block is not None and (
+        fight_block.reason is not FightBlockReason.TERM_READS_AS_TOPIC
+        or fight_block.subject not in interpretation.search_terms
+    ):
+        violations.append(
+            "interpretation.fight_block names a reason the interpretation does not show"
+        )
+    expected_fight_terms = interpretation.search_terms if fight_block is None else ()
+    if interpretation.fight_terms != expected_fight_terms:
+        violations.append(
+            "interpretation.fight_terms must be every search term when nothing blocks a FiGHT "
+            "search, and none otherwise"
+        )
+    if interpretation.fight_terms and interpretation.intent is not QueryIntent.FREE_TEXT:
+        violations.append("interpretation.fight_terms are only free text's")
+    return violations
+
+
+def list_fight_request_terms(step: ToolStep) -> tuple[str, ...]:
+    """The terms of the FiGHT search the step sent; none when it sent none."""
+    for backend_request in step.backend_requests:
+        if isinstance(backend_request, FightBackendRequest):
+            return backend_request.terms
+    return ()
+
+
+def find_fight_step_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
+    """At most one step per run consults FiGHT; a ``fight_direct_search`` step appears only
+    when no topic resolved and the interpretation has ``fight_terms``, a ``topic_context``
+    step only when a topic resolved; and every threat-context item was returned by an
+    admitted step of the kind the interpretation permits, which sent every term the item
+    matched."""
+    violations: list[str] = []
+    interpretation = evidence_set.interpretation
+    is_topic_resolved = bool(interpretation.resolution.matches)
+    fight_step_indices: list[int] = []
+    permitted_fight_steps: list[ToolStep] = []
+    for step in evidence_set.trajectory.steps:
+        if KnowledgeSource.MITRE_FIGHT in step.sources:
+            fight_step_indices.append(step.step_index)
+        if isinstance(step.call, FightDirectSearchCall):
+            if is_topic_resolved or not interpretation.fight_terms:
+                violations.append(
+                    f"step {step.step_index} searches FiGHT directly, which the interpretation "
+                    "does not allow"
+                )
+            elif step.admission is StepAdmission.ADMITTED:
+                permitted_fight_steps.append(step)
+        if isinstance(step.call, TopicContextCall):
+            if not is_topic_resolved:
+                violations.append(f"step {step.step_index} explores a topic, but no topic resolved")
+            elif step.admission is StepAdmission.ADMITTED:
+                permitted_fight_steps.append(step)
+    if len(fight_step_indices) > 1:
+        violations.append(f"steps {fight_step_indices} each search FiGHT; a run holds one")
+    violations.extend(find_threat_context_source_violations(evidence_set, permitted_fight_steps))
+    return violations
+
+
+def find_threat_context_source_violations(
+    evidence_set: KnowledgeEvidenceSet, permitted_fight_steps: list[ToolStep]
+) -> list[str]:
+    """Each threat-context item was returned by one of ``permitted_fight_steps``, which
+    sent every term the item matched."""
+    violations: list[str] = []
+    for item in evidence_set.protocol_context:
+        returning_step = find_returning_step(item, permitted_fight_steps)
+        if returning_step is None:
+            violations.append(
+                f"{item.technique_id}: not returned by an admitted step that may search FiGHT"
+            )
+            continue
+        sent_terms = list_fight_request_terms(returning_step)
+        if any(matched_term not in sent_terms for matched_term in item.matched_terms):
+            violations.append(
+                f"{item.technique_id}: matched by a term step {returning_step.step_index} "
+                "did not send"
+            )
+    return violations
+
+
+def find_returning_step(item: ThreatContextItem, steps: list[ToolStep]) -> ToolStep | None:
+    for step in steps:
+        if item.technique_id in step.answer_ids:
+            return step
+    return None
 
 
 def find_deadline_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
@@ -1061,7 +1206,9 @@ def find_budget_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     consulted_sources: list[KnowledgeSource] = []
     admitted_context_bytes = 0
     for step in steps:
-        violations.extend(find_backend_request_violations(step, evidence_set.request))
+        violations.extend(
+            find_backend_request_violations(step, evidence_set.request, evidence_set.interpretation)
+        )
         charged_tool_calls += step.charged_tool_calls
         for source in step.sources:
             if source not in consulted_sources:
@@ -1409,11 +1556,14 @@ def find_source_capability_violations(
 
 
 def find_step_topic_warning_violations(
-    step: ToolStep, pinned_fight_snapshot: KnownFightSnapshot | None
+    step: ToolStep,
+    protocol_context: tuple[ThreatContextItem, ...],
+    pinned_fight_snapshot: KnownFightSnapshot | None,
 ) -> list[str]:
     """The topic-response warning rules (``find_topic_warning_violations``) over what a
-    topic step records: its FiGHT outcome, and the techniques and CVEs among its answer
-    IDs."""
+    step records: its FiGHT outcome, the techniques and CVEs among its answer IDs, whether
+    it explored a topic, the terms of its FiGHT search, and the terms the answer's
+    techniques it returned matched."""
     listed_technique_count = 0
     listed_candidate_count = 0
     for answer_id in step.answer_ids:
@@ -1421,6 +1571,10 @@ def find_step_topic_warning_violations(
             listed_technique_count += 1
         else:
             listed_candidate_count += 1
+    returned_items: list[ThreatContextItem] = []
+    for item in protocol_context:
+        if item.technique_id in step.answer_ids:
+            returned_items.append(item)
     violations: list[str] = []
     for violation in find_topic_warning_violations(
         step.topic_warnings,
@@ -1428,6 +1582,9 @@ def find_step_topic_warning_violations(
         listed_technique_count=listed_technique_count,
         listed_candidate_count=listed_candidate_count,
         pinned_snapshot=pinned_fight_snapshot,
+        is_resolved=isinstance(step.call, TopicContextCall),
+        sent_terms=list_fight_request_terms(step),
+        listed_matched_terms=collect_matched_terms(returned_items),
     ):
         violations.append(f"step {step.step_index}: {violation}")
     return violations
@@ -1447,8 +1604,9 @@ def find_truncation_violations(
     """Truncation as a set can show it (ADR 0009 §11a): each step's topic warnings follow
     the topic-response rules; ``answer_truncated`` appears at most once, with a positive
     count, and never in a run with no adopted step; its count is at least the adopted
-    topic step's two counts together; and when the answer lists fewer CVEs than the
-    per-call cap, the topic step left no CVE out, so it equals the FiGHT count. Whether a
+    steps' cut counts together; and when the answer lists fewer CVEs than the per-call
+    cap, the topic step left no CVE out, so it equals the count of techniques the step
+    that searched FiGHT left out. Whether a
     count is true is replay's to prove: the set does not carry what derives it."""
     violations: list[str] = []
     # An invalid_evidence run returns nothing any step retrieved, so it adopts no step.
@@ -1456,7 +1614,11 @@ def find_truncation_violations(
     adopted_steps: list[ToolStep] = []
     for step in evidence_set.trajectory.steps:
         if step.topic_warnings:
-            violations.extend(find_step_topic_warning_violations(step, pinned_fight_snapshot))
+            violations.extend(
+                find_step_topic_warning_violations(
+                    step, evidence_set.protocol_context, pinned_fight_snapshot
+                )
+            )
         if is_answer_adopted and step.admission is StepAdmission.ADMITTED:
             adopted_steps.append(step)
     truncation_counts: list[int] = []
@@ -1483,13 +1645,13 @@ def find_truncation_violations(
         )
     truncated_count = sum(truncation_counts)
     if truncated_count < unlisted_technique_count + left_out_candidate_count:
-        violations.append("answer_truncated counts fewer items than the topic step left out")
+        violations.append("answer_truncated counts fewer items than the adopted steps left out")
     listed_cve_count = len(list_investigation_candidates(evidence_set))
     is_under_cap = listed_cve_count < evidence_set.request.budget.max_results_per_call
     if is_under_cap and truncated_count != unlisted_technique_count:
         violations.append(
-            "an answer listing fewer CVEs than the cap truncates only the techniques the topic "
-            "step left out"
+            "an answer listing fewer CVEs than the cap truncates only the techniques the step "
+            "that searched FiGHT left out"
         )
     return violations
 
@@ -1522,6 +1684,8 @@ def validate_knowledge_evidence_set(
     violations.extend(find_round_transition_violations(evidence_set))
     violations.extend(find_policy_round_violations(evidence_set))
     violations.extend(find_accepted_plan_violations(evidence_set))
+    violations.extend(find_interpretation_fight_violations(evidence_set.interpretation))
+    violations.extend(find_fight_step_violations(evidence_set))
     violations.extend(find_budget_violations(evidence_set))
     violations.extend(find_deadline_violations(evidence_set))
     violations.extend(find_investigation_fight_violations(evidence_set, pinned_fight_snapshot))

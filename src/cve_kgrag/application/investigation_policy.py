@@ -1,4 +1,4 @@
-"""The deterministic investigation policy (version ``m7b.1``): pure functions of the
+"""The deterministic investigation policy (version ``m7b.2``): pure functions of the
 request, its interpretation and the observed steps.
 
 The policy reads a query into an intent, decides whether the query can be answered
@@ -13,7 +13,11 @@ Round 1, by intent and scope:
 - a resolved topic is explored with ``topic_context`` under ``mixed`` and
   ``protocol_context_only``; under ``implementation_only`` the caller's own terms
   are searched literally first, since one search costs less than a topic's fan-out;
-- free text is searched literally.
+- free text is searched literally under ``implementation_only``; under
+  ``protocol_context_only`` its words are searched in FiGHT directly
+  (``fight_direct_search``), and under ``mixed`` both, the CVE search first, when the
+  words may go to FiGHT (``find_fight_block``), else only the CVE search. So round 1
+  plans one call, or two for ``mixed`` free text.
 
 Refinement, at most one call, never one round 1 already issued, and only for an
 implementation or protocol need round 1 left open (``domain/evidence_needs.py``); a named
@@ -26,10 +30,14 @@ CVE no lookup found is met by no other call:
   need otherwise);
 - R3: the implementation need is open and round 1's searches did not send every search
   term, none of which is an unexplained unindexed term, so search all of them.
+
+No rule plans ``fight_direct_search``: round 1 already plans it wherever it may run, and a
+run holds at most one.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import assert_never
 
 from cve_kgrag.domain.cve import MAX_CVE_ID_CHARS
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
@@ -42,6 +50,8 @@ from cve_kgrag.domain.investigation import (
     DecisionBasis,
     EvidenceNeed,
     EvidenceNeedKind,
+    FightBlock,
+    FightBlockReason,
     Interpretation,
     InvestigationRequest,
     StepReason,
@@ -52,6 +62,7 @@ from cve_kgrag.domain.planning import (
     CveExactLookupCall,
     CveSearchCall,
     DeterministicPlannerIdentity,
+    FightDirectSearchCall,
     PlannerKind,
     QueryIntent,
     ToolCall,
@@ -74,9 +85,11 @@ from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.topics.registry import TopicRegistry
 
-DETERMINISTIC_POLICY_VERSION = "m7b.1"
+DETERMINISTIC_POLICY_VERSION = "m7b.2"
 # An exact lookup or a CVE search is one backend query.
 CVE_TOOL_COST = 1
+# A direct FiGHT search is one backend query.
+FIGHT_DIRECT_SEARCH_COST = 1
 
 
 @dataclass(frozen=True)
@@ -123,6 +136,57 @@ def list_search_terms(query: str, excluded_tokens: set[str]) -> tuple[str, ...]:
     return tuple(search_text.split())
 
 
+def list_kept_cve_ids(query: str) -> list[str]:
+    """The CVE IDs the query names that the CVE program can assign, in query order: an ID
+    longer than ``MAX_CVE_ID_CHARS`` is never assigned, so it is neither looked up nor a
+    reason to keep FiGHT from the query's words."""
+    kept_cve_ids: list[str] = []
+    for cve_id in find_cve_ids(query):
+        if len(cve_id) <= MAX_CVE_ID_CHARS:
+            kept_cve_ids.append(cve_id)
+    return kept_cve_ids
+
+
+def find_fight_block(query: str, topic_registry: TopicRegistry) -> FightBlock | None:
+    """Why the query's search terms may not be sent to FiGHT without a reviewed topic, or
+    None when they may: all of them are sent, or none.
+
+    Checked in order: a topic resolved (its card's terms reach FiGHT through
+    ``topic_context``); an excluded term is named, which is never stripped and searched
+    around; a CVE ID ``interpret_request`` keeps is named, so only a topic is a text
+    target; one of the search terms the registry reads alone as a topic or an excluded
+    term, which the query's own Unicode reading may not report (``5Géaka`` yields the
+    ASCII term ``aka``). The rule reuses the registry's resolution and exclusions and the
+    search-term rules, and adds no word list.
+    """
+    resolution = topic_registry.resolve(query)
+    if resolution.matches:
+        return FightBlock(
+            reason=FightBlockReason.TOPIC_RESOLVED, subject=resolution.matches[0].topic_id
+        )
+    if resolution.excluded_terms:
+        return FightBlock(
+            reason=FightBlockReason.EXCLUDED_TERM, subject=resolution.excluded_terms[0].term
+        )
+    kept_cve_ids = list_kept_cve_ids(query)
+    if kept_cve_ids:
+        return FightBlock(reason=FightBlockReason.CVE_ID_NAMED, subject=kept_cve_ids[0])
+    for search_term in list_search_terms(query, set()):
+        term_resolution = topic_registry.resolve(search_term)
+        if term_resolution.matches or term_resolution.excluded_terms:
+            return FightBlock(reason=FightBlockReason.TERM_READS_AS_TOPIC, subject=search_term)
+    return None
+
+
+def list_fight_terms(query: str, topic_registry: TopicRegistry) -> tuple[str, ...]:
+    """The words a direct FiGHT search sends: every search term of the query when
+    ``find_fight_block`` gives none, else none. The interpretation records them, and the
+    executor and the request builders call this on the same request and registry."""
+    if find_fight_block(query, topic_registry) is not None:
+        return ()
+    return list_search_terms(query, set())
+
+
 def list_affectedness_mentions(
     normalized_query: str, evidence_catalog: EvidenceCatalog
 ) -> tuple[str, ...]:
@@ -144,8 +208,8 @@ def list_affectedness_mentions(
 def interpret_request(
     request: InvestigationRequest, topic_registry: TopicRegistry, evidence_catalog: EvidenceCatalog
 ) -> Interpretation:
-    """The query's intent, CVE IDs, searchable terms, topic resolution and the product
-    versions it asks affectedness of.
+    """The query's intent, CVE IDs, searchable terms, the words a direct FiGHT search may
+    send and why not, topic resolution and the product versions it asks affectedness of.
 
     Tokens of an excluded term are stripped from the search terms, so an ambiguous
     alias cannot reach the CVE index through free text (``EPS AKA crash`` searches
@@ -156,15 +220,17 @@ def interpret_request(
     is looked up or searched.
     """
     normalized_query = normalize_query(request.query)
-    cve_ids: list[str] = []
-    for cve_id in find_cve_ids(request.query):
-        if len(cve_id) <= MAX_CVE_ID_CHARS:
-            cve_ids.append(cve_id)
+    cve_ids = list_kept_cve_ids(request.query)
     resolution = topic_registry.resolve(request.query)
     excluded_tokens: set[str] = set()
     for excluded_term in resolution.excluded_terms:
         excluded_tokens.update(tokenize(excluded_term.term))
     search_terms = list_search_terms(request.query, excluded_tokens)
+    fight_block = find_fight_block(request.query, topic_registry)
+    # Without a block no excluded term was named, so the search terms are all the query's.
+    fight_terms: tuple[str, ...] = ()
+    if fight_block is None:
+        fight_terms = search_terms
 
     if cve_ids:
         intent = QueryIntent.EXACT_ID
@@ -181,6 +247,8 @@ def interpret_request(
         normalized_query=normalized_query,
         cve_ids=tuple(cve_ids),
         search_terms=search_terms,
+        fight_terms=fight_terms,
+        fight_block=fight_block,
         resolution=resolution,
         affectedness_mentions=list_affectedness_mentions(normalized_query, evidence_catalog),
     )
@@ -239,7 +307,9 @@ def find_interpretation_stop(
         return StopReason.NO_EVIDENCE, DecisionBasis.EXCLUDED_TERMS_ONLY
     if interpretation.intent is QueryIntent.UNSEARCHABLE:
         return StopReason.NO_EVIDENCE, DecisionBasis.NO_SEARCHABLE_TERMS
-    if is_protocol_scope and interpretation.intent is QueryIntent.FREE_TEXT:
+    # Protocol-only free text whose words may not be sent to FiGHT without a reviewed topic.
+    is_protocol_free_text = is_protocol_scope and interpretation.intent is QueryIntent.FREE_TEXT
+    if is_protocol_free_text and not interpretation.fight_terms:
         return StopReason.NO_EVIDENCE, DecisionBasis.PROTOCOL_SCOPE_NEEDS_TOPIC
     return None
 
@@ -254,10 +324,17 @@ def build_topic_call(interpretation: Interpretation) -> TopicContextCall:
     )
 
 
+def build_fight_direct_search_call() -> FightDirectSearchCall:
+    return FightDirectSearchCall(tool=ToolName.FIGHT_DIRECT_SEARCH)
+
+
 def plan_first_round(
     request: InvestigationRequest, interpretation: Interpretation
 ) -> list[PlannedStep]:
-    """One call chosen by intent and scope; only intents that passed the stop table arrive."""
+    """The calls chosen by intent and scope, one or, for ``mixed`` free text whose words may
+    go to FiGHT, the CVE search then the direct FiGHT search: both needs of such a question
+    are known before planning, and neither search depends on the other's results. Only
+    intents that passed the stop table arrive."""
     if interpretation.intent is QueryIntent.EXACT_ID:
         exact_lookup = CveExactLookupCall(
             tool=ToolName.CVE_EXACT_LOOKUP, cve_ids=interpretation.cve_ids
@@ -270,7 +347,13 @@ def plan_first_round(
         if is_literal_first:
             return [PlannedStep(build_search_call(interpretation), StepReason.QUERY_TERMS)]
         return [PlannedStep(build_topic_call(interpretation), StepReason.REVIEWED_TOPIC)]
-    return [PlannedStep(build_search_call(interpretation), StepReason.QUERY_TERMS)]
+    fight_step = PlannedStep(build_fight_direct_search_call(), StepReason.QUERY_TERMS_FIGHT)
+    if request.scope is QueryScope.PROTOCOL_CONTEXT_ONLY:
+        return [fight_step]
+    search_step = PlannedStep(build_search_call(interpretation), StepReason.QUERY_TERMS)
+    if request.scope is QueryScope.MIXED and interpretation.fight_terms:
+        return [search_step, fight_step]
+    return [search_step]
 
 
 def has_only_unknown_ids(round_one_steps: Sequence[ToolStep]) -> bool:
@@ -342,13 +425,18 @@ def plan_refinement(
 
 def count_tool_calls(call: ToolCall, scope: QueryScope, topic_registry: TopicRegistry) -> int:
     """Backend queries a call costs: a topic call fans out to one CVE search per query
-    template, plus one FiGHT search unless the scope is ``implementation_only``."""
-    if not isinstance(call, TopicContextCall):
+    template, plus one FiGHT search unless the scope is ``implementation_only``; every
+    other call is one query."""
+    if isinstance(call, CveExactLookupCall | CveSearchCall):
         return CVE_TOOL_COST
-    template_searches = len(topic_registry.require_topic(call.topic_id).query_templates)
-    if scope is QueryScope.IMPLEMENTATION_ONLY:
-        return template_searches
-    return template_searches + 1
+    if isinstance(call, FightDirectSearchCall):
+        return FIGHT_DIRECT_SEARCH_COST
+    if isinstance(call, TopicContextCall):
+        template_searches = len(topic_registry.require_topic(call.topic_id).query_templates)
+        if scope is QueryScope.IMPLEMENTATION_ONLY:
+            return template_searches
+        return template_searches + 1
+    assert_never(call)
 
 
 def describe_deterministic_planner() -> DeterministicPlannerIdentity:

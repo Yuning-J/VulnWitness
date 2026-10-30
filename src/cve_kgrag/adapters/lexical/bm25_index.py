@@ -11,23 +11,24 @@ does not know says so instead of answering only with its other words' matches.
 """
 
 import heapq
-import math
 from array import array
 from bisect import bisect_left
 from collections import Counter
 from collections.abc import Iterable, Set
 from dataclasses import dataclass
 
+from cve_kgrag.domain.bm25 import (
+    SCORE_DECIMALS,
+    compute_inverse_document_frequency,
+    compute_length_saturation,
+    compute_term_weight,
+)
 from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.search import RetrievalMatch, RetrievalOutcome
 from cve_kgrag.domain.taxonomy import BackendStatus
 from cve_kgrag.domain.text import tokenize
 
-# Standard Okapi BM25 parameters.
-TERM_SATURATION_K1 = 1.2
-LENGTH_NORMALIZATION_B = 0.75
 INDEXED_FIELDS = ("description", "vendor", "product", "cwe_ids")
-SCORE_DECIMALS = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,14 +93,10 @@ class Bm25LexicalIndex:
             for term, term_count in term_counts.items():
                 self._add_posting(term, record_position, term_count, field_masks[term])
         average_length = sum(record_lengths) / len(record_lengths) if record_lengths else 0.0
-        # Each record's share of a term's saturation, K1 * (1 - B + B * length / average).
-        # An average of 0 means no record holds a term, so no search reads it.
         self._length_saturations = array("d")
         for record_length in record_lengths:
-            length_ratio = record_length / average_length if average_length else 0.0
             self._length_saturations.append(
-                TERM_SATURATION_K1
-                * (1 - LENGTH_NORMALIZATION_B + LENGTH_NORMALIZATION_B * length_ratio)
+                compute_length_saturation(record_length, average_length)
             )
 
     def search(
@@ -113,7 +110,9 @@ class Bm25LexicalIndex:
             postings = self._postings.get(term)
             if postings is None:
                 continue
-            inverse_document_frequency = self._compute_inverse_document_frequency(postings)
+            inverse_document_frequency = compute_inverse_document_frequency(
+                len(self._cve_ids), len(postings.record_positions)
+            )
             for record_position, term_count in zip(
                 postings.record_positions, postings.term_counts, strict=True
             ):
@@ -122,13 +121,13 @@ class Bm25LexicalIndex:
                     and self._cve_ids[record_position] not in allowed_cve_ids
                 ):
                     continue
-                saturation = term_count + self._length_saturations[record_position]
+                term_weight = compute_term_weight(
+                    inverse_document_frequency,
+                    term_count,
+                    self._length_saturations[record_position],
+                )
                 record_scores[record_position] = (
-                    record_scores.get(record_position, 0.0)
-                    + inverse_document_frequency
-                    * term_count
-                    * (TERM_SATURATION_K1 + 1)
-                    / saturation
+                    record_scores.get(record_position, 0.0) + term_weight
                 )
         # Best rounded score first, ties by position, which is ascending CVE ID order.
         ranked_positions = heapq.nsmallest(
@@ -167,11 +166,6 @@ class Bm25LexicalIndex:
         postings.record_positions.append(record_position)
         postings.term_counts.append(term_count)
         postings.field_masks.append(field_mask)
-
-    def _compute_inverse_document_frequency(self, postings: TermPostings) -> float:
-        record_count = len(self._cve_ids)
-        document_frequency = len(postings.record_positions)
-        return math.log(1 + (record_count - document_frequency + 0.5) / (document_frequency + 0.5))
 
     def _build_match(
         self, record_position: int, score: float, query_terms: list[str]

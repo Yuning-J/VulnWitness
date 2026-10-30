@@ -8,7 +8,10 @@ import pytest
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.decision_path_audit import audit_decision_path
-from cve_kgrag.application.investigation_policy import interpret_request
+from cve_kgrag.application.investigation_policy import (
+    build_fight_direct_search_call,
+    interpret_request,
+)
 from cve_kgrag.composition import build_topic_registry
 from cve_kgrag.domain.budget import BudgetBreach
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
@@ -58,6 +61,7 @@ from tests.support.investigation import (
     reseal_evidence_set,
     rewrite_step,
     rewrite_the_ranking,
+    update_interpretation,
     update_trajectory,
     verify_as_sealed,
 )
@@ -66,6 +70,8 @@ from tests.support.investigation_runs import (
     investigate_with_model_replies,
     run_cve_under_protocol_scope,
     run_exact_id,
+    run_fight_direct_search,
+    run_fight_direct_search_over_the_byte_cap,
     run_five_g_aka,
     run_five_g_aka_mixed,
     run_model_accepted,
@@ -206,14 +212,6 @@ def replace_call(
     return update_trajectory(evidence_set, steps=tuple(steps), rounds=tuple(rounds))
 
 
-def update_interpretation(
-    evidence_set: KnowledgeEvidenceSet, **changes: Any
-) -> KnowledgeEvidenceSet:
-    return reseal_evidence_set(
-        evidence_set, interpretation=evidence_set.interpretation.model_copy(update=changes)
-    )
-
-
 def update_topic_match(evidence_set: KnowledgeEvidenceSet, **changes: Any) -> KnowledgeEvidenceSet:
     resolution = evidence_set.interpretation.resolution
     topic_match = resolution.matches[0].model_copy(update=changes)
@@ -283,9 +281,14 @@ def mark_the_topic_reviewed(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvid
 
 
 def drop_the_excluded_term(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
-    resolution = evidence_set.interpretation.resolution
+    """The excluded term is dropped together with the FiGHT block it caused, so the
+    interpretation still agrees with itself."""
+    interpretation = evidence_set.interpretation
     return update_interpretation(
-        evidence_set, resolution=resolution.model_copy(update={"excluded_terms": ()})
+        evidence_set,
+        resolution=interpretation.resolution.model_copy(update={"excluded_terms": ()}),
+        fight_terms=interpretation.search_terms,
+        fight_block=None,
     )
 
 
@@ -890,7 +893,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_five_g_aka,
             name_another_policy_version,
-            "the planner names a policy other than m7b.1, the one whose decisions the audit "
+            "the planner names a policy other than m7b.2, the one whose decisions the audit "
             "re-derives",
         ),
     ],
@@ -956,23 +959,91 @@ def test_forged_decision_is_rejected_after_reseal(
     assert any(expected_violation in violation for violation in raised.value.violations)
 
 
-def run_mixed_free_text(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """Free text under ``mixed`` with no topic: implementation CVEs found, protocol context
-    unsupported, so the run stops ``needs_unmet``."""
-    return investigate(fixture_bundle, "sql injection gateway", "mixed")
+def run_mixed_free_text_with_an_excluded_term(
+    fixture_bundle: FixtureBundle,
+) -> KnowledgeEvidenceSet:
+    """Free text under ``mixed`` naming an excluded term: implementation CVEs found,
+    protocol context unsupported because the excluded term bars a direct FiGHT search, so
+    the run stops ``needs_unmet``."""
+    return investigate(fixture_bundle, "EPS AKA crash", "mixed")
 
 
 def claim_protocol_context_searchable(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
     """The unsupported protocol need is relabelled ``not_found``, as if a tool could still
     serve it; the stop, which needs an unmet need either way, is left as recorded."""
+    return relabel_protocol_need(evidence_set, NeedOutcome.NOT_FOUND)
+
+
+def relabel_protocol_need(
+    evidence_set: KnowledgeEvidenceSet, outcome: NeedOutcome
+) -> KnowledgeEvidenceSet:
+    """The protocol need is given ``outcome``; the stop is left as recorded."""
     needs: list[EvidenceNeed] = []
     for need in evidence_set.coverage.needs:
         recorded_need = need
         if need.kind is EvidenceNeedKind.PROTOCOL_CONTEXT:
-            recorded_need = need.model_copy(update={"outcome": NeedOutcome.NOT_FOUND})
+            recorded_need = need.model_copy(update={"outcome": outcome})
         needs.append(recorded_need)
     coverage = evidence_set.coverage.model_copy(update={"needs": tuple(needs)})
     return reseal_evidence_set(evidence_set, coverage=coverage)
+
+
+def claim_the_unevaluated_need_not_found(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    return relabel_protocol_need(evidence_set, NeedOutcome.NOT_FOUND)
+
+
+def claim_the_unevaluated_need_found(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    return relabel_protocol_need(evidence_set, NeedOutcome.FOUND)
+
+
+def run_mixed_direct_search_of_an_unindexed_word(
+    fixture_bundle: FixtureBundle,
+) -> KnowledgeEvidenceSet:
+    """Mixed free text whose word ``threats`` neither the CVE index nor the FiGHT excerpt
+    holds: both needs are ``not_found`` beside their answers, so the run stops
+    ``needs_unmet`` whichever one a forger relabels."""
+    return investigate(fixture_bundle, "SUCI threats", "mixed")
+
+
+def claim_the_uncovered_protocol_need_found(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    return relabel_protocol_need(evidence_set, NeedOutcome.FOUND)
+
+
+def send_aka_to_fight_everywhere(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """``aka`` is added to the search terms, the FiGHT terms and the direct search's recorded
+    request alike, so every part of the set agrees with every other."""
+    interpretation = evidence_set.interpretation
+    forged_terms = (*interpretation.search_terms, "aka")
+    fight_request = evidence_set.trajectory.steps[0].backend_requests[0]
+    forged_request = fight_request.model_copy(update={"terms": forged_terms})
+    forged_interpretation = interpretation.model_copy(
+        update={"search_terms": forged_terms, "fight_terms": forged_terms}
+    )
+    forged_set = reseal_evidence_set(evidence_set, interpretation=forged_interpretation)
+    return rewrite_step(forged_set, 1, backend_requests=(forged_request,))
+
+
+def run_mixed_free_text_with_a_word_read_alone_as_a_topic(
+    fixture_bundle: FixtureBundle,
+) -> KnowledgeEvidenceSet:
+    """Mixed free text whose word ``aka``, read alone, the registry reads as a topic: the
+    interpretation blocks a direct FiGHT search, and only the audit, holding the registry,
+    can re-check that block."""
+    return investigate(fixture_bundle, "5Géaka threats", "mixed")
+
+
+def clear_the_word_read_alone_block(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The block is cleared and every search term becomes a FiGHT term, so the
+    interpretation still agrees with itself."""
+    return update_interpretation(
+        evidence_set,
+        fight_block=None,
+        fight_terms=evidence_set.interpretation.search_terms,
+    )
 
 
 def claim_the_model_was_consulted(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
@@ -1048,10 +1119,39 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
             "reply give model_not_consulted",
         ),
         (
-            run_mixed_free_text,
+            run_mixed_free_text_with_an_excluded_term,
             claim_protocol_context_searchable,
             "coverage.needs are not the needs the request gives, judged over the admitted "
             "steps and the answer",
+        ),
+        (
+            run_fight_direct_search_over_the_byte_cap,
+            claim_the_unevaluated_need_not_found,
+            "coverage.needs are not the needs the request gives, judged over the admitted "
+            "steps and the answer",
+        ),
+        (
+            run_fight_direct_search_over_the_byte_cap,
+            claim_the_unevaluated_need_found,
+            "coverage.needs are not the needs the request gives, judged over the admitted "
+            "steps and the answer",
+        ),
+        (
+            run_mixed_direct_search_of_an_unindexed_word,
+            claim_the_uncovered_protocol_need_found,
+            "coverage.needs are not the needs the request gives, judged over the admitted "
+            "steps and the answer",
+        ),
+        (
+            run_fight_direct_search,
+            send_aka_to_fight_everywhere,
+            "interpretation.search_terms is not the one the request gives under this topic "
+            "registry",
+        ),
+        (
+            run_mixed_free_text_with_a_word_read_alone_as_a_topic,
+            clear_the_word_read_alone_block,
+            "interpretation.fight_block is not the one the request gives under this topic registry",
         ),
     ],
     ids=[
@@ -1063,6 +1163,11 @@ def erase_the_skipped_round_two(evidence_set: KnowledgeEvidenceSet) -> Knowledge
         "planned_round_two_erased",
         "unconsultable_round_claims_a_model_reply",
         "need_outcome_rewritten",
+        "unevaluated_need_relabelled_not_found",
+        "unevaluated_need_relabelled_found",
+        "uncovered_protocol_need_relabelled_found",
+        "aka_added_to_the_fight_words_everywhere",
+        "word_read_alone_block_cleared",
     ],
 )
 def test_planner_record_the_validator_accepts_is_rejected_by_the_audit(
@@ -1088,3 +1193,25 @@ def test_planner_record_the_validator_accepts_is_rejected_by_the_audit(
         audit_decision_path(forged_set, topic_registry, packaged_evidence_catalog)
 
     assert expected_violation in raised.value.violations
+
+
+def test_audit_reports_a_direct_fight_search_of_words_the_interpretation_bars(
+    fixture_bundle: FixtureBundle,
+    packaged_evidence_catalog: EvidenceCatalog,
+    topic_registry: TopicRegistry,
+) -> None:
+    """Run alone, the audit reports a direct FiGHT search on a query an excluded term bars,
+    rather than rebuilding requests the interpretation allows none of."""
+    evidence_set = run_mixed_free_text_with_an_excluded_term(fixture_bundle)
+    fight_call = build_fight_direct_search_call()
+    forged_set = rewrite_step(
+        evidence_set, 1, call=fight_call, call_key=compute_call_key(fight_call)
+    )
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        audit_decision_path(forged_set, topic_registry, packaged_evidence_catalog)
+
+    assert (
+        "step 1 searches FiGHT with words the interpretation does not allow"
+        in raised.value.violations
+    )

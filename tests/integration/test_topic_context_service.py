@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -141,11 +142,24 @@ def test_implementation_only_never_consults_threat_context(fixture_bundle: Fixtu
     assert response.protocol_context == ()
 
 
-def test_unresolved_query_consults_no_source(fixture_bundle: FixtureBundle) -> None:
+@pytest.mark.parametrize(
+    ("scope", "query"),
+    [
+        (QueryScope.MIXED, "aka"),
+        (QueryScope.PROTOCOL_CONTEXT_ONLY, "gtp threats"),
+        (QueryScope.MIXED, "gtp threats"),
+    ],
+    ids=["excluded_term", "free_text_under_protocol", "free_text_mixed"],
+)
+def test_unresolved_query_consults_no_source(
+    fixture_bundle: FixtureBundle, scope: QueryScope, query: str
+) -> None:
+    """Explore reaches FiGHT only through a resolved topic; searching FiGHT with the
+    question's own words is open to an investigation alone."""
     fight_source = RecordingFightSource(ThreatContextOutcome(status="ok", snapshot=FULL_SNAPSHOT))
     service = build_topic_context_service(fixture_bundle, fight_source, PINNED_FAKE_SNAPSHOT)
 
-    response = service.explore(build_request(QueryScope.MIXED, query="aka"))
+    response = service.explore(build_request(scope, query=query))
 
     assert fight_source.searches == []
     assert response.source_outcomes == ()
@@ -634,11 +648,13 @@ def test_fight_outcome_whose_matched_count_disagrees_with_its_items_is_refused(
         service.explore(build_request(QueryScope.PROTOCOL_CONTEXT_ONLY))
 
 
-def reseal_with_warnings(
-    response: TopicContextResponse, warnings: Sequence[TopicContextWarning]
-) -> TopicContextResponse:
-    changed = response.model_copy(update={"warnings": tuple(warnings)})
-    return changed.model_copy(update={"result_sha256": changed.compute_result_sha256()})
+def reseal_topic_response(response: TopicContextResponse, **changes: Any) -> TopicContextResponse:
+    """``response`` with ``changes`` applied unvalidated and its hash recomputed, as a
+    forger holding the response could do."""
+    changed_response = response.model_copy(update=changes)
+    return changed_response.model_copy(
+        update={"result_sha256": changed_response.compute_result_sha256()}
+    )
 
 
 def build_warning(code: TopicContextWarningCode, subject: str) -> TopicContextWarning:
@@ -708,7 +724,7 @@ def test_topic_warnings_that_break_their_structure_are_refused(
 ) -> None:
     pinned_source, pinned_snapshot = load_packaged_fight_source(read_fixed_clock)
     response = explore_five_g_aka(fixture_bundle, scope, limit).response
-    forged_response = reseal_with_warnings(response, warnings)
+    forged_response = reseal_topic_response(response, warnings=tuple(warnings))
 
     with pytest.raises(EvidenceValidationError, match=violation):
         validate_topic_context_response(
@@ -724,12 +740,96 @@ def test_candidate_cut_beside_an_empty_candidate_section_is_refused(
     response = service.explore(
         TopicContextRequest(query="5G-AKA", scope=QueryScope.MIXED, filters={"vendors": ["x"]})
     )
-    forged_response = reseal_with_warnings(
+    forged_response = reseal_topic_response(
         response,
-        [*response.warnings, build_warning(TopicContextWarningCode.CANDIDATES_TRUNCATED, "1")],
+        warnings=(
+            *response.warnings,
+            build_warning(TopicContextWarningCode.CANDIDATES_TRUNCATED, "1"),
+        ),
     )
 
     with pytest.raises(EvidenceValidationError, match="candidate section that lists some"):
         validate_topic_context_response(
             forged_response, pinned_snapshot, build_evidence_catalog(fixture_bundle, pinned_source)
+        )
+
+
+def search_suci_threats_directly(fixture_bundle: FixtureBundle) -> TopicContextResponse:
+    """The direct FiGHT search of ``suci threats`` over the packaged excerpt."""
+    service = build_topic_context_service(fixture_bundle)
+    return service.search_fight_directly(
+        build_request(QueryScope.PROTOCOL_CONTEXT_ONLY, query="SUCI threats"), ("suci", "threats")
+    )
+
+
+def test_direct_fight_search_consults_fight_alone_and_names_the_words_it_misses(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    response = search_suci_threats_directly(fixture_bundle)
+
+    source_names: list[KnowledgeSource] = []
+    for source_outcome in response.source_outcomes:
+        source_names.append(source_outcome.source)
+    assert source_names == [KnowledgeSource.MITRE_FIGHT]
+    assert response.resolution.matches == ()
+    assert describe_warnings(response) == [
+        ("topic_not_resolved", "suci threats"),
+        ("source_snapshot_is_excerpt", "mitre_fight: excerpt of 6 techniques"),
+        ("term_not_indexed", "threats"),
+    ]
+    assert response.protocol_context != ()
+    assert response.excluded_implementation_candidates == ()
+    assert response.status is ResultStatus.OK
+
+
+def test_unindexed_term_the_direct_search_did_not_send_is_refused(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    """The service checks the response against the words it sent, so the same response
+    checked against no sent words fails."""
+    pinned_source, pinned_snapshot = load_packaged_fight_source(read_fixed_clock)
+    response = search_suci_threats_directly(fixture_bundle)
+
+    with pytest.raises(EvidenceValidationError, match="did not send"):
+        validate_topic_context_response(
+            response,
+            pinned_snapshot,
+            build_evidence_catalog(fixture_bundle, pinned_source),
+            sent_fight_terms=(),
+        )
+
+
+def test_unresolved_response_consulting_fight_outside_protocol_scope_is_refused(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    pinned_source, pinned_snapshot = load_packaged_fight_source(read_fixed_clock)
+    response = search_suci_threats_directly(fixture_bundle)
+    forged_response = reseal_topic_response(response, requested_scope=QueryScope.MIXED)
+
+    with pytest.raises(EvidenceValidationError, match="do not name exactly the consulted sources"):
+        validate_topic_context_response(
+            forged_response,
+            pinned_snapshot,
+            build_evidence_catalog(fixture_bundle, pinned_source),
+            sent_fight_terms=("suci", "threats"),
+        )
+
+
+def test_unindexed_term_on_a_topic_response_is_refused(fixture_bundle: FixtureBundle) -> None:
+    pinned_source, pinned_snapshot = load_packaged_fight_source(read_fixed_clock)
+    response = explore_five_g_aka(fixture_bundle, QueryScope.MIXED, 20).response
+    forged_response = reseal_topic_response(
+        response,
+        warnings=(
+            *response.warnings,
+            build_warning(TopicContextWarningCode.TERM_NOT_INDEXED, "K_SEAF"),
+        ),
+    )
+
+    with pytest.raises(EvidenceValidationError, match="needs a direct FiGHT search"):
+        validate_topic_context_response(
+            forged_response,
+            pinned_snapshot,
+            build_evidence_catalog(fixture_bundle, pinned_source),
+            sent_fight_terms=("K_SEAF",),
         )

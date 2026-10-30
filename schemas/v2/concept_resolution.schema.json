@@ -132,8 +132,8 @@
       "$ref": "#/$defs/TopicResolution"
     },
     "schema_version": {
-      "const": "2.0.0-dev.29",
-      "default": "2.0.0-dev.29",
+      "const": "2.0.0-dev.30",
+      "default": "2.0.0-dev.30",
       "title": "Schema Version",
       "type": "string"
     }

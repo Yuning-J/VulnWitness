@@ -48,6 +48,7 @@ from cve_kgrag.application.investigation_decisions import (
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
 from cve_kgrag.application.investigation_policy import (
     CVE_TOOL_COST,
+    FIGHT_DIRECT_SEARCH_COST,
     PlannedStep,
     count_tool_calls,
     find_interpretation_stop,
@@ -170,7 +171,9 @@ def build_planning_input(
     required_tools: tuple[ToolName, ...],
 ) -> PlanningInput:
     """What a planner sees: the quoted query, codes, counts, the vocabulary, the tools the
-    budgets allow and those a round-1 plan includes, never source records."""
+    budgets allow and those a round-1 plan includes, never source records. A direct FiGHT
+    search is offered only when the interpretation allows one (``fight_terms``) and the
+    scope admits threat context."""
     interpretation = run.interpretation
     scope = run.request.scope
     tool_costs: list[ToolCost] = []
@@ -190,6 +193,10 @@ def build_planning_input(
                 tool=ToolName.TOPIC_CONTEXT,
                 charged_tool_calls=count_tool_calls(topic_call, scope, topic_registry),
             )
+        )
+    if scope is not QueryScope.IMPLEMENTATION_ONLY and interpretation.fight_terms:
+        tool_costs.append(
+            ToolCost(tool=ToolName.FIGHT_DIRECT_SEARCH, charged_tool_calls=FIGHT_DIRECT_SEARCH_COST)
         )
     # A tool that alone would consult more sources than the run may is never offered.
     budget = run.request.budget

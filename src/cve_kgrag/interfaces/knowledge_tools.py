@@ -143,8 +143,10 @@ KNOWLEDGE_TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name=KnowledgeToolName.SEARCH_FIGHT,
         description=(
-            "MITRE FiGHT techniques for the reviewed topic a query resolves to; CVEs appear "
-            f"only as excluded implementation evidence. {PUBLISHER_AFFECTED_STATEMENT} "
+            "MITRE FiGHT techniques for the reviewed topic a query resolves to; a query that "
+            "resolves to no reviewed topic consults no source (an investigation searches "
+            "FiGHT with the question's own words on its own). CVEs appear only as excluded "
+            f"implementation evidence. {PUBLISHER_AFFECTED_STATEMENT} "
             f"{UNTRUSTED_RECORD_AND_TECHNIQUE_TEXT}"
         ),
         request_model=FightSearchRequest,

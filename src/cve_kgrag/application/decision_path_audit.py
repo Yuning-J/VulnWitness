@@ -10,8 +10,9 @@ record to say exactly that:
 
 - the interpretation is the one ``interpret_request`` gives the request under this
   registry and evidence catalog: intent, normalized query, CVE IDs, search terms, the
-  resolution, with every match's topic ID, version, content hash and review status and
-  every excluded term, and the product versions the query asks affectedness of;
+  words a direct FiGHT search may send and the block that bars it, the resolution,
+  with every match's topic ID, version, content hash and review status and every
+  excluded term, and the product versions the query asks affectedness of;
 - the run stops before planning exactly when ``find_interpretation_stop`` says so, for
   its reason;
 - every round planned before the deadline is the one ``choose_round_plan`` gives over
@@ -36,7 +37,9 @@ record to say exactly that:
   ``rounds`` for the round cap, and ``context_bytes`` for a step discarded over it;
 - every step's backend requests are the ones its call sends under the request and
   the registry's card (``list_backend_requests``), so its charge, which the
-  validator ties to them, and the remaining budget the gate is re-run with are too;
+  validator ties to them, and the remaining budget the gate is re-run with are too; a
+  topic the registry does not hold, or a direct FiGHT search of words the
+  interpretation does not allow, is reported rather than rebuilt;
 - the warnings the interpretation and the decisions give
   (``list_interpretation_warnings``, one ``model_plan_rejected`` per model reply the
   gate rejects, naming its re-derived codes, one ``evidence_discarded`` per step a cap
@@ -102,6 +105,7 @@ from cve_kgrag.application.investigation_policy import (
     find_resolved_topic,
     interpret_request,
     list_calls,
+    list_fight_terms,
     plan_first_round,
     plan_refinement,
 )
@@ -135,6 +139,7 @@ from cve_kgrag.domain.investigation_validation import (
 )
 from cve_kgrag.domain.planning import (
     DeterministicPlannerIdentity,
+    FightDirectSearchCall,
     PlannerKind,
     PlanRejection,
     TopicContextCall,
@@ -479,14 +484,23 @@ def find_issued_request_violations(
     evidence_set: KnowledgeEvidenceSet, topic_registry: TopicRegistry
 ) -> list[str]:
     """Every step records the backend requests its call sends under the request and the
-    registry's card."""
+    registry's card; a step whose requests cannot be rebuilt (a topic the registry does
+    not hold, a direct FiGHT search of words the interpretation does not allow) is
+    reported instead."""
     violations: list[str] = []
     request = evidence_set.request
+    fight_terms = list_fight_terms(request.query, topic_registry)
     for step in evidence_set.trajectory.steps:
         call = step.call
         if isinstance(call, TopicContextCall) and topic_registry.get_topic(call.topic_id) is None:
             violations.append(
                 f"step {step.step_index} explores a topic this registry does not hold"
+            )
+            continue
+        if isinstance(call, FightDirectSearchCall) and not fight_terms:
+            violations.append(
+                f"step {step.step_index} searches FiGHT with words the interpretation does "
+                "not allow"
             )
             continue
         if step.backend_requests != list_backend_requests(call, request, topic_registry):

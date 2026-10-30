@@ -204,7 +204,8 @@ A configured snapshot is served or the command refuses to start, exit 2, with
 `fight_snapshot_too_large` (over 4 MiB), `fight_snapshot_hash_mismatch`,
 `fight_snapshot_not_catalogued` or `fight_snapshot_invalid`. It never falls back to the
 excerpt. Only a hash the reviewed catalog lists is ever parsed: serving another FiGHT
-file is a reviewed change to the catalog. With the full snapshot a topic can match more
+file is a reviewed change to the catalog. With the full snapshot a topic, or an
+investigation's direct FiGHT search, can match more
 techniques than a response lists; `protocol_context_truncated` counts the rest.
 
 ## Store formats, upgrades and downgrades

@@ -1,4 +1,4 @@
-"""The deterministic policy m7b.1: interpretation, stops, round-1 plans, refinement and cost."""
+"""The deterministic policy m7b.2: interpretation, stops, round-1 plans, refinement and cost."""
 
 from typing import Any
 
@@ -6,10 +6,13 @@ import pytest
 
 from cve_kgrag.application.investigation_policy import (
     PlannedStep,
+    build_fight_direct_search_call,
     count_tool_calls,
+    find_fight_block,
     find_interpretation_stop,
     interpret_request,
     list_allowed_terms,
+    list_fight_terms,
     plan_first_round,
     plan_refinement,
 )
@@ -17,6 +20,8 @@ from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.investigation import (
     DecisionBasis,
     EvidenceNeed,
+    FightBlock,
+    FightBlockReason,
     Interpretation,
     InvestigationRequest,
     StepReason,
@@ -128,6 +133,69 @@ def test_query_is_interpreted_into_intent_ids_and_searchable_terms(
     assert interpretation.search_terms == expected_terms
 
 
+@pytest.mark.parametrize(
+    ("query", "expected_block"),
+    [
+        ("aka attacks", FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="aka")),
+        ("EPS AKA crash", FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="EPS AKA")),
+        ("EAP-AKA' threats", FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="EAP-AKA'")),
+        (
+            "5G, aka NR GTP threats",
+            FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="aka"),
+        ),
+        ("5Géaka threats", FightBlock(reason=FightBlockReason.TERM_READS_AS_TOPIC, subject="aka")),
+        (
+            "CVE-9999-0003 GTP threats",
+            FightBlock(reason=FightBlockReason.CVE_ID_NAMED, subject="CVE-9999-0003"),
+        ),
+        (
+            "5G-AKA threats",
+            FightBlock(reason=FightBlockReason.TOPIC_RESOLVED, subject=FIVE_G_AKA_TOPIC_ID),
+        ),
+        ("gtp threats", None),
+    ],
+    ids=[
+        "bare_excluded_alias",
+        "excluded_phrase",
+        "excluded_phrase_with_an_apostrophe",
+        "excluded_alias_among_other_words",
+        "excluded_alias_only_the_ascii_reading_finds",
+        "cve_id_named",
+        "topic_resolved",
+        "free_text_without_a_block",
+    ],
+)
+def test_fight_block_names_the_first_reason_the_words_may_not_go_to_fight(
+    topic_registry: TopicRegistry, query: str, expected_block: FightBlock | None
+) -> None:
+    assert find_fight_block(query, topic_registry) == expected_block
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_fight_terms"),
+    [
+        ("GTP threats in the mobile core", ("gtp", "threats", "mobile", "core")),
+        ("5G, aka NR GTP threats", ()),
+        ("5Géaka threats", ()),
+        ("CVE-9999-0003 GTP threats", ()),
+        ("5G-AKA threats", ()),
+    ],
+    ids=["every_word", "excluded_term", "word_read_alone", "cve_id", "topic"],
+)
+def test_fight_terms_are_every_search_term_or_none(
+    topic_registry: TopicRegistry, query: str, expected_fight_terms: tuple[str, ...]
+) -> None:
+    interpretation = interpret_request(
+        build_investigation_request(query, "mixed"), topic_registry, build_productless_catalog()
+    )
+
+    fight_terms = list_fight_terms(query, topic_registry)
+
+    assert fight_terms == expected_fight_terms
+    assert interpretation.fight_terms == expected_fight_terms
+    assert interpretation.fight_block == find_fight_block(query, topic_registry)
+
+
 def test_overlong_normalized_token_is_dropped_rather_than_searched(
     topic_registry: TopicRegistry,
 ) -> None:
@@ -171,7 +239,13 @@ def test_overlong_normalized_token_is_dropped_rather_than_searched(
             (StopReason.NO_EVIDENCE, DecisionBasis.NO_SEARCHABLE_TERMS),
         ),
         (
-            "crash",
+            "EPS AKA crash",
+            "protocol_context_only",
+            {},
+            (StopReason.NO_EVIDENCE, DecisionBasis.PROTOCOL_SCOPE_NEEDS_TOPIC),
+        ),
+        (
+            "5Géaka threats",
             "protocol_context_only",
             {},
             (StopReason.NO_EVIDENCE, DecisionBasis.PROTOCOL_SCOPE_NEEDS_TOPIC),
@@ -183,6 +257,7 @@ def test_overlong_normalized_token_is_dropped_rather_than_searched(
             (StopReason.POLICY_BLOCKED, DecisionBasis.CVE_IDS_OVER_LOOKUP_CAP),
         ),
         ("5gaka", "protocol_context_only", {}, None),
+        ("crash", "protocol_context_only", {}, None),
         ("crash", "mixed", {}, None),
         ("CVE-9999-0003", "mixed", {"products": ["f5gc"]}, None),
     ],
@@ -192,9 +267,11 @@ def test_overlong_normalized_token_is_dropped_rather_than_searched(
         "any_filter_under_protocol",
         "excluded_terms_only",
         "unsearchable",
-        "free_text_under_protocol",
+        "free_text_with_an_excluded_term_under_protocol",
+        "free_text_with_a_word_read_alone_as_an_excluded_term_under_protocol",
         "more_ids_than_one_lookup_takes",
         "topic_under_protocol",
+        "free_text_under_protocol_searches_fight_directly",
         "free_text_mixed",
         "exact_id_with_product",
     ],
@@ -236,6 +313,24 @@ def test_interpretation_stop_is_decided_before_any_call(
             [(build_search_call("crash"), StepReason.QUERY_TERMS)],
         ),
         ("aka bug in amf", "mixed", [(build_search_call("bug amf"), StepReason.QUERY_TERMS)]),
+        (
+            "gtp threats",
+            "protocol_context_only",
+            [(build_fight_direct_search_call(), StepReason.QUERY_TERMS_FIGHT)],
+        ),
+        (
+            "gtp threats",
+            "mixed",
+            [
+                (build_search_call("gtp threats"), StepReason.QUERY_TERMS),
+                (build_fight_direct_search_call(), StepReason.QUERY_TERMS_FIGHT),
+            ],
+        ),
+        (
+            "gtp threats",
+            "implementation_only",
+            [(build_search_call("gtp threats"), StepReason.QUERY_TERMS)],
+        ),
     ],
     ids=[
         "exact_id_implementation",
@@ -244,10 +339,13 @@ def test_interpretation_stop_is_decided_before_any_call(
         "topic_mixed",
         "topic_protocol",
         "free_text_implementation",
-        "free_text_mixed",
+        "free_text_mixed_whose_words_may_not_go_to_fight",
+        "free_text_protocol_searches_fight_directly",
+        "free_text_mixed_searches_cves_then_fight",
+        "free_text_implementation_never_searches_fight",
     ],
 )
-def test_round_one_plans_one_call_by_intent_and_scope(
+def test_round_one_plans_calls_by_intent_and_scope(
     topic_registry: TopicRegistry,
     query: str,
     scope: str,
@@ -417,13 +515,21 @@ def test_r3_searches_the_query_terms_when_the_explored_topic_answered_nothing(
         (build_topic_call(), QueryScope.MIXED, 5),
         (build_topic_call(), QueryScope.IMPLEMENTATION_ONLY, 4),
         (build_search_call("crash"), QueryScope.MIXED, 1),
+        (build_fight_direct_search_call(), QueryScope.PROTOCOL_CONTEXT_ONLY, 1),
         (
             build_exact_lookup_call("CVE-9999-0001", "CVE-9999-0002"),
             QueryScope.IMPLEMENTATION_ONLY,
             1,
         ),
     ],
-    ids=["topic_protocol", "topic_mixed", "topic_implementation", "search", "exact_lookup"],
+    ids=[
+        "topic_protocol",
+        "topic_mixed",
+        "topic_implementation",
+        "search",
+        "fight_direct_search",
+        "exact_lookup",
+    ],
 )
 def test_call_costs_every_backend_query_it_fans_out_to(
     topic_registry: TopicRegistry, call: ToolCall, scope: QueryScope, expected_cost: int

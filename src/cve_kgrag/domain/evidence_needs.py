@@ -4,13 +4,23 @@ The needs follow from the request and its interpretation alone, never from label
 cases, and whether one was met follows from what the run recorded, so the controller, the
 validator and the decision-path audit compute the same needs from a sealed set. Each need
 is met only by the tool that can serve it: an exact lookup a named CVE, a CVE search
-implementation CVEs, a topic call implementation CVEs and protocol context; no tool serves
-affectedness (ADR 0003).
+implementation CVEs, a topic call implementation CVEs and protocol context, and with no
+topic a direct FiGHT search protocol context; no tool serves affectedness (ADR 0003). A
+need no admitted step of a serving tool has a result for is ``not_evaluated``: whether it
+is met cannot yet be judged.
 
-``docs/rebuild/m7b-b-evidence-needs.md`` gives the rules and their limits.
+Implementation CVEs and protocol context searched with the query's own words share one
+term-coverage check: a search term a search warned no record holds, and the interpretation
+does not explain (``list_explained_terms``), leaves the need ``not_found``. It is a
+conservative check of what the retrieval covered, not a judgement of relevance: it keeps
+every answer item, and a need whose every word some record holds is met by whatever
+matches them.
+
+``docs/rebuild/m7b-b-evidence-needs.md`` and ``docs/rebuild/m7b-c-fight-direct-search.md``
+give the rules and their limits.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 from cve_kgrag.domain.investigation import (
     EvidenceNeed,
@@ -23,13 +33,24 @@ from cve_kgrag.domain.investigation import (
     ToolStep,
     list_named_products,
 )
-from cve_kgrag.domain.planning import CveExactLookupCall, CveSearchCall, TopicContextCall
+from cve_kgrag.domain.planning import (
+    CveExactLookupCall,
+    CveSearchCall,
+    FightDirectSearchCall,
+    TopicContextCall,
+)
 from cve_kgrag.domain.search import SearchWarningCode
 from cve_kgrag.domain.text import AFFECTEDNESS_QUESTION_TERMS, list_query_terms, tokenize
 from cve_kgrag.domain.threat_context import ThreatContextItem
-from cve_kgrag.domain.topic_context import SERVED_STATUSES, KnowledgeSource, QueryScope
+from cve_kgrag.domain.topic_context import (
+    SERVED_STATUSES,
+    KnowledgeSource,
+    QueryScope,
+    TopicContextWarningCode,
+)
 
 RequiredNeed = tuple[EvidenceNeedKind, str | None]
+OPEN_NEED_OUTCOMES = frozenset({NeedOutcome.NOT_FOUND, NeedOutcome.NOT_EVALUATED})
 
 
 def derive_needs(
@@ -107,23 +128,46 @@ def list_explained_terms(interpretation: Interpretation) -> set[str]:
     return explained_terms
 
 
-def list_unexplained_unindexed_terms(
-    interpretation: Interpretation, steps: Sequence[ToolStep]
+def filter_unexplained_terms(
+    interpretation: Interpretation, unindexed_terms: Iterable[str]
 ) -> set[str]:
-    """The query's search terms an admitted search warned no record holds, other than
-    words the interpretation explains (``5gaka`` names 5G-AKA whether or not a record
-    spells it so)."""
+    """Of the words a search warned no record holds, the query's search terms the
+    interpretation does not explain (``5gaka`` names 5G-AKA whether or not a record
+    spells it so). The one explanation rule of both the CVE and the FiGHT side."""
     search_terms = set(interpretation.search_terms)
     explained_terms = list_explained_terms(interpretation)
     unexplained_terms: set[str] = set()
+    for term in unindexed_terms:
+        if term in search_terms and term not in explained_terms:
+            unexplained_terms.add(term)
+    return unexplained_terms
+
+
+def list_unexplained_unindexed_terms(
+    interpretation: Interpretation, steps: Sequence[ToolStep]
+) -> set[str]:
+    """The query's search terms an admitted CVE search warned no record holds, other than
+    words the interpretation explains."""
+    unindexed_terms: list[str] = []
     for step in list_admitted_steps(steps):
         for search_warning in step.search_warnings:
-            if search_warning.code is not SearchWarningCode.TERM_NOT_INDEXED:
-                continue
-            term = search_warning.subject
-            if term in search_terms and term not in explained_terms:
-                unexplained_terms.add(term)
-    return unexplained_terms
+            if search_warning.code is SearchWarningCode.TERM_NOT_INDEXED:
+                unindexed_terms.append(search_warning.subject)
+    return filter_unexplained_terms(interpretation, unindexed_terms)
+
+
+def list_unexplained_unindexed_fight_terms(
+    interpretation: Interpretation, fight_steps: Sequence[ToolStep]
+) -> set[str]:
+    """The query's search terms one of ``fight_steps``, admitted direct FiGHT searches,
+    warned no technique holds, other than words the interpretation explains. FiGHT's
+    warning is a topic warning, so it never reaches the CVE side's rule."""
+    unindexed_terms: list[str] = []
+    for step in fight_steps:
+        for topic_warning in step.topic_warnings:
+            if topic_warning.code is TopicContextWarningCode.TERM_NOT_INDEXED:
+                unindexed_terms.append(topic_warning.subject)
+    return filter_unexplained_terms(interpretation, unindexed_terms)
 
 
 def has_failed_source(steps: Sequence[ToolStep], source: KnowledgeSource) -> bool:
@@ -135,10 +179,13 @@ def has_failed_source(steps: Sequence[ToolStep], source: KnowledgeSource) -> boo
 
 
 def judge_named_cve(cve_id: str, admitted_steps: Sequence[ToolStep]) -> NeedOutcome:
+    """Not evaluated without an admitted lookup of the ID; found when one returned it."""
     lookup_steps: list[ToolStep] = []
     for step in admitted_steps:
         if isinstance(step.call, CveExactLookupCall) and cve_id in step.call.cve_ids:
             lookup_steps.append(step)
+    if not lookup_steps:
+        return NeedOutcome.NOT_EVALUATED
     if any(cve_id in step.answer_ids for step in lookup_steps):
         return NeedOutcome.FOUND
     if has_failed_source(lookup_steps, KnowledgeSource.CVE_SEARCH):
@@ -151,19 +198,33 @@ def judge_protocol_context(
     admitted_steps: Sequence[ToolStep],
     protocol_context: Sequence[ThreatContextItem],
 ) -> NeedOutcome:
-    """Found when the answer lists a technique an admitted topic step returned. Without a
-    resolved topic no tool reaches FiGHT."""
-    if not interpretation.resolution.matches:
+    """Served by the admitted topic steps when a topic resolved, else by the admitted direct
+    FiGHT searches. Unsupported when no topic resolved and the words may not be sent to
+    FiGHT (``interpretation.fight_block`` says why); not evaluated without a serving step.
+    Without a topic, not found when a direct search warned that no technique holds a word
+    the interpretation does not explain (``list_explained_terms``): a conservative check
+    of term coverage, not a judgement of relevance, so the techniques stay listed and the
+    step's ``term_not_indexed`` names the word. Otherwise found when the answer lists a
+    technique a serving step returned."""
+    has_topic = bool(interpretation.resolution.matches)
+    if not has_topic and not interpretation.fight_terms:
         return NeedOutcome.UNSUPPORTED
-    topic_steps: list[ToolStep] = []
-    topic_answer_ids: set[str] = set()
+    serving_call_type: type[TopicContextCall | FightDirectSearchCall] = FightDirectSearchCall
+    if has_topic:
+        serving_call_type = TopicContextCall
+    serving_steps: list[ToolStep] = []
+    serving_answer_ids: set[str] = set()
     for step in admitted_steps:
-        if isinstance(step.call, TopicContextCall):
-            topic_steps.append(step)
-            topic_answer_ids.update(step.answer_ids)
-    if any(item.technique_id in topic_answer_ids for item in protocol_context):
+        if isinstance(step.call, serving_call_type):
+            serving_steps.append(step)
+            serving_answer_ids.update(step.answer_ids)
+    if not serving_steps:
+        return NeedOutcome.NOT_EVALUATED
+    if not has_topic and list_unexplained_unindexed_fight_terms(interpretation, serving_steps):
+        return NeedOutcome.NOT_FOUND
+    if any(item.technique_id in serving_answer_ids for item in protocol_context):
         return NeedOutcome.FOUND
-    if has_failed_source(topic_steps, KnowledgeSource.MITRE_FIGHT):
+    if has_failed_source(serving_steps, KnowledgeSource.MITRE_FIGHT):
         return NeedOutcome.SOURCE_UNAVAILABLE
     return NeedOutcome.NOT_FOUND
 
@@ -175,18 +236,21 @@ def judge_implementation_cves(
 ) -> NeedOutcome:
     """A limited check of the retrieval process, not proof that the CVEs are relevant.
 
-    Not found when a search term the interpretation does not explain
+    Not evaluated without an admitted CVE search or topic call. Not found when a search
+    term the interpretation does not explain
     (``list_explained_terms``) is held by no record. With a
     resolved topic, found when the answer lists a CVE an admitted topic call or search
     found, at the relevance tier the card gave it. Without one, found when the admitted
     searches together sent every search term and one of them returned a CVE.
     """
-    if list_unexplained_unindexed_terms(interpretation, admitted_steps):
-        return NeedOutcome.NOT_FOUND
     serving_steps: list[ToolStep] = []
     for step in admitted_steps:
         if isinstance(step.call, CveSearchCall | TopicContextCall):
             serving_steps.append(step)
+    if not serving_steps:
+        return NeedOutcome.NOT_EVALUATED
+    if list_unexplained_unindexed_terms(interpretation, admitted_steps):
+        return NeedOutcome.NOT_FOUND
     if interpretation.resolution.matches:
         serving_step_indices: set[int] = set()
         for step in serving_steps:
@@ -238,9 +302,9 @@ def judge_needs(
 
 
 def is_need_open(needs: Sequence[EvidenceNeed], kind: EvidenceNeedKind) -> bool:
-    """Whether a need of ``kind`` is ``not_found``: unmet, and a tool could still meet it.
-    ``source_unavailable`` and ``unsupported`` are final."""
-    return any(need.kind is kind and need.outcome is NeedOutcome.NOT_FOUND for need in needs)
+    """Whether a need of ``kind`` is ``not_found`` or ``not_evaluated``: unmet, and a tool
+    could still meet it. ``source_unavailable`` and ``unsupported`` are final."""
+    return any(need.kind is kind and need.outcome in OPEN_NEED_OUTCOMES for need in needs)
 
 
 def has_unmet_need_beyond_affectedness(needs: Sequence[EvidenceNeed]) -> bool:

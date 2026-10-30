@@ -2,15 +2,19 @@
 
 Per step, in order (the first failing check is the step's rejection):
 
-1. ``tool_not_permitted_by_scope``: a CVE tool under ``protocol_context_only``;
+1. ``tool_not_permitted_by_scope``: a CVE tool under ``protocol_context_only``, or a
+   direct FiGHT search under ``implementation_only``;
 2. ``invented_cve_id``: an exact lookup of an ID the caller did not name;
 3. ``cve_id_in_search_text``: a free-text search carrying a CVE ID;
 4. ``term_outside_vocabulary``: a search with no search term (``list_query_terms``:
    a search of nothing but stopwords and the low-signal words ``cve`` and ``cves`` has
    none), or a term outside the caller's terms and the resolved card's terms;
 5. ``topic_not_resolved``: a topic other than the one the query resolved;
+   ``fight_direct_search_blocked``: a direct FiGHT search the interpretation does not
+   allow (no ``fight_terms``; ``fight_block`` records why);
 6. ``repeated_call``: a call that would run as one already issued in this run, or
-   as an earlier call of the plan that passed checks 1-5.
+   as an earlier call of the plan that passed checks 1-5. A direct FiGHT search's key is
+   constant, so a run holds at most one.
 
 Then over the whole plan, every call counted, repeats included, except a topic
 that was not resolved (it may have no card to cost): ``missing_baseline_source``
@@ -38,6 +42,7 @@ terms, stopwords, low-signal words or repeated IDs share a key and count as a re
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import assert_never
 
 from pydantic import ValidationError
 
@@ -50,11 +55,13 @@ from cve_kgrag.domain.investigation import Interpretation, InvestigationRequest,
 from cve_kgrag.domain.planning import (
     CveExactLookupCall,
     CveSearchCall,
+    FightDirectSearchCall,
     PlanRejection,
     PlanRejectionCode,
     QueryPlan,
     ToolCall,
     ToolName,
+    TopicContextCall,
     compute_call_key,
     is_tool_permitted,
     list_tool_sources,
@@ -128,8 +135,9 @@ def list_plan_sources(calls: Sequence[ToolCall], scope: QueryScope) -> frozenset
 
 def canonicalize_call(call: ToolCall) -> ToolCall:
     """The call as it runs and is recorded: a search keeps only its search terms, each
-    once and in order, and an exact lookup each ID once. Only an accepted call is
-    canonicalized, so its search has a term within the query limit."""
+    once and in order, and an exact lookup each ID once; a topic call and a direct FiGHT
+    search, which carry no text, stay as they are. Only an accepted call is canonicalized,
+    so its search has a term within the query limit."""
     if isinstance(call, CveSearchCall):
         search_terms = list_search_terms(call.query, set())
         return CveSearchCall(tool=ToolName.CVE_SEARCH, query=" ".join(search_terms))
@@ -167,10 +175,15 @@ def find_call_rejection(call: ToolCall, plan_context: PlanContext) -> PlanReject
         has_search_term = bool(list_search_terms(call.query, set()))
         if not has_search_term or has_foreign_term:
             return PlanRejectionCode.TERM_OUTSIDE_VOCABULARY
-    else:
+    elif isinstance(call, TopicContextCall):
         matches = interpretation.resolution.matches
         if not matches or call.topic_id != matches[0].topic_id:
             return PlanRejectionCode.TOPIC_NOT_RESOLVED
+    elif isinstance(call, FightDirectSearchCall):
+        if not interpretation.fight_terms:
+            return PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED
+    else:
+        assert_never(call)
     return None
 
 

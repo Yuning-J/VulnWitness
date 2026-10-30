@@ -2,16 +2,17 @@
 
 Every call runs under the request's filters, semantic flag and per-call result cap;
 a plan cannot change them. The cap bounds every backend search a call sends,
-including each template search a ``topic_context`` call fans out to, and each step
-records those searches as built from the same requests the tools run. A response
-that fails its own evidence validation is recorded as an integrity failure, never
-used as partial data.
+including each template search a ``topic_context`` call fans out to and the one FiGHT
+search of a ``fight_direct_search`` call, which sends the interpretation's words
+(``list_fight_terms``) and nothing a planner chose. Each step records those searches as
+built from the same requests the tools run. A response that fails its own evidence
+validation is recorded as an integrity failure, never used as partial data.
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, assert_never
 
-from cve_kgrag.application.investigation_policy import count_tool_calls
+from cve_kgrag.application.investigation_policy import count_tool_calls, list_fight_terms
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.application.topic_context import (
     TopicContextService,
@@ -35,6 +36,7 @@ from cve_kgrag.domain.investigation import (
 from cve_kgrag.domain.planning import (
     CveExactLookupCall,
     CveSearchCall,
+    FightDirectSearchCall,
     PlannerKind,
     ToolCall,
     TopicContextCall,
@@ -47,6 +49,7 @@ from cve_kgrag.domain.taxonomy import ResultStatus, RetrievalChannel
 from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import (
     KnowledgeSource,
+    QueryScope,
     SourceOutcome,
     TopicContextRequest,
     TopicContextResponse,
@@ -93,38 +96,67 @@ class ToolExecutor:
         self._topic_registry = topic_registry
 
     def execute(self, call: ToolCall, request: InvestigationRequest) -> ToolExecution:
+        """Run the call. Raises ``LookupError`` for a direct FiGHT search of a query whose
+        words may not go to FiGHT, a call the gate never admits."""
         try:
+            if isinstance(call, CveExactLookupCall | CveSearchCall):
+                search_response = self._search_service.search(build_search_request(call, request))
+                return build_search_execution(search_response)
             if isinstance(call, TopicContextCall):
                 topic = self._topic_registry.require_topic(call.topic_id)
                 topic_exploration = self._topic_context_service.explore_with_omissions(
                     build_topic_request(topic, request)
                 )
-                topic_response = topic_exploration.response
-                return ToolExecution(
-                    search_response=None,
-                    topic_response=topic_response,
-                    integrity_violations=(),
-                    context_bytes=measure_context_bytes(topic_response),
-                    omitted_topic_cve_ids=topic_exploration.omitted_cve_ids,
+                return build_topic_execution(
+                    topic_exploration.response, topic_exploration.omitted_cve_ids
                 )
-            search_response = self._search_service.search(build_search_request(call, request))
+            if isinstance(call, FightDirectSearchCall):
+                fight_terms = require_fight_terms(request, self._topic_registry)
+                topic_response = self._topic_context_service.search_fight_directly(
+                    build_fight_request(request), fight_terms
+                )
+                return build_topic_execution(topic_response, ())
+            assert_never(call)
         except EvidenceValidationError as error:
             # A source returned evidence that failed integrity; it is an observation,
             # never partial data.
             return ToolExecution(None, None, error.violations, 0)
-        return build_search_execution(search_response)
+
+
+def require_fight_terms(
+    request: InvestigationRequest, topic_registry: TopicRegistry
+) -> tuple[str, ...]:
+    """The words a direct FiGHT search of the request sends (``list_fight_terms``). Raises
+    ``LookupError`` when the query's words may not go to FiGHT, a call the gate never
+    admits."""
+    fight_terms = list_fight_terms(request.query, topic_registry)
+    if not fight_terms:
+        raise LookupError("the interpretation allows no direct FiGHT search")
+    return fight_terms
 
 
 def list_backend_requests(
     call: ToolCall, request: InvestigationRequest, topic_registry: TopicRegistry
 ) -> tuple[BackendRequest, ...]:
     """The searches a call sends, in the order it sends them, from the same request
-    builders the executor runs it with: a CVE tool's one search, or a topic's FiGHT search
-    (unless the scope is ``implementation_only``) then one search per card query template.
-    Raises ``LookupError`` for a topic the registry does not hold."""
-    if not isinstance(call, TopicContextCall):
+    builders the executor runs it with: a CVE tool's one search, a topic's FiGHT search
+    (unless the scope is ``implementation_only``) then one search per card query template,
+    or a direct FiGHT search of the query's ``list_fight_terms``. Raises ``LookupError``
+    for a topic the registry does not hold, or a direct FiGHT search of a query whose
+    words may not go to FiGHT."""
+    if isinstance(call, CveExactLookupCall | CveSearchCall):
         search_request = build_search_request(call, request)
         return (record_cve_request(search_request),)
+    if isinstance(call, FightDirectSearchCall):
+        return (
+            FightBackendRequest(
+                source=KnowledgeSource.MITRE_FIGHT,
+                terms=require_fight_terms(request, topic_registry),
+                limit=decide_fight_search_limit(build_fight_request(request)),
+            ),
+        )
+    if not isinstance(call, TopicContextCall):
+        assert_never(call)
     topic = topic_registry.require_topic(call.topic_id)
     topic_request = build_topic_request(topic, request)
     backend_requests: list[BackendRequest] = []
@@ -167,8 +199,33 @@ def build_topic_request(topic: ProtocolTopic, request: InvestigationRequest) -> 
     )
 
 
+def build_fight_request(request: InvestigationRequest) -> TopicContextRequest:
+    """The direct FiGHT search, asked by the caller's own query under
+    ``protocol_context_only``, its one section and search bounded by the result cap. FiGHT
+    is never filtered, so the request names no filter."""
+    max_results_per_call = request.budget.max_results_per_call
+    return TopicContextRequest(
+        query=request.query,
+        scope=QueryScope.PROTOCOL_CONTEXT_ONLY,
+        limit=max_results_per_call,
+        max_results_per_search=max_results_per_call,
+    )
+
+
 def build_search_execution(search_response: SearchResponse) -> ToolExecution:
     return ToolExecution(search_response, None, (), measure_context_bytes(search_response))
+
+
+def build_topic_execution(
+    topic_response: TopicContextResponse, omitted_cve_ids: tuple[str, ...]
+) -> ToolExecution:
+    return ToolExecution(
+        search_response=None,
+        topic_response=topic_response,
+        integrity_violations=(),
+        context_bytes=measure_context_bytes(topic_response),
+        omitted_topic_cve_ids=omitted_cve_ids,
+    )
 
 
 def record_cve_request(search_request: SearchRequest) -> CveBackendRequest:
@@ -216,7 +273,8 @@ def issue_step(
 ) -> IssuedStep:
     """A planned call as issued: its call key, the backend requests it sends, its charge and
     sources, all derived from the call, the request and the registry's card. Raises
-    ``LookupError`` for a topic the registry does not hold."""
+    ``LookupError`` for a topic the registry does not hold, or a direct FiGHT search of a
+    query whose words may not go to FiGHT."""
     return IssuedStep(
         step_index=step_index,
         round_number=round_number,

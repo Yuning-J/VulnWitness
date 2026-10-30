@@ -1041,7 +1041,7 @@
     },
     "FightBackendRequest": {
       "additionalProperties": false,
-      "description": "The FiGHT search a topic step sent: the topic's name, aliases and entities.",
+      "description": "The FiGHT search a step sent: a topic's names, aliases and entities, or the\ninterpretation's fight_terms.",
       "properties": {
         "limit": {
           "maximum": 20,
@@ -1069,6 +1069,52 @@
         "limit"
       ],
       "title": "FightBackendRequest",
+      "type": "object"
+    },
+    "FightBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/FightBlockReason"
+        },
+        "subject": {
+          "description": "The first matched topic ID, the first excluded term, the first CVE ID, or the search term the registry reads as a topic or excluded term.",
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "subject"
+      ],
+      "title": "FightBlock",
+      "type": "object"
+    },
+    "FightBlockReason": {
+      "description": "Why the query's words may not be sent to FiGHT without a reviewed topic, checked in\nthis order: a topic resolved, so its card's terms reach FiGHT; the query names an\nexcluded term; it names a CVE ID; or one of its search terms the registry reads alone\nas a topic or an excluded term.",
+      "enum": [
+        "topic_resolved",
+        "excluded_term",
+        "cve_id_named",
+        "term_reads_as_topic"
+      ],
+      "title": "FightBlockReason",
+      "type": "string"
+    },
+    "FightDirectSearchCall": {
+      "additionalProperties": false,
+      "description": "One MITRE FiGHT search with the question's own words, when no topic resolved. It\ntakes no arguments, so no planner chooses its words: the interpretation's\n``fight_terms`` are what it sends.",
+      "properties": {
+        "tool": {
+          "const": "fight_direct_search",
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "title": "FightDirectSearchCall",
       "type": "object"
     },
     "FightUnavailableDetail": {
@@ -1134,6 +1180,25 @@
           "title": "Cve Ids",
           "type": "array"
         },
+        "fight_block": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FightBlock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the search terms may not be sent to FiGHT without a reviewed topic; null when they may."
+        },
+        "fight_terms": {
+          "description": "The words a direct FiGHT search sends: all of search_terms when fight_block is null, else none; never a subset.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fight Terms",
+          "type": "array"
+        },
         "intent": {
           "$ref": "#/$defs/QueryIntent"
         },
@@ -1158,6 +1223,8 @@
         "normalized_query",
         "cve_ids",
         "search_terms",
+        "fight_terms",
+        "fight_block",
         "resolution",
         "affectedness_mentions"
       ],
@@ -1320,7 +1387,7 @@
     },
     "InvestigationWarning": {
       "additionalProperties": false,
-      "description": "What the run could not do or left out. ``answer_truncated`` counts, each once, the\nitems the adopted steps knew and the answer does not list: the CVEs they kept (a CVE\nthe caller named always kept), those the topic step kept and left out at its limit\nincluded, less the CVEs the answer lists, plus the techniques the topic step matched\nand did not list. ``unrelated_candidates_dropped`` counts search-step candidates the\nrelevance rule removed, never one ``answer_truncated`` counts.",
+      "description": "What the run could not do or left out. ``answer_truncated`` counts, each once, the\nitems the adopted steps knew and the answer does not list: the CVEs they kept (a CVE\nthe caller named always kept), those the topic step kept and left out at its limit\nincluded, less the CVEs the answer lists, plus the techniques the step that searched\nFiGHT (a topic step or a direct FiGHT search) matched and did not list.\n``unrelated_candidates_dropped`` counts search-step candidates the\nrelevance rule removed, never one ``answer_truncated`` counts.",
       "properties": {
         "code": {
           "$ref": "#/$defs/InvestigationWarningCode"
@@ -1632,11 +1699,13 @@
       "type": "string"
     },
     "NeedOutcome": {
+      "description": "Whether a need was met. ``unsupported``: no tool can serve it for this\ninterpretation. ``not_evaluated``: no admitted step of a tool that serves it has a\nresult, so whether it is met cannot yet be judged. ``not_evaluated`` and ``not_found``\nare open; ``source_unavailable`` and ``unsupported`` are final.",
       "enum": [
         "found",
         "not_found",
         "source_unavailable",
-        "unsupported"
+        "unsupported",
+        "not_evaluated"
       ],
       "title": "NeedOutcome",
       "type": "string"
@@ -1691,6 +1760,7 @@
         "cve_id_in_search_text",
         "term_outside_vocabulary",
         "topic_not_resolved",
+        "fight_direct_search_blocked",
         "repeated_call",
         "missing_baseline_source",
         "missing_named_cve_id",
@@ -2187,6 +2257,7 @@
               "mapping": {
                 "cve_exact_lookup": "#/$defs/CveExactLookupCall",
                 "cve_search": "#/$defs/CveSearchCall",
+                "fight_direct_search": "#/$defs/FightDirectSearchCall",
                 "topic_context": "#/$defs/TopicContextCall"
               },
               "propertyName": "tool"
@@ -2200,6 +2271,9 @@
               },
               {
                 "$ref": "#/$defs/TopicContextCall"
+              },
+              {
+                "$ref": "#/$defs/FightDirectSearchCall"
               }
             ]
           },
@@ -3214,6 +3288,7 @@
         "topic_after_literal_miss",
         "topic_for_open_need",
         "query_terms_for_open_need",
+        "query_terms_fight",
         "model_proposal"
       ],
       "title": "StepReason",
@@ -3292,7 +3367,7 @@
           "type": "array"
         },
         "matched_terms": {
-          "description": "Terms of the topic the server searched for; the search checks each.",
+          "description": "Terms the server sent to FiGHT that the technique holds: a resolved topic's name, aliases and entities, or with no topic the question's own words.",
           "items": {
             "type": "string"
           },
@@ -3412,7 +3487,7 @@
           "type": "array"
         },
         "backend_requests": {
-          "description": "Every search the call sends to a knowledge source, in order, with its limit; a topic_context call fans out to several.",
+          "description": "Every search the call sends to a knowledge source, in order, with its limit; a topic_context call fans out to several, and a fight_direct_search call sends one FiGHT search of the interpretation's fight_terms.",
           "items": {
             "discriminator": {
               "mapping": {
@@ -3440,6 +3515,7 @@
             "mapping": {
               "cve_exact_lookup": "#/$defs/CveExactLookupCall",
               "cve_search": "#/$defs/CveSearchCall",
+              "fight_direct_search": "#/$defs/FightDirectSearchCall",
               "topic_context": "#/$defs/TopicContextCall"
             },
             "propertyName": "tool"
@@ -3453,6 +3529,9 @@
             },
             {
               "$ref": "#/$defs/TopicContextCall"
+            },
+            {
+              "$ref": "#/$defs/FightDirectSearchCall"
             }
           ],
           "title": "Call"
@@ -3640,7 +3719,7 @@
     },
     "TopicContextWarning": {
       "additionalProperties": false,
-      "description": "What a response leaves out or could not do. ``protocol_context_truncated`` counts\nthe techniques the snapshot matched that the protocol section does not list because\nof the response's bounds; ``candidates_truncated`` the relevant CVEs topic context\nheld that the candidate section does not list only because of its limit, never a\nbackend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the\nrelevance rule removed. A cut changes no status.",
+      "description": "What a response leaves out or could not do. ``protocol_context_truncated`` counts\nthe techniques the snapshot matched that the protocol section does not list because\nof the response's bounds; ``candidates_truncated`` the relevant CVEs topic context\nheld that the candidate section does not list only because of its limit, never a\nbackend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the\nrelevance rule removed. ``term_not_indexed`` names a word a direct FiGHT search sent\nthat no technique holds; a topic's card search never raises it. A cut changes no\nstatus.",
       "properties": {
         "code": {
           "$ref": "#/$defs/TopicContextWarningCode"
@@ -3664,6 +3743,7 @@
         "additional_topic_not_explored",
         "unrelated_candidates_dropped",
         "source_snapshot_is_excerpt",
+        "term_not_indexed",
         "protocol_context_truncated",
         "candidates_truncated"
       ],
@@ -4381,8 +4461,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.29",
-      "default": "2.0.0-dev.29",
+      "const": "2.0.0-dev.30",
+      "default": "2.0.0-dev.30",
       "title": "Schema Version",
       "type": "string"
     },

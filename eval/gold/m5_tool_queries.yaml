@@ -7,8 +7,9 @@
 # - search_vulnerabilities, lookup_cve: status, channels executed, candidate CVE IDs in
 #   rank order, and warnings as [code, subject];
 # - resolve_telecom_concept: matched topics as [topic_id, match_kind], and excluded terms;
-# - search_fight: status, protocol-context technique IDs, and implementation and excluded
-#   candidate CVE IDs;
+# - search_fight: status, protocol-context technique IDs in the FiGHT search order
+#   (phrase-unit BM25 score, best first, ties by technique ID), and implementation and
+#   excluded candidate CVE IDs;
 # - check_affectedness: applicability and failure;
 # - get_knowledge_capabilities: each capability's state;
 # - investigate_telecom_topic: stop reason, status, the basis of the move to validate, and
@@ -86,13 +87,19 @@ rows:
     request: {query: "5gaka"}
     expected:
       status: ok
-      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
+      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
       implementation_candidates: []
       excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
   # A bare aka resolves to no topic, so FiGHT is not searched.
   - id: fight_bare_aka
     tool: search_fight
     request: {query: "aka"}
+    expected: {status: no_match, protocol_context: [], implementation_candidates: [], excluded_implementation_candidates: []}
+  # Free text no topic resolves is not searched in FiGHT here, though the excerpt holds
+  # SUCI: only an investigation searches FiGHT with the question's own words.
+  - id: fight_free_text_without_a_topic
+    tool: search_fight
+    request: {query: "SUCI threats"}
     expected: {status: no_match, protocol_context: [], implementation_candidates: [], excluded_implementation_candidates: []}
 
   - id: affectedness_open5gs

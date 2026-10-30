@@ -159,7 +159,9 @@ A set sealed under an earlier contract version does not validate (ADR 0003 §2, 
   (`MatchedField`, and `TechniqueField` for FiGHT). Its `matched_terms` must be terms
   the server sent: the caller's query terms (lexical), its filter values (structured),
   none (semantic), relation values both records assert (graph, whose `graph_paths` are
-  checked the same way), or the topic terms sent to FiGHT. Anything else fails the call
+  checked the same way), or the terms sent to FiGHT: the resolved topic's terms, or,
+  with no topic, the interpretation's `fight_terms` an investigation's direct FiGHT
+  search sends. Anything else fails the call
   `integrity_check_failed`, or rejects the investigation step, without echoing the text.
   A FiGHT claim names the technique by ID and status only, and a FiGHT anchor's
   source name and locator are fixed by the pin and its technique ID (ADR 0003 §3).
@@ -346,7 +348,8 @@ regenerate the file.
   each warned `term_not_indexed`.
   They feed the M7 decision on whether these words join the low-signal set.
 - The other rows cover a known and an unknown CVE ID, `5gaka` and a bare `aka` for
-  concept resolution and FiGHT search, the affectedness check, an unknown evidence ID,
+  concept resolution and FiGHT search, the free text `SUCI threats` for FiGHT search
+  (no topic resolves, so nothing is searched), the affectedness check, an unknown evidence ID,
   the capabilities, and the two product investigations, which end `partial` with the
   product `unknown`.
 

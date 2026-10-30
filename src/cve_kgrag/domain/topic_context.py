@@ -315,6 +315,7 @@ class TopicContextWarningCode(StrEnum):
     ADDITIONAL_TOPIC_NOT_EXPLORED = "additional_topic_not_explored"
     UNRELATED_CANDIDATES_DROPPED = "unrelated_candidates_dropped"
     SOURCE_SNAPSHOT_IS_EXCERPT = "source_snapshot_is_excerpt"
+    TERM_NOT_INDEXED = "term_not_indexed"
     PROTOCOL_CONTEXT_TRUNCATED = "protocol_context_truncated"
     CANDIDATES_TRUNCATED = "candidates_truncated"
 
@@ -325,9 +326,10 @@ TOPIC_WARNING_ORDER = {
     TopicContextWarningCode.TOPIC_NOT_RESOLVED: 1,
     TopicContextWarningCode.ADDITIONAL_TOPIC_NOT_EXPLORED: 1,
     TopicContextWarningCode.SOURCE_SNAPSHOT_IS_EXCERPT: 2,
-    TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED: 3,
-    TopicContextWarningCode.UNRELATED_CANDIDATES_DROPPED: 4,
-    TopicContextWarningCode.CANDIDATES_TRUNCATED: 5,
+    TopicContextWarningCode.TERM_NOT_INDEXED: 3,
+    TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED: 4,
+    TopicContextWarningCode.UNRELATED_CANDIDATES_DROPPED: 5,
+    TopicContextWarningCode.CANDIDATES_TRUNCATED: 6,
 }
 # The codes whose subject is a positive decimal count, each given at most once.
 TOPIC_COUNT_WARNING_CODES = (
@@ -343,7 +345,9 @@ class TopicContextWarning(ContractModel):
     of the response's bounds; ``candidates_truncated`` the relevant CVEs topic context
     held that the candidate section does not list only because of its limit, never a
     backend's own uncounted matches; ``unrelated_candidates_dropped`` the candidates the
-    relevance rule removed. A cut changes no status."""
+    relevance rule removed. ``term_not_indexed`` names a word a direct FiGHT search sent
+    that no technique holds; a topic's card search never raises it. A cut changes no
+    status."""
 
     code: TopicContextWarningCode
     subject: str

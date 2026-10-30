@@ -99,3 +99,140 @@ the unrelated record. That is lost recall, which no later stop decision can brin
 the baseline cases' gains do not outweigh it. No vendor list, filler-word list or further
 threshold is added; whether matches answer the question is the assessment's job (B), and
 "has a CVE" does not by itself meet an implementation evidence need.
+
+## C — FiGHT search from the question's own words
+
+The design and the owner's decisions are in
+[`m7b-c-fight-direct-search.md`](m7b-c-fight-direct-search.md). Each stage (C1, C1 + C1b,
+C1 + C1b + C2) is measured against the dev.29 run before the next is added.
+
+**Pre-registered synthetic queries.** Registered before any synthetic run of C, with the
+words a relevant technique must hold. None names a holdout subject (NAS, Diameter, PJSIP).
+Each runs as a deterministic investigation over the 2026-10-27 store and FiGHT 3.1.0 with
+default budgets; per stage the table reports `fight_terms` or the block, the matched and
+listed technique counts, how many of the top 10 and top 20 hold a subject word, the
+`term_not_indexed` words, the protocol need's outcome and the stop. A subject word held by
+a technique is a crude, word-level check, not a relevance label.
+
+| Query | Scope | Subject words |
+|---|---|---|
+| `SS7 location tracking attacks` | protocol_context_only | ss7 |
+| `IMSI catcher threats` | protocol_context_only | imsi |
+| `fake base station attacks` | protocol_context_only | base, station |
+| `network slicing attacks` | protocol_context_only | slice, slicing |
+| `NRF service discovery abuse` | protocol_context_only | nrf |
+| `SEPP roaming interconnect threats` | protocol_context_only | sepp |
+| `authentication vector theft from the home network` | protocol_context_only | authentication, vector, vectors |
+| `LTE downgrade attacks` | protocol_context_only | downgrade, bidding |
+| `GTP-U TEID guessing` | protocol_context_only | teid |
+| `GTP tunnel attacks against the UPF` | protocol_context_only | gtp |
+| `UPF user plane threats` | protocol_context_only | upf, user, plane |
+| `UDM threats` | protocol_context_only | udm |
+| `AMF attacks` | protocol_context_only | amf |
+| `SIP IMS signalling attacks` | protocol_context_only | sip, ims |
+| `SIP IMS signaling attacks` | protocol_context_only | sip, ims |
+| `PFCP session manipulation threats` | protocol_context_only | pfcp (FiGHT holds none) |
+| `Bluetooth pairing attacks` | protocol_context_only | bluetooth (none) |
+| `MQTT broker threats` | protocol_context_only | mqtt (none) |
+| `WPA3 Wi-Fi handshake attacks` | protocol_context_only | wpa3, wifi, wi (none) |
+| `srsRAN vulnerabilities` | mixed | srsran (none) |
+
+**Exclusion table.** Each issues no FiGHT step and records the block: `aka attacks`,
+`EAP-AKA' threats`, `5G, aka NR GTP threats` (`excluded_term`), `EPS AKA crash` under
+both `protocol_context_only` and `mixed` (`excluded_term`), `5Géaka threats`
+(`term_reads_as_topic`, `aka`), `CVE-2024-37877 GTP threats` under `mixed`
+(`cve_id_named`).
+
+**Measured on the 13 baseline cases.** Deterministic runs over the 2026-10-27 store and
+FiGHT 3.1.0 with default budgets, `gold-sets --check` passed before each. The dev.29 row
+is a clean checkout of c1b5b8a; each stage row is a working tree on that commit, whose
+diff (new files included), its SHA-256 and the run settings stay with the run under
+`~/data/cve-kgrag/`. The holdout cases ran with the others and were not read.
+
+| Row | Code | Diff SHA-256 | Run (under `runs/c-stages/`) |
+|---|---|---|---|
+| dev.29 | c1b5b8a, clean | — | `dev29/planner-93_xb68r` |
+| C1 | c1b5b8a + diff | `f14e17b2edd9d214625851d7010b9a6facc9c0586857b7d1f3db1dda757c0eaa` | `c1/planner-sc82a8yi` |
+| C1 + C1b | c1b5b8a + diff | `92f33035c1f60c35c7c131d9de75ab7f96e4618d05c7753113b97471ccbcaf69` | `c1b/planner-h9mrj05n` |
+| C1 + C1b + C2 | c1b5b8a + diff | `bb4a86324674aa0a488ca75b65a15cceefe88ea956cf106397a30dd528c70bfe` | `c2/planner-zxfwa9np` |
+
+| Figure | dev.29 | C1 | C1 + C1b | C1 + C1b + C2 |
+|---|---|---|---|---|
+| `wrong_stop` | 3/13 | 5/13 | 4/13 | 4/13 |
+| Protocol coverage, mean over 3 | 0.222 | 0.347 | 0.347 | 0.556 |
+| Protocol irrelevant items | 0 | 5 | 5 | 7 |
+| Implementation coverage, mean over 8 | 0.827 | 0.827 | 0.827 | 0.827 |
+| `false_gap`, `unflagged_gap`, `premature_no_evidence` | 0 | 0 | 0 | 0 |
+| `need_agreement` | 13/13 | 13/13 | 13/13 | 13/13 |
+
+- Every case lists the same CVEs in the same order in all four rows; C changes only
+  FiGHT evidence and the stops that read it. Judged sufficiency stays 5 sufficient, 6
+  partial, 2 insufficient.
+- `gtp-mobile-core` (mixed, no topic) runs `cve_search` and `fight_direct_search` in
+  round 1. Its protocol coverage goes 0.0 → 0.375 (C1) → 1.0 (C2), and it stops
+  `sufficient` from C1 on. That is a wrong stop: its implementation coverage is 0.333,
+  a shortfall B's needs cannot see. It stays an open quality gap, not offset by the
+  coverage gain.
+- `sip-ims-threats` (labelled insufficient) no longer stops before planning. Under C1 it
+  stops `sufficient`, a wrong stop. With C1b, `signalling` is held by no technique, so
+  the protocol need is `not_found` and the run stops `needs_unmet`, with its techniques
+  listed. That saving rests on the spelling: `signaling` is held (below). Its irrelevant
+  items in the top 20 are 5 under the count order and 7 under BM25.
+- `5g-aka-threats` and `5g-aka-implementations` keep their steps, needs and stops. C2
+  replaces 5 of their 20 listed techniques with 5 others, all labelled allowed, and
+  their coverage stays 0.333; FGT5044 is still cut at the limit. They remain wrong stops
+  for the card-term review.
+- `oai-cn5g` remains the fourth wrong stop (CVE top-20 ranking, untouched by C).
+
+The owner accepted C on 2026-10-30 as a widening of FiGHT retrieval, not as an
+improvement of investigation quality overall: `wrong_stop` rises from 3/13 to 4/13,
+protocol irrelevant items rise to 7, and C1b's verdict depends on spelling. These stay
+open quality gaps.
+
+**Synthetic queries, measured.** The protocol need and stop under C1 and C1 + C1b
+(the FiGHT order is the same in both), the words a direct search warned no technique
+holds, and the subject check under C1 + C1b and under C2. Every synthetic query issued a
+`fight_direct_search` step with no block, so its `fight_terms` are all of its search terms
+(§2.1 of the design). The matched and listed counts are the same in every stage, since
+the order decides only which matches the limit keeps:
+
+| Query | Matched / listed | C1: need, stop | C1 + C1b: need, stop | Unheld words | Subject in top 10 / 20 (C1b → C2) |
+|---|---|---|---|---|---|
+| `SS7 location tracking attacks` | 60 / 20 | found, `sufficient` | found, `sufficient` | — | 4/6 → 5/8 |
+| `IMSI catcher threats` | 16 / 16 | found, `sufficient` | not_found, `needs_unmet` | `catcher` | 7/12 → 8/12 |
+| `fake base station attacks` | 60 / 20 | found, `sufficient` | found, `sufficient` | — | 9/14 → 8/17 |
+| `network slicing attacks` | 146 / 20 | found, `sufficient` | found, `sufficient` | — | 0/2 → 3/4 |
+| `NRF service discovery abuse` | 124 / 20 | found, `sufficient` | found, `sufficient` | — | 3/4 → 7/8 |
+| `SEPP roaming interconnect threats` | 31 / 20 | found, `sufficient` | found, `sufficient` | — | 5/5 → 5/5 |
+| `authentication vector theft from the home network` | 148 / 20 | found, `sufficient` | found, `sufficient` | — | 6/12 → 5/7 |
+| `LTE downgrade attacks` | 34 / 20 | found, `sufficient` | found, `sufficient` | — | 1/3 → 3/3 |
+| `GTP-U TEID guessing` | 16 / 16 | found, `sufficient` | found, `sufficient` | — | 3/4 → 4/4 |
+| `GTP tunnel attacks against the UPF` | 60 / 20 | found, `sufficient` | found, `sufficient` | — | 5/8 → 8/8 |
+| `UPF user plane threats` | 71 / 20 | found, `sufficient` | found, `sufficient` | — | 10/19 → 10/20 |
+| `UDM threats` | 20 / 20 | found, `sufficient` | found, `sufficient` | — | 3/9 → 5/9 |
+| `AMF attacks` | 53 / 20 | found, `sufficient` | found, `sufficient` | — | 2/5 → 8/10 |
+| `SIP IMS signalling attacks` | 36 / 20 | found, `sufficient` | not_found, `needs_unmet` | `signalling` | 3/4 → 5/6 |
+| `SIP IMS signaling attacks` | 64 / 20 | found, `sufficient` | found, `sufficient` | — | 4/5 → 6/6 |
+| `PFCP session manipulation threats` | 38 / 20 | found, `sufficient` | not_found, `needs_unmet` | `pfcp` | 0/0 → 0/0 |
+| `Bluetooth pairing attacks` | 28 / 20 | found, `sufficient` | not_found, `needs_unmet` | `bluetooth`, `pairing` | 0/0 → 0/0 |
+| `MQTT broker threats` | 3 / 3 | found, `sufficient` | not_found, `needs_unmet` | `mqtt`, `broker` | 0/0 → 0/0 |
+| `WPA3 Wi-Fi handshake attacks` | 29 / 20 | found, `sufficient` | not_found, `needs_unmet` | `wpa3` | 1/1 → 1/1 |
+| `srsRAN vulnerabilities` (mixed) | 14 / 14 | found, `needs_unmet` | not_found, `needs_unmet` | `srsran` | 0/0 → 0/0 |
+
+- **C1b's gain:** the PFCP, Bluetooth, MQTT, WPA3 and srsRAN queries, whose subject FiGHT
+  does not hold, no longer meet the protocol need on generic matches. **Its cost:**
+  `IMSI catcher threats` is judged a gap although 12 of its 16 techniques name IMSI; the
+  step's warning names `catcher`, and the techniques stay listed. **Its sensitivity:**
+  the two SIP queries differ only in spelling and get opposite verdicts. A need C1b
+  leaves `found` is not shown to be semantically sufficient.
+- **C2's order:** subject techniques in the top 10 sum to 66 → 91 and in the top 20 to
+  113 → 128. It gains most on `AMF attacks`, `NRF service discovery abuse`,
+  `network slicing attacks` and `GTP tunnel attacks against the UPF`, and loses on
+  `authentication vector theft from the home network` (top 20: 12 → 7) and
+  `fake base station attacks` (top 10: 9 → 8). No outcome or stop changes with the order.
+- **Exclusion table:** every query issued no FiGHT step and recorded its block:
+  `aka attacks`, `EAP-AKA' threats`, `5G, aka NR GTP threats` and `EPS AKA crash` under
+  both scopes (`excluded_term`); `5Géaka threats` (`term_reads_as_topic`, `aka`);
+  `CVE-2024-37877 GTP threats` under `mixed` (`cve_id_named`), which ran its exact
+  lookup only. The protocol need is `unsupported` in each, except the last, which
+  derives no protocol need.

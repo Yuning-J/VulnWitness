@@ -47,6 +47,7 @@ with 1 to {MAX_TOOL_CALLS} steps, each one of:
 {{"tool": "cve_exact_lookup", "cve_ids": ["CVE-YYYY-NNNN", ...]}}
 {{"tool": "cve_search", "query": "<words>"}}
 {{"tool": "topic_context", "topic_id": "<topic_id>"}}
+{{"tool": "fight_direct_search"}}
 and no other fields.
 
 Rules:
@@ -55,6 +56,8 @@ Rules:
   issued_calls already holds that lookup.
 - A cve_search query uses only words from allowed_terms and holds no CVE ID.
 - topic_context takes only the given topic_id.
+- fight_direct_search takes no arguments; it searches MITRE FiGHT with the question's own
+  words and is offered only when no topic resolved.
 - The tool_costs of the steps you plan add up to at most remaining_tool_calls.
 - Repeat no call in issued_calls, and no step of your own plan, even with its words
   reordered.

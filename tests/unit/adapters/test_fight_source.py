@@ -128,21 +128,103 @@ def test_status_is_normalized_and_its_published_text_kept(
     assert item.source_status == source_status
 
 
-def test_search_ranks_by_distinct_terms_and_counts_alias_spellings_once() -> None:
+def build_scored_technique(
+    technique_id: str, name: str, bluf: str, description: str
+) -> dict[str, Any]:
+    """A technique whose scored texts a test fixes in full, with one shared procedure, so
+    two techniques given texts of equal word counts have equal BM25 lengths."""
+    return build_fight_technique(
+        id=technique_id,
+        name=name,
+        bluf=bluf,
+        description=description,
+        procedureexamples=[{"name": "Replay", "description": "Replays traffic."}],
+    )
+
+
+def load_order_scenario() -> PinnedFightYamlSource:
+    """FGT9001 and FGT9003 name the common KeyHub and DKX once each; FGT9002 names only
+    the rare Zeta, three times. All three have the same word count."""
+    return load_source(
+        [
+            build_scored_technique(
+                "FGT9001", "Demo Technique", "Abuses the KeyHub.", "Replays DKX messages."
+            ),
+            build_scored_technique(
+                "FGT9002", "Demo Technique", "Abuses the Zeta.", "Replays Zeta Zeta."
+            ),
+            build_scored_technique(
+                "FGT9003", "Demo Technique", "Abuses the KeyHub.", "Replays DKX messages."
+            ),
+        ]
+    )
+
+
+def test_search_orders_by_bm25_score_not_by_distinct_terms_named() -> None:
+    source = load_order_scenario()
+
+    outcome = source.search(["KeyHub", "DKX", "Zeta"], 5)
+
+    assert list_technique_ids(outcome.items) == ["FGT9002", "FGT9001", "FGT9003"]
+    assert outcome.matched_count == 3
+
+
+@pytest.mark.parametrize(
+    "terms",
+    [["Zeta", "DKX", "KeyHub"], ["DKX", "Zeta", "KeyHub"]],
+    ids=["reversed", "shuffled"],
+)
+def test_search_order_does_not_depend_on_the_order_of_the_sent_terms(terms: list[str]) -> None:
+    source = load_order_scenario()
+
+    outcome = source.search(terms, 5)
+
+    assert list_technique_ids(outcome.items) == ["FGT9002", "FGT9001", "FGT9003"]
+
+
+def test_term_named_in_several_fields_scores_each_span() -> None:
     source = load_source(
         [
-            build_fight_technique(
-                id="FGT9001",
-                description="[SYNTHETIC] Abuse of the KeyHub.",
-                procedureexamples=[{"name": "Abuse", "description": "Abuses the hub."}],
+            build_scored_technique(
+                "FGT9001", "Demo Technique", "Abuses the hub.", "Abuse of Zeta."
             ),
-            build_fight_technique(id="FGT9002", name="Other", description="[SYNTHETIC] D-KX."),
+            build_scored_technique(
+                "FGT9002", "Zeta Technique", "Abuses the Zeta.", "Abuse of Zeta."
+            ),
+        ]
+    )
+
+    outcome = source.search(["Zeta"], 5)
+
+    assert list_technique_ids(outcome.items) == ["FGT9002", "FGT9001"]
+    assert outcome.items[0].matched_fields == ("name", "bluf", "description")
+
+
+def test_alias_spellings_of_one_term_count_once_as_the_first_spelling() -> None:
+    # FGT9002 names KeyHub twice, FGT9001 names DKX once, at equal length and equal df:
+    # FGT9001 would come first only if DKX and D-KX were scored as two terms.
+    source = load_source(
+        [
+            build_scored_technique("FGT9001", "Demo Technique", "Abuses the DKX.", "Abuse of hub."),
+            build_scored_technique(
+                "FGT9002", "Demo Technique", "Abuses the KeyHub.", "Abuse of KeyHub."
+            ),
         ]
     )
 
     outcome = source.search(["DKX", "D-KX", "KeyHub"], 5)
 
     assert list_technique_ids(outcome.items) == ["FGT9002", "FGT9001"]
+    assert outcome.items[1].matched_terms == ("DKX",)
+
+
+def test_matched_terms_follow_the_sent_order_with_the_first_alias_spelling() -> None:
+    # KeyHub sits in the bluf, D-KX in the description and DKX in the procedure:
+    # field order would put KeyHub first, and keeping both spellings would add D-KX.
+    source = load_source([build_fight_technique(description="[SYNTHETIC] D-KX.")])
+
+    outcome = source.search(["DKX", "D-KX", "KeyHub"], 5)
+
     assert outcome.items[0].matched_terms == ("DKX", "KeyHub")
 
 
@@ -150,6 +232,19 @@ def test_technique_naming_no_term_is_not_returned() -> None:
     source = load_source([build_fight_technique()])
 
     assert source.search(["SUCI"], 5).items == ()
+
+
+def test_search_names_each_sent_term_no_technique_holds_once_in_sent_order() -> None:
+    source = load_source([build_fight_technique()])
+
+    outcome = source.search(["SUCI", "KeyHub", "gtp", "Suci"], 5)
+
+    assert outcome.unindexed_terms == ("SUCI", "gtp")
+    assert list_technique_ids(outcome.items) == ["FGT9001"]
+
+
+def test_unconfigured_source_names_no_unindexed_term() -> None:
+    assert UnavailableFightSource().search(["SUCI"], 5).unindexed_terms == ()
 
 
 def test_each_item_cites_an_authoritative_threat_context_anchor() -> None:

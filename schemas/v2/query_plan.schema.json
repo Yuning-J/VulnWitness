@@ -49,6 +49,22 @@
       "title": "CveSearchCall",
       "type": "object"
     },
+    "FightDirectSearchCall": {
+      "additionalProperties": false,
+      "description": "One MITRE FiGHT search with the question's own words, when no topic resolved. It\ntakes no arguments, so no planner chooses its words: the interpretation's\n``fight_terms`` are what it sends.",
+      "properties": {
+        "tool": {
+          "const": "fight_direct_search",
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "title": "FightDirectSearchCall",
+      "type": "object"
+    },
     "TopicContextCall": {
       "additionalProperties": false,
       "properties": {
@@ -81,6 +97,7 @@
           "mapping": {
             "cve_exact_lookup": "#/$defs/CveExactLookupCall",
             "cve_search": "#/$defs/CveSearchCall",
+            "fight_direct_search": "#/$defs/FightDirectSearchCall",
             "topic_context": "#/$defs/TopicContextCall"
           },
           "propertyName": "tool"
@@ -94,6 +111,9 @@
           },
           {
             "$ref": "#/$defs/TopicContextCall"
+          },
+          {
+            "$ref": "#/$defs/FightDirectSearchCall"
           }
         ]
       },

@@ -36,10 +36,20 @@ def test_excerpt_serves_techniques_pinned_to_the_upstream_commit() -> None:
 
     outcome = source.search(["SUCI"], 20)
 
-    assert list_technique_ids(outcome.items) == ["FGT1499.503", "FGT5019", "FGT5040"]
+    assert list_technique_ids(outcome.items) == ["FGT5040", "FGT5019", "FGT1499.503"]
     for anchor in outcome.evidence:
         assert anchor.source_version == f"3.1.0@{PINNED_COMMIT}+sha256:{EXCERPT_SHA256}"
         assert anchor.scope is KnowledgeScope.PROTOCOL_THREAT_CONTEXT
+
+
+def test_excerpt_search_orders_by_bm25_score_and_breaks_ties_by_technique_id() -> None:
+    # FGT5044 names "obtained" twice, the others once each; FGT5019 is the shortest of
+    # those, and FGT5019.005 and FGT5040 have the same word count, so their scores tie.
+    source = load_fight_fixture(default_fight_fixture_dir(), PACKAGED_CATALOG, read_fixed_clock)
+
+    outcome = source.search(["obtained"], 20)
+
+    assert list_technique_ids(outcome.items) == ["FGT5044", "FGT5019", "FGT5019.005", "FGT5040"]
 
 
 def test_excerpt_declares_itself_an_excerpt() -> None:

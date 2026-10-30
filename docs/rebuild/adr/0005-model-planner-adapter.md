@@ -83,8 +83,12 @@ policy, so ADR 0003 §8's bound on their abandoned calls stands.
 - The instructions (`PLANNER_INSTRUCTIONS`) give the `QueryPlan` shape with an example and
   the gate's rules: only `allowed_tools`, every tool in `required_tools`, every ID in
   `cve_ids` in one lookup, search words only from `allowed_terms`, the tool costs within
-  `remaining_tool_calls`, nothing from `issued_calls` repeated. `quoted_query` is the
-  caller's text and never instructs the model.
+  `remaining_tool_calls`, nothing from `issued_calls` repeated. The shape lists
+  `{"tool": "fight_direct_search"}`, with the rule that it takes no arguments, searches
+  MITRE FiGHT with the question's own words and is offered only when no topic resolved;
+  the planning input offers it only when, in addition, the scope is not
+  `implementation_only` and the interpretation lets the words go to FiGHT
+  (`fight_terms`). `quoted_query` is the caller's text and never instructs the model.
 - `PlanningInput.required_tools` is new: the tools of the policy's round-1 plan, so a
   round-1 model plan that includes them consults every baseline source the gate requires;
   empty in round 2. A planner was otherwise left to guess the baseline.

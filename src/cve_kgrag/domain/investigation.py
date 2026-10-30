@@ -150,6 +150,28 @@ class InvestigationRequest(ContractModel):
     budget: InvestigationBudget = Field(default_factory=InvestigationBudget)
 
 
+class FightBlockReason(StrEnum):
+    """Why the query's words may not be sent to FiGHT without a reviewed topic, checked in
+    this order: a topic resolved, so its card's terms reach FiGHT; the query names an
+    excluded term; it names a CVE ID; or one of its search terms the registry reads alone
+    as a topic or an excluded term."""
+
+    TOPIC_RESOLVED = "topic_resolved"
+    EXCLUDED_TERM = "excluded_term"
+    CVE_ID_NAMED = "cve_id_named"
+    TERM_READS_AS_TOPIC = "term_reads_as_topic"
+
+
+class FightBlock(ContractModel):
+    reason: FightBlockReason
+    subject: str = Field(
+        description=(
+            "The first matched topic ID, the first excluded term, the first CVE ID, or the "
+            "search term the registry reads as a topic or excluded term."
+        )
+    )
+
+
 class Interpretation(ContractModel):
     intent: QueryIntent
     normalized_query: str
@@ -158,6 +180,18 @@ class Interpretation(ContractModel):
         description=(
             "Query tokens without CVE IDs, words that read together as a CVE ID, "
             "stopwords, the low-signal words cve and cves, and the tokens of excluded terms."
+        )
+    )
+    fight_terms: tuple[str, ...] = Field(
+        description=(
+            "The words a direct FiGHT search sends: all of search_terms when fight_block is "
+            "null, else none; never a subset."
+        )
+    )
+    fight_block: FightBlock | None = Field(
+        description=(
+            "Why the search terms may not be sent to FiGHT without a reviewed topic; null "
+            "when they may."
         )
     )
     resolution: TopicResolution
@@ -178,6 +212,7 @@ class StepReason(StrEnum):
     TOPIC_AFTER_LITERAL_MISS = "topic_after_literal_miss"
     TOPIC_FOR_OPEN_NEED = "topic_for_open_need"
     QUERY_TERMS_FOR_OPEN_NEED = "query_terms_for_open_need"
+    QUERY_TERMS_FIGHT = "query_terms_fight"
     MODEL_PROPOSAL = "model_proposal"
 
 
@@ -191,6 +226,7 @@ POLICY_STEP_TOOL_AND_ROUND: dict[StepReason, tuple[ToolName, int]] = {
     StepReason.TOPIC_AFTER_LITERAL_MISS: (ToolName.TOPIC_CONTEXT, 2),
     StepReason.TOPIC_FOR_OPEN_NEED: (ToolName.TOPIC_CONTEXT, 2),
     StepReason.QUERY_TERMS_FOR_OPEN_NEED: (ToolName.CVE_SEARCH, 2),
+    StepReason.QUERY_TERMS_FIGHT: (ToolName.FIGHT_DIRECT_SEARCH, 1),
 }
 
 
@@ -260,7 +296,8 @@ class CveBackendRequest(ContractModel):
 
 
 class FightBackendRequest(ContractModel):
-    """The FiGHT search a topic step sent: the topic's name, aliases and entities."""
+    """The FiGHT search a step sent: a topic's names, aliases and entities, or the
+    interpretation's fight_terms."""
 
     source: Literal[KnowledgeSource.MITRE_FIGHT]
     terms: tuple[str, ...] = Field(min_length=1)
@@ -291,7 +328,8 @@ class ToolStep(ContractModel):
         min_length=1,
         description=(
             "Every search the call sends to a knowledge source, in order, with its limit; "
-            "a topic_context call fans out to several."
+            "a topic_context call fans out to several, and a fight_direct_search call sends "
+            "one FiGHT search of the interpretation's fight_terms."
         ),
     )
     charged_tool_calls: int = Field(ge=1, description="One per backend request.")
@@ -880,10 +918,16 @@ class EvidenceNeedKind(StrEnum):
 
 
 class NeedOutcome(StrEnum):
+    """Whether a need was met. ``unsupported``: no tool can serve it for this
+    interpretation. ``not_evaluated``: no admitted step of a tool that serves it has a
+    result, so whether it is met cannot yet be judged. ``not_evaluated`` and ``not_found``
+    are open; ``source_unavailable`` and ``unsupported`` are final."""
+
     FOUND = "found"
     NOT_FOUND = "not_found"
     SOURCE_UNAVAILABLE = "source_unavailable"
     UNSUPPORTED = "unsupported"
+    NOT_EVALUATED = "not_evaluated"
 
 
 class EvidenceNeed(ContractModel):
@@ -930,8 +974,9 @@ class InvestigationWarning(ContractModel):
     """What the run could not do or left out. ``answer_truncated`` counts, each once, the
     items the adopted steps knew and the answer does not list: the CVEs they kept (a CVE
     the caller named always kept), those the topic step kept and left out at its limit
-    included, less the CVEs the answer lists, plus the techniques the topic step matched
-    and did not list. ``unrelated_candidates_dropped`` counts search-step candidates the
+    included, less the CVEs the answer lists, plus the techniques the step that searched
+    FiGHT (a topic step or a direct FiGHT search) matched and did not list.
+    ``unrelated_candidates_dropped`` counts search-step candidates the
     relevance rule removed, never one ``answer_truncated`` counts."""
 
     code: InvestigationWarningCode

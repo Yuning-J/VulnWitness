@@ -29,6 +29,8 @@ from cve_kgrag.domain.investigation import (
     DecisionBasis,
     ExcludedInvestigationCandidate,
     FightBackendRequest,
+    FightBlock,
+    FightBlockReason,
     InvestigationState,
     InvestigationWarning,
     InvestigationWarningCode,
@@ -81,13 +83,19 @@ from tests.support.investigation import (
     build_topic_call,
     reseal_evidence_set,
     rewrite_step,
+    update_interpretation,
     update_trajectory,
 )
 from tests.support.investigation_runs import (
     investigate,
     run_cve_under_protocol_scope,
     run_exact_id,
+    run_fight_direct_search,
+    run_fight_direct_search_fight_failing,
+    run_fight_direct_search_of_an_unindexed_word,
     run_five_g_aka,
+    run_five_g_aka_mixed,
+    run_mixed_fight_direct_search,
     run_model_accepted,
     run_model_not_consulted,
     run_model_refinement_unavailable,
@@ -2144,7 +2152,7 @@ def test_set_whose_topic_step_cut_its_sections_counts_every_cut_and_validates(
     [
         (
             lambda evidence_set: rewrite_answer_truncation(evidence_set, "4"),
-            "fewer items than the topic step left out",
+            "fewer items than the adopted steps left out",
         ),
         (
             lambda evidence_set: rewrite_answer_truncation(evidence_set, "5", "5"),
@@ -2227,3 +2235,234 @@ def test_truncation_in_a_run_with_no_adopted_step_is_rejected(
     assert any(
         "needs a step the answer was assembled from" in found for found in raised.value.violations
     )
+
+
+def drop_a_fight_term(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The interpretation sends FiGHT only some of its search terms."""
+    return update_interpretation(
+        evidence_set, fight_terms=evidence_set.interpretation.fight_terms[:1]
+    )
+
+
+def blame_a_cve_id_for_the_block(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The interpretation claims a CVE ID it does not hold bars the direct search."""
+    return update_interpretation(
+        evidence_set,
+        fight_terms=(),
+        fight_block=FightBlock(reason=FightBlockReason.CVE_ID_NAMED, subject="CVE-9999-0003"),
+    )
+
+
+def blame_an_absent_word_for_the_block(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The interpretation claims ``aka``, a word the query lacks, reads alone as a topic."""
+    return update_interpretation(
+        evidence_set,
+        fight_terms=(),
+        fight_block=FightBlock(reason=FightBlockReason.TERM_READS_AS_TOPIC, subject="aka"),
+    )
+
+
+def send_aka_to_fight(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The direct search's recorded request adds the excluded alias ``aka``."""
+    fight_request = evidence_set.trajectory.steps[0].backend_requests[0]
+    forged_request = fight_request.model_copy(update={"terms": (*fight_request.terms, "aka")})
+    return rewrite_step(evidence_set, 1, backend_requests=(forged_request,))
+
+
+def explain_a_technique_with_an_unsent_term(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    """The first technique claims a match on ``aka``, a word the search never sent."""
+    protocol_context = list(evidence_set.protocol_context)
+    protocol_context[0] = protocol_context[0].model_copy(update={"matched_terms": ("aka",)})
+    return reseal_evidence_set(evidence_set, protocol_context=tuple(protocol_context))
+
+
+def append_unindexed_warning(
+    evidence_set: KnowledgeEvidenceSet, step_index: int, subject: str
+) -> KnowledgeEvidenceSet:
+    step = evidence_set.trajectory.steps[step_index - 1]
+    topic_warnings = (
+        *step.topic_warnings,
+        TopicContextWarning(code=TopicContextWarningCode.TERM_NOT_INDEXED, subject=subject),
+    )
+    return rewrite_step(evidence_set, step_index, topic_warnings=topic_warnings)
+
+
+def warn_an_unsent_term_unindexed(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    return append_unindexed_warning(evidence_set, 1, "aka")
+
+
+def warn_a_held_term_unindexed(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    return append_unindexed_warning(evidence_set, 1, "suci")
+
+
+def warn_a_card_term_unindexed(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """A topic step names a card term unindexed, which only a direct search may report."""
+    return append_unindexed_warning(evidence_set, 1, "K_SEAF")
+
+
+def clear_the_topic_block(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """A resolved topic's interpretation claims nothing bars sending its words to FiGHT."""
+    return update_interpretation(
+        evidence_set, fight_block=None, fight_terms=evidence_set.interpretation.search_terms
+    )
+
+
+def drop_a_returned_technique(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The direct search's step no longer returns the first technique the answer lists."""
+    answer_ids = evidence_set.trajectory.steps[0].answer_ids
+    return rewrite_step(evidence_set, 1, answer_ids=answer_ids[1:])
+
+
+def repeat_the_unindexed_warning(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The direct search's step names its unindexed word twice."""
+    topic_warnings = evidence_set.trajectory.steps[0].topic_warnings
+    return rewrite_step(evidence_set, 1, topic_warnings=(*topic_warnings, topic_warnings[-1]))
+
+
+def warn_a_word_of_a_failed_search_unindexed(
+    evidence_set: KnowledgeEvidenceSet,
+) -> KnowledgeEvidenceSet:
+    """A direct search whose FiGHT outcome failed claims ``suci`` is held by no technique."""
+    return append_unindexed_warning(evidence_set, 1, "suci")
+
+
+def clear_the_topic_resolution(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The interpretation of a run that explored a topic claims no topic resolved."""
+    resolution = evidence_set.interpretation.resolution
+    return update_interpretation(
+        evidence_set, resolution=resolution.model_copy(update={"matches": ()})
+    )
+
+
+def search_fight_twice(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
+    """The mixed run's direct FiGHT step appears again as a third step."""
+    fight_step = evidence_set.trajectory.steps[1]
+    repeated_step = fight_step.model_copy(update={"step_index": 3})
+    return update_trajectory(evidence_set, steps=(*evidence_set.trajectory.steps, repeated_step))
+
+
+@pytest.mark.parametrize(
+    ("run", "forgery", "expected_violation"),
+    [
+        (
+            run_mixed_fight_direct_search,
+            drop_a_fight_term,
+            "interpretation.fight_terms must be every search term",
+        ),
+        (
+            run_mixed_fight_direct_search,
+            blame_a_cve_id_for_the_block,
+            "interpretation.fight_block names a reason the interpretation does not show",
+        ),
+        (
+            run_mixed_fight_direct_search,
+            blame_an_absent_word_for_the_block,
+            "interpretation.fight_block names a reason the interpretation does not show",
+        ),
+        (
+            run_mixed_fight_direct_search,
+            blame_a_cve_id_for_the_block,
+            "searches FiGHT directly, which the interpretation does not allow",
+        ),
+        (
+            run_fight_direct_search,
+            send_aka_to_fight,
+            "step 1 records other backend requests than its call sends",
+        ),
+        (
+            run_fight_direct_search,
+            explain_a_technique_with_an_unsent_term,
+            "matched by a term step 1 did not send",
+        ),
+        (
+            run_fight_direct_search,
+            warn_an_unsent_term_unindexed,
+            "term_not_indexed names a term the FiGHT search did not send",
+        ),
+        (
+            run_fight_direct_search,
+            warn_a_held_term_unindexed,
+            "term_not_indexed names a term a listed technique holds",
+        ),
+        (
+            run_five_g_aka_mixed,
+            warn_a_card_term_unindexed,
+            "term_not_indexed needs a direct FiGHT search",
+        ),
+        (
+            run_mixed_fight_direct_search,
+            search_fight_twice,
+            "each search FiGHT; a run holds one",
+        ),
+        (
+            run_five_g_aka,
+            clear_the_topic_block,
+            "interpretation.fight_block does not give the first reason the interpretation shows",
+        ),
+        (
+            run_five_g_aka,
+            clear_the_topic_block,
+            "interpretation.fight_terms are only free text's",
+        ),
+        (
+            run_fight_direct_search,
+            drop_a_returned_technique,
+            "not returned by an admitted step that may search FiGHT",
+        ),
+        (
+            run_fight_direct_search_of_an_unindexed_word,
+            repeat_the_unindexed_warning,
+            "step 1: term_not_indexed names a term more than once",
+        ),
+        (
+            run_fight_direct_search_fight_failing,
+            warn_a_word_of_a_failed_search_unindexed,
+            "term_not_indexed needs a direct FiGHT search whose FiGHT outcome was served",
+        ),
+        (
+            run_five_g_aka_mixed,
+            clear_the_topic_resolution,
+            "step 1 explores a topic, but no topic resolved",
+        ),
+    ],
+    ids=[
+        "fight_terms_a_subset",
+        "block_blaming_an_absent_cve_id",
+        "block_blaming_a_word_the_query_lacks",
+        "direct_search_beside_a_block",
+        "aka_added_to_the_request",
+        "technique_explained_by_an_unsent_term",
+        "unindexed_term_never_sent",
+        "unindexed_term_a_technique_holds",
+        "unindexed_term_on_a_topic_step",
+        "second_fight_search",
+        "topic_block_cleared",
+        "fight_terms_beside_a_resolved_topic",
+        "technique_no_step_returned",
+        "unindexed_term_named_twice",
+        "unindexed_term_on_a_failed_fight_search",
+        "topic_step_without_a_resolved_topic",
+    ],
+)
+def test_forged_direct_fight_search_is_rejected(
+    fixture_bundle: FixtureBundle,
+    pinned_fight_snapshot: KnownFightSnapshot,
+    packaged_evidence_catalog: EvidenceCatalog,
+    run: TrajectoryRun,
+    forgery: Callable[[KnowledgeEvidenceSet], KnowledgeEvidenceSet],
+    expected_violation: str,
+) -> None:
+    evidence_set = run(fixture_bundle)
+
+    forged_set = forgery(evidence_set)
+
+    with pytest.raises(EvidenceValidationError) as raised:
+        validate_knowledge_evidence_set(
+            forged_set,
+            pinned_fight_snapshot,
+            packaged_evidence_catalog,
+            evidence_set.source_capabilities,
+        )
+    assert any(expected_violation in violation for violation in raised.value.violations)

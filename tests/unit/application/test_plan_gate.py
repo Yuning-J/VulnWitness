@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from cve_kgrag.application.investigation_policy import (
+    build_fight_direct_search_call,
     find_interpretation_stop,
     find_resolved_topic,
     interpret_request,
@@ -365,6 +366,87 @@ def test_plan_breaking_a_rule_is_rejected_with_its_code(
     assert rejections == expected_rejections
 
 
+@pytest.mark.parametrize(
+    ("query", "scope", "expected_code"),
+    [
+        ("5G-AKA threats", "protocol_context_only", PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED),
+        ("EPS AKA crash", "mixed", PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED),
+        ("CVE-9999-0003 GTP threats", "mixed", PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED),
+        ("5Géaka threats", "mixed", PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED),
+        ("gtp threats", "implementation_only", PlanRejectionCode.TOOL_NOT_PERMITTED_BY_SCOPE),
+    ],
+    ids=[
+        "topic_resolved",
+        "excluded_term",
+        "cve_id_named",
+        "word_read_alone_as_an_excluded_term",
+        "implementation_only",
+    ],
+)
+def test_direct_fight_search_the_interpretation_bars_is_rejected(
+    topic_registry: TopicRegistry, query: str, scope: str, expected_code: PlanRejectionCode
+) -> None:
+    request = build_investigation_request(query, scope)
+    plan_context = build_round_one_context(request, topic_registry, cve_ids_to_look_up=frozenset())
+
+    rejections = find_plan_rejections(
+        [build_fight_direct_search_call()], plan_context, topic_registry
+    )
+
+    assert rejections == [PlanRejection(step_position=0, code=expected_code)]
+
+
+def test_second_direct_fight_search_in_a_run_is_a_repeated_call(
+    topic_registry: TopicRegistry,
+) -> None:
+    request = build_investigation_request("gtp threats", "protocol_context_only")
+    plan_context = build_round_one_context(
+        request,
+        topic_registry,
+        issued_call_keys=frozenset({compute_call_key(build_fight_direct_search_call())}),
+    )
+
+    rejections = find_plan_rejections(
+        [build_fight_direct_search_call()], plan_context, topic_registry
+    )
+
+    assert rejections == [PlanRejection(step_position=0, code=PlanRejectionCode.REPEATED_CALL)]
+
+
+def test_mixed_free_text_plan_of_a_cve_search_and_a_direct_fight_search_passes(
+    topic_registry: TopicRegistry,
+) -> None:
+    request = build_investigation_request("gtp threats", "mixed")
+    plan_context = build_round_one_context(
+        request,
+        topic_registry,
+        baseline_sources=frozenset({KnowledgeSource.MITRE_FIGHT, KnowledgeSource.CVE_SEARCH}),
+    )
+
+    rejections = find_plan_rejections(
+        [build_search_call("gtp"), build_fight_direct_search_call()], plan_context, topic_registry
+    )
+
+    assert rejections == []
+
+
+def test_mixed_free_text_model_plan_without_the_direct_fight_search_misses_its_source(
+    topic_registry: TopicRegistry,
+) -> None:
+    request = build_investigation_request("gtp threats", "mixed")
+    plan_context = build_round_one_context(
+        request,
+        topic_registry,
+        baseline_sources=frozenset({KnowledgeSource.MITRE_FIGHT, KnowledgeSource.CVE_SEARCH}),
+    )
+
+    rejections = find_plan_rejections(
+        [build_search_call("gtp threats")], plan_context, topic_registry
+    )
+
+    assert rejections == [PlanRejection(code=PlanRejectionCode.MISSING_BASELINE_SOURCE)]
+
+
 def test_model_plan_within_the_vocabulary_and_budget_passes(
     topic_registry: TopicRegistry,
 ) -> None:
@@ -448,6 +530,7 @@ def test_malformed_plan_text_parses_to_nothing(plan_text: str) -> None:
         ),
         (build_topic_call(), build_topic_call()),
         (build_search_call("CVE ausf, cves SUCI"), build_search_call("ausf suci")),
+        (build_fight_direct_search_call(), build_fight_direct_search_call()),
     ],
     ids=[
         "non_latin_text_and_metacharacters",
@@ -455,6 +538,7 @@ def test_malformed_plan_text_parses_to_nothing(plan_text: str) -> None:
         "repeated_id",
         "topic",
         "low_signal_words",
+        "fight_direct_search",
     ],
 )
 def test_accepted_call_runs_in_its_canonical_form(call: ToolCall, expected_call: ToolCall) -> None:

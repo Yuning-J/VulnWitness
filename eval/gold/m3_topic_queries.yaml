@@ -19,10 +19,12 @@ resolution:
   - {query: "5G a.k.a. New Radio", topic: null, match_kind: null, excluded: []}
   - {query: "5Géaka", topic: null, match_kind: null, excluded: []}
 context:
+  # protocol_context lists techniques in the FiGHT search order: phrase-unit BM25 score
+  # over the card's terms, best first, ties by technique ID.
   - query: "5gaka"
     scope: protocol_context_only
     status: ok
-    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
+    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
     implementation_candidates: []
     excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
   - query: "5gaka"
@@ -36,7 +38,7 @@ context:
   - query: "5G Authentication and Key Agreement"
     scope: mixed
     status: ok
-    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
+    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
     implementation_candidates:
       - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
       - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}

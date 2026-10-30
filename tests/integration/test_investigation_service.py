@@ -401,22 +401,28 @@ def test_malformed_id_is_neither_looked_up_nor_searched(
     ],
 )
 @pytest.mark.parametrize(
-    ("scope", "expected_stop"),
+    ("scope", "expected_tools", "expected_stop"),
     [
-        ("implementation_only", StopReason.SUFFICIENT),
-        ("mixed", StopReason.NEEDS_UNMET),
+        ("implementation_only", ["cve_search"], StopReason.SUFFICIENT),
+        # No technique of the excerpt holds ``crash``, so the protocol need is not found.
+        ("mixed", ["cve_search", "fight_direct_search"], StopReason.NEEDS_UNMET),
     ],
-    ids=["implementation_only", "mixed_without_a_topic_for_protocol_context"],
+    ids=["implementation_only", "mixed_also_searching_fight_directly"],
 )
 def test_query_words_beside_an_id_likeness_are_searched_without_it(
-    fixture_bundle: FixtureBundle, query: str, scope: str, expected_stop: StopReason
+    fixture_bundle: FixtureBundle,
+    query: str,
+    scope: str,
+    expected_tools: list[str],
+    expected_stop: StopReason,
 ) -> None:
     service = build_test_investigation_service(fixture_bundle)
 
     evidence_set = service.investigate(build_investigation_request(query, scope))
 
     assert evidence_set.interpretation.search_terms == ("ausf", "crash")
-    assert list_step_tools(evidence_set) == ["cve_search"]
+    assert evidence_set.interpretation.fight_terms == ("ausf", "crash")
+    assert list_step_tools(evidence_set) == expected_tools
     assert evidence_set.trajectory.steps[0].backend_requests[0].query == "ausf crash"
     assert list_implementation_ids(evidence_set) == ["CVE-9999-0003"]
     assert evidence_set.stop_reason is expected_stop
@@ -475,19 +481,27 @@ def test_query_of_only_low_signal_words_stops_without_a_call(
     ],
     ids=["before_terms", "before_a_year"],
 )
-@pytest.mark.parametrize("scope", ["implementation_only", "mixed"])
+@pytest.mark.parametrize(
+    ("scope", "expected_tools"),
+    [
+        ("implementation_only", ["cve_search"]),
+        ("mixed", ["cve_search", "fight_direct_search"]),
+    ],
+    ids=["implementation_only", "mixed"],
+)
 def test_low_signal_words_are_left_out_of_the_search_a_run_sends(
     fixture_bundle: FixtureBundle,
     query: str,
     expected_search_text: str,
     expected_cve_ids: list[str],
     scope: str,
+    expected_tools: list[str],
 ) -> None:
     service = build_test_investigation_service(fixture_bundle)
 
     evidence_set = service.investigate(build_investigation_request(query, scope))
 
-    assert list_step_tools(evidence_set) == ["cve_search"]
+    assert list_step_tools(evidence_set) == expected_tools
     assert evidence_set.trajectory.steps[0].backend_requests[0].query == expected_search_text
     assert list_implementation_ids(evidence_set) == expected_cve_ids
 

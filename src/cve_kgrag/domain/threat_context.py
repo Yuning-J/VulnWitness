@@ -177,7 +177,10 @@ class ThreatContextItem(ContractModel):
     scope: Literal[KnowledgeScope.PROTOCOL_THREAT_CONTEXT] = KnowledgeScope.PROTOCOL_THREAT_CONTEXT
     matched_fields: tuple[TechniqueField, ...]
     matched_terms: tuple[str, ...] = Field(
-        description="Terms of the topic the server searched for; the search checks each."
+        description=(
+            "Terms the server sent to FiGHT that the technique holds: a resolved topic's "
+            "name, aliases and entities, or with no topic the question's own words."
+        )
     )
     evidence_ids: tuple[EvidenceId, ...] = Field(min_length=1)
 
@@ -189,13 +192,15 @@ class ThreatContextOutcome(ContractModel):
     carries that snapshot's version, so results and their source identity travel
     together and cannot disagree. ``matched_count`` is every technique of the snapshot
     that named a term, before the search's limit cut the items: at least the items
-    listed, 0 exactly when none is, and 0 on failure (ADR 0009 §11a). The outcome is
-    internal and in no published schema.
+    listed, 0 exactly when none is, and 0 on failure (ADR 0009 §11a). ``unindexed_terms``
+    are the sent terms no technique holds, the first spelling of each, in sent order, and
+    none on failure. The outcome is internal and in no published schema.
     """
 
     status: BackendStatus
     items: tuple[ThreatContextItem, ...] = ()
     matched_count: int = Field(default=0, ge=0)
+    unindexed_terms: tuple[str, ...] = ()
     evidence: tuple[EvidenceAnchor, ...] = ()
     snapshot: FightSnapshotInfo | None = None
     failure: BackendFailure | None = Field(
@@ -209,8 +214,12 @@ class ThreatContextOutcome(ContractModel):
             raise ValueError("a successful source outcome cannot carry a failure")
         if is_ok and self.snapshot is None:
             raise ValueError("a successful source outcome must name its snapshot")
-        if not is_ok and (self.items or self.evidence or self.snapshot is not None):
-            raise ValueError("an unsuccessful source outcome cannot carry items or a snapshot")
+        if not is_ok and (
+            self.items or self.evidence or self.unindexed_terms or self.snapshot is not None
+        ):
+            raise ValueError(
+                "an unsuccessful source outcome cannot carry items, unindexed terms or a snapshot"
+            )
         if not is_ok and self.failure is None:
             raise ValueError("an unsuccessful source outcome must carry its failure")
         if self.matched_count < len(self.items) or (self.matched_count == 0) != (not self.items):

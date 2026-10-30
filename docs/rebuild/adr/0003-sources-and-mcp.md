@@ -224,7 +224,9 @@ caller's query terms from the lexical channel, the caller's filter values from t
 structured channel (`SearchFilters.list_match_terms`), no term from the semantic
 channel, and from the graph channel only relation values that both the seed and the
 hit record assert (`record_relations`), each graph path checked the same way. The
-topic-context service accepts only the topic terms it sent the FiGHT source. A
+topic-context service accepts only the terms it sent the FiGHT source (a topic's
+terms, or an investigation's `fight_terms` for a direct search), and only those as the
+terms the source names no technique holds. A
 violation raises `EvidenceValidationError`, so the call fails `integrity_check_failed`
 and an investigation step is `rejected_invalid_evidence`; the violation names the
 record or technique, never the adapter's text. A FiGHT claim names the technique by ID
@@ -311,8 +313,14 @@ unpinned contract for the same payload.
 version.
 
 `search_fight` reaches FiGHT only through a reviewed topic. A bare `aka` resolves to
-no topic and searches nothing. The response lists CVE candidates only as excluded
-implementation evidence.
+no topic and searches nothing, and so does free text such as `SUCI threats`; the tool's
+description says that an investigation searches FiGHT with the question's own words on
+its own. The response lists CVE candidates only as excluded implementation evidence.
+The only path to FiGHT without a topic is an investigation's `fight_direct_search`
+(ADR 0002 §15), a tool of the investigation's plan that `investigate_telecom_topic`
+can run, never a tool this server lists. Both paths order techniques by the one shared
+FiGHT order: phrase-unit BM25 over the sent terms, ties by technique ID
+(`../m3-topics-and-threat-context.md`).
 
 Every tool is annotated read-only, non-destructive, idempotent and closed-world.
 

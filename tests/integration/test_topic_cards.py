@@ -66,3 +66,19 @@ def test_only_yaml_suffixed_files_are_cards(tmp_path: Path) -> None:
     (tmp_path / "notes.txt").write_text("topic_id: [unclosed", encoding="utf-8")
 
     assert load_topic_cards(tmp_path) == []
+
+
+def test_no_packaged_card_has_a_contextual_alias() -> None:
+    """A contextual alias written without its context is reported neither as a match nor
+    as an excluded term, so ``find_fight_block`` cannot see it and the query's words would
+    reach a direct FiGHT search. A card that gains one must revisit that rule first
+    (docs/rebuild/m7b-c-fight-direct-search.md §3)."""
+    topics = load_topic_cards(default_topic_dir())
+
+    cards_with_contextual_aliases: list[str] = []
+    for topic in topics:
+        if topic.contextual_aliases:
+            cards_with_contextual_aliases.append(topic.topic_id)
+
+    assert topics != []
+    assert cards_with_contextual_aliases == []
