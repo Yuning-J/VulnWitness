@@ -146,3 +146,33 @@ coverage and stop rules.
 
 Order: develop on the baseline, have the owner confirm the new cases' labels, then run the
 validation once and record the result, pass or fail.
+
+## Result (2026-10-31, one validation run)
+
+`deepseek-flash`, effort `none`, three clean repeats and one injected copy of the ten
+owner-confirmed cases (`eval/gold/relevance_cases.yaml`, seed 11), 200 question-candidate
+pairs. Rates are over candidate-repeat labels.
+
+| Figure | Threshold | All | Seen (58 pairs) | Unseen (142 pairs) |
+|---|---|---|---|---|
+| Required dropped | at most 5% | 8/363 (2.2%) | 0/102 | 8/261 (3.1%) |
+| Irrelevant accepted | at most 20% | 0/129 (0%) | 0/18 | 0/111 |
+| Undecided | at most 20% | 1/525 (0.2%) | 0 | 0.3% |
+| Stability | at least 90% | 193/200 (96.5%) | 94.8% | 97.2% |
+| Allowed dropped | reported | 0/33 | 0/30 | 0/3 |
+
+- **Injected sentences:** no injected candidate changed its label. Two other candidates
+  differ from a clean label (1.0%), against 2.3% disagreement among the clean repeats;
+  no change follows an injected instruction.
+- **Coverage@20 of the required items:** 0.768 unfiltered, 0.753 after the conservative
+  filter (drop only `not_relevant`), 0.751 keeping only `relevant`.
+- **Where the drops are:** the eight required drops are in `rel-free5gc-amf` (6) and
+  `rel-open5gs-smf` (2), both unseen records.
+- **Sample:** 121 required and 43 irrelevant pairs, above the 40/40 minimum. Ten
+  questions, one model and one run; the repeats are not independent samples, and 58 of
+  200 pairs are records the prompt was tuned on.
+
+Every exploration gate is met. That means the per-candidate relevance judgement is worth
+further research. It does not authorise filtering answers or changing `sufficient`, and
+it says nothing about candidates the search never returned; any use of the labels is a
+separate owner decision.
