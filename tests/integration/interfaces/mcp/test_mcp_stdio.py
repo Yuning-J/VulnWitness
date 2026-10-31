@@ -132,6 +132,42 @@ def test_undecodable_frames_get_no_reply_and_later_requests_are_answered() -> No
     assert server_process.stderr == b""
 
 
+@pytest.mark.parametrize("request_id", [2, "02"])
+def test_cancelled_requests_do_not_keep_the_server_alive_after_stdin_closes(
+    request_id: int | str,
+) -> None:
+    frames = [
+        INITIALIZE_FRAME,
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        {
+            "jsonrpc": "2.0",
+            "method": "notifications/cancelled",
+            "params": {"requestId": request_id},
+        },
+        {"jsonrpc": "2.0", "id": 3, "method": "tools/list"},
+    ]
+
+    server_process = subprocess.run(
+        [str(CVE_KGRAG_SCRIPT), "mcp"],
+        input=("\n".join(json.dumps(frame) for frame in frames) + "\n").encode(),
+        capture_output=True,
+        timeout=5,
+        check=False,
+        env=build_server_environment(),
+    )
+
+    answers_by_id = {}
+    for line in server_process.stdout.splitlines():
+        answer = json.loads(line)
+        answers_by_id[answer["id"]] = answer
+    assert server_process.returncode == 0
+    assert 1 in answers_by_id
+    assert "tools" in answers_by_id[3]["result"]
+    # The cancellation may reach a request that has already been answered.
+    assert set(answers_by_id) <= {1, 2, 3}
+
+
 def test_json_rpc_errors_carry_no_data_and_repeat_nothing_sent() -> None:
     """A JSON-RPC error carries its code and fixed message, never ``data``, where the SDK
     would put the method name the client sent, or an empty string for parameters that
@@ -161,8 +197,7 @@ def test_json_rpc_errors_carry_no_data_and_repeat_nothing_sent() -> None:
     assert server_process.stdin is not None and server_process.stdout is not None
     server_process.stdin.write(("\n".join(frames) + "\n").encode())
     server_process.stdin.flush()
-    # Read the answers before closing stdin: the server stops at end of input, and a
-    # reply still in flight then is not written.
+    # Keep stdin open while this client consumes its three replies.
     initialize_answer = server_process.stdout.readline()
     unknown_method_answer = server_process.stdout.readline()
     invalid_params_answer = server_process.stdout.readline()
@@ -237,8 +272,7 @@ def test_cve_kgrag_mcp_over_a_store_announces_loading_on_stderr_and_keeps_stdout
     assert server_process.stdout is not None
     server_process.stdin.write(("\n".join(frames) + "\n").encode())
     server_process.stdin.flush()
-    # stdin stays open until both answers arrived: the server may stop reading at end of
-    # input before it answers a request still queued.
+    # Keep the client connected through the loading and readiness notices.
     answer_lines = [server_process.stdout.readline(), server_process.stdout.readline()]
     assert server_process.stderr is not None
     notice_lines: list[str] = []

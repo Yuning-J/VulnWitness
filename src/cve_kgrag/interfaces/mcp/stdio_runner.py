@@ -23,7 +23,9 @@ from cve_kgrag.interfaces.mcp.server import (
     build_mcp_server,
     build_mcp_tools,
 )
+from cve_kgrag.interfaces.mcp.stdio_connection import StdioConnection
 from cve_kgrag.interfaces.mcp.stdio_input import StdioInput
+from cve_kgrag.interfaces.mcp.stdio_reader import StdioReader
 
 
 class StdioServer:
@@ -36,6 +38,7 @@ class StdioServer:
         self._handlers = KnowledgeToolHandlers(None, build_mcp_tools(KNOWLEDGE_TOOL_SPECS))
         self._server = build_mcp_server(self._handlers, dataset_kind)
         self._initialized = anyio.Event()
+        self._stdin_closed = anyio.Event()
         self._server.middleware.append(self.observe_initialization)
         self._loop = asyncio.get_running_loop()
         self._loaded: asyncio.Future[KnowledgeToolbox | int] = self._loop.create_future()
@@ -73,15 +76,22 @@ class StdioServer:
         if not self._loaded.done():
             self._loaded.set_result(toolbox_or_exit)
 
-    async def load(self, cancel_scope: anyio.CancelScope) -> None:
+    async def load(self, cancel_scope: anyio.CancelScope, stdin: StdioInput | None) -> None:
         """Load once after negotiation, then publish the toolbox or stop on failure."""
         await self._initialized.wait()
+        if stdin is not None:
+            # Consume the client's queued input before starting work for an idle connection.
+            await stdin.wait_until_idle()
+        if self._stdin_closed.is_set():
+            return
         started_at = time.monotonic()
         threading.Thread(target=self.load_in_background, daemon=True).start()
         toolbox_or_exit = await self._loaded
         if isinstance(toolbox_or_exit, int):
             self._exit_code = toolbox_or_exit
             cancel_scope.cancel()
+            return
+        if self._stdin_closed.is_set():
             return
         self._handlers.publish_toolbox(toolbox_or_exit)
         print(
@@ -92,15 +102,32 @@ class StdioServer:
             flush=True,
         )
 
-    async def run(self) -> int:
+    async def run(
+        self,
+        *,
+        stdin: anyio.AsyncFile[str] | None = None,
+        stdout: anyio.AsyncFile[str] | None = None,
+    ) -> int:
         """Serve until stdin closes or startup fails, returning the process exit code."""
-        async with anyio.create_task_group() as tasks:
-            tasks.start_soon(self.load, tasks.cancel_scope)
-            async with stdio_server(stdin=StdioInput(sys.stdin)) as (read_stream, write_stream):
+        process_stdin = None
+        if stdin is None:
+            process_stdin = StdioInput(sys.stdin, self._stdin_closed)
+            stdin = process_stdin
+        reader = StdioReader(stdin)
+        # Loader failure cancels the session, while the outer transport drains stdout.
+        async with (
+            stdio_server(stdin=reader, stdout=stdout) as (read_stream, write_stream),
+            anyio.create_task_group() as tasks,
+        ):
+            tasks.start_soon(self.load, tasks.cancel_scope, process_stdin)
+            connection = StdioConnection(read_stream, write_stream, self._stdin_closed)
+            try:
                 await self._server.run(
-                    read_stream, write_stream, self._server.create_initialization_options()
+                    connection, connection, self._server.create_initialization_options()
                 )
-                tasks.cancel_scope.cancel()
+            finally:
+                reader.stop()
+            tasks.cancel_scope.cancel()
         return self._exit_code
 
 
