@@ -32,6 +32,7 @@ from cve_kgrag.cli import (
     PACKAGE_DIR,
     build_parser,
     main,
+    print_investigation,
     print_verification,
     run_api_server,
     run_evidence_lookup,
@@ -107,7 +108,7 @@ from tests.support.investigation import (
     reseal_evidence_set,
     rewrite_step,
 )
-from tests.support.investigation_runs import run_model_accepted
+from tests.support.investigation_runs import run_five_g_aka_mixed, run_model_accepted
 from tests.support.legacy_inputs import build_declaration, write_inputs_manifest
 from tests.support.paths import REPOSITORY_ROOT, REPOSITORY_SCHEMA_DIR
 from tests.support.secrets import assert_secret_absent
@@ -263,6 +264,68 @@ def test_investigate_prints_an_evidence_set_and_exits_zero_only_when_ok(
     evidence_set = KnowledgeEvidenceSet.model_validate_json(capsys.readouterr().out)
     assert exit_code == expected_exit_code
     assert evidence_set.status.value == expected_status
+
+
+def test_investigate_text_prints_the_fixture_header_and_candidate_table(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Arrange
+    arguments = ["investigate", "5G-AKA", "--scope", "mixed", "--format", "text"]
+
+    # Act
+    exit_code = run_cli(arguments)
+    summary = capsys.readouterr().out
+
+    # Assert
+    assert exit_code == 0
+    assert summary.startswith("Investigation: 5G-AKA\nScope: mixed\n")
+    assert "CVE candidates:\nRank  CVE ID" in summary
+    assert "CVE-9999-0003   HIGH 7.5 v3.1" in summary
+    assert "CVE-9999-0004   HIGH 8.2 v3.1" in summary
+
+
+def test_default_and_explicit_json_formats_print_identical_bytes(
+    fixture_bundle: FixtureBundle, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Arrange: the same fixed-clock set keeps runtime timings identical.
+    evidence_set = run_five_g_aka_mixed(fixture_bundle)
+    parser = build_parser()
+    arguments = ["investigate", "5G-AKA", "--scope", "mixed"]
+    default_arguments = parser.parse_args(arguments)
+    json_arguments = parser.parse_args([*arguments, "--format", "json"])
+
+    # Act
+    default_exit_code = print_investigation(evidence_set, default_arguments.format)
+    default_json = capsys.readouterr().out
+    json_exit_code = print_investigation(evidence_set, json_arguments.format)
+    explicit_json = capsys.readouterr().out
+
+    # Assert
+    assert default_exit_code == json_exit_code == 0
+    assert default_json == explicit_json == evidence_set.model_dump_json(indent=2) + "\n"
+
+
+@pytest.mark.parametrize("output_format", ["json", "text"])
+def test_investigate_with_unassessed_matches_exits_one_in_both_formats(
+    capsys: pytest.CaptureFixture[str], output_format: str
+) -> None:
+    # Arrange
+    arguments = [
+        "investigate",
+        "sql injection gateway",
+        "--scope",
+        "implementation_only",
+        "--format",
+        output_format,
+    ]
+
+    # Act
+    exit_code = run_cli(arguments)
+    investigation_text = capsys.readouterr().out
+
+    # Assert
+    assert exit_code == 1
+    assert investigation_text
 
 
 @pytest.mark.parametrize(

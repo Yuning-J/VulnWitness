@@ -73,6 +73,7 @@ uv run cve-kgrag search "authentication bypass"         # ranked search
 uv run cve-kgrag search gateway --vendor democorp --severity critical --graph-expand
 uv run cve-kgrag topic 5G-AKA --scope mixed             # scoped topic context
 uv run cve-kgrag investigate 5G-AKA --scope mixed       # bounded investigation
+uv run cve-kgrag investigate 5G-AKA --scope mixed --format text
 uv run cve-kgrag investigate 5G-AKA --scope mixed --max-rounds 1
 uv run cve-kgrag capabilities                           # the sources and what each serves
 uv run cve-kgrag resolve 5G-AKA                         # the reviewed topics a query names
@@ -91,7 +92,10 @@ uv run cve-kgrag store status                           # the active and previou
 uv run cve-kgrag store rollback                         # back to the store active before
 ```
 
-Every command but `mcp`, `api` and `schema` prints JSON. `--scope` is one of
+`investigate --format text` shows needs, CVE severity and KEV status, protocol context,
+uncertainties, warnings and where to find the evidence.
+
+Every command but `mcp`, `api` and `schema` prints JSON by default. `--scope` is one of
 `protocol_context_only`, `implementation_only` or `mixed`. `search` filters by
 `--vendor`, `--product`, `--purl`, `--cwe`, `--severity`, `--year`, `--origin` (each
 repeatable) and `--kev-only`; `investigate` takes the product options and the budget

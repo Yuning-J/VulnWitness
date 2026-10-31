@@ -173,6 +173,7 @@ from cve_kgrag.evaluation.planner_runner import (
     run_planner_evaluation,
 )
 from cve_kgrag.evaluation.result_directory import ResultDirectory
+from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
 from cve_kgrag.interfaces.knowledge_toolbox import (
     UNSUPPORTED_FILTER_ERROR,
     describe_knowledge_capabilities,
@@ -348,11 +349,12 @@ def build_parser() -> argparse.ArgumentParser:
         "investigate",
         help=(
             "run a bounded, evidence-grounded investigation with the planner the settings "
-            "configure; prints JSON"
+            "configure; prints JSON or a text summary"
         ),
     )
     investigate_parser.add_argument("query")
     investigate_parser.add_argument("--scope", required=True, choices=list(QueryScope))
+    investigate_parser.add_argument("--format", choices=("json", "text"), default="json")
     investigate_parser.add_argument("--semantic", action="store_true", help=SEMANTIC_HELP)
     add_filter_options(investigate_parser, PRODUCT_OPTIONS)
     for budget_option, budget_field in BUDGET_OPTIONS:
@@ -676,6 +678,13 @@ def build_investigation_request(
 def print_response(response: SearchResponse | TopicContextResponse | KnowledgeEvidenceSet) -> int:
     print(response.model_dump_json(indent=2))
     return 0 if response.status is ResultStatus.OK else 1
+
+
+def print_investigation(evidence_set: KnowledgeEvidenceSet, output_format: str) -> int:
+    if output_format == "text":
+        print(render_investigation_summary(evidence_set))
+        return 0 if evidence_set.status is ResultStatus.OK else 1
+    return print_response(evidence_set)
 
 
 def summarize(response: SearchResponse) -> dict[str, object]:
@@ -1507,7 +1516,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             data_plane, planner_setup=discover_planner_setup(settings.model_planner)
         )
         try:
-            return print_response(investigation_service.investigate(investigation_request))
+            evidence_set = investigation_service.investigate(investigation_request)
+            return print_investigation(evidence_set, arguments.format)
         except UnsupportedFilter as error:
             refuse_unsupported_filter(parser, error)
     if arguments.command == "topic":
