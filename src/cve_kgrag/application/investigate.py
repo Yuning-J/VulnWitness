@@ -499,6 +499,7 @@ class InvestigationService:
                 round_plan.planned_by,
                 request,
                 self._topic_registry,
+                self._evidence_catalog,
             )
             ledger.charge(issued_step.charged_tool_calls, issued_step.sources)
             started_seconds = ledger.elapsed_seconds()

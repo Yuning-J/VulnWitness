@@ -28,6 +28,10 @@ def list_interpretation_warnings(
     """Excluded terms, a topic the scope expects but the query did not resolve, a query
     without searchable terms, a pending-review card, and the GTP card's family scope."""
     warnings: list[InvestigationWarning] = []
+    for name in interpretation.ambiguous_product_names:
+        warnings.append(
+            InvestigationWarning(code=InvestigationWarningCode.PRODUCT_NAME_AMBIGUOUS, subject=name)
+        )
     for excluded_term in interpretation.resolution.excluded_terms:
         warnings.append(
             InvestigationWarning(

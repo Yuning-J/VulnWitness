@@ -463,7 +463,11 @@ def build_investigation_deployment(
         served_dataset=data_plane.served_dataset,
         topic_registry=data_plane.topic_registry,
         tool_executor=ToolExecutor(
-            data_plane.search_service, topic_context_service, data_plane.topic_registry
+            data_plane.search_service,
+            topic_context_service,
+            data_plane.topic_registry,
+            data_plane.product_query_service,
+            data_plane.evidence_catalog,
         ),
         search_service=data_plane.search_service,
         product_query_service=data_plane.product_query_service,

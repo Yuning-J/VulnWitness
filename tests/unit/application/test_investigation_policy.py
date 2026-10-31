@@ -238,7 +238,7 @@ def test_fight_terms_are_every_search_term_or_none(
         build_investigation_request(query, "mixed"), topic_registry, build_productless_catalog()
     )
 
-    fight_terms = list_fight_terms(query, topic_registry)
+    fight_terms = list_fight_terms(query, topic_registry, build_productless_catalog())
 
     assert fight_terms == expected_fight_terms
     assert interpretation.fight_terms == expected_fight_terms

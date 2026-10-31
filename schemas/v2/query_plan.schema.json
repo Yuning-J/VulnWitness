@@ -65,6 +65,150 @@
       "title": "FightDirectSearchCall",
       "type": "object"
     },
+    "ProductQueryCall": {
+      "additionalProperties": false,
+      "properties": {
+        "recognition": {
+          "$ref": "#/$defs/ProductRecognition"
+        },
+        "tool": {
+          "const": "product_query",
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "recognition"
+      ],
+      "title": "ProductQueryCall",
+      "type": "object"
+    },
+    "ProductQueryRequest": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "vendor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "vendor"
+          ]
+        },
+        {
+          "properties": {
+            "product": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "product"
+          ]
+        }
+      ],
+      "description": "At least one whole vendor or product name; version is never search text.",
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 8192,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Opaque continuation from next_cursor; pass unchanged with the same vendor, product, version and limit against the same served corpus.",
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 10,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*[^\\s\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069][^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact CPE product name, case-folded; punctuation and whitespace retained.",
+          "title": "Product"
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*[^\\s\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069][^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact CPE vendor name, case-folded; punctuation and whitespace retained.",
+          "title": "Vendor"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*[^\\s\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069][^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "title": "ProductQueryRequest",
+      "type": "object"
+    },
+    "ProductRecognition": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "enum": [
+            "affectedness_mention",
+            "exact_phrase"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/ProductQueryRequest"
+        }
+      },
+      "required": [
+        "name",
+        "basis",
+        "request"
+      ],
+      "title": "ProductRecognition",
+      "type": "object"
+    },
     "TopicContextCall": {
       "additionalProperties": false,
       "properties": {
@@ -98,6 +242,7 @@
             "cve_exact_lookup": "#/$defs/CveExactLookupCall",
             "cve_search": "#/$defs/CveSearchCall",
             "fight_direct_search": "#/$defs/FightDirectSearchCall",
+            "product_query": "#/$defs/ProductQueryCall",
             "topic_context": "#/$defs/TopicContextCall"
           },
           "propertyName": "tool"
@@ -108,6 +253,9 @@
           },
           {
             "$ref": "#/$defs/CveSearchCall"
+          },
+          {
+            "$ref": "#/$defs/ProductQueryCall"
           },
           {
             "$ref": "#/$defs/TopicContextCall"

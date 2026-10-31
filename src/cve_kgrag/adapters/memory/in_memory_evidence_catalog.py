@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
+from cve_kgrag.domain.product_query import ProductIdentity
 from cve_kgrag.domain.threat_context import ThreatContextItem
 from cve_kgrag.domain.validation import EvidenceValidationError
 from cve_kgrag.domain.weakness_associations import WeaknessAssociations
@@ -57,12 +58,20 @@ class InMemoryEvidenceCatalog:
         )
         if violations:
             raise EvidenceValidationError(violations)
-        product_names: set[str] = set()
+        product_pairs: set[tuple[str, str]] = set()
         for record in self._records_by_id.values():
             for implicated_product in record.list_implicated_products():
-                product_names.add(implicated_product.vendor.casefold())
-                product_names.add(implicated_product.product.casefold())
-        self._product_names = frozenset(product_names)
+                product_pairs.add(
+                    (implicated_product.vendor.casefold(), implicated_product.product.casefold())
+                )
+        identities_by_name: dict[str, list[ProductIdentity]] = {}
+        for vendor, product in sorted(product_pairs):
+            identity = ProductIdentity(vendor=vendor, product=product)
+            for name in sorted({identity.vendor, identity.product}):
+                identities_by_name.setdefault(name, []).append(identity)
+        self._identities_by_name: dict[str, tuple[ProductIdentity, ...]] = {}
+        for name, named_identities in identities_by_name.items():
+            self._identities_by_name[name] = tuple(named_identities)
 
     def get_evidence(self, evidence_id: str) -> EvidenceAnchor | None:
         return self._anchors_by_id.get(evidence_id)
@@ -79,5 +88,8 @@ class InMemoryEvidenceCatalog:
             return None
         return self._weakness_mapping.associate(record)
 
+    def find_product_identities(self, name: str) -> tuple[ProductIdentity, ...]:
+        return self._identities_by_name.get(name.casefold(), ())
+
     def names_product(self, name: str) -> bool:
-        return name.casefold() in self._product_names
+        return name.casefold() in self._identities_by_name

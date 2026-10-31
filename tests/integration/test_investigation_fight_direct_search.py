@@ -141,7 +141,12 @@ def test_unheld_word_the_affectedness_question_explains_leaves_the_protocol_need
     )
 
     assert evidence_set.interpretation.affectedness_mentions == ("f5gc 1.2.3",)
-    fight_warning_descriptions = describe_warnings(evidence_set.trajectory.steps[1].topic_warnings)
+    fight_step = next(
+        step
+        for step in evidence_set.trajectory.steps
+        if step.call.tool is ToolName.FIGHT_DIRECT_SEARCH
+    )
+    fight_warning_descriptions = describe_warnings(fight_step.topic_warnings)
     assert "term_not_indexed:f5gc" in fight_warning_descriptions
     assert "term_not_indexed:affected" in fight_warning_descriptions
     assert list_need_outcomes(evidence_set)[1] == (

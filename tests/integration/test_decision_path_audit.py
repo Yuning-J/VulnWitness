@@ -937,7 +937,7 @@ def test_reviewer_forgery_is_rejected_after_reseal(
         (
             run_five_g_aka,
             name_another_policy_version,
-            "the planner names a policy other than m7b.4, the one whose decisions the audit "
+            "the planner names a policy other than m7b.5, the one whose decisions the audit "
             "re-derives",
         ),
     ],

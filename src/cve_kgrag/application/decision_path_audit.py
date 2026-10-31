@@ -522,7 +522,9 @@ def find_transition_violations(
 
 
 def find_issued_request_violations(
-    evidence_set: KnowledgeEvidenceSet, topic_registry: TopicRegistry
+    evidence_set: KnowledgeEvidenceSet,
+    topic_registry: TopicRegistry,
+    evidence_catalog: EvidenceCatalog,
 ) -> list[str]:
     """Every step records the backend requests its call sends under the request and the
     registry's card; a step whose requests cannot be rebuilt (a topic the registry does
@@ -530,7 +532,7 @@ def find_issued_request_violations(
     reported instead."""
     violations: list[str] = []
     request = evidence_set.request
-    fight_terms = list_fight_terms(request.query, topic_registry)
+    fight_terms = list_fight_terms(request.query, topic_registry, evidence_catalog)
     for step in evidence_set.trajectory.steps:
         call = step.call
         if isinstance(call, TopicContextCall) and topic_registry.get_topic(call.topic_id) is None:
@@ -544,7 +546,9 @@ def find_issued_request_violations(
                 "not allow"
             )
             continue
-        if step.backend_requests != list_backend_requests(call, request, topic_registry):
+        if step.backend_requests != list_backend_requests(
+            call, request, topic_registry, evidence_catalog
+        ):
             violations.append(
                 f"step {step.step_index} records other backend requests than its call sends "
                 "under the request and the registry's card"
@@ -716,7 +720,9 @@ def find_decision_path_violations(
             )
         return violations
     topic = find_resolved_topic(interpretation, topic_registry)
-    violations.extend(find_issued_request_violations(evidence_set, topic_registry))
+    violations.extend(
+        find_issued_request_violations(evidence_set, topic_registry, evidence_catalog)
+    )
     violations.extend(find_coverage_violations(evidence_set))
     path = derive_decision_path(evidence_set, topic, topic_registry)
     violations.extend(path.violations)

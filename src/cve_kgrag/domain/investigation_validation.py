@@ -148,6 +148,7 @@ from cve_kgrag.domain.investigation import (
     list_named_products,
     list_record_evidence_ids,
     list_step_notices,
+    list_version_mentions,
 )
 from cve_kgrag.domain.nvd_version_note import list_nvd_version_notes
 from cve_kgrag.domain.planning import (
@@ -157,6 +158,7 @@ from cve_kgrag.domain.planning import (
     ModelPlannerUnavailableDetail,
     PlannerKind,
     PlanRejectionCode,
+    ProductQueryCall,
     QueryIntent,
     ToolCall,
     TopicContextCall,
@@ -349,7 +351,7 @@ def find_investigation_scope_violations(evidence_set: KnowledgeEvidenceSet) -> l
 def find_nvd_version_note_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     """Notes are exactly those derived from each candidate and the recorded mentions."""
     violations: list[str] = []
-    mentions = evidence_set.interpretation.affectedness_mentions
+    mentions = list_version_mentions(evidence_set.interpretation)
     for mention in mentions:
         if " " not in mention:
             return ["NVD version notes require affectedness mentions naming a product and version"]
@@ -1116,6 +1118,23 @@ def find_backend_request_violations(
             violations.append(
                 f"step {step.step_index} records other backend requests than its call sends"
             )
+    if isinstance(step.call, ProductQueryCall):
+        expected_product_request = CveBackendRequest(
+            source=KnowledgeSource.CVE_SEARCH,
+            query=step.call.recognition.name,
+            product_query=step.call.recognition.request,
+            limit=max_results_per_call,
+        )
+        if step.backend_requests != (expected_product_request,):
+            violations.append(
+                f"step {step.step_index} records other backend requests than its product call sends"
+            )
+        if step.call.recognition.request.limit != max_results_per_call:
+            violations.append(f"step {step.step_index} product read exceeds its fixed result cap")
+        if step.call.recognition != interpretation.product_recognition:
+            violations.append(
+                f"step {step.step_index} names a product the interpretation did not recognize"
+            )
     if isinstance(step.call, FightDirectSearchCall):
         sent_requests: tuple[FightBackendRequest, ...] = ()
         if interpretation.fight_terms:
@@ -1492,7 +1511,10 @@ def sends_searchable_text(step: ToolStep) -> bool:
     CVE IDs, stopwords and low-signal words), which the search service's text channels,
     the semantic one included, need to run."""
     for backend_request in step.backend_requests:
-        if not isinstance(backend_request, CveBackendRequest):
+        if (
+            not isinstance(backend_request, CveBackendRequest)
+            or backend_request.product_query is not None
+        ):
             continue
         if list_query_terms(backend_request.query):
             return True

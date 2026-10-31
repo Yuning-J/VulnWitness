@@ -37,6 +37,8 @@ from cve_kgrag.domain.planning import (
     ToolName,
     format_planner_version,
 )
+from cve_kgrag.domain.product_query import ProductQueryRequest
+from cve_kgrag.domain.product_recognition import ProductRecognition
 from cve_kgrag.domain.relevance import RelevanceAssessmentRecord, RelevanceLabel
 from cve_kgrag.domain.result_prefix import PrefixAdmission
 from cve_kgrag.domain.search import (
@@ -179,13 +181,16 @@ class FightBlock(ContractModel):
 
 
 class Interpretation(ContractModel):
+    product_recognition: ProductRecognition | None = Field(default=None, exclude_if=not_)
+    ambiguous_product_names: tuple[str, ...] = Field(default=(), exclude_if=not_)
     intent: QueryIntent
     normalized_query: str
     cve_ids: tuple[CveId, ...]
     search_terms: tuple[str, ...] = Field(
         description=(
             "Query tokens without CVE IDs, words that read together as a CVE ID, "
-            "stopwords, the low-signal words cve and cves, and the tokens of excluded terms."
+            "stopwords, the low-signal words cve and cves, tokens of excluded terms, "
+            "and version spans attached to recognized product names."
         )
     )
     fight_terms: tuple[str, ...] = Field(
@@ -210,9 +215,21 @@ class Interpretation(ContractModel):
     )
 
 
+def list_version_mentions(interpretation: Interpretation) -> tuple[str, ...]:
+    """NVD annotation subjects, without adding affectedness evidence needs."""
+    mentions = list(interpretation.affectedness_mentions)
+    recognition = interpretation.product_recognition
+    if recognition is not None and recognition.request.version is not None:
+        mention = f"{recognition.name} {recognition.request.version}"
+        if mention not in mentions:
+            mentions.append(mention)
+    return tuple(mentions)
+
+
 class StepReason(StrEnum):
     QUERY_CVE_IDS = "query_cve_ids"
     QUERY_TERMS = "query_terms"
+    RECOGNIZED_PRODUCT = "recognized_product"
     REVIEWED_TOPIC = "reviewed_topic"
     TOPIC_AFTER_UNKNOWN_IDS = "topic_after_unknown_ids"
     TOPIC_AFTER_LITERAL_MISS = "topic_after_literal_miss"
@@ -228,6 +245,7 @@ class StepReason(StrEnum):
 POLICY_STEP_TOOL_AND_ROUND: dict[StepReason, tuple[ToolName, int]] = {
     StepReason.QUERY_CVE_IDS: (ToolName.CVE_EXACT_LOOKUP, 1),
     StepReason.QUERY_TERMS: (ToolName.CVE_SEARCH, 1),
+    StepReason.RECOGNIZED_PRODUCT: (ToolName.PRODUCT_QUERY, 1),
     StepReason.REVIEWED_TOPIC: (ToolName.TOPIC_CONTEXT, 1),
     StepReason.TOPIC_AFTER_UNKNOWN_IDS: (ToolName.TOPIC_CONTEXT, 2),
     StepReason.TOPIC_AFTER_LITERAL_MISS: (ToolName.TOPIC_CONTEXT, 2),
@@ -318,6 +336,7 @@ class CveBackendRequest(ContractModel):
 
     source: Literal[KnowledgeSource.CVE_SEARCH]
     query: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
+    product_query: ProductQueryRequest | None = Field(default=None, exclude_if=not_)
     limit: int = Field(ge=1, le=MAX_RESULTS_PER_CALL)
 
 
@@ -637,7 +656,7 @@ class RoundRecord(ContractModel):
 class RankingConfiguration(ContractModel):
     rrf_k: int = Field(ge=1)
     relevance_tier_order: tuple[RelevanceTier, ...]
-    merge_rule: Literal["named_then_tier_then_step_then_tool_rank"]
+    merge_rule: Literal["named_then_tier_then_product_match_then_lexical_then_step_then_tool_rank"]
 
 
 def describe_trajectory_shape() -> JsonDict:
@@ -1050,6 +1069,7 @@ class CoverageAssessment(ContractModel):
 
 
 class InvestigationWarningCode(StrEnum):
+    PRODUCT_NAME_AMBIGUOUS = "product_name_ambiguous"
     EXCLUDED_TERM = "excluded_term"
     TOPIC_NOT_RESOLVED = "topic_not_resolved"
     TOPIC_PENDING_REVIEW = "topic_pending_review"

@@ -14,6 +14,7 @@ from cve_kgrag.domain.planning import (
     CveExactLookupCall,
     CveSearchCall,
     FightDirectSearchCall,
+    ProductQueryCall,
     format_cve_tool_query,
 )
 from cve_kgrag.domain.result_prefix import ResultListCount, measure_response_bytes
@@ -32,7 +33,7 @@ def find_prefix_count_violations(step: ToolStep, max_results: int) -> list[str]:
     names = []
     for count in admission.counts:
         names.append(count.name)
-    is_cve_call = isinstance(step.call, CveExactLookupCall | CveSearchCall)
+    is_cve_call = isinstance(step.call, CveExactLookupCall | CveSearchCall | ProductQueryCall)
     expected_names = (
         ["candidates"]
         if is_cve_call
@@ -135,7 +136,7 @@ def find_prefix_content_violations(
         ):
             violations.append(f"step {step.step_index}: prefix record is partial or absent")
         if (
-            isinstance(step.call, CveExactLookupCall | CveSearchCall)
+            isinstance(step.call, CveExactLookupCall | CveSearchCall | ProductQueryCall)
             and candidate.found_by_steps[0] == step.step_index
             and record.cve_id in step.answer_ids
             and candidate.candidate.rank != step.answer_ids.index(record.cve_id) + 1
@@ -175,7 +176,7 @@ def reconstruct_visible_search_prefix(
     Merged or dropped candidates lose their per-call metadata, so those responses
     cannot be rebuilt from a set. No tool is re-run and no omitted record is needed.
     """
-    if not isinstance(step.call, CveExactLookupCall | CveSearchCall):
+    if not isinstance(step.call, CveExactLookupCall | CveSearchCall | ProductQueryCall):
         return None
     if step.status is None or step.result_sha256 is None:
         return None
@@ -207,7 +208,11 @@ def reconstruct_visible_search_prefix(
         channel_outcomes.append(
             channel_failures.get(channel, ChannelOutcome(channel=channel, status=BackendStatus.OK))
         )
-    query = format_cve_tool_query(step.call)
+    query = (
+        step.call.recognition.name
+        if isinstance(step.call, ProductQueryCall)
+        else format_cve_tool_query(step.call)
+    )
     return SearchResponse(
         query=query,
         normalized_query=normalize_query(query),

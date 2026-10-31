@@ -285,7 +285,7 @@ def test_forged_prefix_is_rejected_by_each_check(
 @pytest.mark.parametrize(
     ("query", "scope", "tool"),
     [
-        ("democorp", "implementation_only", "cve_search"),
+        ("gateway", "implementation_only", "cve_search"),
         ("5gaka", "mixed", "topic_context"),
         ("5gaka", "protocol_context_only", "topic_context"),
         (FIGHT_FREE_TEXT_QUERY, "protocol_context_only", "fight_direct_search"),

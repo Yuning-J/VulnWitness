@@ -49,8 +49,10 @@ TOOL_LABELS = {
     "cve_exact_lookup": "exact lookup",
     "topic_context": "topic card",
     "cve_search": "word match",
+    "product_query": "product match",
 }
 WARNING_SENTENCES = {
+    "product_name_ambiguous": "The product name is ambiguous; lexical retrieval was retained.",
     "excluded_term": "The query contains a term excluded from topic resolution.",
     "topic_not_resolved": "The query did not resolve to a reviewed topic.",
     "topic_pending_review": "The topic card used for retrieval is pending review.",

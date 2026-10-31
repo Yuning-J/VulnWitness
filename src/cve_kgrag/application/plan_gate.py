@@ -58,6 +58,7 @@ from cve_kgrag.domain.planning import (
     FightDirectSearchCall,
     PlanRejection,
     PlanRejectionCode,
+    ProductQueryCall,
     QueryPlan,
     ToolCall,
     ToolName,
@@ -174,6 +175,9 @@ def find_call_rejection(call: ToolCall, plan_context: PlanContext) -> PlanReject
         # The canonical search keeps terms within the query limit; it must keep one.
         has_search_term = bool(list_search_terms(call.query, set()))
         if not has_search_term or has_foreign_term:
+            return PlanRejectionCode.TERM_OUTSIDE_VOCABULARY
+    elif isinstance(call, ProductQueryCall):
+        if call.recognition != interpretation.product_recognition:
             return PlanRejectionCode.TERM_OUTSIDE_VOCABULARY
     elif isinstance(call, TopicContextCall):
         matches = interpretation.resolution.matches

@@ -7,7 +7,10 @@ topic (``assess_relevance``); topic steps have already assessed theirs. A CVE th
 caller named by ID is never dropped: an exact lookup's candidate keeps its
 assessment when it relates to the topic and is kept unassessed otherwise. Candidates an
 exact lookup found come first, then the rest; each group is ordered by relevance tier,
-then by the first step that found them, then by that step's own rank, then by CVE ID,
+then by a match to the recognized product when a product step was admitted.
+Within that group, non-product retrieval candidates precede product-only candidates;
+each group keeps first step, tool rank and CVE ID order. Product identity supplies
+no component relevance and does not reorder matching lexical candidates,
 and the whole list is cut to the per-call result cap. A run names at most that many IDs
 (``exceeds_lookup_cap``), so the cut never reaches a named CVE, whatever the order of
 the plan's steps. Under
@@ -27,6 +30,7 @@ from functools import partial
 
 from cve_kgrag.application.fusion import RRF_K
 from cve_kgrag.application.investigation_tools import ToolExecution
+from cve_kgrag.application.product_investigation import matches_product_name
 from cve_kgrag.application.topic_context import PROTOCOL_EXCLUSION_REASON, TIER_ORDER
 from cve_kgrag.domain.affectedness import AffectednessDetail, ApplicabilityStatus
 from cve_kgrag.domain.evidence import Claim, EvidenceAnchor
@@ -55,9 +59,10 @@ from cve_kgrag.domain.investigation import (
     list_named_products,
     list_record_evidence_ids,
     list_step_notices,
+    list_version_mentions,
 )
 from cve_kgrag.domain.nvd_version_note import list_nvd_version_notes
-from cve_kgrag.domain.planning import CveExactLookupCall
+from cve_kgrag.domain.planning import CveExactLookupCall, ProductQueryCall
 from cve_kgrag.domain.relevance import LABEL_ORDER, RelevanceLabel
 from cve_kgrag.domain.search import Candidate, ChannelOutcome, SearchFilters
 from cve_kgrag.domain.taxonomy import (
@@ -106,13 +111,13 @@ def list_decision_warnings(
 
 def describe_ranking() -> RankingConfiguration:
     """The ranking this code applies: the search service's RRF constant, the relevance
-    tier order, and ``CandidateSighting.sort_key``'s merge by named ID, tier, first step
-    and tool rank. A trajectory records it, and the decision-path audit requires exactly
-    it."""
+    tier order, and ``CandidateSighting.sort_key``'s merge by named ID, tier, product
+    match, non-product retrieval, first step and tool rank. A trajectory records it;
+    the decision-path audit requires exactly it."""
     return RankingConfiguration(
         rrf_k=RRF_K,
         relevance_tier_order=TIER_ORDER,
-        merge_rule="named_then_tier_then_step_then_tool_rank",
+        merge_rule="named_then_tier_then_product_match_then_lexical_then_step_then_tool_rank",
     )
 
 
@@ -126,12 +131,16 @@ class CandidateSighting:
     tool_rank: int
     found_by_steps: list[int] = field(default_factory=list)
     is_named: bool = False
+    matches_product: bool = False
+    is_product_only: bool = True
 
-    def sort_key(self) -> tuple[bool, int, int, int, str]:
+    def sort_key(self) -> tuple[bool, int, bool, bool, int, int, str]:
         tier_position = 0 if self.relevance is None else TIER_ORDER.index(self.relevance.tier)
         return (
             not self.is_named,
             tier_position,
+            not self.matches_product,
+            self.is_product_only,
             self.found_by_steps[0],
             self.tool_rank,
             self.candidate.record.cve_id,
@@ -173,6 +182,7 @@ def record_sighting(
     relevance: RelevanceAssessment | None,
     tool_rank: int,
     is_exact_lookup: bool,
+    is_product_step: bool,
 ) -> None:
     cve_id = candidate.record.cve_id
     sighting = sightings.get(cve_id)
@@ -181,6 +191,8 @@ def record_sighting(
         sightings[cve_id] = sighting
     if is_exact_lookup:
         sighting.is_named = True
+    if not is_product_step:
+        sighting.is_product_only = False
     if step_index not in sighting.found_by_steps:
         sighting.found_by_steps.append(step_index)
 
@@ -207,6 +219,11 @@ def collect_sightings(
     """The sightings of the admitted steps' candidates, each CVE once."""
     sightings: dict[str, CandidateSighting] = {}
     dropped_cve_ids: set[str] = set()
+    product_name = None
+    for step, _ in admitted_executions:
+        if isinstance(step.call, ProductQueryCall):
+            product_name = step.call.recognition.name
+            break
     for step, execution in admitted_executions:
         search_response = execution.search_response
         topic_response = execution.topic_response
@@ -229,6 +246,7 @@ def collect_sightings(
                     relevance,
                     candidate.rank,
                     is_exact_lookup,
+                    isinstance(step.call, ProductQueryCall),
                 )
         elif topic_response is not None:
             topic_candidates = list(topic_response.implementation_candidates)
@@ -242,7 +260,11 @@ def collect_sightings(
                     topic_candidate.relevance,
                     topic_candidate.topic_rank,
                     False,
+                    False,
                 )
+    if product_name is not None:
+        for sighting in sightings.values():
+            sighting.matches_product = matches_product_name(sighting.candidate.record, product_name)
     return CollectedSightings(list(sightings.values()), dropped_cve_ids)
 
 
@@ -576,7 +598,7 @@ def assemble_returned_answer(
         topic,
         admitted_executions,
         request.budget.max_results_per_call,
-        interpretation.affectedness_mentions,
+        list_version_mentions(interpretation),
         relevance_labels,
     )
     admitted_steps: list[ToolStep] = []

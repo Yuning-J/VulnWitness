@@ -1,4 +1,4 @@
-"""The deterministic investigation policy (version ``m7b.4``): pure functions of the
+"""The deterministic investigation policy (version ``m7b.5``): pure functions of the
 request, its interpretation and the observed steps.
 
 The policy reads a query into an intent, decides whether the query can be answered
@@ -13,11 +13,13 @@ Round 1, by intent and scope:
 - a resolved topic is explored with ``topic_context`` in every scope; under
   ``implementation_only`` the call fans out to the card's CVE searches only, never to
   FiGHT (``count_tool_calls``);
-- free text is searched literally under ``implementation_only``; under
+- free text is searched under ``implementation_only``, with recognized product
+  versions kept out of lexical terms and an auxiliary exact product read when
+  recognition is unambiguous; under
   ``protocol_context_only`` its words are searched in FiGHT directly
   (``fight_direct_search``), and under ``mixed`` both, the CVE search first, when the
-  words may go to FiGHT (``find_fight_block``), else only the CVE search. So round 1
-  plans one call, or two for ``mixed`` free text.
+  words may go to FiGHT (``find_fight_block``), else only the CVE search. The product
+  read adds one call only when the base plan leaves room in the call budget.
 
 Refinement, at most one call, never one round 1 already issued, and only for an
 implementation or protocol need round 1 left open (``domain/evidence_needs.py``); a named
@@ -40,6 +42,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import assert_never
 
+from cve_kgrag.application.product_recognition import recognize_product, remove_recognized_versions
 from cve_kgrag.domain.cve import MAX_CVE_ID_CHARS
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.evidence_needs import (
@@ -65,6 +68,7 @@ from cve_kgrag.domain.planning import (
     DeterministicPlannerIdentity,
     FightDirectSearchCall,
     PlannerKind,
+    ProductQueryCall,
     QueryIntent,
     ToolCall,
     ToolName,
@@ -86,7 +90,7 @@ from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.topics.registry import TopicRegistry
 
-DETERMINISTIC_POLICY_VERSION = "m7b.4"
+DETERMINISTIC_POLICY_VERSION = "m7b.5"
 # An exact lookup or a CVE search is one backend query.
 CVE_TOOL_COST = 1
 # A direct FiGHT search is one backend query.
@@ -182,13 +186,15 @@ def find_fight_block(query: str, topic_registry: TopicRegistry) -> FightBlock | 
     return None
 
 
-def list_fight_terms(query: str, topic_registry: TopicRegistry) -> tuple[str, ...]:
+def list_fight_terms(
+    query: str, topic_registry: TopicRegistry, evidence_catalog: EvidenceCatalog
+) -> tuple[str, ...]:
     """The words a direct FiGHT search sends: every search term of the query when
     ``find_fight_block`` gives none, else none. The interpretation records them, and the
     executor and the request builders call this on the same request and registry."""
-    if find_fight_block(query, topic_registry) is not None:
-        return ()
-    return list_search_terms(query, set())
+    return interpret_request(
+        InvestigationRequest(query=query, scope=QueryScope.MIXED), topic_registry, evidence_catalog
+    ).fight_terms
 
 
 def list_affectedness_mentions(
@@ -230,7 +236,22 @@ def interpret_request(
     excluded_tokens: set[str] = set()
     for excluded_term in resolution.excluded_terms:
         excluded_tokens.update(tokenize(excluded_term.term))
-    search_terms = list_search_terms(request.query, excluded_tokens)
+    affectedness_mentions = list_affectedness_mentions(normalized_query, evidence_catalog)
+    product_recognition, ambiguous_product_names = recognize_product(
+        normalized_query,
+        affectedness_mentions,
+        evidence_catalog,
+        request.budget.max_results_per_call,
+    )
+    version_mentions = list(affectedness_mentions)
+    if product_recognition is not None and product_recognition.request.version is not None:
+        mention = f"{product_recognition.name} {product_recognition.request.version}"
+        if mention not in version_mentions:
+            version_mentions.append(mention)
+    lexical_query = request.query
+    if version_mentions:
+        lexical_query = remove_recognized_versions(normalized_query, version_mentions)
+    search_terms = list_search_terms(lexical_query, excluded_tokens)
     fight_block = find_fight_block(request.query, topic_registry)
     # Without a block no excluded term was named, so the search terms are all the query's.
     fight_terms: tuple[str, ...] = ()
@@ -255,7 +276,9 @@ def interpret_request(
         fight_terms=fight_terms,
         fight_block=fight_block,
         resolution=resolution,
-        affectedness_mentions=list_affectedness_mentions(normalized_query, evidence_catalog),
+        affectedness_mentions=affectedness_mentions,
+        product_recognition=product_recognition,
+        ambiguous_product_names=ambiguous_product_names,
     )
 
 
@@ -351,9 +374,25 @@ def plan_first_round(
     if request.scope is QueryScope.PROTOCOL_CONTEXT_ONLY:
         return [fight_step]
     search_step = PlannedStep(build_search_call(interpretation), StepReason.QUERY_TERMS)
+    search_steps = [search_step]
+    required_calls = 1
     if request.scope is QueryScope.MIXED and interpretation.fight_terms:
-        return [search_step, fight_step]
-    return [search_step]
+        required_calls += 1
+    if (
+        interpretation.product_recognition is not None
+        and request.budget.max_tool_calls > required_calls
+    ):
+        search_steps.append(
+            PlannedStep(
+                ProductQueryCall(
+                    tool=ToolName.PRODUCT_QUERY, recognition=interpretation.product_recognition
+                ),
+                StepReason.RECOGNIZED_PRODUCT,
+            )
+        )
+    if request.scope is QueryScope.MIXED and interpretation.fight_terms:
+        return [*search_steps, fight_step]
+    return search_steps
 
 
 def has_only_unknown_ids(round_one_steps: Sequence[ToolStep]) -> bool:
@@ -427,7 +466,7 @@ def count_tool_calls(call: ToolCall, scope: QueryScope, topic_registry: TopicReg
     """Backend queries a call costs: a topic call fans out to one CVE search per query
     template, plus one FiGHT search unless the scope is ``implementation_only``; every
     other call is one query."""
-    if isinstance(call, CveExactLookupCall | CveSearchCall):
+    if isinstance(call, CveExactLookupCall | CveSearchCall | ProductQueryCall):
         return CVE_TOOL_COST
     if isinstance(call, FightDirectSearchCall):
         return FIGHT_DIRECT_SEARCH_COST

@@ -13,6 +13,8 @@ from dataclasses import dataclass, replace
 from typing import Literal, assert_never
 
 from cve_kgrag.application.investigation_policy import count_tool_calls, list_fight_terms
+from cve_kgrag.application.product_investigation import adapt_product_read
+from cve_kgrag.application.product_query import ProductQueryService
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.application.topic_context import (
     TopicContextService,
@@ -23,6 +25,7 @@ from cve_kgrag.application.topic_context import (
     list_topic_terms,
 )
 from cve_kgrag.domain.evidence import EvidenceAnchor
+from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.investigation import (
     BackendRequest,
     CveBackendRequest,
@@ -37,6 +40,7 @@ from cve_kgrag.domain.planning import (
     CveSearchCall,
     FightDirectSearchCall,
     PlannerKind,
+    ProductQueryCall,
     ToolCall,
     TopicContextCall,
     compute_call_key,
@@ -96,10 +100,14 @@ class ToolExecutor:
         search_service: SearchService,
         topic_context_service: TopicContextService,
         topic_registry: TopicRegistry,
+        product_query_service: ProductQueryService,
+        evidence_catalog: EvidenceCatalog,
     ) -> None:
         self._search_service = search_service
         self._topic_context_service = topic_context_service
         self._topic_registry = topic_registry
+        self._product_query_service = product_query_service
+        self._evidence_catalog = evidence_catalog
 
     def execute(self, call: ToolCall, request: InvestigationRequest) -> ToolExecution:
         """Run the call. Raises ``LookupError`` for a direct FiGHT search of a query whose
@@ -108,6 +116,9 @@ class ToolExecutor:
             if isinstance(call, CveExactLookupCall | CveSearchCall):
                 search_response = self._search_service.search(build_search_request(call, request))
                 return build_search_execution(search_response)
+            if isinstance(call, ProductQueryCall):
+                product_read = self._product_query_service.query(call.recognition.request)
+                return build_search_execution(adapt_product_read(product_read, request.filters))
             if isinstance(call, TopicContextCall):
                 topic = self._topic_registry.require_topic(call.topic_id)
                 topic_exploration = self._topic_context_service.explore_with_omissions(
@@ -117,7 +128,9 @@ class ToolExecutor:
                     topic_exploration.response, topic_exploration.omitted_cve_ids
                 )
             if isinstance(call, FightDirectSearchCall):
-                fight_terms = require_fight_terms(request, self._topic_registry)
+                fight_terms = require_fight_terms(
+                    request, self._topic_registry, self._evidence_catalog
+                )
                 topic_response = self._topic_context_service.search_fight_directly(
                     build_fight_request(request), fight_terms
                 )
@@ -130,19 +143,22 @@ class ToolExecutor:
 
 
 def require_fight_terms(
-    request: InvestigationRequest, topic_registry: TopicRegistry
+    request: InvestigationRequest, topic_registry: TopicRegistry, evidence_catalog: EvidenceCatalog
 ) -> tuple[str, ...]:
     """The words a direct FiGHT search of the request sends (``list_fight_terms``). Raises
     ``LookupError`` when the query's words may not go to FiGHT, a call the gate never
     admits."""
-    fight_terms = list_fight_terms(request.query, topic_registry)
+    fight_terms = list_fight_terms(request.query, topic_registry, evidence_catalog)
     if not fight_terms:
         raise LookupError("the interpretation allows no direct FiGHT search")
     return fight_terms
 
 
 def list_backend_requests(
-    call: ToolCall, request: InvestigationRequest, topic_registry: TopicRegistry
+    call: ToolCall,
+    request: InvestigationRequest,
+    topic_registry: TopicRegistry,
+    evidence_catalog: EvidenceCatalog,
 ) -> tuple[BackendRequest, ...]:
     """The searches a call sends, in the order it sends them, from the same request
     builders the executor runs it with: a CVE tool's one search, a topic's FiGHT search
@@ -153,11 +169,20 @@ def list_backend_requests(
     if isinstance(call, CveExactLookupCall | CveSearchCall):
         search_request = build_search_request(call, request)
         return (record_cve_request(search_request),)
+    if isinstance(call, ProductQueryCall):
+        return (
+            CveBackendRequest(
+                source=KnowledgeSource.CVE_SEARCH,
+                query=call.recognition.name,
+                product_query=call.recognition.request,
+                limit=request.budget.max_results_per_call,
+            ),
+        )
     if isinstance(call, FightDirectSearchCall):
         return (
             FightBackendRequest(
                 source=KnowledgeSource.MITRE_FIGHT,
-                terms=require_fight_terms(request, topic_registry),
+                terms=require_fight_terms(request, topic_registry, evidence_catalog),
                 limit=decide_fight_search_limit(build_fight_request(request)),
             ),
         )
@@ -272,6 +297,7 @@ def issue_step(
     planned_by: PlannerKind,
     request: InvestigationRequest,
     topic_registry: TopicRegistry,
+    evidence_catalog: EvidenceCatalog,
 ) -> IssuedStep:
     """A planned call as issued: its call key, the backend requests it sends, its charge and
     sources, all derived from the call, the request and the registry's card. Raises
@@ -284,7 +310,7 @@ def issue_step(
         reason=reason,
         planned_by=planned_by,
         call_key=compute_call_key(call),
-        backend_requests=list_backend_requests(call, request, topic_registry),
+        backend_requests=list_backend_requests(call, request, topic_registry, evidence_catalog),
         charged_tool_calls=count_tool_calls(call, request.scope, topic_registry),
         sources=list_tool_sources(call, request.scope),
     )

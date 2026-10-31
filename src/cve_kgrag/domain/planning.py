@@ -20,6 +20,7 @@ from cve_kgrag.domain.budget import MAX_TOOL_CALLS
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.cve import CveId
 from cve_kgrag.domain.hashing import canonical_sha256
+from cve_kgrag.domain.product_recognition import ProductRecognition
 from cve_kgrag.domain.search import MAX_QUERY_CHARS, MAX_RESULTS_PER_CALL
 from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus
 from cve_kgrag.domain.text import list_query_terms
@@ -40,6 +41,7 @@ class ToolName(StrEnum):
 
     CVE_EXACT_LOOKUP = "cve_exact_lookup"
     CVE_SEARCH = "cve_search"
+    PRODUCT_QUERY = "product_query"
     TOPIC_CONTEXT = "topic_context"
     FIGHT_DIRECT_SEARCH = "fight_direct_search"
 
@@ -62,6 +64,11 @@ class CveSearchCall(ContractModel):
     query: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
 
 
+class ProductQueryCall(ContractModel):
+    tool: Literal[ToolName.PRODUCT_QUERY]
+    recognition: ProductRecognition
+
+
 class TopicContextCall(ContractModel):
     tool: Literal[ToolName.TOPIC_CONTEXT]
     topic_id: str = Field(pattern=TOPIC_ID_PATTERN)
@@ -76,7 +83,11 @@ class FightDirectSearchCall(ContractModel):
 
 
 ToolCall = Annotated[
-    CveExactLookupCall | CveSearchCall | TopicContextCall | FightDirectSearchCall,
+    CveExactLookupCall
+    | CveSearchCall
+    | ProductQueryCall
+    | TopicContextCall
+    | FightDirectSearchCall,
     Field(discriminator="tool"),
 ]
 
@@ -93,6 +104,8 @@ def compute_call_key(call: ToolCall) -> str:
     if isinstance(call, CveSearchCall):
         search_terms = sorted(set(list_query_terms(call.query)))
         return canonical_sha256({"tool": call.tool.value, "query_tokens": search_terms})
+    if isinstance(call, ProductQueryCall):
+        return canonical_sha256(call.model_dump(mode="json"))
     if isinstance(call, TopicContextCall):
         return canonical_sha256({"tool": call.tool.value, "topic_id": call.topic_id})
     if isinstance(call, FightDirectSearchCall):
@@ -111,7 +124,7 @@ def is_tool_permitted(call: ToolCall, scope: QueryScope) -> bool:
     """Whether ``scope`` permits the call's tool: no CVE tool runs under
     ``protocol_context_only``, whose answer holds no CVE, and no direct FiGHT search under
     ``implementation_only``, whose answer holds no threat context."""
-    if isinstance(call, CveExactLookupCall | CveSearchCall):
+    if isinstance(call, CveExactLookupCall | CveSearchCall | ProductQueryCall):
         return scope is not QueryScope.PROTOCOL_CONTEXT_ONLY
     if isinstance(call, FightDirectSearchCall):
         return scope is not QueryScope.IMPLEMENTATION_ONLY
@@ -127,7 +140,7 @@ def list_tool_name_sources(tool: ToolName, scope: QueryScope) -> tuple[Knowledge
         return list_consulted_sources(scope)
     if tool is ToolName.FIGHT_DIRECT_SEARCH:
         return (KnowledgeSource.MITRE_FIGHT,)
-    if tool is ToolName.CVE_EXACT_LOOKUP or tool is ToolName.CVE_SEARCH:
+    if tool in (ToolName.CVE_EXACT_LOOKUP, ToolName.CVE_SEARCH, ToolName.PRODUCT_QUERY):
         return (KnowledgeSource.CVE_SEARCH,)
     assert_never(tool)
 

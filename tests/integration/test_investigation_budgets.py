@@ -165,17 +165,18 @@ def test_response_over_the_byte_cap_is_discarded_with_a_warning(
 
 
 @pytest.mark.parametrize(
-    ("query", "scope", "expected_answer_ids", "expected_status"),
+    ("query", "scope", "expected_answer_ids", "expected_status", "expected_step_count"),
     [
         # A search on the question's own words leaves its match unassessed.
-        ("democorp", "implementation_only", ("CVE-9999-0001",), ResultStatus.PARTIAL),
+        ("democorp", "implementation_only", ("CVE-9999-0001",), ResultStatus.PARTIAL, 2),
         (
             "5gaka",
             "protocol_context_only",
             ("CVE-9999-0003", "FGT1499.503"),
             ResultStatus.OK,
+            1,
         ),
-        ("5gaka", "mixed", ("CVE-9999-0003", "FGT1499.503"), ResultStatus.OK),
+        ("5gaka", "mixed", ("CVE-9999-0003", "FGT1499.503"), ResultStatus.OK, 1),
     ],
     ids=["cve_search", "topic_context_protocol", "topic_context_mixed"],
 )
@@ -185,16 +186,21 @@ def test_lowered_result_cap_limits_what_every_tool_returns(
     scope: str,
     expected_answer_ids: tuple[str, ...],
     expected_status: ResultStatus,
+    expected_step_count: int,
 ) -> None:
-    # Uncapped, each of these calls returns two to seven answer IDs.
+    # Arrange: uncapped, each call returns two to seven answer IDs.
     service = build_reviewed_investigation_service(fixture_bundle)
 
+    # Act
     evidence_set = service.investigate(
         build_investigation_request(query, scope, budget={"max_results_per_call": 1})
     )
 
+    # Assert
     step = evidence_set.trajectory.steps[0]
-    assert len(evidence_set.trajectory.steps) == 1
+    assert len(evidence_set.trajectory.steps) == expected_step_count
+    for tool_step in evidence_set.trajectory.steps:
+        assert len(tool_step.answer_ids) <= len(expected_answer_ids)
     assert set(list_backend_limits(evidence_set)) == {1}
     assert step.answer_ids == expected_answer_ids
     assert evidence_set.status is expected_status
