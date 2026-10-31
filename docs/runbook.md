@@ -1,10 +1,127 @@
-# Operator runbook: corpus stores and the FiGHT snapshot
+# Operator runbook
 
-How to import, activate, serve and roll back a corpus store, and how to serve the full
-MITRE FiGHT snapshot. The decisions behind each step are in
-[ADR 0008](rebuild/adr/0008-legacy-data-importer.md) (the importer and the store format)
-and [ADR 0009](rebuild/adr/0009-store-activation-and-serving.md) (activation and
-serving).
+Install, configure, refresh, serve and recover the evidence service.
+See [architecture](architecture.md) for retrieval/interpretation rules and
+[evaluation](evaluation.md) for offline validation. Current pre-release contracts
+are in the [schema manifest](../schemas/v2/manifest.json).
+
+## Install
+
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.11+. From a checkout:
+
+```sh
+uv sync --locked
+source .venv/bin/activate
+cve-kgrag demo
+```
+
+If needed, `uv sync` installs Python; the system Python version does not matter.
+`uv sync --locked` includes the development group, MCP/migration extras and API
+runtime packages. Optional extras are `mcp` (stdio/Streamable HTTP), `api` (REST),
+`migration` (ijson streaming parser) and `semantic` (Chroma/sentence-transformers).
+Only the semantic channel requires an additional extra in this checkout setup.
+Installed core wheels keep these integrations optional.
+
+## Command reference
+
+With the environment activated, all commands below run as `cve-kgrag`:
+
+```sh
+cve-kgrag demo
+cve-kgrag lookup CVE-9999-0001
+cve-kgrag search "authentication bypass"
+cve-kgrag search gateway --vendor democorp --severity critical --graph-expand
+cve-kgrag product --vendor democorp --version 2.0 --format text
+cve-kgrag topic 5G-AKA --scope mixed
+cve-kgrag investigate 5G-AKA --scope mixed --format text
+cve-kgrag investigate 5G-AKA --scope mixed --max-rounds 1
+cve-kgrag capabilities
+cve-kgrag resolve 5G-AKA
+cve-kgrag affectedness CVE-9999-0003 --purl pkg:generic/open5gs@2.7.0
+cve-kgrag evidence ev:d8097ae9c31b754d26a1ef92
+cve-kgrag investigate 5G-AKA --scope mixed > /data/cve-kgrag/evidence-set.json
+cve-kgrag verify /data/cve-kgrag/evidence-set.json
+cve-kgrag mcp
+cve-kgrag mcp --http
+cve-kgrag api
+cve-kgrag schema check
+```
+
+`investigate` exits 0 only for status `ok`; a partial answer such as the pending-card
+example exits 1 while still printing its evidence.
+`affectedness` deliberately exits 1 with `unknown` / `blocked_unverified`.
+`verify` consumes the evidence set printed by `investigate`, returned by REST
+`/api/v2/investigate` or MCP `investigate_telecom_topic`; use the same sources and
+supported configuration. Keep sets and model text outside version control.
+The [evaluation guide](evaluation.md) covers `eval planner` and offline checks.
+
+Commands generally print JSON; server commands run protocols and `schema` reports
+checks. `investigate --format text` shows needs, CVE severity/KEV, protocol context,
+uncertainties, warnings and evidence pointers. Product also supports text output.
+`--scope` is `protocol_context_only`, `implementation_only` or `mixed`.
+Search has repeatable `--vendor`, `--product`, `--purl`, `--cwe`, `--severity`,
+`--year`, `--origin`, plus `--kev-only`. Investigation accepts those product filters
+and budget options `--max-rounds`, `--max-tool-calls`, `--max-sources`,
+`--max-results-per-call`, `--max-wall-time-seconds`, `--max-context-bytes`.
+Use `cve-kgrag <command> --help` for the complete options.
+
+An NVD import names no package URLs. A `--purl` filter (`filters.purls` over REST/MCP)
+requires a dataset that has them, such as the fixture. Otherwise the CLI exits 2
+with `filters.purls: filter_unsupported`, REST returns 422 and MCP a
+`filter_unsupported` failure, naming the filter without its value. Check
+`capabilities.purl_filter_available` before choosing the filter.
+
+## Configuration
+
+Settings are `CVE_KGRAG_*` environment variables, read once at startup. Invalid
+settings are usage errors naming the variable without its value. Keep keys/tokens
+in the environment, never command arguments or committed files.
+
+- `CVE_KGRAG_STORE_ROOT`: absolute corpus-store root. Unset selects the fixture;
+  configured roots must serve their active store or startup fails.
+- `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` and optional `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`:
+  reviewed FiGHT snapshot and expected digest; see [below](#the-operator-fight-snapshot).
+- `CVE_KGRAG_MITRE_SNAPSHOT_PATH` and optional `CVE_KGRAG_MITRE_SNAPSHOT_SHA256`:
+  derived weakness mapping and expected digest; see [below](#weakness-association-mapping).
+- `CVE_KGRAG_PLANNER_*`: optional model planner/assessor, off by default, used only
+  by CLI `investigate` and `eval planner`. Configuration and live-call procedure are
+  in [evaluation](evaluation.md#optional-live-model-checks); sourced refinement,
+  gate/fallback and label semantics are in [architecture](architecture.md#where-the-model-participates).
+- `CVE_KGRAG_SEMANTIC_*`: optional semantic channel, off by default. It reads an
+  operator-named Chroma directory in the legacy pipeline's format; this repository
+  does not build it. Imported corpora have no bound collection; see
+  [the semantic channel](#the-semantic-channel-against-a-store).
+
+### REST and MCP
+
+HTTP requires a bearer token before startup. Generate one in the environment:
+
+```sh
+export CVE_KGRAG_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+cve-kgrag api
+```
+
+`CVE_KGRAG_HTTP_HOST` is `127.0.0.1` by default, or `::1`.
+`CVE_KGRAG_API_PORT` defaults to 8766; `CVE_KGRAG_MCP_HTTP_PORT` defaults to 8765.
+Run `cve-kgrag mcp --http` in a separate process for MCP at `POST /mcp`, or use
+`cve-kgrag mcp` for stdio. All server investigations use deterministic policy;
+model settings do not enable server model calls. Servers do not open Chroma.
+
+REST routes: `POST /api/v2/search`, `/api/v2/product`, `/api/v2/investigate`,
+`/api/v2/verify`; `GET /api/v2/evidence/{evidence_id}` and `/api/v2/capabilities`.
+Request bodies follow the `*_request` schemas under `schemas/v2/`.
+For example, after the API is ready:
+
+```sh
+curl -H "Authorization: Bearer $CVE_KGRAG_HTTP_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"vendor":"democorp","limit":10}' http://127.0.0.1:8766/api/v2/product
+```
+
+`GET /health` alone needs no token and returns 204. `/ready` needs the bearer token;
+it returns 204 while a toolbox worker is free, 503 otherwise. Host/Origin guards
+restrict HTTP to the configured loopback endpoint. MCP stdio exposes nine bounded,
+read-only tools; their [tool list](architecture.md#interfaces) includes examples.
 
 ## The store root
 
@@ -128,10 +245,9 @@ reasons are `store_root_unusable`, `no_active_store`,
 `active_unreadable`, `active_store_missing`, `active_store_changed`, `store_invalid` and
 `store_format_unsupported`; `store status` says more. `resolve`, `affectedness`,
 `migrate`, `store` and `schema` load no served store; `demo` always uses the packaged
-fixture, and so does `eval planner` for an M7a gold file, each saying so on standard
-error. `eval planner` with an M7b gold file runs on the active store and the operator
-FiGHT snapshot
-([`m7b-planner-evaluation.md`](rebuild/m7b-planner-evaluation.md#the-command)).
+fixture, and so does `eval planner` for a fixture-format case file, each saying so
+on standard error. Store-format evaluation uses the active store and operator
+FiGHT snapshot; see [evaluation](evaluation.md#real-store-evaluation).
 
 HTTP servers load before binding: health probes see connection refused during loading.
 MCP stdio answers `initialize` and static `tools/list` before loading finishes. Every tool
@@ -149,10 +265,24 @@ once its complete toolbox is usable. HTTP servers print
 serving; bind failures print no ready notice. Standard output stays the command's JSON
 or the MCP protocol.
 
-**Real data.** The figures for a full NVD store (the store of 2026-10-27)
- are in the README's
-[Running on real data](../README.md#running-on-real-data) section: store loading
-and peak resident memory. Size a host from those.
+### Running on real data
+
+Commands load the whole store before answering. Measured 
+against the store of 2026-10-27 (396,211 records):
+
+| What | Measured |
+|---|---|
+| store on disk | — |
+| one CLI command (`lookup`, `search`, `capabilities`, ...) | — |
+| `api` ready (`/health` answers) | — |
+| `mcp --http` ready | — |
+| MCP stdio, store loading | — |
+| peak memory while loading | — |
+
+These are sizing observations for that dataset/hardware, not a latency promise.
+Once loaded, queries reuse the store. Keep REST or MCP HTTP
+running for repeated queries. Stdio clients can connect during loading and call
+data tools after the ready notice. The fixture is loaded before use.
 
 **Synthetic data.** The table below is from 250,000 synthetic records of one CPE and a
 short description each, measured by `scripts/operator/serving_scale.sh` (a synthetic store)
@@ -196,7 +326,7 @@ The server equivalents are authenticated `POST /api/v2/product` and MCP
 Version annotates the retained NVD conditions without filtering CVEs or deciding
 affectedness. `basis.kind` distinguishes `product_field` from `description_mention`;
 mention-only results cannot confirm vendor ownership or version conditions. See
-[Product vulnerabilities](../README.md#product-vulnerabilities) for the normalization,
+[Product vulnerabilities](architecture.md#product-vulnerabilities) for the normalization,
 grouping and coverage limits.
 
 ## The semantic channel against a store
@@ -246,15 +376,13 @@ techniques than a response lists; `protocol_context_truncated` counts the rest.
 
 ## Store formats, upgrades and downgrades
 
-A store's `store_format_version` decides whether a release can read it; the contract
-version it was created under is provenance only. This release reads format 1, including
-stores written under `2.0.0-dev.25`, without a re-import. A release that changes the
-store format says so in its notes; stores then need a re-import with that release.
-
-Compatibility runs in one direction. The `2.0.0-dev.25` release (commit `28e5b4d`) reads
-no store written from `2.0.0-dev.26` on. Before downgrading the program, use the newer
-release to activate a store the earlier release can read, such as one it imported
-itself; then downgrade and restart.
+A store's `store_format_version` decides whether the program can read it; its
+creation contract is provenance only. This reader accepts format 1. Future readers
+and writers can have different acceptance rules even when contracts share a version.
+An unsupported format requires re-import with the serving program or activation of
+a readable store. Before downgrading, use the installed program to activate a store
+the target program can read, such as one it imported itself; then downgrade and
+restart. Keep a readable store and its matching program for recovery.
 
 ## Data terms
 
@@ -367,3 +495,44 @@ cannot change candidate admission. They do not enter retrieval, ranking, planner
 inputs, evidence needs or FiGHT `protocol_context`. Every served association is
 validated against the snapshot; a forged path or changed snapshot digest fails
 validation.
+
+## Reading bounded answers
+
+- `result_limit_reached` names the search limit (`--limit`, or investigation
+  `--max-results-per-call`). More matches were found, or a lexical, semantic or
+  graph channel filled its limit. It does not count all remaining matches or say
+  relevant evidence was omitted. Investigations emit it only for searches eligible
+  for their answer, never protocol-only CVEs. `answer_truncated` counts known
+  adopted-step results left out during answer assembly.
+- `evidence_prefix_omitted` names a step and its omitted-result count. The context
+  budget admits the longest prefix of whole results and anchors that fits, with
+  topic sections interleaved by rank. `admitted_prefix` records the original
+  response digest, per-list counts, charged bytes and first omitted increment,
+  without copying the full original body into the set. If the first result cannot
+  fit, the step is discarded with `evidence_discarded`. Prefix admission itself is
+  not a budget breach.
+- `term_not_indexed` names each adopted search term absent from the CVE index,
+  or from FiGHT in a direct search. That word matched nothing; other words can
+  still return candidates while the need remains unmet.
+
+`max_context_bytes` bounds admitted tool results, not the serialized answer.
+Claims, anchors and trajectory can make it larger: an observed real-store set
+charged 199,477 bytes in a 339,057-byte answer. There is no separate investigation
+answer-size cap; transport response limits still apply. Search matches words,
+so read candidates' matched terms before treating them as relevant.
+
+## Import raw local feeds directly
+
+Use `migrate legacy` when managing the manifest and activation separately:
+
+```sh
+cve-kgrag migrate legacy --inputs /data/feeds/inputs.yaml \
+  --target /data/stores/nvd-2026-10 --dry-run
+```
+
+Remove `--dry-run` to import a fresh target. The operator-written manifest declares
+raw NVD 1.1/2.0 feeds and CISA KEV CSV with acquisition times. Import produces a
+verified corpus store/report without writing beside inputs or over an existing
+store. Legacy derived exports are never imported. Activate explicitly under the
+configured root, then restart serving processes. Keep inputs/stores outside version
+control under their [data terms](../THIRD_PARTY_DATA.md).
