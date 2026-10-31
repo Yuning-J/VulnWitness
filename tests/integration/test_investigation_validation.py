@@ -54,6 +54,7 @@ from cve_kgrag.domain.planning import (
     PlanRejection,
     PlanRejectionCode,
     ToolCall,
+    TopicContextCall,
     compute_call_key,
     compute_model_reply_sha256,
 )
@@ -389,16 +390,24 @@ def raise_a_template_search_limit(
     evidence_set: KnowledgeEvidenceSet, fixture_bundle: FixtureBundle
 ) -> KnowledgeEvidenceSet:
     """The topic step's second template search asked for 20 under a cap of 1."""
-    backend_requests = list(evidence_set.trajectory.steps[-1].backend_requests)
+    topic_step = next(
+        step for step in evidence_set.trajectory.steps if isinstance(step.call, TopicContextCall)
+    )
+    backend_requests = list(topic_step.backend_requests)
     backend_requests[1] = backend_requests[1].model_copy(update={"limit": 20})
-    return update_last_step(evidence_set, backend_requests=tuple(backend_requests))
+    return rewrite_step(
+        evidence_set, topic_step.step_index, backend_requests=tuple(backend_requests)
+    )
 
 
 def drop_a_template_search(
     evidence_set: KnowledgeEvidenceSet, fixture_bundle: FixtureBundle
 ) -> KnowledgeEvidenceSet:
-    backend_requests = evidence_set.trajectory.steps[-1].backend_requests
-    return update_last_step(evidence_set, backend_requests=backend_requests[:-1])
+    topic_step = next(
+        step for step in evidence_set.trajectory.steps if isinstance(step.call, TopicContextCall)
+    )
+    backend_requests = topic_step.backend_requests
+    return rewrite_step(evidence_set, topic_step.step_index, backend_requests=backend_requests[:-1])
 
 
 def swap_a_template_search_for_fight(
@@ -408,8 +417,13 @@ def swap_a_template_search_for_fight(
     fight_request = FightBackendRequest(
         source=KnowledgeSource.MITRE_FIGHT, terms=("5G AKA",), limit=1
     )
-    backend_requests = evidence_set.trajectory.steps[-1].backend_requests
-    return update_last_step(evidence_set, backend_requests=(fight_request, *backend_requests[1:]))
+    topic_step = next(
+        step for step in evidence_set.trajectory.steps if isinstance(step.call, TopicContextCall)
+    )
+    backend_requests = topic_step.backend_requests
+    return rewrite_step(
+        evidence_set, topic_step.step_index, backend_requests=(fight_request, *backend_requests[1:])
+    )
 
 
 def raise_the_lookup_limit(
@@ -2206,7 +2220,7 @@ def test_set_whose_topic_step_cut_its_sections_counts_every_cut_and_validates(
     for warning in evidence_set.warnings:
         answer_warnings.append((warning.code.value, warning.subject))
     assert ("answer_truncated", "5") in answer_warnings
-    assert evidence_set.status is ResultStatus.OK
+    assert evidence_set.status is ResultStatus.PARTIAL
 
 
 @pytest.mark.parametrize(

@@ -72,7 +72,9 @@ affectedness.
 
 **The rule.** A need is `found` only through an exact correspondence or a reviewed
 mapping: an exact lookup that returned the named CVE, or the topic call of a resolved,
-reviewed topic that returned evidence. Matches of a search on the question's own words
+reviewed topic that returned evidence. The resolved card must have review status
+`reviewed`; a `pending_review` card can retrieve evidence but cannot establish `found`.
+Matches from a pending-review topic or a search on the question's own words
 (`cve_search` or `fight_direct_search`) give `matches_unassessed`: matches were found and
 their relevance was not assessed. It is not a finding that no relevant evidence exists,
 and the answer keeps every match. The current version does not judge free-text results
@@ -105,8 +107,9 @@ source failed gives `source_unavailable`, never `not_evaluated`.
   `not_evaluated` without a serving step; without a topic, `not_found` when a serving
   step warned `term_not_indexed` for a sent word the interpretation does not explain
   (the FiGHT term-coverage rule below); when the answer lists a technique a serving step
-  returned, `found` from a topic step and `matches_unassessed` from a direct search;
-  `source_unavailable` when a serving step's FiGHT source failed; else `not_found`.
+  returned, `found` from a reviewed topic step and `matches_unassessed` from a
+  pending-review topic or a direct search; `source_unavailable` when a serving step's
+  FiGHT source failed; else `not_found`.
 - **affectedness**: `source_unavailable`, since no deployment serves it (ADR 0003); the
   answer carries `applicability_unknown` for the subject.
 - **implementation_cves**: `not_evaluated` without an admitted CVE search or topic
@@ -115,12 +118,12 @@ source failed gives `source_unavailable`, never `not_evaluated`.
   or context term, and those words written together, explain a term, so `5GAKA` and
   `5G-AKA` judge alike; so do, in a question whether a product version is affected, the
   words of the version and the word that asks it. Otherwise, with a
-  resolved topic, `found` when the answer lists a CVE an admitted topic step found, at
-  whatever relevance tier the card gave it, and `matches_unassessed` when only an
-  admitted search of words (a model's plan) found the listed CVEs. Without a topic,
-  `matches_unassessed` when the admitted searches together sent every search term and
-  one of them returned a CVE. `source_unavailable` when a CVE source failed; else
-  `not_found`.
+  resolved topic, `found` when the answer lists a CVE an admitted reviewed topic step found,
+  at whatever relevance tier the card gave it, and `matches_unassessed` when only a
+  pending-review topic or an admitted search of words (a model's plan) found the listed
+  CVEs. Without a topic, `matches_unassessed` when the admitted searches together sent
+  every search term and one of them returned a CVE. `source_unavailable` when a CVE source
+  failed; else `not_found`.
 
 The term-coverage check is a conservative check of the retrieval process: it catches a
 word no record holds and a plan that dropped a word. It judges no relevance, so a query

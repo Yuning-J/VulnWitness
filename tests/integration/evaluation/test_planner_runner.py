@@ -18,7 +18,6 @@ from cve_kgrag.evaluation.case_runner import (
     PACKAGE_CHANGED,
     EvaluationStopped,
     ModelRuns,
-    build_fixture_data_planes,
     describe_fixture_dataset,
 )
 from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport, format_report
@@ -33,6 +32,7 @@ from tests.support.evaluation import (
     SMALL_GOLD_ROWS,
     PackageEditingModelPort,
     build_package_dir,
+    build_reviewed_fixture_data_planes,
     encode_gold,
     list_entry_names,
 )
@@ -53,7 +53,7 @@ def read_written_set(result_directory: ResultDirectory, relative_path: str) -> K
 
 def fixture_inputs(fixture_bundle: FixtureBundle) -> dict[str, Any]:
     """The data planes, dataset and absent labels an M7a evaluation runs with."""
-    data_planes = build_fixture_data_planes(fixture_bundle)
+    data_planes = build_reviewed_fixture_data_planes(fixture_bundle)
     return {
         "data_planes": data_planes,
         "dataset": describe_fixture_dataset(data_planes),

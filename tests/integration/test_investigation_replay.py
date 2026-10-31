@@ -49,6 +49,7 @@ from cve_kgrag.domain.investigation_validation import (
 from cve_kgrag.domain.planning import ModelReply
 from cve_kgrag.domain.taxonomy import ResultStatus, RetrievalChannel
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
+from cve_kgrag.domain.topic import ReviewStatus
 from cve_kgrag.domain.topic_context import (
     KnowledgeSource,
     SourceOutcome,
@@ -74,6 +75,8 @@ from tests.support.investigation import (
     build_blocking_investigation_service,
     build_deadline_nearing_service,
     build_investigation_request,
+    build_reviewed_deployment,
+    build_reviewed_investigation_service,
     build_test_deployment,
     build_test_investigation_service,
     choose_fight_source,
@@ -104,7 +107,6 @@ from tests.support.investigation_runs import (
     run_model_unavailable,
     run_over_the_byte_cap,
     run_policy_plan_over_budget,
-    run_refinement,
     run_semantic_hit,
     run_with_invalid_evidence,
     wire_lexical_unavailable,
@@ -609,7 +611,7 @@ def test_replay_of_a_prefix_whose_source_fits_names_full_admission(
     request = build_investigation_request(
         "5G-AKA", "implementation_only", budget={"max_context_bytes": current_bytes + 1000}
     )
-    evidence_set = build_test_investigation_service(bigger_bundle).investigate(request)
+    evidence_set = build_reviewed_investigation_service(bigger_bundle).investigate(request)
     step = evidence_set.trajectory.steps[0]
     assert step.admission is StepAdmission.ADMITTED_PREFIX
     assert step.context_bytes <= current_bytes + 1000
@@ -620,7 +622,7 @@ def test_replay_of_a_prefix_whose_source_fits_names_full_admission(
     )
 
     # Act
-    replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(fixture_bundle))
+    replay_outcome = replay_evidence_set(evidence_set, build_reviewed_deployment(fixture_bundle))
 
     # Assert
     assert replay_outcome == ReplayCompleted(
@@ -650,10 +652,10 @@ def test_replay_whose_first_round_now_answers_runs_no_refinement_round(
     meets the need and the replayed run stops there: replay names the step only the record
     holds, the rounds, the transitions and ``refinement_applied``, rather than running the
     recorded round 2 again."""
-    evidence_set = run_refinement(fixture_bundle)
+    evidence_set = build_reviewed_investigation_service(fixture_bundle).investigate(OPEN5GS_REQUEST)
     changed_bundle = build_bundle_with_an_open5gs_record(fixture_bundle)
 
-    replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(changed_bundle))
+    replay_outcome = replay_evidence_set(evidence_set, build_reviewed_deployment(changed_bundle))
 
     assert replay_outcome == ReplayCompleted(
         (
@@ -690,10 +692,12 @@ def test_replay_that_stops_before_the_recorded_deadline_point_names_the_breach(
     holds an open5gs record the topic call finds, so round 1 meets the need and the
     replayed run stops before that point: the deadline is never put
     back, and replay names the stop, the breach and the rounds the deadline gave."""
-    evidence_set = run_deadline_before_the_refinement_round(fixture_bundle)
+    evidence_set = build_deadline_nearing_service(
+        fixture_bundle, review_status=ReviewStatus.REVIEWED
+    ).investigate(OPEN5GS_REQUEST)
     changed_bundle = build_bundle_with_an_open5gs_record(fixture_bundle)
 
-    replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(changed_bundle))
+    replay_outcome = replay_evidence_set(evidence_set, build_reviewed_deployment(changed_bundle))
 
     assert replay_outcome == ReplayCompleted(
         (

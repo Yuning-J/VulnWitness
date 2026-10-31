@@ -246,7 +246,7 @@ def test_schema_check_reports_drift_for_empty_directory(
 @pytest.mark.parametrize(
     ("arguments", "expected_exit_code", "expected_status"),
     [
-        (["investigate", "5gaka", "--scope", "protocol_context_only"], 0, "ok"),
+        (["investigate", "5gaka", "--scope", "protocol_context_only"], 1, "partial"),
         (["investigate", "aka", "--scope", "mixed"], 1, "no_match"),
         (
             ["investigate", "5gaka", "--scope", "implementation_only", "--product", "open5gs"],
@@ -280,7 +280,7 @@ def test_investigate_text_prints_the_fixture_header_and_candidate_table(
     summary = capsys.readouterr().out
 
     # Assert
-    assert exit_code == 0
+    assert exit_code == 1
     assert summary.startswith("Investigation: 5G-AKA\nScope: mixed\n")
     assert "CVE candidates:\nRank  CVE ID" in summary
     assert "CVE-9999-0003   HIGH 7.5 v3.1" in summary
@@ -304,7 +304,7 @@ def test_default_and_explicit_json_formats_print_identical_bytes(
     explicit_json = capsys.readouterr().out
 
     # Assert
-    assert default_exit_code == json_exit_code == 0
+    assert default_exit_code == json_exit_code == 1
     assert default_json == explicit_json == evidence_set.model_dump_json(indent=2) + "\n"
 
 
@@ -692,7 +692,7 @@ def test_investigate_with_a_planner_missing_its_key_plans_deterministically_and_
     )
 
     evidence_set = KnowledgeEvidenceSet.model_validate_json(capsys.readouterr().out)
-    assert exit_code == 0
+    assert exit_code == 1
     assert evidence_set.trajectory.planner == describe_deterministic_planner()
     assert evidence_set.source_capabilities[-1] == describe_planner_capability(
         describe_deterministic_planner(), ModelPlannerUnavailableDetail.MISSING_API_KEY
@@ -771,7 +771,7 @@ def test_investigate_plans_with_the_installed_adapter_and_the_set_verifies(
     )
 
     planner = evidence_set.trajectory.planner
-    assert exit_code == 0
+    assert exit_code == 1
     assert isinstance(planner, ModelPlannerIdentity)
     assert planner.adapter == INSTALLED_PLANNER_ADAPTER
     assert evidence_set.trajectory.rounds[0].planner_outcome is PlannerOutcome.MODEL_ACCEPTED

@@ -218,7 +218,10 @@ R3 serves an open implementation need, the run stops `no_refinement_available`.
 
 **Evidence needs.** A need is `found` only through an exact correspondence or a reviewed
 mapping: an exact lookup that returned the named CVE, or the topic call of a resolved,
-reviewed topic that returned evidence. Matches of a search on the question's own words
+reviewed topic that returned evidence. A card with `pending_review` status still serves
+retrieval, but its matches give `matches_unassessed` and cannot support `sufficient`.
+Truncation alone does not prevent a reviewed mapping from giving `found`.
+Matches of a search on the question's own words
 (`cve_search`, `fight_direct_search`) leave it `matches_unassessed`: matches were found
 and their relevance was not assessed, which says nothing about whether relevant evidence
 exists. The current version does not judge such matches sufficient automatically. The

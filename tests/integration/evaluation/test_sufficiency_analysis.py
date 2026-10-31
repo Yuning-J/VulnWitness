@@ -10,6 +10,7 @@ import pytest
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet, StopReason
+from cve_kgrag.domain.topic import ReviewStatus
 from cve_kgrag.evaluation.gold_sets import DerivedSets
 from cve_kgrag.evaluation.labelled_cases import (
     EvidenceCategory,
@@ -33,7 +34,8 @@ from tests.support.investigation import (
 )
 
 # "democorp gateway" lists CVE-9999-0001, -0002 and -0007 and stops needs_unmet, its
-# matches unassessed; "5gaka" lists CVE-9999-0003 and -0004 and stops sufficient, under
+# matches unassessed; with a synthetic reviewed card, "5gaka" lists CVE-9999-0003
+# and -0004 and stops sufficient, under
 # mixed also with FGT1499.503, FGT5040, FGT5019, FGT5019.005 and FGT5044.
 GATEWAY_QUERY = "democorp gateway"
 PROTOCOL_RULES = {
@@ -60,12 +62,16 @@ def gateway_set(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
 
 @pytest.fixture
 def topic_set(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    return run_deterministically(fixture_bundle, "5gaka", "implementation_only")
+    return build_test_investigation_service(
+        fixture_bundle, review_status=ReviewStatus.REVIEWED
+    ).investigate(build_investigation_request("5gaka", "implementation_only"))
 
 
 @pytest.fixture
 def mixed_set(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    return run_deterministically(fixture_bundle, "5gaka", "mixed")
+    return build_test_investigation_service(
+        fixture_bundle, review_status=ReviewStatus.REVIEWED
+    ).investigate(build_investigation_request("5gaka", "mixed"))
 
 
 def list_absent_ids(id_count: int) -> tuple[str, ...]:
@@ -104,9 +110,9 @@ def test_lower_request_budget_does_not_lower_the_coverage_bar(
     fixture_bundle: FixtureBundle,
 ) -> None:
     budget = {"max_results_per_call": 1}
-    low_budget_set = run_deterministically(
-        fixture_bundle, "5gaka", "implementation_only", budget=budget
-    )
+    low_budget_set = build_test_investigation_service(
+        fixture_bundle, review_status=ReviewStatus.REVIEWED
+    ).investigate(build_investigation_request("5gaka", "implementation_only", budget=budget))
     case = build_case(request={"query": "5gaka", "scope": "implementation_only", "budget": budget})
     required = ("CVE-9999-0003", "CVE-9999-0004")
 
@@ -260,7 +266,9 @@ def build_cve_gap_case() -> LabelledCase:
 def test_cve_gap_is_flagged_only_when_the_run_leaves_its_implementation_need_unfound(
     fixture_bundle: FixtureBundle, query: str, expected_unflagged: bool
 ) -> None:
-    answer_set = run_deterministically(fixture_bundle, query, "implementation_only")
+    answer_set = build_test_investigation_service(
+        fixture_bundle, review_status=ReviewStatus.REVIEWED
+    ).investigate(build_investigation_request(query, "implementation_only"))
     case_sets = {
         SubjectKind.CVES: build_sets(()),
         SubjectKind.TECHNIQUES: build_sets(("FGT5044",)),

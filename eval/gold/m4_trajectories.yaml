@@ -91,12 +91,13 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, answer_found]
+        - [assess, refine, needs_open]
+        - [refine, validate, no_refinement_available]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 5, admission: admitted, status: ok}
-      stop_reason: sufficient
-      status: ok
+      stop_reason: needs_unmet
+      status: partial
       implementation_candidates: []
       excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
       protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
@@ -152,11 +153,15 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, affectedness_unavailable]
+        - [assess, refine, needs_open]
+        - [refine, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, needs_open_after_refinement]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 4, admission: admitted, status: ok}
-      stop_reason: source_unavailable
+        - {round: 2, tool: cve_search, reason: query_terms_for_open_need, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [structured, lexical]}
+      stop_reason: needs_unmet
       status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
@@ -166,9 +171,9 @@ trajectories:
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
       applicability:
         - {product: "f5gc", status: unknown}
-      warning_codes: [topic_pending_review, applicability_unknown]
-      tool_calls: 4
-      rounds: 1
+      warning_codes: [topic_pending_review, term_not_indexed, applicability_unknown]
+      tool_calls: 5
+      rounds: 2
 
   # FiGHT fails inside the one topic step; nothing retries it.
   - id: fight_unavailable_mixed
@@ -232,12 +237,16 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, answer_found]
+        - [assess, refine, needs_open]
+        - [refine, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, needs_open_after_refinement]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 4, admission: admitted, status: ok}
-      stop_reason: sufficient
-      status: ok
+        - {round: 2, tool: cve_search, reason: query_terms_for_open_need, charged_tool_calls: 1, admission: admitted, status: no_match, channels: [lexical]}
+      stop_reason: needs_unmet
+      status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
         - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
@@ -245,9 +254,9 @@ trajectories:
       protocol_context: []
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
       applicability: []
-      warning_codes: [topic_pending_review]
-      tool_calls: 4
-      rounds: 1
+      warning_codes: [topic_pending_review, term_not_indexed]
+      tool_calls: 5
+      rounds: 2
 
   # The spelled-out alias resolves the same topic and is explored the same way: the
   # topic call, not a literal search, finds both records.
@@ -260,12 +269,16 @@ trajectories:
         - [interpret, plan, query_interpreted]
         - [plan, retrieve, plan_accepted]
         - [retrieve, assess, steps_finished]
-        - [assess, validate, answer_found]
+        - [assess, refine, needs_open]
+        - [refine, retrieve, plan_accepted]
+        - [retrieve, assess, steps_finished]
+        - [assess, validate, needs_open_after_refinement]
         - [validate, return, answer_validated]
       steps:
         - {round: 1, tool: topic_context, reason: reviewed_topic, charged_tool_calls: 4, admission: admitted, status: ok}
-      stop_reason: sufficient
-      status: ok
+        - {round: 2, tool: cve_search, reason: query_terms_for_open_need, charged_tool_calls: 1, admission: admitted, status: ok, channels: [lexical]}
+      stop_reason: needs_unmet
+      status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
         - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
@@ -274,8 +287,8 @@ trajectories:
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
       applicability: []
       warning_codes: [topic_pending_review]
-      tool_calls: 4
-      rounds: 1
+      tool_calls: 5
+      rounds: 2
 
   # An unknown ID beside plain text: the question needs only that CVE, which no search
   # can meet, so the words are not searched.

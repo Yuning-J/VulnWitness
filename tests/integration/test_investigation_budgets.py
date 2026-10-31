@@ -25,6 +25,7 @@ from cve_kgrag.domain.investigation import (
 from cve_kgrag.domain.search import RetrievalOutcome
 from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus
 from cve_kgrag.domain.text import normalize_query
+from cve_kgrag.domain.topic import ReviewStatus
 from tests.support.clocks import ONE_SECOND_RUN_REAL_SECONDS, SteppingClock, read_fixed_clock
 from tests.support.fakes import (
     CannedRetriever,
@@ -40,11 +41,13 @@ from tests.support.investigation import (
     build_blocking_investigation_service,
     build_deadline_nearing_service,
     build_investigation_request,
+    build_reviewed_investigation_service,
     build_test_investigation_service,
     list_implementation_ids,
     list_step_tools,
     list_transitions,
     list_warning_codes,
+    with_topic_review,
 )
 from tests.support.planners import ScriptedModelPort, build_plan_reply
 from tests.support.services import build_fixture_service
@@ -184,7 +187,7 @@ def test_lowered_result_cap_limits_what_every_tool_returns(
     expected_status: ResultStatus,
 ) -> None:
     # Uncapped, each of these calls returns two to seven answer IDs.
-    service = build_test_investigation_service(fixture_bundle)
+    service = build_reviewed_investigation_service(fixture_bundle)
 
     evidence_set = service.investigate(
         build_investigation_request(query, scope, budget={"max_results_per_call": 1})
@@ -219,13 +222,16 @@ def test_every_backend_request_stays_within_max_results_per_call(
     packaged_fight_source, pinned_fight_snapshot = load_packaged_fight_source(read_fixed_clock)
     fight_recorder = FightRequestRecorder(packaged_fight_source)
     service = build_investigation_service(
-        build_serving_data_plane(
-            fixture_bundle,
-            search_service=build_fixture_service(
-                fixture_bundle, lexical_retriever=lexical_recorder
+        with_topic_review(
+            build_serving_data_plane(
+                fixture_bundle,
+                search_service=build_fixture_service(
+                    fixture_bundle, lexical_retriever=lexical_recorder
+                ),
+                fight_source=fight_recorder,
+                pinned_fight_snapshot=pinned_fight_snapshot,
             ),
-            fight_source=fight_recorder,
-            pinned_fight_snapshot=pinned_fight_snapshot,
+            ReviewStatus.REVIEWED,
         ),
         wall_clock=read_fixed_clock,
         monotonic_clock=SteppingClock().read,
@@ -488,4 +494,4 @@ def test_fast_run_on_the_real_clock_matches_the_run_on_a_still_clock(
     real_clock_set = real_clock_service.investigate(request)
 
     assert real_clock_set.result_sha256 == still_clock_set.result_sha256
-    assert real_clock_set.stop_reason is StopReason.SUFFICIENT
+    assert real_clock_set.stop_reason is StopReason.NEEDS_UNMET

@@ -127,11 +127,11 @@ def test_found_cve_id_beside_a_resolved_topic_explores_the_topic_for_its_needs(
         StepReason.QUERY_CVE_IDS,
         StepReason.TOPIC_FOR_OPEN_NEED,
     ]
-    assert evidence_set.stop_reason is StopReason.SUFFICIENT
+    assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
     assert list_need_outcomes(evidence_set) == [
         (EvidenceNeedKind.NAMED_CVE, "CVE-9999-0001", NeedOutcome.FOUND),
-        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.FOUND),
-        (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.FOUND),
+        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.MATCHES_UNASSESSED),
+        (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.MATCHES_UNASSESSED),
     ]
 
 
@@ -184,15 +184,17 @@ def test_product_version_without_an_affectedness_word_is_a_search_not_a_need(
     assert evidence_set.product_applicability == ()
 
 
-def test_alias_spelling_no_record_holds_still_meets_the_need_through_the_topic(
+def test_alias_spelling_resolves_but_a_pending_topic_leaves_the_need_unassessed(
     fixture_bundle: FixtureBundle,
 ) -> None:
     evidence_set = run_deterministically(fixture_bundle, "5gaka", "implementation_only")
 
-    assert evidence_set.stop_reason is StopReason.SUFFICIENT
+    assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
     assert evidence_set.coverage.needs == (
         EvidenceNeed(
-            kind=EvidenceNeedKind.IMPLEMENTATION_CVES, subject=None, outcome=NeedOutcome.FOUND
+            kind=EvidenceNeedKind.IMPLEMENTATION_CVES,
+            subject=None,
+            outcome=NeedOutcome.MATCHES_UNASSESSED,
         ),
     )
 
@@ -303,6 +305,6 @@ def test_unknown_id_beside_a_resolved_topic_still_explores_the_topic(
     ]
     assert list_need_outcomes(evidence_set) == [
         (EvidenceNeedKind.NAMED_CVE, "CVE-9999-4242", NeedOutcome.NOT_FOUND),
-        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.FOUND),
-        (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.FOUND),
+        (EvidenceNeedKind.IMPLEMENTATION_CVES, None, NeedOutcome.MATCHES_UNASSESSED),
+        (EvidenceNeedKind.PROTOCOL_CONTEXT, None, NeedOutcome.MATCHES_UNASSESSED),
     ]

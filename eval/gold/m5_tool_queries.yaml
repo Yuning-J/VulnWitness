@@ -137,7 +137,7 @@ rows:
     tool: investigate_telecom_topic
     request: {query: "5gaka", scope: implementation_only, filters: {products: ["f5gc"]}}
     expected:
-      stop_reason: source_unavailable
+      stop_reason: needs_unmet
       status: partial
-      validate_basis: affectedness_unavailable
+      validate_basis: needs_open_after_refinement
       applicability: [{product: "f5gc", status: unknown}]

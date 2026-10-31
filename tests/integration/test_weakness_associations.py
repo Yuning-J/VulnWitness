@@ -306,7 +306,7 @@ def test_mapping_contents_leave_needs_stops_ranking_and_protocol_context_unchang
 
     # Assert
     assert mapped_set.coverage.needs == sparse_set.coverage.needs
-    assert mapped_set.stop_reason == sparse_set.stop_reason == "sufficient"
+    assert mapped_set.stop_reason == sparse_set.stop_reason == "needs_unmet"
     assert mapped_set.protocol_context == sparse_set.protocol_context
     assert mapped_set.product_applicability == sparse_set.product_applicability
     assert mapped_set.trajectory.ranking == sparse_set.trajectory.ranking

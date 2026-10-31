@@ -5,6 +5,7 @@ calls, the gold trajectories, and loop-based extractors for asserting on evidenc
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any, Literal
 
 import yaml
@@ -17,6 +18,7 @@ from cve_kgrag.application.decision_path_audit import audit_decision_path
 from cve_kgrag.application.investigate import InvestigationService
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
 from cve_kgrag.application.planner_setup import DeterministicPlanning, PlannerSetup
+from cve_kgrag.application.serving_data_plane import ServingDataPlane
 from cve_kgrag.composition import (
     build_investigation_deployment,
     build_investigation_service,
@@ -42,6 +44,7 @@ from cve_kgrag.domain.planning import (
     TopicContextCall,
 )
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
+from cve_kgrag.domain.topic import ReviewStatus, TopicReview
 from cve_kgrag.ports.affectedness import TrustifyPort
 from cve_kgrag.ports.planning import ModelPort
 from cve_kgrag.ports.sources import FightSource
@@ -150,6 +153,7 @@ def build_test_investigation_service(
     bundle: FixtureBundle,
     *,
     fight: FightChoice = "packaged",
+    review_status: ReviewStatus | None = None,
     model_port: ModelPort | None = None,
     planner_unavailable_detail: ModelPlannerUnavailableDetail | None = None,
     trustify_port: TrustifyPort | None = None,
@@ -170,14 +174,17 @@ def build_test_investigation_service(
         planner_setup = DeterministicPlanning(planner_unavailable_detail)
     else:
         planner_setup = plan_with(model_port)
+    data_plane = build_serving_data_plane(
+        bundle,
+        search_service=build_fixture_service(bundle, **retrievers),
+        fight_source=fight_source,
+        pinned_fight_snapshot=pinned_fight_snapshot,
+        clock=read_fixed_clock,
+    )
+    if review_status is not None:
+        data_plane = with_topic_review(data_plane, review_status)
     return build_investigation_service(
-        build_serving_data_plane(
-            bundle,
-            search_service=build_fixture_service(bundle, **retrievers),
-            fight_source=fight_source,
-            pinned_fight_snapshot=pinned_fight_snapshot,
-            clock=read_fixed_clock,
-        ),
+        data_plane,
         planner_setup=planner_setup,
         trustify_port=trustify_port,
         wall_clock=read_fixed_clock,
@@ -185,8 +192,26 @@ def build_test_investigation_service(
     )
 
 
+def with_topic_review(
+    data_plane: ServingDataPlane, review_status: ReviewStatus
+) -> ServingDataPlane:
+    """The fixture data plane with an explicitly synthetic review of its topic."""
+    topic = data_plane.topic_registry.list_topics()[0].topic
+    review = TopicReview(
+        status=review_status,
+        reviewer="Synthetic test reviewer" if review_status is ReviewStatus.REVIEWED else None,
+        reviewed_on="2026-10-01" if review_status is ReviewStatus.REVIEWED else None,
+        basis="Synthetic review for sufficiency tests only.",
+    )
+    registry = TopicRegistry([topic.model_copy(update={"review": review})])
+    return replace(data_plane, topic_registry=registry)
+
+
 def build_deadline_nearing_service(
-    bundle: FixtureBundle, model_port: ModelPort | None = None
+    bundle: FixtureBundle,
+    model_port: ModelPort | None = None,
+    *,
+    review_status: ReviewStatus | None = None,
 ) -> InvestigationService:
     """The production wiring whose first lexical search lands at 29.5 seconds, in time, after
     which every clock read moves on a second, so the next deadline check finds the default
@@ -196,7 +221,11 @@ def build_deadline_nearing_service(
         Bm25LexicalIndex(bundle.records), clock, seconds=29.5, seconds_per_read=1.0
     )
     return build_test_investigation_service(
-        bundle, model_port=model_port, monotonic_clock=clock.read, lexical_retriever=nearing_lexical
+        bundle,
+        model_port=model_port,
+        monotonic_clock=clock.read,
+        lexical_retriever=nearing_lexical,
+        review_status=review_status,
     )
 
 
@@ -229,6 +258,7 @@ def build_test_deployment(
     bundle: FixtureBundle,
     *,
     fight: FightChoice = "packaged",
+    review_status: ReviewStatus | None = None,
     trustify_port: TrustifyPort | None = None,
     monotonic_clock: Callable[[], float] | None = None,
     **retrievers: Any,
@@ -240,14 +270,17 @@ def build_test_deployment(
     ``monotonic_clock`` time never advances, so no deadline is ever reached.
     """
     fight_source, pinned_fight_snapshot = choose_fight_source(fight)
+    data_plane = build_serving_data_plane(
+        bundle,
+        search_service=build_fixture_service(bundle, **retrievers),
+        fight_source=fight_source,
+        pinned_fight_snapshot=pinned_fight_snapshot,
+        clock=read_fixed_clock,
+    )
+    if review_status is not None:
+        data_plane = with_topic_review(data_plane, review_status)
     return build_investigation_deployment(
-        build_serving_data_plane(
-            bundle,
-            search_service=build_fixture_service(bundle, **retrievers),
-            fight_source=fight_source,
-            pinned_fight_snapshot=pinned_fight_snapshot,
-            clock=read_fixed_clock,
-        ),
+        data_plane,
         trustify_port=trustify_port,
         wall_clock=read_fixed_clock,
         monotonic_clock=monotonic_clock or SteppingClock().read,
@@ -368,3 +401,15 @@ def build_productless_catalog() -> InMemoryEvidenceCatalog:
     """A catalog that holds nothing and so names no product: interpreting a query with it
     records no product version, whatever the query asks."""
     return InMemoryEvidenceCatalog((), ())
+
+
+def build_reviewed_investigation_service(
+    bundle: FixtureBundle, **options: Any
+) -> InvestigationService:
+    """A fixture service with a synthetic reviewed topic for planner behavior tests."""
+    return build_test_investigation_service(bundle, review_status=ReviewStatus.REVIEWED, **options)
+
+
+def build_reviewed_deployment(bundle: FixtureBundle, **options: Any) -> InvestigationDeployment:
+    """The deployment matching the explicitly reviewed planner-test service."""
+    return build_test_deployment(bundle, review_status=ReviewStatus.REVIEWED, **options)

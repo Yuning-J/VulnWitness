@@ -56,8 +56,8 @@ from tests.support.investigation import (
     ONE_SECOND_REQUEST,
     build_exact_lookup_call,
     build_investigation_request,
-    build_test_deployment,
-    build_test_investigation_service,
+    build_reviewed_deployment,
+    build_reviewed_investigation_service,
     build_topic_call,
     list_implementation_ids,
     list_need_outcomes,
@@ -100,6 +100,12 @@ NON_LATIN_PAYLOAD = (
 )
 
 
+@pytest.fixture
+def topic_registry(fixture_bundle: FixtureBundle) -> TopicRegistry:
+    """These planner tests require a reviewed mapping that can finish in one round."""
+    return build_reviewed_deployment(fixture_bundle).topic_registry
+
+
 def describe_rounds(evidence_set: KnowledgeEvidenceSet) -> list[tuple[str, list[str]]]:
     """Each round as (planner outcome, rejection codes)."""
     described_rounds: list[tuple[str, list[str]]] = []
@@ -121,12 +127,12 @@ def find_capability_version(evidence_set: KnowledgeEvidenceSet, source: str) -> 
 def investigate_without_planner(
     fixture_bundle: FixtureBundle, request: InvestigationRequest
 ) -> KnowledgeEvidenceSet:
-    return build_test_investigation_service(fixture_bundle).investigate(request)
+    return build_reviewed_investigation_service(fixture_bundle).investigate(request)
 
 
 def test_valid_model_plan_is_accepted_and_run(fixture_bundle: FixtureBundle) -> None:
     model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request("5G-AKA", "implementation_only"))
 
@@ -146,7 +152,7 @@ def test_model_literal_search_with_matches_on_a_topic_question_is_followed_by_th
     leaves its matches unassessed: round 2 explores the reviewed topic, and only its call
     meets the implementation need."""
     model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request("5G-AKA", "implementation_only"))
 
@@ -169,7 +175,7 @@ def test_model_literal_search_with_matches_never_ends_sufficient_without_the_top
     """Under one round the topic the matches leave open cannot run, so the run stops on the
     round cap with the matches listed and the need ``matches_unassessed``."""
     model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI)])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
     request = build_investigation_request("5G-AKA", "implementation_only", budget={"max_rounds": 1})
 
     evidence_set = service.investigate(request)
@@ -204,7 +210,7 @@ def test_malformed_plan_falls_back_to_the_deterministic_plan(
 ) -> None:
     request = build_investigation_request("5G-AKA", "implementation_only")
     model_port = ScriptedModelPort([build_text_reply(plan_text)])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(request)
 
@@ -312,7 +318,7 @@ def test_rejected_model_plan_falls_back_to_the_deterministic_plan(
 ) -> None:
     request = build_investigation_request(query, scope)
     model_port = ScriptedModelPort([build_plan_reply(*plan_calls), UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(request)
 
@@ -387,7 +393,7 @@ def test_model_plan_that_does_not_look_up_every_named_cve_id_falls_back_to_the_l
     query's resolved topic still needs its topic call, which round 2 makes."""
     request = build_investigation_request(query, scope, budget=budget)
     model_port = ScriptedModelPort([build_plan_reply(*plan_calls), UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(request)
 
@@ -417,7 +423,7 @@ def test_model_lookup_of_an_id_written_against_cjk_text_is_accepted(
     model_port = ScriptedModelPort(
         [build_plan_reply({"tool": "cve_exact_lookup", "cve_ids": ["CVE-9999-0003"]})]
     )
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request(query, scope))
 
@@ -437,7 +443,7 @@ def test_named_ids_beyond_the_per_call_cap_stop_the_run_before_the_planner(
     model_port = ScriptedModelPort(
         [build_plan_reply({"tool": "cve_exact_lookup", "cve_ids": list(reversed(BOTH_NAMED_IDS))})]
     )
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(
         build_investigation_request(
@@ -468,7 +474,7 @@ def test_named_cve_a_later_lookup_finds_survives_the_result_cap(
             UNAVAILABLE_REPLY,
         ]
     )
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(
         build_investigation_request(
@@ -495,7 +501,7 @@ def test_model_searches_that_run_as_one_query_fall_back_to_the_deterministic_pla
         {"tool": "cve_search", "query": f"{FILLED_SEARCH_LIMIT_QUERY} ausf"},
         {"tool": "cve_search", "query": f"{FILLED_SEARCH_LIMIT_QUERY} udm"},
     )
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle, model_port=ScriptedModelPort([model_reply])
     )
 
@@ -519,7 +525,7 @@ def test_round_two_plan_repeating_round_one_falls_back_to_the_policy_refinement(
             build_plan_reply({"tool": "cve_search", "query": "5GAKA"}),
         ]
     )
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request("5gaka", "implementation_only"))
 
@@ -568,7 +574,7 @@ def test_round_two_plan_repeating_round_one_in_another_spelling_is_rejected(
     model_port = ScriptedModelPort(
         [build_plan_reply(round_one_call), build_plan_reply(round_two_call)]
     )
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request(query, "implementation_only"))
 
@@ -581,7 +587,7 @@ def test_accepted_round_two_model_plan_runs_as_the_refinement(
 ) -> None:
     # Under mixed scope a round-1 model plan must consult FiGHT; a refinement need not.
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, build_plan_reply(SEARCH_AUSF_SUCI)])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request("CVE-9999-4242 5G-AKA", "mixed"))
 
@@ -611,7 +617,7 @@ def test_policy_refinement_already_issued_by_the_model_is_not_run_again_and_no_r
             UNAVAILABLE_REPLY,
         ]
     )
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(
         build_investigation_request(
@@ -641,7 +647,7 @@ def test_rejected_model_plan_and_its_over_budget_fallback_are_both_recorded(
     model_port = ScriptedModelPort(
         [build_plan_reply({"tool": "cve_search", "query": "5gaka"}), build_text_reply("not json")]
     )
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(
         build_investigation_request("5gaka", "implementation_only", budget={"max_tool_calls": 4})
@@ -662,7 +668,7 @@ def test_policy_round_one_plan_over_the_source_budget_consults_no_model(
     """A round-1 model plan must consult the policy's sources, so with one source allowed
     for a topic call that consults two, no plan the gate accepts exists."""
     model_port = ScriptedModelPort([build_text_reply("not json")])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(
         build_investigation_request("5G-AKA", scope, budget={"max_sources": 1})
@@ -685,7 +691,7 @@ def test_model_search_runs_and_is_recorded_without_text_outside_its_tokens(
         )
     )
     model_port = ScriptedModelPort([non_latin_reply])
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle, model_port=model_port, semantic_retriever=semantic_channel
     )
 
@@ -710,7 +716,7 @@ def test_model_search_with_a_low_signal_word_runs_and_is_recorded_without_it(
 ) -> None:
     semantic_channel = RecordingRetriever(RetrievalOutcome(status=BackendStatus.OK))
     model_reply = build_plan_reply({"tool": "cve_search", "query": "CVE ausf cves suci"})
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle,
         model_port=ScriptedModelPort([model_reply]),
         semantic_retriever=semantic_channel,
@@ -734,7 +740,7 @@ def test_model_search_of_only_a_low_signal_word_falls_back_to_the_deterministic_
     fixture_bundle: FixtureBundle,
 ) -> None:
     model_port = ScriptedModelPort([build_plan_reply({"tool": "cve_search", "query": "cve"})])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(
         build_investigation_request("5G-AKA cve crash", "implementation_only")
@@ -783,7 +789,7 @@ def test_free_text_keeps_policy_retrieval_when_the_assessor_is_unavailable(
     scope: str,
 ) -> None:
     request = build_investigation_request(query, scope)
-    service = build_test_investigation_service(fixture_bundle, model_port=FailingModelPort())
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=FailingModelPort())
 
     evidence_set = service.investigate(request)
 
@@ -820,7 +826,7 @@ def test_question_naming_a_reviewed_topic_or_a_cve_id_consults_the_model_once(
     expected_intent: QueryIntent,
 ) -> None:
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request(query, "implementation_only"))
 
@@ -864,7 +870,7 @@ def test_run_with_no_policy_refinement_ends_without_evidence_and_never_asks_the_
     model_port = ScriptedModelPort(
         [build_plan_reply(*round_one_calls), build_plan_reply(*round_one_calls)]
     )
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request(query, "implementation_only"))
 
@@ -881,7 +887,7 @@ def test_run_with_no_policy_refinement_ends_without_evidence_and_never_asks_the_
 def test_unavailable_planner_falls_back_in_every_round(fixture_bundle: FixtureBundle) -> None:
     request = build_investigation_request("CVE-9999-0003 5gaka", "implementation_only")
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(request)
 
@@ -901,7 +907,7 @@ def test_planner_reply_after_the_deadline_stops_before_any_call(
     model_port = ScriptedModelPort(
         [build_plan_reply(SEARCH_AUSF_SUCI)], clock=clock, seconds_per_call=31
     )
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle, model_port=model_port, monotonic_clock=clock.read
     )
 
@@ -942,7 +948,7 @@ def test_round_records_the_reply_the_planner_returned_with_its_hash(
     model_port = ScriptedModelPort(
         [reply, UNAVAILABLE_REPLY], clock=clock, seconds_per_call=seconds_per_call
     )
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle, model_port=model_port, monotonic_clock=clock.read
     )
 
@@ -956,7 +962,7 @@ def test_round_records_the_reply_the_planner_returned_with_its_hash(
 def test_planner_that_never_replies_is_abandoned_at_the_deadline(
     fixture_bundle: FixtureBundle, blocked_call_release: threading.Event
 ) -> None:
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle,
         model_port=BlockingModelPort(blocked_call_release),
         monotonic_clock=LateStartClock(LATE_START_SECONDS).read,
@@ -992,7 +998,7 @@ def test_service_over_any_deployment_reports_the_model_planner_it_plans_with(
     planner it was given, so no planner choice can disagree with the deployment."""
     model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY])
     service = InvestigationService(
-        build_test_deployment(fixture_bundle), plan_with(model_port), ignore_checkpoint
+        build_reviewed_deployment(fixture_bundle), plan_with(model_port), ignore_checkpoint
     )
 
     evidence_set = service.investigate(build_investigation_request("5G-AKA", "implementation_only"))
@@ -1011,7 +1017,7 @@ def test_planner_timeout_is_the_time_left_but_never_more_than_the_planner_cap(
     model_port = ScriptedModelPort(
         [build_plan_reply({"tool": "cve_search", "query": "5gaka"}), UNAVAILABLE_REPLY]
     )
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle,
         model_port=model_port,
         monotonic_clock=clock.read,
@@ -1038,7 +1044,7 @@ def test_planner_never_sees_source_text(
     fixture_bundle: FixtureBundle, query: str, round_one_reply: ModelReply
 ) -> None:
     model_port = ScriptedModelPort([round_one_reply, UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request(query, "implementation_only"))
 
@@ -1060,7 +1066,7 @@ def test_planner_choice_never_changes_the_returned_records(fixture_bundle: Fixtu
     request = build_investigation_request("5G-AKA", "implementation_only")
     model_port = ScriptedModelPort([build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY])
 
-    planned_set = build_test_investigation_service(
+    planned_set = build_reviewed_investigation_service(
         fixture_bundle, model_port=model_port
     ).investigate(request)
 
@@ -1115,7 +1121,7 @@ def test_misbehaving_adapter_is_recorded_as_a_fixed_failure_and_its_text_reaches
     reply, becomes the fixed failed reply, the policy plans the round, and neither the
     set nor the log holds the adapter's text, which quotes the key."""
     service = InvestigationService(
-        build_test_deployment(fixture_bundle),
+        build_reviewed_deployment(fixture_bundle),
         ModelPlanning(SCRIPTED_PLANNER, GuardedModelPort(adapter)),
         ignore_checkpoint,
     )
@@ -1138,7 +1144,7 @@ def test_round_one_requires_the_policy_s_tools_and_round_two_requires_none(
     """An unknown ID beside a topic: the policy's round 1 looks the ID up, and an
     unavailable planner leaves round 2 to explore the topic."""
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
 
     evidence_set = service.investigate(build_investigation_request("CVE-9999-4242 5gaka", "mixed"))
 
@@ -1161,7 +1167,7 @@ def test_planner_is_offered_only_tools_the_source_budget_leaves_room_for(
     """With one source allowed, the topic call, which would consult FiGHT besides the CVE
     search, is not offered, so a plan following the offer cannot exceed the budget."""
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
     request = build_investigation_request(
         "CVE-9999-0003 5G-AKA", "mixed", budget={"max_sources": 1}
     )
@@ -1184,7 +1190,7 @@ def test_planner_is_never_asked_for_a_tool_the_budget_does_not_offer(
     search) is over the tool-call budget, but a cheaper plan may exist, so the planner is
     consulted; it is not told to include the tool it is not offered."""
     model_port = ScriptedModelPort([UNAVAILABLE_REPLY, UNAVAILABLE_REPLY])
-    service = build_test_investigation_service(fixture_bundle, model_port=model_port)
+    service = build_reviewed_investigation_service(fixture_bundle, model_port=model_port)
     request = build_investigation_request("5G-AKA", scope, budget={"max_tool_calls": 4})
 
     service.investigate(request)
@@ -1204,7 +1210,7 @@ def test_planner_past_its_share_of_the_run_is_recorded_timed_out_and_the_policy_
     """A planner that never replies is abandoned when its third of a one-second run ends,
     not at the run's deadline: the round records the typed timeout and runs the policy's
     plan with the time left."""
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle,
         model_port=BlockingModelPort(blocked_call_release),
         monotonic_clock=time.monotonic,
@@ -1230,14 +1236,14 @@ def test_replay_of_a_planner_past_its_share_finds_no_difference(
 ) -> None:
     """The recorded timeout reply is answered again, so replay takes the same fallback
     without waiting for any planner."""
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle,
         model_port=BlockingModelPort(blocked_call_release),
         monotonic_clock=time.monotonic,
     )
     evidence_set = service.investigate(ONE_SECOND_REQUEST)
 
-    replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(fixture_bundle))
+    replay_outcome = replay_evidence_set(evidence_set, build_reviewed_deployment(fixture_bundle))
 
     assert replay_outcome == ReplayCompleted(())
 
@@ -1248,7 +1254,7 @@ def test_investigation_with_a_blocking_planner_leaves_at_most_three_calls_live(
     """Each round abandons its planner call at the end of its share, so a run whose two
     rounds both consult a planner that never returns leaves those two calls live, within
     the bound of three (ADR 0005 §2)."""
-    deployment = build_test_deployment(fixture_bundle, monotonic_clock=time.monotonic)
+    deployment = build_reviewed_deployment(fixture_bundle, monotonic_clock=time.monotonic)
     service = InvestigationService(
         deployment, plan_with(BlockingModelPort(blocked_call_release)), ignore_checkpoint
     )
@@ -1275,7 +1281,7 @@ def test_planner_reply_landing_after_its_share_is_not_read_and_the_policy_plans(
     model_port = ScriptedModelPort(
         [build_plan_reply(SEARCH_AUSF_SUCI)], clock=clock, seconds_per_call=0.5
     )
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle, model_port=model_port, monotonic_clock=clock.read
     )
 
@@ -1289,7 +1295,7 @@ def test_planner_reply_landing_after_its_share_is_not_read_and_the_policy_plans(
     assert evidence_set.trajectory.steps[0].planned_by is PlannerKind.DETERMINISTIC
     assert evidence_set.timings.planner_durations_ms == (500,)
     assert replay_evidence_set(
-        evidence_set, build_test_deployment(fixture_bundle)
+        evidence_set, build_reviewed_deployment(fixture_bundle)
     ) == ReplayCompleted(())
 
 
@@ -1298,7 +1304,7 @@ def test_planner_reply_landing_within_its_share_is_read(fixture_bundle: FixtureB
     model_port = ScriptedModelPort(
         [build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY], clock=clock, seconds_per_call=0.3
     )
-    service = build_test_investigation_service(
+    service = build_reviewed_investigation_service(
         fixture_bundle, model_port=model_port, monotonic_clock=clock.read
     )
 

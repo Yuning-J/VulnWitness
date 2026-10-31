@@ -1005,9 +1005,10 @@ class NeedOutcome(StrEnum):
     """Whether a need was met. ``found``: the evidence was reached through an exact
     correspondence or a reviewed mapping, an exact lookup that returned the named CVE or the
     reviewed topic call that returned evidence for the resolved topic; it does not prove the
-    answer sufficient. ``matches_unassessed``: a search on the question's own words returned
-    matches whose relevance the run did not assess; it says nothing about whether relevant
-    evidence exists. ``unsupported``: no tool can serve it for this interpretation.
+    answer sufficient. ``matches_unassessed``: a pending-review topic or a search on the
+    question's own words returned matches whose relevance the run did not assess; it says
+    nothing about whether relevant evidence exists. ``unsupported``: no tool can serve it
+    for this interpretation.
     ``not_evaluated``: no admitted step of a tool that serves it has a result, so whether it
     is met cannot yet be judged. ``not_evaluated``, ``not_found`` and
     ``matches_unassessed`` are open; ``source_unavailable`` and ``unsupported`` are final."""

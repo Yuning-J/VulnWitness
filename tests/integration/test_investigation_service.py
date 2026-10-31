@@ -57,6 +57,7 @@ from tests.support.investigation import (
     DISGUISED_LOW_SIGNAL_WORDS,
     TWENTY_ONE_IDS,
     build_investigation_request,
+    build_reviewed_investigation_service,
     build_test_investigation_service,
     list_implementation_ids,
     list_step_reasons,
@@ -101,7 +102,7 @@ def test_product_named_by_a_topic_record_still_has_unknown_applicability(
         "[SYNTHETIC] Open5GS AUSF mishandles 5G-AKA resynchronization",
         affected=[{"vendor": "open5gs", "product": "open5gs", "status": "affected"}],
     )
-    service = build_test_investigation_service(bundle)
+    service = build_reviewed_investigation_service(bundle)
 
     evidence_set = service.investigate(
         build_investigation_request(
@@ -131,7 +132,7 @@ def test_product_question_reports_the_server_sentence_for_the_port_reason(
         failure=AffectednessFailure.SOURCE_UNAVAILABLE,
         described_failure=AffectednessFailure.AUTH_FAILED,
     )
-    service = build_test_investigation_service(fixture_bundle, trustify_port=trustify_port)
+    service = build_reviewed_investigation_service(fixture_bundle, trustify_port=trustify_port)
 
     evidence_set = service.investigate(
         build_investigation_request("5G-AKA", "implementation_only", filters={"products": ["f5gc"]})
@@ -161,11 +162,14 @@ def test_topic_question_under_implementation_only_explores_the_topic_without_fig
     backend_sources: set[KnowledgeSource] = set()
     for backend_request in evidence_set.trajectory.steps[0].backend_requests:
         backend_sources.add(backend_request.source)
-    assert list_step_reasons(evidence_set) == [StepReason.REVIEWED_TOPIC]
+    assert list_step_reasons(evidence_set) == [
+        StepReason.REVIEWED_TOPIC,
+        StepReason.QUERY_TERMS_FOR_OPEN_NEED,
+    ]
     assert backend_sources == {KnowledgeSource.CVE_SEARCH}
     assert evidence_set.trajectory.budget_used.sources == (KnowledgeSource.CVE_SEARCH,)
     assert list_implementation_ids(evidence_set) == ["CVE-9999-0003", "CVE-9999-0004"]
-    assert evidence_set.stop_reason is StopReason.SUFFICIENT
+    assert evidence_set.stop_reason is StopReason.NEEDS_UNMET
 
 
 def test_failed_lexical_source_stops_the_run_without_refining(
@@ -278,8 +282,8 @@ def test_cve_named_by_id_is_answered_first_and_the_named_topic_is_then_called_fo
         StepReason.TOPIC_FOR_OPEN_NEED,
     ]
     assert (evidence_set.stop_reason, evidence_set.status) == (
-        StopReason.SUFFICIENT,
-        ResultStatus.OK,
+        StopReason.NEEDS_UNMET,
+        ResultStatus.PARTIAL,
     )
     assert list_implementation_ids(evidence_set) == expected_ids
     assert "unrelated_candidates_dropped" not in list_warning_codes(evidence_set)

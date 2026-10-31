@@ -603,7 +603,7 @@ def test_investigation_runs_for_its_wall_time_budget_plus_the_seal_margin(
         )
     )
 
-    assert tool_answer.structured_content["status"] == "ok"
+    assert tool_answer.structured_content["status"] == "partial"
 
 
 def test_timed_out_call_keeps_its_worker_until_its_backend_returns(

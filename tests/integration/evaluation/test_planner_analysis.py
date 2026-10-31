@@ -18,6 +18,7 @@ from cve_kgrag.domain.investigation import (
 from cve_kgrag.domain.planning import ModelReply, PlanRejection, PlanRejectionCode
 from cve_kgrag.domain.search import SearchWarning, SearchWarningCode
 from cve_kgrag.domain.taxonomy import ResultStatus
+from cve_kgrag.domain.topic import ReviewStatus
 from cve_kgrag.evaluation.planner_analysis import CaseRuns, analyze_planner_runs
 from cve_kgrag.evaluation.planner_report import (
     ModelSection,
@@ -97,6 +98,7 @@ def run_5g_aka(
         "implementation_only",
         *replies,
         seconds_per_call=seconds_per_call,
+        review_status=ReviewStatus.REVIEWED,
     )
 
 
@@ -141,7 +143,9 @@ def build_deadline_round(planner_outcome: PlannerOutcome) -> RoundRecord:
 def test_deterministic_baseline_alone_has_no_model_section_and_counts_its_results(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    topic_set = run_deterministically(fixture_bundle, "5gaka", "implementation_only")
+    topic_set = run_deterministically(
+        fixture_bundle, "5gaka", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     exact_set = run_deterministically(fixture_bundle, "CVE-9999-4242", "implementation_only")
 
     report = analyze(build_case(topic_set, name="a"), build_case(exact_set, name="b"))
@@ -184,7 +188,9 @@ def test_round_outcomes_are_counted_over_their_stated_denominators(
         # The policy's round-1 plan is over the source budget: the model is not consulted.
         run_with_replies(fixture_bundle, "5gaka", "mixed", budget={"max_sources": 1}),
     )
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
 
     model_section = require_model_section(analyze(build_case(deterministic_set, *model_sets)))
 
@@ -250,7 +256,9 @@ def test_every_outcome_detail_and_code_is_listed_even_when_none_occurred(
     fixture_bundle: FixtureBundle,
 ) -> None:
     """A report always has the same keys, so two reports compare key by key."""
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     model_set = run_5g_aka(fixture_bundle, build_plan_reply(TOPIC_5G_AKA))
 
     round_one = require_model_section(analyze(build_case(deterministic_set, model_set))).round_one
@@ -289,7 +297,9 @@ def test_round_two_plan_is_compared_when_both_runs_reached_it_from_the_same_stat
 def test_round_one_plan_unlike_the_policy_s_counts_as_differing(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     model_set = run_5g_aka(fixture_bundle, build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY)
 
     divergence = require_model_section(
@@ -314,7 +324,7 @@ def test_round_two_from_another_state_is_not_comparable_and_says_why(
     deterministic_sets = {
         # The policy answers "5G-AKA" in round 1, so it plans no round 2.
         NotComparableReason.DETERMINISTIC_RUN_LACKS_ROUND: run_deterministically(
-            fixture_bundle, "5G-AKA", "implementation_only"
+            fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
         ),
         # Its round 1 looks an ID up instead of exploring the topic.
         NotComparableReason.ROUND_ONE_CALLS_DIFFER: run_deterministically(
@@ -397,7 +407,9 @@ def test_any_difference_in_what_round_two_s_planner_was_shown_makes_it_not_compa
 def test_rounds_the_model_did_not_plan_are_left_out_of_the_divergence(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     model_set = run_5g_aka(fixture_bundle, UNAVAILABLE_REPLY)
 
     divergence = require_model_section(
@@ -411,7 +423,9 @@ def test_rounds_the_model_did_not_plan_are_left_out_of_the_divergence(
 def test_each_case_reports_its_stability_and_the_cases_spread_their_acceptance(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     accepted_set = run_5g_aka(fixture_bundle, build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY)
     unavailable_set = run_5g_aka(fixture_bundle, UNAVAILABLE_REPLY)
     rejected_set = run_5g_aka(fixture_bundle, build_text_reply("not json"))
@@ -455,7 +469,9 @@ def test_each_case_reports_its_stability_and_the_cases_spread_their_acceptance(
 def test_runs_falling_back_in_different_ways_do_not_switch_planner(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     rejected_set = run_5g_aka(fixture_bundle, build_text_reply("not json"))
     unavailable_set = run_5g_aka(fixture_bundle, UNAVAILABLE_REPLY)
 
@@ -469,13 +485,16 @@ def test_runs_falling_back_in_different_ways_do_not_switch_planner(
 def test_plan_switch_in_round_two_counts_as_switching_planner(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5gaka", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5gaka", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     accepted_set = run_with_replies(
         fixture_bundle,
         "5gaka",
         "implementation_only",
         build_plan_reply(SEARCH_5GAKA),
         build_plan_reply(TOPIC_5G_AKA),
+        review_status=ReviewStatus.REVIEWED,
     )
     fallback_set = run_with_replies(
         fixture_bundle,
@@ -483,6 +502,7 @@ def test_plan_switch_in_round_two_counts_as_switching_planner(
         "implementation_only",
         build_plan_reply(SEARCH_5GAKA),
         UNAVAILABLE_REPLY,
+        review_status=ReviewStatus.REVIEWED,
     )
 
     (model_case,) = require_model_section(
@@ -495,7 +515,9 @@ def test_plan_switch_in_round_two_counts_as_switching_planner(
 def test_run_ending_for_another_reason_does_not_match_the_deterministic_ending(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     accepted_set = run_5g_aka(fixture_bundle, build_plan_reply(SEARCH_AUSF_SUCI), UNAVAILABLE_REPLY)
     same_status_other_stop_set = reseal_evidence_set(
         accepted_set, stop_reason=StopReason.SOURCE_UNAVAILABLE
@@ -513,7 +535,9 @@ def test_run_ending_for_another_reason_does_not_match_the_deterministic_ending(
 def test_reordered_answers_match_and_other_answer_ids_do_not_match_the_deterministic_answers(
     fixture_bundle: FixtureBundle, answer_section: str
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "mixed")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "mixed", review_status=ReviewStatus.REVIEWED
+    )
     answers = getattr(deterministic_set, answer_section)
     assert len(answers) >= 2
     reordered_set = reseal_evidence_set(deterministic_set, **{answer_section: answers[::-1]})
@@ -534,7 +558,9 @@ def test_reordered_answers_match_and_other_answer_ids_do_not_match_the_determini
 def test_accepted_model_plan_that_executed_nothing_is_no_executed_model_step(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     accepted_set = run_5g_aka(fixture_bundle, build_plan_reply(TOPIC_5G_AKA))
     accepted_round = accepted_set.trajectory.rounds[0].model_copy(
         update={"executed_step_indices": ()}
@@ -549,7 +575,9 @@ def test_accepted_model_plan_that_executed_nothing_is_no_executed_model_step(
 
 
 def test_model_section_counts_only_the_model_runs_results(fixture_bundle: FixtureBundle) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     after_deadline_set = run_5g_aka(
         fixture_bundle, build_plan_reply(SEARCH_AUSF_SUCI), seconds_per_call=31
     )
@@ -565,7 +593,9 @@ def test_model_section_counts_only_the_model_runs_results(fixture_bundle: Fixtur
 def test_tool_calls_set_each_model_run_beside_the_deterministic_run(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     same_cost_set = run_5g_aka(fixture_bundle, build_plan_reply(TOPIC_5G_AKA))
     costlier_set = run_5g_aka(fixture_bundle, build_plan_reply(SEARCH_5G_AKA, TOPIC_5G_AKA))
     cheaper_set = run_5g_aka(
@@ -600,7 +630,9 @@ def test_evidence_ids_hash_tells_runs_with_other_evidence_apart(
     fixture_bundle: FixtureBundle,
 ) -> None:
     lookup_set = run_deterministically(fixture_bundle, "CVE-9999-0005", "implementation_only")
-    search_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    search_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
 
     report = analyze(build_case(lookup_set, name="a"), build_case(search_set, name="b"))
 
@@ -612,7 +644,9 @@ def test_evidence_ids_hash_tells_runs_with_other_evidence_apart(
 def test_planner_durations_give_the_lower_median_of_an_even_count(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5G-AKA", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5G-AKA", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     model_sets: list[KnowledgeEvidenceSet] = []
     for seconds_per_call in (1, 3, 2, 4):
         model_sets.append(
@@ -638,7 +672,9 @@ def test_planner_durations_give_the_lower_median_of_an_even_count(
 def test_equal_sets_give_byte_equal_reports_however_they_were_loaded(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    deterministic_set = run_deterministically(fixture_bundle, "5gaka", "implementation_only")
+    deterministic_set = run_deterministically(
+        fixture_bundle, "5gaka", "implementation_only", review_status=ReviewStatus.REVIEWED
+    )
     model_sets = (
         run_with_replies(
             fixture_bundle,
@@ -646,9 +682,15 @@ def test_equal_sets_give_byte_equal_reports_however_they_were_loaded(
             "implementation_only",
             build_plan_reply(SEARCH_5GAKA),
             build_plan_reply(SEARCH_AKA),
+            review_status=ReviewStatus.REVIEWED,
         ),
         run_with_replies(
-            fixture_bundle, "5gaka", "implementation_only", UNAVAILABLE_REPLY, UNAVAILABLE_REPLY
+            fixture_bundle,
+            "5gaka",
+            "implementation_only",
+            UNAVAILABLE_REPLY,
+            UNAVAILABLE_REPLY,
+            review_status=ReviewStatus.REVIEWED,
         ),
     )
     reloaded_sets: list[KnowledgeEvidenceSet] = []

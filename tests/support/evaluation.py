@@ -8,14 +8,19 @@ from typing import Any
 import yaml
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
+from cve_kgrag.application.serving_data_plane import ServingDataPlane
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
 from cve_kgrag.domain.planning import ModelReply, PlanningInput
 from cve_kgrag.domain.search import SCHEMA_VERSION
+from cve_kgrag.domain.topic import ReviewStatus
+from cve_kgrag.evaluation.case_runner import build_fixture_data_planes
+from cve_kgrag.evaluation.gold_cases import FightChoice
 from cve_kgrag.evaluation.planner_report import DatasetIdentity, EvaluationIdentity, FightProfile
 from tests.support.clocks import SteppingClock
 from tests.support.investigation import (
     build_investigation_request,
     build_test_investigation_service,
+    with_topic_review,
 )
 from tests.support.planners import UNAVAILABLE_REPLY, ScriptedModelPort
 
@@ -85,9 +90,14 @@ def write_gold_file(directory: Path, rows: list[Any]) -> Path:
 
 
 def run_deterministically(
-    fixture_bundle: FixtureBundle, query: str, scope: str, **fields: Any
+    fixture_bundle: FixtureBundle,
+    query: str,
+    scope: str,
+    *,
+    review_status: ReviewStatus | None = None,
+    **fields: Any,
 ) -> KnowledgeEvidenceSet:
-    service = build_test_investigation_service(fixture_bundle)
+    service = build_test_investigation_service(fixture_bundle, review_status=review_status)
     return service.investigate(build_investigation_request(query, scope, **fields))
 
 
@@ -97,6 +107,7 @@ def run_with_replies(
     scope: str,
     *replies: ModelReply,
     seconds_per_call: float = 0.0,
+    review_status: ReviewStatus | None = None,
     **fields: Any,
 ) -> KnowledgeEvidenceSet:
     """One run whose model planner answers round by round with ``replies``, each taking
@@ -104,7 +115,10 @@ def run_with_replies(
     clock = SteppingClock()
     model_port = ScriptedModelPort(list(replies), clock=clock, seconds_per_call=seconds_per_call)
     service = build_test_investigation_service(
-        fixture_bundle, model_port=model_port, monotonic_clock=clock.read
+        fixture_bundle,
+        model_port=model_port,
+        monotonic_clock=clock.read,
+        review_status=review_status,
     )
     return service.investigate(build_investigation_request(query, scope, **fields))
 
@@ -129,3 +143,13 @@ class PackageEditingModelPort:
             self.package_file.write_text("EDITED = True\n", encoding="utf-8")
         self.calls += 1
         return UNAVAILABLE_REPLY
+
+
+def build_reviewed_fixture_data_planes(
+    fixture_bundle: FixtureBundle,
+) -> dict[FightChoice, ServingDataPlane]:
+    """Explicitly reviewed topics for tests of one-round sufficient planner runs."""
+    data_planes = build_fixture_data_planes(fixture_bundle)
+    for choice, data_plane in data_planes.items():
+        data_planes[choice] = with_topic_review(data_plane, ReviewStatus.REVIEWED)
+    return data_planes

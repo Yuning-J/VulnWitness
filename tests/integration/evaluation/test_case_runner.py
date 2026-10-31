@@ -15,7 +15,6 @@ from cve_kgrag.evaluation.case_runner import (
     CaseRunner,
     EvaluationStopped,
     ModelRuns,
-    build_fixture_data_planes,
     read_package_digest,
 )
 from cve_kgrag.evaluation.gold_cases import GoldCase
@@ -26,6 +25,7 @@ from tests.support.evaluation import (
     PackageEditingModelPort,
     build_gold_row,
     build_package_dir,
+    build_reviewed_fixture_data_planes,
     encode_gold,
     list_entry_names,
 )
@@ -41,7 +41,7 @@ def build_case_runner(
 ) -> tuple[CaseRunner, ResultDirectory]:
     result_directory = ResultDirectory.create(tmp_path / EVAL_RESULTS)
     case_runner = CaseRunner(
-        build_fixture_data_planes(fixture_bundle),
+        build_reviewed_fixture_data_planes(fixture_bundle),
         ThreadedCallRunner(),
         result_directory,
         package_dir,

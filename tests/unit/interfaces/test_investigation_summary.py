@@ -16,7 +16,7 @@ from tests.support.investigation_runs import (
 )
 
 
-def test_topic_summary_shows_found_needs_candidates_and_protocol_context(
+def test_pending_topic_summary_shows_unassessed_needs_candidates_and_protocol_context(
     fixture_bundle: FixtureBundle,
 ) -> None:
     # Arrange
@@ -27,14 +27,10 @@ def test_topic_summary_shows_found_needs_candidates_and_protocol_context(
 
     # Assert
     assert summary.startswith("Investigation: 5G-AKA\nScope: mixed\n")
-    assert (
-        "Status: Every evidence need was met; that does not show the list is complete." in summary
-    )
-    assert (
-        "Stop reason: Each need was met through an exact lookup or the reviewed topic." in summary
-    )
-    assert "Implementation CVEs: found through the reviewed topic." in summary
-    assert "Protocol context: found through the reviewed topic." in summary
+    assert "Status: The investigation returned a partial answer." in summary
+    assert "Stop reason: Matches were found but not every need was met." in summary
+    assert "Implementation CVEs: matches found; their relevance was not assessed." in summary
+    assert "Protocol context: matches found; their relevance was not assessed." in summary
     assert "Rank  CVE ID" in summary
     assert "CVE-9999-0003   HIGH 7.5 v3.1" in summary
     assert "CVE-9999-0004   HIGH 8.2 v3.1" in summary

@@ -32,6 +32,7 @@ from cve_kgrag.domain.result_prefix import (
     slice_response,
 )
 from cve_kgrag.domain.search import SearchResponse
+from cve_kgrag.domain.topic import ReviewStatus
 from cve_kgrag.domain.topic_context import TopicContextResponse
 from cve_kgrag.domain.validation import EvidenceValidationError
 from tests.support.investigation import (
@@ -585,7 +586,7 @@ def test_topic_prefix_can_omit_an_entire_later_list(
     fixture_bundle: FixtureBundle, scope: str
 ) -> None:
     # Arrange
-    deployment = build_test_deployment(fixture_bundle)
+    deployment = build_test_deployment(fixture_bundle, review_status=ReviewStatus.REVIEWED)
     request = build_investigation_request("5gaka", scope)
     execution = deployment.tool_executor.execute(build_topic_call(), request)
     assert execution.topic_response is not None

@@ -562,9 +562,17 @@ def update_topic_step_requests(
         }
     )
     budget_used = evidence_set.trajectory.budget_used.model_copy(
-        update={"tool_calls": len(backend_requests)}
+        update={
+            "tool_calls": evidence_set.trajectory.budget_used.tool_calls
+            - evidence_set.trajectory.steps[0].charged_tool_calls
+            + len(backend_requests)
+        }
     )
-    return update_trajectory(evidence_set, steps=(topic_step,), budget_used=budget_used)
+    return update_trajectory(
+        evidence_set,
+        steps=(topic_step, *evidence_set.trajectory.steps[1:]),
+        budget_used=budget_used,
+    )
 
 
 def trim_the_topic_fan_out(evidence_set: KnowledgeEvidenceSet) -> KnowledgeEvidenceSet:
@@ -1124,7 +1132,7 @@ def run_topic_model_unavailable(fixture_bundle: FixtureBundle) -> KnowledgeEvide
     """A topic question whose model planner fails, so the policy's search runs."""
     return investigate_with_model_replies(
         fixture_bundle,
-        build_investigation_request("5G-AKA", "implementation_only"),
+        build_investigation_request("5G-AKA", "protocol_context_only"),
         UNAVAILABLE_REPLY,
     )
 

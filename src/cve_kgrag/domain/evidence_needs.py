@@ -12,8 +12,8 @@ A need is ``found`` only through an exact correspondence or a reviewed mapping: 
 lookup that returned the named CVE, or the topic call of a resolved, reviewed topic that
 returned evidence. That is a rule about how the evidence was reached, not proof that the
 answer is sufficient: a topic run can still stop on evidence that does not answer the
-question. Hits of a search on the question's own words (``cve_search``,
-``fight_direct_search``) give ``matches_unassessed``: matches were found and their
+question. A pending-review topic or a search on the question's own words (``cve_search``,
+``fight_direct_search``) gives ``matches_unassessed``: matches were found and their
 relevance was not assessed, which is not a finding that no relevant evidence exists. The
 current version does not judge such results sufficient automatically, so a free-text run
 ends with the matches listed and the need unmet.
@@ -48,6 +48,7 @@ from cve_kgrag.domain.planning import (
 from cve_kgrag.domain.search import SearchWarningCode
 from cve_kgrag.domain.text import AFFECTEDNESS_QUESTION_TERMS, list_query_terms, tokenize
 from cve_kgrag.domain.threat_context import ThreatContextItem
+from cve_kgrag.domain.topic import ReviewStatus
 from cve_kgrag.domain.topic_context import (
     SERVED_STATUSES,
     KnowledgeSource,
@@ -201,6 +202,16 @@ def judge_named_cve(cve_id: str, admitted_steps: Sequence[ToolStep]) -> NeedOutc
     return NeedOutcome.NOT_FOUND
 
 
+def is_reviewed_topic_step(interpretation: Interpretation, step: ToolStep) -> bool:
+    """Whether the step used a resolved card whose mapping has been reviewed."""
+    if not isinstance(step.call, TopicContextCall):
+        return False
+    return any(
+        match.topic_id == step.call.topic_id and match.review_status is ReviewStatus.REVIEWED
+        for match in interpretation.resolution.matches
+    )
+
+
 def judge_protocol_context(
     interpretation: Interpretation,
     admitted_steps: Sequence[ToolStep],
@@ -212,8 +223,8 @@ def judge_protocol_context(
     Without a topic, not found when a direct search warned that no technique holds a word
     the interpretation does not explain (``list_explained_terms``), so the techniques stay
     listed and the step's ``term_not_indexed`` names the word. Otherwise, when the answer
-    lists a technique a serving step returned: found from a topic call, matches unassessed
-    from a direct search on the question's own words."""
+    lists a technique a serving step returned: found from a reviewed topic call, matches
+    unassessed from a pending-review topic or a direct search on the question's own words."""
     has_topic = bool(interpretation.resolution.matches)
     if not has_topic and not interpretation.fight_terms:
         return NeedOutcome.UNSUPPORTED
@@ -231,7 +242,11 @@ def judge_protocol_context(
     if not has_topic and list_unexplained_unindexed_fight_terms(interpretation, serving_steps):
         return NeedOutcome.NOT_FOUND
     if any(item.technique_id in serving_answer_ids for item in protocol_context):
-        if has_topic:
+        if any(
+            is_reviewed_topic_step(interpretation, step)
+            and any(item.technique_id in step.answer_ids for item in protocol_context)
+            for step in serving_steps
+        ):
             return NeedOutcome.FOUND
         return NeedOutcome.MATCHES_UNASSESSED
     if has_failed_source(serving_steps, KnowledgeSource.MITRE_FIGHT):
@@ -248,11 +263,11 @@ def judge_implementation_cves(
 
     Not evaluated without an admitted CVE search or topic call. Not found when a search
     term the interpretation does not explain (``list_explained_terms``) is held by no
-    record. With a resolved topic, found when the answer lists a CVE an admitted topic
-    call found, at the relevance tier the card gave it, and matches unassessed when only a
-    search on the question's own words found the listed CVEs. Without a topic, matches
-    unassessed when the admitted searches together sent every search term and one of them
-    returned a CVE.
+    record. With a resolved topic, found when the answer lists a CVE an admitted reviewed
+    topic call found, at the relevance tier the card gave it, and matches unassessed when
+    only a pending-review topic or a search on the question's own words found the listed
+    CVEs. Without a topic, matches unassessed when the admitted searches together sent
+    every search term and one of them returned a CVE.
     """
     serving_steps: list[ToolStep] = []
     for step in admitted_steps:
@@ -263,20 +278,20 @@ def judge_implementation_cves(
     if list_unexplained_unindexed_terms(interpretation, admitted_steps):
         return NeedOutcome.NOT_FOUND
     if interpretation.resolution.matches:
-        topic_step_indices: set[int] = set()
-        search_step_indices: set[int] = set()
+        reviewed_topic_step_indices: set[int] = set()
+        unassessed_step_indices: set[int] = set()
         for step in serving_steps:
-            if isinstance(step.call, TopicContextCall):
-                topic_step_indices.add(step.step_index)
+            if is_reviewed_topic_step(interpretation, step):
+                reviewed_topic_step_indices.add(step.step_index)
             else:
-                search_step_indices.add(step.step_index)
+                unassessed_step_indices.add(step.step_index)
         if any(
-            topic_step_indices.intersection(candidate.found_by_steps)
+            reviewed_topic_step_indices.intersection(candidate.found_by_steps)
             for candidate in implementation_candidates
         ):
             return NeedOutcome.FOUND
         if any(
-            search_step_indices.intersection(candidate.found_by_steps)
+            unassessed_step_indices.intersection(candidate.found_by_steps)
             for candidate in implementation_candidates
         ):
             return NeedOutcome.MATCHES_UNASSESSED
