@@ -88,7 +88,7 @@ from cve_kgrag.application.evidence_set_verification import (
 )
 from cve_kgrag.application.investigate import describe_service_capabilities
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
-from cve_kgrag.application.knowledge_lookup import find_served_evidence, lookup_cve
+from cve_kgrag.application.knowledge_lookup import find_served_evidence
 from cve_kgrag.application.planner_setup import ModelPlanning
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.application.serving_data_plane import ServingDataPlane
@@ -1611,12 +1611,9 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     if arguments.command == "lookup":
         lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)
         return print_response(
-            lookup_cve(
-                load_search_service_or_exit(
-                    "lookup", settings.store_root, mitre_snapshot=settings.mitre_snapshot
-                ),
-                lookup_request.cve_id,
-            )
+            load_search_service_or_exit(
+                "lookup", settings.store_root, mitre_snapshot=settings.mitre_snapshot
+            ).lookup(lookup_request.cve_id)
         )
     if arguments.command == "product":
         product_request = build_contract(

@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from cve_kgrag.application.affectedness import check_affectedness
 from cve_kgrag.application.investigate import InvestigationService
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
-from cve_kgrag.application.knowledge_lookup import find_served_evidence, lookup_cve
+from cve_kgrag.application.knowledge_lookup import find_served_evidence
 from cve_kgrag.application.threaded_call_runner import (
     CallTimedOut,
     NoFreeWorker,
@@ -256,7 +256,7 @@ class KnowledgeToolbox:
         return ConceptResolution(resolution=self._deployment.topic_registry.resolve(request.query))
 
     def _lookup_cve(self, request: CveLookupRequest) -> SearchResponse:
-        return lookup_cve(self._deployment.search_service, request.cve_id)
+        return self._deployment.search_service.lookup(request.cve_id)
 
     def _search_vulnerabilities(self, request: SearchRequest) -> SearchResponse:
         return self._deployment.search_service.search(request)

@@ -200,12 +200,10 @@ def find_served_violations(
     """The anchor rules, and the catalog re-check of every anchor, CVE record and FiGHT
     technique a response serves, before it is returned."""
     served_anchors = list(anchors)
-    served_candidates = tuple(candidates)
     served_records: list[CveRecord] = []
-    for candidate in served_candidates:
-        served_records.append(candidate.record)
     violations: list[str] = []
-    for candidate in served_candidates:
+    for candidate in candidates:
+        served_records.append(candidate.record)
         if (
             candidate.weakness_associations is not None
             and candidate.weakness_associations

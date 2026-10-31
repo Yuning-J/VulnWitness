@@ -1,11 +1,12 @@
 """Explicit product reads, grouped deterministically without a relevance ranking."""
 
+from collections.abc import Iterable
 from typing import Annotated, Literal, Self
 
 from pydantic import ConfigDict, Field, model_validator
 
 from cve_kgrag.domain.contract_model import ContractModel
-from cve_kgrag.domain.cve import CveRecord
+from cve_kgrag.domain.cve import AffectedProduct, CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.nvd_version_note import NvdVersionNote
 from cve_kgrag.domain.search import (
@@ -119,3 +120,14 @@ class ProductQueryResponse(ContractModel):
         )
     )
     evidence: tuple[EvidenceAnchor, ...]
+
+
+def list_product_identities(entries: Iterable[AffectedProduct]) -> tuple[ProductIdentity, ...]:
+    """Unique case-folded vendor/product identities, sorted independently of record order."""
+    identities: set[tuple[str, str]] = set()
+    for entry in entries:
+        identities.add((entry.vendor.casefold(), entry.product.casefold()))
+    products: list[ProductIdentity] = []
+    for vendor, product in sorted(identities):
+        products.append(ProductIdentity(vendor=vendor, product=product))
+    return tuple(products)

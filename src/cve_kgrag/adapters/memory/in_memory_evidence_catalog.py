@@ -1,12 +1,13 @@
 """In-memory catalog of what a deployment's sources hold."""
 
 from collections.abc import Callable, Iterable
+from itertools import chain
 from operator import attrgetter
 from typing import TypeVar
 
 from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.product_query import ProductIdentity
+from cve_kgrag.domain.product_query import ProductIdentity, list_product_identities
 from cve_kgrag.domain.threat_context import ThreatContextItem
 from cve_kgrag.domain.validation import EvidenceValidationError
 from cve_kgrag.domain.weakness_associations import WeaknessAssociations
@@ -58,15 +59,11 @@ class InMemoryEvidenceCatalog:
         )
         if violations:
             raise EvidenceValidationError(violations)
-        product_pairs: set[tuple[str, str]] = set()
-        for record in self._records_by_id.values():
-            for implicated_product in record.list_implicated_products():
-                product_pairs.add(
-                    (implicated_product.vendor.casefold(), implicated_product.product.casefold())
-                )
+        product_entries = chain.from_iterable(
+            map(CveRecord.list_implicated_products, self._records_by_id.values())
+        )
         identities_by_name: dict[str, list[ProductIdentity]] = {}
-        for vendor, product in sorted(product_pairs):
-            identity = ProductIdentity(vendor=vendor, product=product)
+        for identity in list_product_identities(product_entries):
             for name in sorted({identity.vendor, identity.product}):
                 identities_by_name.setdefault(name, []).append(identity)
         self._identities_by_name: dict[str, tuple[ProductIdentity, ...]] = {}

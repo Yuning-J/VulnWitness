@@ -1,17 +1,8 @@
-"""Lookups every surface answers the same way: one CVE by its ID, and one served evidence
-anchor by its evidence ID."""
+"""Evidence-anchor lookup shared by every serving surface."""
 
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
-from cve_kgrag.application.search import SearchService
-from cve_kgrag.domain.search import SearchResponse
 from cve_kgrag.domain.tool_contracts import EvidenceLookup
 from cve_kgrag.domain.validation import validate_served_anchor
-
-
-def lookup_cve(search_service: SearchService, cve_id: str) -> SearchResponse:
-    """Exactly ``cve_id`` with full catalogue associations: ``ok`` with its record, or
-    ``no_match`` with an ``unknown_cve_id`` warning."""
-    return search_service.lookup(cve_id)
 
 
 def find_served_evidence(

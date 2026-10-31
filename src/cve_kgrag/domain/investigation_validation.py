@@ -351,7 +351,10 @@ def find_investigation_scope_violations(evidence_set: KnowledgeEvidenceSet) -> l
 def find_nvd_version_note_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     """Notes are exactly those derived from each candidate and the recorded mentions."""
     violations: list[str] = []
-    mentions = list_version_mentions(evidence_set.interpretation)
+    mentions = list_version_mentions(
+        evidence_set.interpretation.affectedness_mentions,
+        evidence_set.interpretation.product_recognition,
+    )
     for mention in mentions:
         if " " not in mention:
             return ["NVD version notes require affectedness mentions naming a product and version"]

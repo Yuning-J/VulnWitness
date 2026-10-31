@@ -11,7 +11,6 @@ from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
 from cve_kgrag.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
 from cve_kgrag.adapters.semantic.vector_retriever import VectorSemanticRetriever
 from cve_kgrag.adapters.store.corpus_store import load_corpus_store
-from cve_kgrag.application.knowledge_lookup import lookup_cve
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.composition import build_search_service
 from cve_kgrag.domain.cve import CveRecord
@@ -1131,7 +1130,7 @@ def test_exact_lookup_filling_its_limit_gives_no_limit_warning(
     search_service: SearchService,
 ) -> None:
     """The exact-ID channel answers only the IDs named, so nothing lies beyond them."""
-    response = lookup_cve(search_service, "CVE-9999-0003")
+    response = search_service.lookup("CVE-9999-0003")
 
     assert len(response.candidates) == 1
     assert SearchWarningCode.RESULT_LIMIT_REACHED not in list_codes(response.warnings)

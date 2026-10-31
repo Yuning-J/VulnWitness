@@ -66,6 +66,7 @@ from cve_kgrag.domain.investigation import (
     StepReason,
     StopReason,
     ToolStep,
+    list_version_mentions,
 )
 from cve_kgrag.domain.planning import (
     CveExactLookupCall,
@@ -254,11 +255,7 @@ def interpret_request(
         evidence_catalog,
         request.budget.max_results_per_call,
     )
-    version_mentions = list(affectedness_mentions)
-    if product_recognition is not None and product_recognition.request.version is not None:
-        mention = f"{product_recognition.name} {product_recognition.request.version}"
-        if mention not in version_mentions:
-            version_mentions.append(mention)
+    version_mentions = list_version_mentions(affectedness_mentions, product_recognition)
     lexical_query = request.query
     if version_mentions:
         lexical_query = remove_recognized_versions(normalized_query, version_mentions)

@@ -215,10 +215,11 @@ class Interpretation(ContractModel):
     )
 
 
-def list_version_mentions(interpretation: Interpretation) -> tuple[str, ...]:
+def list_version_mentions(
+    affectedness_mentions: Sequence[str], recognition: ProductRecognition | None
+) -> tuple[str, ...]:
     """NVD annotation subjects, without adding affectedness evidence needs."""
-    mentions = list(interpretation.affectedness_mentions)
-    recognition = interpretation.product_recognition
+    mentions = list(affectedness_mentions)
     if recognition is not None and recognition.request.version is not None:
         mention = f"{recognition.name} {recognition.request.version}"
         if mention not in mentions:

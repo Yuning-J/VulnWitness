@@ -14,11 +14,11 @@ from cve_kgrag.domain.nvd_version_note import (
 from cve_kgrag.domain.product_query import (
     DescriptionMentionBasis,
     ProductFieldBasis,
-    ProductIdentity,
     ProductMatchBasis,
     ProductQueryRequest,
     ProductQueryResponse,
     ProductVulnerability,
+    list_product_identities,
 )
 from cve_kgrag.domain.product_query_cursor import (
     InvalidProductCursor,
@@ -34,17 +34,6 @@ from cve_kgrag.domain.validation import (
 from cve_kgrag.ports.repositories import CveRepository
 
 VERSION_GROUPS = {"hit": 0, "unknown": 1, "no_hit": 2}
-
-
-def list_product_identities(entries: Sequence[AffectedProduct]) -> tuple[ProductIdentity, ...]:
-    """Unique case-folded vendor/product identities, sorted independently of record order."""
-    identities: set[tuple[str, str]] = set()
-    for entry in entries:
-        identities.add((entry.vendor.casefold(), entry.product.casefold()))
-    products: list[ProductIdentity] = []
-    for vendor, product in sorted(identities):
-        products.append(ProductIdentity(vendor=vendor, product=product))
-    return tuple(products)
 
 
 def description_names_phrase(record: CveRecord, phrase_tokens: list[str]) -> bool:

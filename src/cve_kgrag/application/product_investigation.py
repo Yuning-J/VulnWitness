@@ -7,7 +7,7 @@ state the product read's field or description basis; they do not satisfy evidenc
 
 from cve_kgrag.application.product_query import description_names_phrase
 from cve_kgrag.application.search import CVE_SCOPE_ASSESSMENT
-from cve_kgrag.domain.cve import CveRecord, purl_package_identity
+from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.product_query import (
     ProductFieldBasis,
     ProductQueryResponse,
@@ -22,6 +22,7 @@ from cve_kgrag.domain.search import (
     SearchWarning,
     SearchWarningCode,
 )
+from cve_kgrag.domain.search_filters import match_filter_reasons
 from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus, RetrievalChannel
 from cve_kgrag.domain.text import normalize_query, tokenize
 
@@ -38,37 +39,6 @@ def matches_product_name(record: CveRecord, name: str) -> bool:
     return description_names_phrase(record, tokenize(name))
 
 
-def matches_filters(record: CveRecord, filters: SearchFilters) -> bool:
-    """Constrain product candidates by every investigation filter before admission."""
-    vendors: set[str] = set()
-    products: set[str] = set()
-    packages: set[str] = set()
-    for entry in record.list_implicated_products():
-        vendors.add(entry.vendor.casefold())
-        products.add(entry.product.casefold())
-        if entry.purl is not None:
-            packages.add(purl_package_identity(entry.purl))
-    if filters.vendors and not any(name.casefold() in vendors for name in filters.vendors):
-        return False
-    if filters.products and not any(name.casefold() in products for name in filters.products):
-        return False
-    if filters.purls and not any(name.casefold() in packages for name in filters.purls):
-        return False
-    if filters.cwe_ids and not set(filters.cwe_ids).intersection(record.cwe_ids):
-        return False
-    if filters.severities and not any(
-        metric.base_severity in filters.severities for metric in record.cvss
-    ):
-        return False
-    if filters.origins and record.vulnerability_origin not in filters.origins:
-        return False
-    if filters.published_years and (
-        record.published is None or record.published.year not in filters.published_years
-    ):
-        return False
-    return not filters.kev_only or record.kev is not None
-
-
 def adapt_product_read(
     product_read: ProductQueryResponse, filters: SearchFilters
 ) -> SearchResponse:
@@ -80,7 +50,7 @@ def adapt_product_read(
     candidates: list[Candidate] = []
     evidence_ids: set[str] = set()
     for item in product_read.items:
-        if not matches_filters(item.record, filters):
+        if match_filter_reasons(item.record, filters) is None:
             continue
         matched_fields: list[MatchedField] = []
         matched_terms: list[str] = []

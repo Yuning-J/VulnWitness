@@ -598,7 +598,9 @@ def assemble_returned_answer(
         topic,
         admitted_executions,
         request.budget.max_results_per_call,
-        list_version_mentions(interpretation),
+        list_version_mentions(
+            interpretation.affectedness_mentions, interpretation.product_recognition
+        ),
         relevance_labels,
     )
     admitted_steps: list[ToolStep] = []

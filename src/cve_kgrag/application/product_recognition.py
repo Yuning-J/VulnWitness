@@ -70,15 +70,11 @@ def recognize_product(
         name, version = mention.rsplit(" ", 1)
         mention_versions[name] = version
     names: list[str] = []
-    for name in sorted(vocabulary):
-        if name in COLLISION_NAMES or not catalog.names_product(name):
+    for name in mention_versions or sorted(vocabulary):
+        if name in COLLISION_NAMES:
             continue
-        names.append(name)
-    if mention_versions:
-        names = []
-        for name in mention_versions:
-            if name not in COLLISION_NAMES:
-                names.append(name)
+        if mention_versions or catalog.names_product(name):
+            names.append(name)
     longest_names: list[str] = []
     for name in names:
         if is_unqualified_network_function(name, vocabulary, catalog.find_product_identities(name)):
