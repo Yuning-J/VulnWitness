@@ -113,8 +113,8 @@ sourced, budgeted refined search. It does not judge whether evidence is sufficie
 `none`. A development result, not a quality acceptance.
 
 - The assessor ran on all 16 free-text model runs, and every reply parsed.
-- It named a gap and a search once: srsRAN, the negative case, "no candidate mentions
-  srsRAN". The refined `srsran` search found nothing new, as it should.
+- It named a gap and a search once, on the negative case `srsran-negative`. The refined
+  search found no new candidate, as it should.
 - It named no gap in `gtp-mobile-core`, `oai-cn5g` or `kamailio-version-affected`, the
   free-text cases whose required coverage is below 1 (0.33, 0.67, 0.95).
 - Coverage@20 and irrelevant items are unchanged in every case, and so are the
