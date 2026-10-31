@@ -14,7 +14,12 @@ from cve_kgrag.adapters.topics.yaml_cards import (
     load_topic_cards,
 )
 from cve_kgrag.composition import build_topic_context_service
-from cve_kgrag.domain.investigation import InvestigationWarningCode
+from cve_kgrag.domain.investigation import (
+    InvestigationWarningCode,
+    PlannerOutcome,
+    StopReason,
+)
+from cve_kgrag.domain.planning import PlanRejectionCode
 from cve_kgrag.domain.taxonomy import RetrievalChannel
 from cve_kgrag.domain.text import tokenize
 from cve_kgrag.domain.topic import RelevanceTier, ReviewStatus
@@ -24,6 +29,11 @@ from cve_kgrag.topics.registry import TopicRegistry
 from cve_kgrag.topics.relevance import assess_relevance
 from tests.support.builders import build_bundle_with
 from tests.support.evaluation import run_deterministically
+from tests.support.investigation import (
+    build_investigation_request,
+    build_test_investigation_service,
+)
+from tests.support.planners import ScriptedModelPort, build_plan_reply, build_text_reply
 
 
 def test_packaged_5g_aka_card_is_pending_human_review() -> None:
@@ -101,7 +111,10 @@ def test_context_and_collisions_do_not_resolve_a_protocol(
         ("5G AKA", "[SYNTHETIC] AUSF compares RES* with XRES* incorrectly."),
         ("5G AKA", "[SYNTHETIC] SIDF SUCI de-concealment leaks memory."),
         ("GTP-C", "[SYNTHETIC] Open5GS ogs_gtp2_parse_tft mishandles a field."),
+        ("GTP-C", "[SYNTHETIC] Open5GS ogs_gtp2_parse_bearer_qos mishandles a field."),
         ("GTP-C", "[SYNTHETIC] SGW mishandles CreateSessionRequest."),
+        ("GTP-C", "[SYNTHETIC] GGSN mishandles CreatePDPContextRequest."),
+        ("GTP-C", "[SYNTHETIC] osmo-ggsn gtp_decode_pdp_ctx corrupts PDP context memory."),
         ("GTP-U", "[SYNTHETIC] UPF mishandles the PDU Session Container."),
     ],
 )
@@ -189,7 +202,7 @@ def test_gtp_family_candidates_require_protocol_context_without_a_dissector_blac
     else:
         assert len(response.implementation_candidates) == 1
         assert response.implementation_candidates[0].relevance.tier is RelevanceTier(tier)
-        assert investigation.stop_reason.value == "sufficient"
+        assert investigation.stop_reason.value == "needs_unmet"
 
 
 @pytest.mark.parametrize("function", ["SMF", "PGW", "SGW", "MME", "UPF", "GGSN", "SGSN"])
@@ -219,7 +232,7 @@ def test_explicit_gtp_with_network_function_context_is_retained(
     assert response.implementation_candidates[0].relevance == relevance
     assert not any(warning.code == "unrelated_candidates_dropped" for warning in response.warnings)
     assert investigation.implementation_candidates[0].relevance == relevance
-    assert investigation.stop_reason.value == "sufficient"
+    assert investigation.stop_reason.value == "needs_unmet"
 
 
 def test_smf_without_gtp_has_no_gtp_relevance(
@@ -284,6 +297,59 @@ def test_investigation_answers_keep_the_pending_review_warning(
         warning.code is InvestigationWarningCode.TOPIC_PENDING_REVIEW
         for warning in evidence_set.warnings
     )
+
+
+@pytest.mark.parametrize("alias", ["GTP", "GTP-U"])
+def test_gtp_malformed_round_two_without_budget_keeps_the_answer_and_stops_budget_exhausted(
+    fixture_bundle: FixtureBundle, alias: str
+) -> None:
+    """Six CVE templates and FiGHT spend seven calls; the extra round-one search uses the
+    eighth, so the fallback for a malformed round-two plan does not fit (a known limit)."""
+    bundle = build_bundle_with(
+        fixture_bundle, "CVE-9999-0901", "[SYNTHETIC] Open5GS GTP-C packet handling crashes."
+    )
+    query = f"{alias} vulnerabilities in mobile core"
+    model_port = ScriptedModelPort(
+        [
+            build_plan_reply(
+                {"tool": "topic_context", "topic_id": "3gpp:gtp"},
+                {"tool": "cve_search", "query": "GTP"},
+            ),
+            build_text_reply("malformed round-two plan"),
+        ]
+    )
+    service = build_test_investigation_service(bundle, model_port=model_port)
+
+    evidence_set = service.investigate(build_investigation_request(query, "mixed"))
+
+    first_round, second_round = evidence_set.trajectory.rounds
+    assert first_round.planner_outcome is PlannerOutcome.MODEL_ACCEPTED
+    assert second_round.planner_outcome is PlannerOutcome.MODEL_REJECTED
+    rejection_codes = []
+    for rejection in second_round.rejections:
+        rejection_codes.append(rejection.code)
+    assert PlanRejectionCode.MALFORMED_PLAN in rejection_codes
+    assert PlanRejectionCode.OVER_TOOL_CALL_BUDGET in rejection_codes
+    topic_step, extra_search = evidence_set.trajectory.steps
+    assert topic_step.charged_tool_calls == 7
+    assert extra_search.round_number == 1
+    assert evidence_set.trajectory.budget_used.tool_calls == 8
+    assert evidence_set.stop_reason is StopReason.BUDGET_EXHAUSTED
+    answer_ids = []
+    for candidate in evidence_set.implementation_candidates:
+        answer_ids.append(candidate.candidate.record.cve_id)
+    assert "CVE-9999-0901" in answer_ids
+    assert evidence_set.interpretation.resolution.matches[0].matched_alias == alias
+    family_notes = []
+    for warning in evidence_set.warnings:
+        if warning.code is InvestigationWarningCode.TOPIC_FAMILY_SCOPE:
+            family_notes.append(warning.subject)
+    assert len(family_notes) == 1
+    assert f"matched_alias={alias}" in family_notes[0]
+    assert "GTP-C and GTP-U" in family_notes[0]
+    assert "not limited" in family_notes[0]
+    summary = " ".join(render_investigation_summary(evidence_set).split())
+    assert "not limited to GTP-C or GTP-U" in summary
 
 
 @pytest.mark.parametrize(

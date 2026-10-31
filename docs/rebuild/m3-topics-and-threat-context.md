@@ -72,6 +72,15 @@ source, CVE relevance tiers and a scoped topic-context service.
   with the matched alias and an explicit note that results include GTP-C and GTP-U.
   GTP-C v1 cites TS 29.060 V16.1.0, GTP-C v2 TS 29.274 V18.7.0 and
   GTP-U TS 29.281 V18.2.0. `GTPv1` without a plane remains ambiguous.
+- The GTP card runs six CVE templates plus one FiGHT search, seven of the default eight
+  tool calls. A model plan that adds a round-one search spends the eighth, so if its
+  round-two plan is malformed the deterministic fallback does not fit: the run keeps its
+  answer, records the rejection and ends `budget_exhausted`, and the unexecuted search is
+  not done. Folding the templates into four was measured on 2026-10-31 and lost required
+  CVEs (merged queries are not the union of separate top-20s), so the six stay.
+- Not every remaining GTP miss is a context or call-budget loss: in that measurement some
+  revised-label required CVEs were admitted into context and then dropped by the card's
+  relevance rule. Recall work on this card has to look at relevance filtering as well.
 - Bare `GTP` is both an exact query alias and an ecosystem term. In candidate
   relevance, a name classified in both fields requires a separate entity or
   ecosystem qualifier. A plane/version name, GTP message or IE, network function,
