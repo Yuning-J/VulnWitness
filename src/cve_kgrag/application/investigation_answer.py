@@ -55,6 +55,7 @@ from cve_kgrag.domain.investigation import (
     list_record_evidence_ids,
     list_step_notices,
 )
+from cve_kgrag.domain.nvd_version_note import list_nvd_version_notes
 from cve_kgrag.domain.planning import CveExactLookupCall
 from cve_kgrag.domain.search import Candidate, ChannelOutcome, SearchFilters
 from cve_kgrag.domain.taxonomy import (
@@ -314,6 +315,7 @@ def assemble_answer(
     topic: ProtocolTopic | None,
     admitted_executions: Sequence[tuple[ToolStep, ToolExecution]],
     max_results: int,
+    affectedness_mentions: Sequence[str] = (),
 ) -> AssembledAnswer:
     collected_sightings = collect_sightings(topic, admitted_executions)
     sightings = collected_sightings.sightings
@@ -326,6 +328,9 @@ def assemble_answer(
                 candidate=sighting.candidate,
                 relevance=sighting.relevance,
                 found_by_steps=tuple(sighting.found_by_steps),
+                nvd_version_notes=list_nvd_version_notes(
+                    sighting.candidate.record, affectedness_mentions
+                ),
             )
         )
     protocol_context = tuple(collect_protocol_context(admitted_executions))
@@ -555,7 +560,11 @@ def assemble_returned_answer(
     if not is_invalid:
         admitted_executions = list_admitted_executions(steps, executions)
     answer = assemble_answer(
-        request.scope, topic, admitted_executions, request.budget.max_results_per_call
+        request.scope,
+        topic,
+        admitted_executions,
+        request.budget.max_results_per_call,
+        interpretation.affectedness_mentions,
     )
     admitted_steps: list[ToolStep] = []
     for step, _ in admitted_executions:

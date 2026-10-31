@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
-    "pydantic>=2.9,<3",
+    "pydantic>=2.12,<3",
     # Reviewed topic cards and FiGHT snapshots are YAML, read only with a SafeLoader subclass.
     "pyyaml>=6.0.2,<7",
 ]

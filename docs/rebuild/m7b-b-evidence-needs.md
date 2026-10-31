@@ -46,6 +46,18 @@ version is a search term, not a need: of the whole names in the 2026-10-27 store
 `release`, `server`, `core`, `network` and `update` are names, so "release 15.2" alone must
 not raise one. The pairs are recorded in `interpretation.affectedness_mentions`.
 
+Each candidate's optional `nvd_version_notes` annotates those mentions against the
+record's retained NVD CPE version conditions, matching whole vendor or product names
+case-insensitively. One note per mention reports `hit` with the matching entry and
+condition, `no_hit` without claiming the version is unaffected, or `unknown` with
+`no_matching_product`, `no_version_condition` or `version_not_comparable`. Numeric dot
+segments compare numerically (5.10 > 5.9), padding trailing segments with zero
+(2.7 == 2.7.0); a non-digit segment is uncomparable, except an exact condition may match
+by trimmed string equality. Any hit wins; without one, a missing or uncomparable
+condition keeps the note unknown. The full configuration and environment conditions
+were not evaluated because the configuration tree and non-vulnerable CPE conditions
+are not retained. The note changes no need, stop rule, retrieval or Trustify behavior.
+
 So "Is Open5GS 2.7.2 affected by CVE-X" needs the named CVE and affectedness; adding "and
 which 5G-AKA threats apply" resolves a topic, which also adds `implementation_cves` and,
 under `mixed`, `protocol_context`.

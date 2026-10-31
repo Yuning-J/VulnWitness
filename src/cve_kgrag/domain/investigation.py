@@ -11,6 +11,7 @@ affectedness source is available to establish it.
 
 from collections.abc import Iterable, Mapping, Sequence
 from enum import StrEnum
+from operator import not_
 from typing import Annotated, Literal, Self
 
 from pydantic import ConfigDict, Field, JsonValue, StrictBool, model_validator
@@ -22,6 +23,7 @@ from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.cve import CveId, CveRecord
 from cve_kgrag.domain.evidence import SHA256_PATTERN, Claim, EvidenceAnchor, EvidenceId
 from cve_kgrag.domain.hashing import canonical_sha256
+from cve_kgrag.domain.nvd_version_note import NvdVersionNote
 from cve_kgrag.domain.planning import (
     ModelPlannerIdentity,
     ModelPlannerUnavailableDetail,
@@ -935,6 +937,18 @@ class InvestigationCandidate(ContractModel):
         )
     )
     found_by_steps: tuple[int, ...] = Field(min_length=1)
+    nvd_version_notes: tuple[NvdVersionNote, ...] | None = Field(
+        default=None,
+        exclude_if=not_,
+        min_length=1,
+        description=(
+            "One annotation per affectedness mention, in mention order; omitted without "
+            "mentions. Numeric dot segments compare with missing trailing zeros; only "
+            "exact conditions can match non-numeric versions by trimmed string equality. "
+            "These notes do not evaluate configuration, environment or affectedness. "
+            "The evidence-set validator recomputes each note from the candidate record."
+        ),
+    )
 
 
 class ExcludedInvestigationCandidate(ContractModel):

@@ -6,7 +6,7 @@ from typing import Any
 import yaml
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.cve import CveRecord
+from cve_kgrag.domain.cve import AffectedProduct, CveRecord
 from cve_kgrag.domain.evidence import (
     UNSEALED_EVIDENCE_ID,
     Claim,
@@ -52,6 +52,18 @@ def build_anchor(**overrides: Any) -> EvidenceAnchor:
     if "evidence_id" in overrides:
         return anchor
     return seal_evidence_anchor(anchor)
+
+
+def build_versioned_product(**overrides: Any) -> AffectedProduct:
+    """A synthetic CPE entry; tests supply the conditions they exercise."""
+    fields: dict[str, Any] = {
+        "vendor": "democorp",
+        "product": "demo_gateway",
+        "cpe": "cpe:2.3:a:democorp:demo_gateway:*:*:*:*:*:*:*:*",
+        "status": "affected",
+    }
+    fields.update(overrides)
+    return AffectedProduct.model_validate(fields)
 
 
 def build_cve_record(**overrides: Any) -> CveRecord:

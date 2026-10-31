@@ -69,6 +69,7 @@ from tests.support.investigation_runs import (
     run_exact_id,
     run_five_g_aka_mixed,
     run_free_text_under_a_model_planner,
+    run_gateway_version_question,
     run_model_accepted,
     run_model_not_consulted,
     run_model_refinement_unavailable,
@@ -237,6 +238,7 @@ def reject_a_request_without_the_token(fixture_bundle: FixtureBundle) -> BaseMod
 
 GENUINE_PAYLOADS: list[tuple[str, PayloadBuilder]] = [
     ("knowledge_evidence_set", run_exact_id),
+    ("knowledge_evidence_set", run_gateway_version_question),
     ("knowledge_evidence_set", run_five_g_aka_mixed),
     ("knowledge_evidence_set", run_refinement),
     ("knowledge_evidence_set", run_cve_under_protocol_scope),
@@ -557,7 +559,37 @@ def clear_a_replay_difference_report_s_differences(payload: JsonObject) -> None:
     payload["differences"] = []
 
 
+def omit_a_hit_s_matched_condition(payload: JsonObject) -> None:
+    del payload["implementation_candidates"][0]["nvd_version_notes"][0]["matched_condition"]
+
+
+def omit_an_unknown_version_s_reason(payload: JsonObject) -> None:
+    del payload["implementation_candidates"][2]["nvd_version_notes"][0]["reason_code"]
+
+
+def invent_an_unknown_version_reason(payload: JsonObject) -> None:
+    payload["implementation_candidates"][2]["nvd_version_notes"][0]["reason_code"] = "unaffected"
+
+
 MODEL_REJECTED_PAYLOADS: list[tuple[str, PayloadBuilder, PayloadForgery, str]] = [
+    (
+        "knowledge_evidence_set",
+        run_gateway_version_question,
+        omit_a_hit_s_matched_condition,
+        "Field required",
+    ),
+    (
+        "knowledge_evidence_set",
+        run_gateway_version_question,
+        omit_an_unknown_version_s_reason,
+        "Field required",
+    ),
+    (
+        "knowledge_evidence_set",
+        run_gateway_version_question,
+        invent_an_unknown_version_reason,
+        "Input should be",
+    ),
     ("search_response", search_ausf, put_a_verdict_in_a_channel_failure, "Input should be"),
     (
         "search_response",

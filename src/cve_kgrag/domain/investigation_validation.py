@@ -149,6 +149,7 @@ from cve_kgrag.domain.investigation import (
     list_record_evidence_ids,
     list_step_notices,
 )
+from cve_kgrag.domain.nvd_version_note import list_nvd_version_notes
 from cve_kgrag.domain.planning import (
     CveExactLookupCall,
     CveSearchCall,
@@ -340,6 +341,23 @@ def find_investigation_scope_violations(evidence_set: KnowledgeEvidenceSet) -> l
         if not is_assessed and is_topic_resolved and cve_id not in interpretation.cve_ids:
             violations.append(
                 f"{cve_id}: relevance is assessed for every candidate the caller did not name"
+            )
+    return violations
+
+
+def find_nvd_version_note_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
+    """Notes are exactly those derived from each candidate and the recorded mentions."""
+    violations: list[str] = []
+    mentions = evidence_set.interpretation.affectedness_mentions
+    for mention in mentions:
+        if " " not in mention:
+            return ["NVD version notes require affectedness mentions naming a product and version"]
+    for candidate in list_investigation_candidates(evidence_set):
+        expected_notes = list_nvd_version_notes(candidate.candidate.record, mentions)
+        if candidate.nvd_version_notes != expected_notes:
+            violations.append(
+                f"{candidate.candidate.record.cve_id}: NVD version notes do not match "
+                "the record and affectedness mentions"
             )
     return violations
 
@@ -1740,6 +1758,7 @@ def validate_knowledge_evidence_set(
     violations = find_record_and_claim_violations(evidence_set, evidence_catalog)
     violations.extend(find_identity_violations(evidence_set))
     violations.extend(find_investigation_scope_violations(evidence_set))
+    violations.extend(find_nvd_version_note_violations(evidence_set))
     violations.extend(find_citation_violations(evidence_set))
     violations.extend(find_step_evidence_violations(evidence_set, evidence_catalog))
     violations.extend(find_step_observation_violations(evidence_set, evidence_catalog))

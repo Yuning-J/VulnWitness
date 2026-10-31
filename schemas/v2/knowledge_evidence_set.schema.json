@@ -1308,6 +1308,41 @@
           "title": "Found By Steps",
           "type": "array"
         },
+        "nvd_version_notes": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "hit": "#/$defs/NvdVersionHit",
+                    "no_hit": "#/$defs/NvdVersionNoHit",
+                    "unknown": "#/$defs/NvdVersionUnknown"
+                  },
+                  "propertyName": "outcome"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/NvdVersionHit"
+                  },
+                  {
+                    "$ref": "#/$defs/NvdVersionNoHit"
+                  },
+                  {
+                    "$ref": "#/$defs/NvdVersionUnknown"
+                  }
+                ]
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One annotation per affectedness mention, in mention order; omitted without mentions. Numeric dot segments compare with missing trailing zeros; only exact conditions can match non-numeric versions by trimmed string equality. These notes do not evaluate configuration, environment or affectedness. The evidence-set validator recomputes each note from the candidate record.",
+          "title": "Nvd Version Notes"
+        },
         "rank": {
           "minimum": 1,
           "title": "Rank",
@@ -1713,6 +1748,102 @@
       ],
       "title": "NeedOutcome",
       "type": "string"
+    },
+    "NvdVersionHit": {
+      "additionalProperties": false,
+      "properties": {
+        "matched_condition": {
+          "$ref": "#/$defs/VersionRange"
+        },
+        "matched_entry": {
+          "$ref": "#/$defs/AffectedProduct"
+        },
+        "mention": {
+          "title": "Mention",
+          "type": "string"
+        },
+        "outcome": {
+          "const": "hit",
+          "default": "hit",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "wording": {
+          "title": "Wording",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mention",
+        "outcome",
+        "wording",
+        "matched_entry",
+        "matched_condition"
+      ],
+      "title": "NvdVersionHit",
+      "type": "object"
+    },
+    "NvdVersionNoHit": {
+      "additionalProperties": false,
+      "properties": {
+        "mention": {
+          "title": "Mention",
+          "type": "string"
+        },
+        "outcome": {
+          "const": "no_hit",
+          "default": "no_hit",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "wording": {
+          "title": "Wording",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mention",
+        "outcome",
+        "wording"
+      ],
+      "title": "NvdVersionNoHit",
+      "type": "object"
+    },
+    "NvdVersionUnknown": {
+      "additionalProperties": false,
+      "properties": {
+        "mention": {
+          "title": "Mention",
+          "type": "string"
+        },
+        "outcome": {
+          "const": "unknown",
+          "default": "unknown",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason_code": {
+          "enum": [
+            "no_matching_product",
+            "no_version_condition",
+            "version_not_comparable"
+          ],
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "wording": {
+          "title": "Wording",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mention",
+        "outcome",
+        "wording",
+        "reason_code"
+      ],
+      "title": "NvdVersionUnknown",
+      "type": "object"
     },
     "ObservationStatus": {
       "description": "FiGHT's own maturity label, normalized; ``source_status`` keeps the original text.",
@@ -4585,8 +4716,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.36",
-      "default": "2.0.0-dev.36",
+      "const": "2.0.0-dev.37",
+      "default": "2.0.0-dev.37",
       "title": "Schema Version",
       "type": "string"
     },

@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.36` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.37` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -23,6 +23,16 @@ their relevance was not assessed, which does not mean no relevant evidence exist
 candidates and the terms each matched before relying on them. An investigation ends
 `sufficient` only through an exact lookup of a named CVE or a reviewed topic's mapping, and
 a topic run can still stop `sufficient` on CVEs that do not answer the question.
+
+When `interpretation.affectedness_mentions` names a product and version, each CVE
+candidate carries `nvd_version_notes`: `hit`, `no_hit` or `unknown` against its retained
+NVD CPE version conditions for a matching vendor or product. Dotted numeric segments
+compare numerically (5.10 > 5.9), with missing trailing segments equal to zero
+(2.7 == 2.7.0); any non-digit segment is uncomparable, except an exact condition may
+match by trimmed string equality. A hit records the matching entry and condition;
+no hit does not show the version is unaffected. The full configuration and environment
+conditions were not evaluated: non-vulnerable CPE conditions and the configuration
+tree are not retained. These annotations do not change retrieval, needs or stop rules.
 
 ## What it does
 
@@ -139,6 +149,11 @@ These warnings explain an answer without reading its trajectory:
 
 Search matches individual words, so a lexical hit is not evidence that a record is about
 the question: read each candidate's matched terms.
+
+`max_context_bytes` measures the tool results admitted into the investigation's context.
+The evidence set the user receives is larger because it also carries claims, evidence
+entries and the trajectory: a real-store example charges 199,477 bytes in a
+339,057-byte answer. There is no separate cap on answer size.
 
 `migrate legacy` imports raw NVD 1.1 and 2.0 feeds and the CISA KEV catalog CSV that an
 operator-written input manifest declares, each with the time it was obtained, into a

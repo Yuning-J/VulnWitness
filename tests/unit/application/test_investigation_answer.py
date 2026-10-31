@@ -454,3 +454,39 @@ def test_each_named_product_is_unknown_in_vendor_product_purl_order() -> None:
         ("product", "f5gc", "unknown"),
         ("purl", "pkg:generic/fictional5g/f5gc", "unknown"),
     ]
+
+
+def test_annotations_preserve_every_existing_answer_field_and_admitted_step(
+    search_service: SearchService,
+) -> None:
+    # Arrange
+    admitted_steps = [
+        build_admitted_exact_lookup_step(
+            search_service, 1, "CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0003"
+        )
+    ]
+    steps_before = admitted_steps.copy()
+    unannotated_answer = assemble_answer(QueryScope.IMPLEMENTATION_ONLY, None, admitted_steps, 20)
+
+    # Act
+    annotated_answer = assemble_answer(
+        QueryScope.IMPLEMENTATION_ONLY, None, admitted_steps, 20, ("democorp 2.0",)
+    )
+
+    # Assert
+    candidate_fields = {"rank", "candidate", "relevance", "found_by_steps"}
+    for candidate_without_notes, candidate_with_notes in zip(
+        unannotated_answer.implementation_candidates,
+        annotated_answer.implementation_candidates,
+        strict=True,
+    ):
+        assert set(candidate_without_notes.model_dump(mode="json")) == candidate_fields
+        assert candidate_with_notes.model_dump(mode="json", exclude={"nvd_version_notes"}) == (
+            candidate_without_notes.model_dump(mode="json")
+        )
+    assert admitted_steps == steps_before
+    assert annotated_answer.evidence == unannotated_answer.evidence
+    assert annotated_answer.excluded_candidates == unannotated_answer.excluded_candidates
+    assert annotated_answer.protocol_context == unannotated_answer.protocol_context
+    assert annotated_answer.dropped_count == unannotated_answer.dropped_count
+    assert annotated_answer.truncated_count == unannotated_answer.truncated_count

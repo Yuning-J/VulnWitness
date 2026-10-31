@@ -11,6 +11,7 @@ from tests.support.investigation_runs import (
     investigate,
     run_exact_id,
     run_five_g_aka_mixed,
+    run_gateway_version_question,
     run_open5gs_product_question,
 )
 
@@ -92,6 +93,27 @@ def test_affectedness_need_says_version_affectedness_was_not_assessed(
     assert "[applicability_unknown]" in summary
     assert "Subject: open5gs" in summary
     assert "not affected" not in summary.lower()
+
+
+def test_version_notes_show_each_outcome_and_the_configuration_caveat(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    # Arrange
+    evidence_set = run_gateway_version_question(fixture_bundle)
+
+    # Act
+    summary = render_investigation_summary(evidence_set)
+
+    # Assert
+    assert "NVD (democorp 2.0): hit." in summary
+    assert "NVD (democorp 2.0): no hit." in summary
+    assert "NVD (democorp 2.0): unknown [no_matching_product]." in summary
+    assert "the full configuration and environment conditions were not evaluated." in " ".join(
+        summary.split()
+    )
+    assert "Version affectedness was not assessed." in " ".join(summary.split())
+    assert "not affected" not in summary.lower()
+    assert all(len(line) <= 100 for line in summary.splitlines())
 
 
 def test_product_applicability_alone_reports_unassessed_version_affectedness(

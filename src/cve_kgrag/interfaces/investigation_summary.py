@@ -164,6 +164,17 @@ def format_candidates(evidence_set: KnowledgeEvidenceSet) -> str:
                 )
             )
         )
+        for note in candidate.nvd_version_notes or ():
+            outcome = note.outcome.replace("_", " ")
+            reason = f" [{note.reason_code}]" if note.outcome == "unknown" else ""
+            lines.append(format_paragraph(f"  NVD ({note.mention}): {outcome}{reason}."))
+    if evidence_set.interpretation.affectedness_mentions:
+        lines.append(
+            format_paragraph(
+                "NVD CPE version condition hits: the full configuration and environment "
+                "conditions were not evaluated."
+            )
+        )
     if len(evidence_set.implementation_candidates) > 20:
         lines.append(
             f"+{len(evidence_set.implementation_candidates) - 20} more CVEs in --format json."

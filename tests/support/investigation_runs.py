@@ -115,6 +115,15 @@ def run_exact_id(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
     return investigate(fixture_bundle, "CVE-9999-0003", "implementation_only")
 
 
+def run_gateway_version_question(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
+    """Three named fixture CVEs: a version hit, a comparable miss and another product."""
+    return investigate(
+        fixture_bundle,
+        "Is democorp 2.0 affected by CVE-9999-0001, CVE-9999-0002 and CVE-9999-0003?",
+        "implementation_only",
+    )
+
+
 def run_over_the_byte_cap(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
     """``5G-AKA`` under a byte cap below its first whole result: the step is discarded
     and the run stops ``budget_exhausted`` on a ``context_bytes`` breach."""

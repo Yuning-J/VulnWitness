@@ -912,7 +912,7 @@ requires-dist = [
     { name = "chromadb", marker = "extra == 'semantic'", specifier = ">=1.0,<2" },
     { name = "ijson", marker = "extra == 'migration'", specifier = ">=3.3,<4" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.3,<3" },
-    { name = "pydantic", specifier = ">=2.9,<3" },
+    { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "pyyaml", specifier = ">=6.0.2,<7" },
     { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=3.3,<6" },
     { name = "starlette", marker = "extra == 'api'", specifier = ">=0.48,<2" },

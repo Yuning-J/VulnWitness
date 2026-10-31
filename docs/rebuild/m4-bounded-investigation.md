@@ -408,6 +408,11 @@ choose a round's plan with the same function, `choose_round_plan` in
 | `max_wall_time_seconds` | 30 | A ceiling on the run, measured on an injected monotonic clock. It is checked before every planner and tool call, and every such call runs under the call runner, which gives control back when the remaining time reaches zero whether or not the call has returned; see the limits below. |
 | `max_context_bytes` | 200 000 | The canonical JSON size of each admitted tool response, including metadata and anchors. An oversized response admits its longest whole-result prefix; if the first result cannot fit, it is discarded and the run stops. |
 
+`max_context_bytes` measures the tool results admitted into the investigation's context.
+The evidence set the user receives is larger because it also carries claims, evidence
+entries and the trajectory: a real-store example charges 199,477 bytes in a
+339,057-byte answer. There is no separate cap on answer size.
+
 A caller may lower each cap and never raise it; a value above a cap is rejected,
 not clamped. An oversized response is admitted as `admitted_prefix` when at least its
 first whole result fits. CVE searches and lookups take candidates in their ranked order;
