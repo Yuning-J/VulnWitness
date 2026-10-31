@@ -24,6 +24,7 @@ from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, build_tool_f
 # tool's error result instead.
 TOOL_FAILURE_STATUSES: dict[ToolFailureCode, int] = {
     ToolFailureCode.INVALID_ARGUMENTS: 422,
+    ToolFailureCode.INVALID_CURSOR: 422,
     ToolFailureCode.ARGUMENTS_TOO_LARGE: 413,
     ToolFailureCode.UNKNOWN_EVIDENCE_ID: 404,
     ToolFailureCode.SERVER_BUSY: 503,

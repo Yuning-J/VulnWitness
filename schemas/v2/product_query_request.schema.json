@@ -25,6 +25,20 @@
   ],
   "description": "At least one whole vendor or product name; version is never search text.",
   "properties": {
+    "cursor": {
+      "anyOf": [
+        {
+          "maxLength": 8192,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Opaque continuation from next_cursor; pass unchanged with the same vendor, product, version and limit against the same served corpus.",
+      "title": "Cursor"
+    },
     "limit": {
       "default": 10,
       "maximum": 20,

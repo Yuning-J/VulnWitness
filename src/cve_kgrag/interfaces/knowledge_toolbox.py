@@ -27,6 +27,7 @@ from cve_kgrag.domain.investigation import (
     SourceCapability,
 )
 from cve_kgrag.domain.product_query import ProductQueryRequest, ProductQueryResponse
+from cve_kgrag.domain.product_query_cursor import InvalidProductCursor
 from cve_kgrag.domain.search import SearchRequest, SearchResponse, UnsupportedFilter
 from cve_kgrag.domain.served_dataset import ServedDataset
 from cve_kgrag.domain.tool_contracts import (
@@ -216,6 +217,8 @@ class KnowledgeToolbox:
             return build_tool_failure(ToolFailureCode.UNKNOWN_EVIDENCE_ID)
         except UnsupportedFilter as error:
             return build_unsupported_filter_failure(error)
+        except InvalidProductCursor:
+            return build_tool_failure(ToolFailureCode.INVALID_CURSOR)
         except EvidenceValidationError:
             return build_tool_failure(ToolFailureCode.INTEGRITY_CHECK_FAILED)
         except Exception:

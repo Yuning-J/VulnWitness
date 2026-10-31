@@ -35,6 +35,11 @@ from tests.support.product_queries import PRODUCT
         ({"product": 123}, False),
         ({"vendor": "ß" * 128}, True),
         ({"product": PRODUCT, "query": "crash"}, False),
+        ({"product": PRODUCT, "cursor": None}, True),
+        ({"product": PRODUCT, "cursor": "opaque-continuation"}, True),
+        ({"product": PRODUCT, "cursor": ""}, True),
+        ({"product": PRODUCT, "cursor": 1}, False),
+        ({"product": PRODUCT, "cursor": "a" * 8193}, False),
     ],
 )
 def test_request_schema_and_model_agree_on_explicit_fields(

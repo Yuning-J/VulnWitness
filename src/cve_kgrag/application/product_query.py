@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 
+from cve_kgrag.application.product_query_index import ProductQueryIndex
 from cve_kgrag.domain.cve import AffectedProduct, CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
@@ -18,6 +19,11 @@ from cve_kgrag.domain.product_query import (
     ProductQueryRequest,
     ProductQueryResponse,
     ProductVulnerability,
+)
+from cve_kgrag.domain.product_query_cursor import (
+    InvalidProductCursor,
+    build_product_cursor,
+    read_product_cursor,
 )
 from cve_kgrag.domain.text import tokenize
 from cve_kgrag.domain.validation import (
@@ -96,11 +102,13 @@ class ProductQueryService:
     def __init__(self, repository: CveRepository, evidence_catalog: EvidenceCatalog) -> None:
         self._repository = repository
         self._evidence_catalog = evidence_catalog
+        self._index = ProductQueryIndex(repository.list_cves())
 
     def query(self, request: ProductQueryRequest) -> ProductQueryResponse:
-        """Return a counted, capped list and all matched identities, or raise
-        ``EvidenceValidationError`` if served records or their anchors fail integrity checks.
+        """Return a counted page and all matched identities. Raise ``InvalidProductCursor``
+        for invalid continuations, or ``EvidenceValidationError`` for invalid evidence.
         """
+        offset = read_product_cursor(request)
         vendor = request.vendor.casefold() if request.vendor is not None else None
         product = request.product.casefold() if request.product is not None else None
         name = product if product is not None else vendor
@@ -110,7 +118,9 @@ class ProductQueryService:
         description_mentions_vendor_unconfirmed = 0
         vulnerabilities: list[ProductVulnerability] = []
         matched_entries: list[AffectedProduct] = []
-        for record in self._repository.list_cves():
+        for cve_id in self._index.find_candidates(vendor, product, phrase_tokens):
+            record = self._repository.get_cve(cve_id)
+            assert record is not None  # Index and repository share one immutable corpus.
             basis: ProductMatchBasis
             implicated_entries = record.list_implicated_products()
             matching_entries: list[AffectedProduct] = []
@@ -146,12 +156,20 @@ class ProductQueryService:
                 )
             )
         vulnerabilities.sort(key=group_product_vulnerability)
-        listed_vulnerabilities = tuple(vulnerabilities[: request.limit])
+        if request.cursor is not None and offset >= len(vulnerabilities):
+            raise InvalidProductCursor("Invalid product query cursor.")
+        page_end = offset + request.limit
+        listed_vulnerabilities = tuple(vulnerabilities[offset:page_end])
+        next_cursor = None
+        if page_end < len(vulnerabilities):
+            next_cursor = build_product_cursor(request, page_end)
         return ProductQueryResponse(
             vendor=vendor,
             product=product,
             version=request.version,
             limit=request.limit,
+            cursor=request.cursor,
+            next_cursor=next_cursor,
             items=listed_vulnerabilities,
             total_available=len(vulnerabilities),
             description_mentions_vendor_unconfirmed=description_mentions_vendor_unconfirmed,

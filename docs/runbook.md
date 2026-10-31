@@ -176,11 +176,23 @@ the shared `api` build does once.
 reads the active corpus directly through exact case-folded product fields, with a
 description-token fallback only for records with no implicated products. Omit
 `--product` for all products of the vendor. `--limit` defaults to 10 and is capped at
-20; the answer counts `total_available` and shows every matched vendor:product pair
-before the cap. Use `--format json` for records, bases and evidence anchors.
+20 per page; the answer counts `total_available` and shows every matched vendor:product
+pair across all pages. Use `--format json` for records, bases and evidence anchors.
+Continue with `--cursor <next_cursor>`, repeating the vendor, product, version and limit,
+until `next_cursor` is null. The response echoes those fields and the requested `cursor`.
+Cursors are opaque stateless offsets over the documented order and require the same
+served corpus throughout traversal. Invalid, mismatched or out-of-range cursors return
+`invalid_cursor` (CLI exit 2, REST 422, MCP tool failure). Wrong input types fail request
+validation. Each page includes evidence only for its returned records.
+
+The product service builds plain vendor, product and eligible description-token postings
+once when the corpus is loaded. Queries intersect postings and verify exact entries and
+consecutive phrases on candidates; description postings include only records without
+implicated products. Full-match counts, identities and version grouping apply across
+all pages.
 
 The server equivalents are authenticated `POST /api/v2/product` and MCP
-`query_product_vulnerabilities`, taking `vendor`, `product`, `version` and `limit`.
+`query_product_vulnerabilities`, taking `vendor`, `product`, `version`, `limit` and `cursor`.
 Version annotates the retained NVD conditions without filtering CVEs or deciding
 affectedness. `basis.kind` distinguishes `product_field` from `description_mention`;
 mention-only results cannot confirm vendor ownership or version conditions. See

@@ -995,8 +995,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The requested continuation, or null for the first page.",
+      "title": "Cursor"
+    },
     "description_mentions_vendor_unconfirmed": {
-      "description": "CVEs with no implicated products whose descriptions name the requested product but not the requested vendor as whole-token phrases, excluded before the cap. Zero unless both vendor and product are supplied; mentions do not establish ownership.",
+      "description": "CVEs with no implicated products whose descriptions name the requested product but not the requested vendor as whole-token phrases, excluded across all pages. Zero unless both vendor and product are supplied; mentions do not establish ownership.",
       "minimum": 0,
       "title": "Description Mentions Vendor Unconfirmed",
       "type": "integer"
@@ -1018,19 +1030,31 @@
       "type": "array"
     },
     "limit": {
-      "description": "Requested list cap.",
+      "description": "Requested page size.",
       "maximum": 20,
       "minimum": 1,
       "title": "Limit",
       "type": "integer"
     },
     "matched_products": {
-      "description": "All matched vendor:product pairs before the cap, sorted by vendor then product. Without a vendor, every matching vendor is included; narrow with vendor.",
+      "description": "All matched vendor:product pairs across all pages, sorted by vendor then product. Without a vendor, every matching vendor is included; narrow with vendor.",
       "items": {
         "$ref": "#/$defs/ProductIdentity"
       },
       "title": "Matched Products",
       "type": "array"
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Opaque continuation, or null on the final page.",
+      "title": "Next Cursor"
     },
     "product": {
       "anyOf": [
@@ -1044,13 +1068,13 @@
       "title": "Product"
     },
     "schema_version": {
-      "const": "2.0.0-dev.43",
-      "default": "2.0.0-dev.43",
+      "const": "2.0.0-dev.44",
+      "default": "2.0.0-dev.44",
       "title": "Schema Version",
       "type": "string"
     },
     "total_available": {
-      "description": "Matching CVEs before the cap.",
+      "description": "Matching CVEs across all pages.",
       "minimum": 0,
       "title": "Total Available",
       "type": "integer"
@@ -1084,6 +1108,8 @@
     "product",
     "version",
     "limit",
+    "cursor",
+    "next_cursor",
     "items",
     "total_available",
     "description_mentions_vendor_unconfirmed",

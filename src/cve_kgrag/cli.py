@@ -126,6 +126,7 @@ from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEviden
 from cve_kgrag.domain.migration_inputs import MAX_MANIFEST_BYTES
 from cve_kgrag.domain.migration_report import MigrationOutcome
 from cve_kgrag.domain.product_query import ProductQueryRequest
+from cve_kgrag.domain.product_query_cursor import InvalidProductCursor
 from cve_kgrag.domain.search import (
     MAX_FILTER_VALUES,
     MAX_RESULTS_PER_CALL,
@@ -150,6 +151,7 @@ from cve_kgrag.domain.tool_contracts import (
     CveLookupRequest,
     EvidenceLookupRequest,
     KnowledgeCapabilities,
+    ToolFailureCode,
 )
 from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, TopicContextResponse
 from cve_kgrag.domain.validation import EvidenceValidationError
@@ -193,7 +195,7 @@ from cve_kgrag.interfaces.knowledge_toolbox import (
     KnowledgeToolbox,
     describe_knowledge_capabilities,
 )
-from cve_kgrag.interfaces.knowledge_tools import ToolLimits
+from cve_kgrag.interfaces.knowledge_tools import ToolLimits, build_tool_failure
 from cve_kgrag.interfaces.product_query_summary import render_product_query_summary
 from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.ports.sources import FightSource
@@ -398,6 +400,7 @@ def build_parser() -> argparse.ArgumentParser:
     product_parser.add_argument("--vendor")
     product_parser.add_argument("--product")
     product_parser.add_argument("--version")
+    product_parser.add_argument("--cursor", help="continuation from the preceding product page")
     product_parser.add_argument("--format", choices=("json", "text"), default="json")
     add_result_limit_option(product_parser, "--limit")
 
@@ -853,7 +856,7 @@ def run_evidence_lookup(evidence_id: str, deployment: InvestigationDeployment) -
 def run_product_query(
     request: ProductQueryRequest, store_root: Path | None, output_format: str
 ) -> int:
-    """Read the configured corpus through the product service and print its capped answer."""
+    """Read the configured corpus through the product service and print its page."""
     started_at = time.monotonic()
     served_corpus = load_served_corpus_or_exit("product", store_root)
     service = build_product_query_service(served_corpus)
@@ -863,7 +866,14 @@ def run_product_query(
         served_corpus.describe_served_dataset(),
         time.monotonic() - started_at,
     )
-    vulnerabilities = service.query(request)
+    try:
+        vulnerabilities = service.query(request)
+    except InvalidProductCursor:
+        print(
+            build_tool_failure(ToolFailureCode.INVALID_CURSOR).model_dump_json(),
+            file=sys.stderr,
+        )
+        return 2
     if output_format == "text":
         print(render_product_query_summary(vulnerabilities))
     else:
@@ -1614,6 +1624,7 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             product=arguments.product,
             version=arguments.version,
             limit=arguments.limit,
+            cursor=arguments.cursor,
         )
         return run_product_query(product_request, settings.store_root, arguments.format)
     if arguments.command == "search":

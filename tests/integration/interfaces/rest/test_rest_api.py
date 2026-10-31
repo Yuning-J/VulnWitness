@@ -84,6 +84,7 @@ ROUTE_BODY_CAP_BYTES = 256 * 1024
 # Each failure's status, as ADR 0007 decision 8 publishes it.
 EXPECTED_FAILURE_STATUSES = {
     ToolFailureCode.INVALID_ARGUMENTS: 422,
+    ToolFailureCode.INVALID_CURSOR: 422,
     ToolFailureCode.ARGUMENTS_TOO_LARGE: 413,
     ToolFailureCode.UNKNOWN_EVIDENCE_ID: 404,
     ToolFailureCode.SERVER_BUSY: 503,
@@ -736,3 +737,42 @@ async def test_exact_id_search_omits_weakness_associations(
     candidate = search.json()["candidates"][0]
     assert candidate["record"]["cve_id"] == cve_id
     assert "weakness_associations" not in candidate
+
+
+async def test_product_route_continuation_matches_the_service_page(
+    product_query_bundle: FixtureBundle,
+) -> None:
+    # Arrange
+    request = ProductQueryRequest(product="oai-cn5g-amf", version="2.0", limit=2)
+    service = build_product_query_service(product_query_bundle)
+    api_app = build_test_api(product_query_bundle)
+    first_answer = await call_api(api_app, "POST", "/api/v2/product", json=request.model_dump())
+    continuation = request.model_copy(update={"cursor": first_answer.json()["next_cursor"]})
+    expected_page = service.query(continuation)
+
+    # Act
+    answer = await call_api(api_app, "POST", "/api/v2/product", json=continuation.model_dump())
+
+    # Assert
+    assert answer.status_code == 200
+    assert answer.json() == expected_page.model_dump(mode="json")
+
+
+@pytest.mark.parametrize("mismatched_request", [False, True])
+async def test_product_route_refuses_invalid_or_mismatched_cursors_with_a_typed_error(
+    product_query_bundle: FixtureBundle, mismatched_request: bool
+) -> None:
+    # Arrange
+    api_app = build_test_api(product_query_bundle)
+    request = ProductQueryRequest(product="oai-cn5g-amf", limit=1)
+    first_page = build_product_query_service(product_query_bundle).query(request)
+    cursor = first_page.next_cursor if mismatched_request else "invalid"
+    arguments = request.model_dump() | {"cursor": cursor, "limit": 2}
+
+    # Act
+    answer = await call_api(api_app, "POST", "/api/v2/product", json=arguments)
+
+    # Assert
+    failure = read_tool_failure(answer)
+    assert answer.status_code == 422
+    assert failure.code is ToolFailureCode.INVALID_CURSOR

@@ -27,6 +27,7 @@
     "ToolFailureCode": {
       "enum": [
         "invalid_arguments",
+        "invalid_cursor",
         "arguments_too_large",
         "unknown_evidence_id",
         "server_busy",
@@ -56,6 +57,22 @@
         "properties": {
           "message": {
             "const": "The arguments do not match the tool's input schema."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "invalid_cursor"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The cursor is invalid for this product query."
           }
         }
       }
@@ -225,8 +242,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.43",
-      "default": "2.0.0-dev.43",
+      "const": "2.0.0-dev.44",
+      "default": "2.0.0-dev.44",
       "title": "Schema Version",
       "type": "string"
     },

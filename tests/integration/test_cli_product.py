@@ -42,7 +42,7 @@ def test_product_text_shows_basis_severity_kev_cap_and_nvd_limits(
     summary = capsys.readouterr().out
     assert exit_code == 0
     assert "Product vulnerabilities:" in summary
-    assert "Showing 2 of 2 matching CVEs (cap 10)." in summary
+    assert "Showing 2 of 2 matching CVEs (page size 10)." in summary
     assert "Basis: product_field (democorp:demo_gateway)" in summary
     assert "Severity: CRITICAL" in summary
     assert "KEV:" in summary
@@ -86,3 +86,53 @@ def test_cli_capabilities_lists_product_query_tool(capsys: pytest.CaptureFixture
     assert exit_code == 0
     capabilities = json.loads(capsys.readouterr().out)
     assert "query_product_vulnerabilities" in capabilities["tools"]
+
+
+def test_product_cursor_fetches_the_next_page_in_json(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Arrange
+    arguments = ["product", "--product", "demo_gateway", "--limit", "1"]
+    main(arguments, environment={})
+    first_page = json.loads(capsys.readouterr().out)
+
+    # Act
+    exit_code = main([*arguments, "--cursor", first_page["next_cursor"]], environment={})
+
+    # Assert
+    second_page = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert second_page["cursor"] == first_page["next_cursor"]
+    assert second_page["next_cursor"] is None
+    assert second_page["total_available"] == first_page["total_available"] == 2
+    assert second_page["items"][0]["record"]["cve_id"] != first_page["items"][0]["record"]["cve_id"]
+
+
+def test_product_text_prints_a_copyable_continuation(capsys: pytest.CaptureFixture[str]) -> None:
+    # Arrange
+    arguments = ["product", "--product", "demo_gateway", "--limit", "1", "--format", "text"]
+
+    # Act
+    exit_code = main(arguments, environment={})
+
+    # Assert
+    summary = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Next page: repeat the request with --cursor\n" in summary
+
+
+@pytest.mark.parametrize("cursor", ["invalid", ""])
+def test_product_invalid_cursor_exits_two_with_a_typed_error(
+    capsys: pytest.CaptureFixture[str], cursor: str
+) -> None:
+    # Arrange
+    arguments = ["product", "--product", "demo_gateway", "--cursor", cursor]
+
+    # Act
+    exit_code = main(arguments, environment={})
+
+    # Assert
+    terminal = capsys.readouterr()
+    assert exit_code == 2
+    assert terminal.out == ""
+    assert json.loads(terminal.err.splitlines()[-1])["code"] == "invalid_cursor"

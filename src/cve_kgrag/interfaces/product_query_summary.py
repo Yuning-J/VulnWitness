@@ -5,7 +5,7 @@ from cve_kgrag.interfaces.investigation_summary import format_paragraph, format_
 
 
 def render_product_query_summary(vulnerabilities: ProductQueryResponse) -> str:
-    """Render only the capped list, its matching basis and NVD facts, with no ranking."""
+    """Render a page, its continuation, matching basis and NVD facts, with no ranking."""
     lines = [
         format_paragraph(
             f"Product vulnerabilities: vendor={vulnerabilities.vendor or '(any)'}; "
@@ -13,7 +13,7 @@ def render_product_query_summary(vulnerabilities: ProductQueryResponse) -> str:
             f"version={vulnerabilities.version or '(not supplied)'}"
         ),
         f"Showing {len(vulnerabilities.items)} of {vulnerabilities.total_available} "
-        f"matching CVEs (cap {vulnerabilities.limit}).",
+        f"matching CVEs (page size {vulnerabilities.limit}).",
         format_paragraph(
             "Description mentions left out because the requested vendor was not named: "
             f"{vulnerabilities.description_mentions_vendor_unconfirmed}."
@@ -21,7 +21,7 @@ def render_product_query_summary(vulnerabilities: ProductQueryResponse) -> str:
         format_paragraph(PRODUCT_ORDER_DESCRIPTION),
         "Affectedness: unknown. NVD backlog and mention-only evidence limit coverage.",
         "",
-        "Matched products (before the cap):",
+        "Matched products (all pages):",
     ]
     for product in vulnerabilities.matched_products:
         lines.append(format_paragraph(f"{product.vendor}:{product.product}"))
@@ -51,5 +51,9 @@ def render_product_query_summary(vulnerabilities: ProductQueryResponse) -> str:
             lines.append(format_paragraph(vulnerability.nvd_version_note.wording))
     if not vulnerabilities.items:
         lines.append("None returned.")
+    if vulnerabilities.next_cursor is not None:
+        lines.extend(
+            ("", "Next page: repeat the request with --cursor", vulnerabilities.next_cursor)
+        )
     lines.extend(("", "Source records: --format json; anchors: cve-kgrag evidence <evidence_id>."))
     return "\n".join(lines)

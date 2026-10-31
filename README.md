@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.43` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.44` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -196,7 +196,7 @@ uv run cve-kgrag product --vendor openairinterface --limit 20
 
 The same service is `POST /api/v2/product` and MCP `query_product_vulnerabilities`,
 listed by `capabilities.tools`. At least one of `vendor` or `product` is required;
-`version` and `limit` are optional. Names compare exactly after Unicode `casefold()`,
+`version`, `limit` and `cursor` are optional. Names compare exactly after Unicode `casefold()`,
 like the structured filters. Use stored CPE component names (unescaped on import),
 preserving underscores, punctuation and whitespace. Vendor and product must match
 the same implicated entry (`status != unaffected`); there is no recognition from prose.
@@ -207,10 +207,10 @@ can match descriptions, using consecutive project-tokenizer tokens: `oai-cn5g-am
 reads as `oai cn5g amf`. With both vendor and product, each must occur separately as
 a whole-token phrase; without a product, the phrase is the vendor.
 `description_mentions_vendor_unconfirmed` counts product mentions left out because
-the vendor was not named, before the cap (zero unless both fields are supplied).
+the vendor was not named, across all pages (zero unless both fields are supplied).
 Mention-only evidence cannot establish vendor ownership. CVEs appear once, with field
-evidence taking precedence. The response's `matched_products` shows all matched pairs before
-the cap; shared product names include every vendor, so narrow with `vendor`.
+evidence taking precedence. The response's `matched_products` shows all matched pairs across
+all pages; shared product names include every vendor, so narrow with `vendor`.
 
 With `version`, each item carries `nvd_version_note`: `hit` means it
 matches a listed NVD CPE version condition; `no_hit` means none of the listed conditions
@@ -221,8 +221,14 @@ environment conditions are not evaluated, and `applicability` remains `unknown`.
 
 This is deterministic grouping, not ranking: with a version, `hit`, `unknown`, then
 `no_hit`; then product-field before mention-only evidence, newest publication first
-(missing dates last), then CVE ID ascending. `items` is capped by `limit` (default 10,
-maximum 20); `total_available` counts matching stored CVEs before the cap. JSON retains
+(missing dates last), then CVE ID ascending. Each `items` page holds up to `limit` (default 10,
+maximum 20); `total_available` counts matching stored CVEs across all pages. Repeat the same
+request with `cursor` set to `next_cursor` (CLI `--cursor`) until `next_cursor` is null.
+The response echoes the request, including its cursor. Continue against the same served
+corpus: cursors are stateless offsets over that corpus's deterministic order. Invalid or
+mismatched cursors return `invalid_cursor` (REST 422, MCP tool failure, CLI exit 2).
+The service builds vendor, product and eligible description-token indexes once on load;
+queries verify exact matching rules on the indexed candidates. JSON retains
 severity metrics, KEV entries and evidence anchors; text summarizes them. CLI exit 0
 means CVEs were returned, 1 means empty. NVD's enrichment backlog can lack product/version
 data; mention-only evidence and absent matches cannot establish affectedness or safety.

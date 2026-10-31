@@ -420,3 +420,41 @@ async def test_lookup_exposes_derived_weakness_associations(mcp_client: Client) 
     assert associations["paths"][0]["cwe_id"] == "CWE-20"
     assert associations["paths"][0]["derived"] is True
     assert associations["paths"][0]["hops"][1]["relation"] == "cwe_related_attack_pattern"
+
+
+async def test_product_tool_continuation_matches_the_service_page(
+    product_query_bundle: FixtureBundle, client_mode: str
+) -> None:
+    # Arrange
+    request = ProductQueryRequest(product="oai-cn5g-amf", version="2.0", limit=2)
+    service = build_product_query_service(product_query_bundle)
+    server = build_knowledge_mcp_server(build_test_toolbox(product_query_bundle))
+
+    # Act
+    async with Client(server, mode=client_mode) as client:
+        first_answer = await client.call_tool("query_product_vulnerabilities", request.model_dump())
+        first_page = read_structured_content(first_answer)
+        continuation = request.model_copy(update={"cursor": first_page["next_cursor"]})
+        answer = await client.call_tool("query_product_vulnerabilities", continuation.model_dump())
+
+    # Assert
+    assert read_structured_content(answer) == service.query(continuation).model_dump(mode="json")
+
+
+@pytest.mark.parametrize("mismatched_request", [False, True])
+async def test_product_tool_refuses_invalid_or_mismatched_cursors_with_a_typed_error(
+    product_query_bundle: FixtureBundle, client_mode: str, mismatched_request: bool
+) -> None:
+    # Arrange
+    server = build_knowledge_mcp_server(build_test_toolbox(product_query_bundle))
+    request = ProductQueryRequest(product="oai-cn5g-amf", limit=1)
+    first_page = build_product_query_service(product_query_bundle).query(request)
+    cursor = first_page.next_cursor if mismatched_request else "invalid"
+    arguments = request.model_dump() | {"cursor": cursor, "limit": 2}
+
+    # Act
+    async with Client(server, mode=client_mode) as client:
+        answer = await client.call_tool("query_product_vulnerabilities", arguments)
+
+    # Assert
+    assert read_tool_failure(answer).code is ToolFailureCode.INVALID_CURSOR

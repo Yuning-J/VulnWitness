@@ -45,6 +45,14 @@ class ProductQueryRequest(ContractModel):
     )
     version: FilterName | None = None
     limit: JsonInteger = Field(default=10, ge=1, le=MAX_RESULTS_PER_CALL)
+    cursor: str | None = Field(
+        default=None,
+        max_length=8192,
+        description=(
+            "Opaque continuation from next_cursor; pass unchanged with the same vendor, "
+            "product, version and limit against the same served corpus."
+        ),
+    )
 
     @model_validator(mode="after")
     def require_product_or_vendor(self) -> Self:
@@ -87,22 +95,26 @@ class ProductQueryResponse(ContractModel):
     vendor: str | None
     product: str | None
     version: str | None
-    limit: JsonInteger = Field(ge=1, le=MAX_RESULTS_PER_CALL, description="Requested list cap.")
+    limit: JsonInteger = Field(ge=1, le=MAX_RESULTS_PER_CALL, description="Requested page size.")
+    cursor: str | None = Field(
+        description="The requested continuation, or null for the first page."
+    )
+    next_cursor: str | None = Field(description="Opaque continuation, or null on the final page.")
     items: tuple[ProductVulnerability, ...] = Field(
         max_length=MAX_RESULTS_PER_CALL, description=PRODUCT_ORDER_DESCRIPTION
     )
-    total_available: JsonInteger = Field(ge=0, description="Matching CVEs before the cap.")
+    total_available: JsonInteger = Field(ge=0, description="Matching CVEs across all pages.")
     description_mentions_vendor_unconfirmed: JsonInteger = Field(
         ge=0,
         description=(
             "CVEs with no implicated products whose descriptions name the requested product "
-            "but not the requested vendor as whole-token phrases, excluded before the cap. "
+            "but not the requested vendor as whole-token phrases, excluded across all pages. "
             "Zero unless both vendor and product are supplied; mentions do not establish ownership."
         ),
     )
     matched_products: tuple[ProductIdentity, ...] = Field(
         description=(
-            "All matched vendor:product pairs before the cap, sorted by vendor then product. "
+            "All matched vendor:product pairs across all pages, sorted by vendor then product. "
             "Without a vendor, every matching vendor is included; narrow with vendor."
         )
     )

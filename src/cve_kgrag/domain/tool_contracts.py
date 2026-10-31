@@ -103,6 +103,7 @@ class EvidenceLookup(ContractModel):
 
 class ToolFailureCode(StrEnum):
     INVALID_ARGUMENTS = "invalid_arguments"
+    INVALID_CURSOR = "invalid_cursor"
     ARGUMENTS_TOO_LARGE = "arguments_too_large"
     UNKNOWN_EVIDENCE_ID = "unknown_evidence_id"
     SERVER_BUSY = "server_busy"
@@ -117,6 +118,7 @@ class ToolFailureCode(StrEnum):
 # The one sentence a failure of each code carries; it never quotes the caller's input.
 TOOL_FAILURE_MESSAGES: dict[ToolFailureCode, str] = {
     ToolFailureCode.INVALID_ARGUMENTS: "The arguments do not match the tool's input schema.",
+    ToolFailureCode.INVALID_CURSOR: "The cursor is invalid for this product query.",
     ToolFailureCode.ARGUMENTS_TOO_LARGE: "The arguments exceed the size limit.",
     ToolFailureCode.UNKNOWN_EVIDENCE_ID: "No evidence anchor has that evidence ID.",
     ToolFailureCode.SERVER_BUSY: "Too many calls are in flight; retry later.",

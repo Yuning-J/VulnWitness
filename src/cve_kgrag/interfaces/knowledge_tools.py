@@ -159,7 +159,8 @@ KNOWLEDGE_TOOL_SPECS: tuple[ToolSpec, ...] = (
             "pairs are shown so the caller can narrow ambiguous names. Version only "
             "annotates NVD conditions and never excludes a CVE. Grouped by version fact "
             "(hit, unknown, no_hit), then basis, newest publication, and CVE ID; not ranked. "
-            "The capped items list reports limit and total_available. "
+            "The items page reports limit, total_available and next_cursor; pass the cursor "
+            "with the same vendor, product, version and limit to fetch the next page. "
             f"{PUBLISHER_AFFECTED_STATEMENT} {UNTRUSTED_RECORD_TEXT}"
         ),
         request_model=ProductQueryRequest,
