@@ -46,6 +46,7 @@ ecosystem_terms:
 - XRES
 - SIDF
 - SUCI de-concealment
+- authentication vector
 exclusions:
 - term: aka
   reason: 'Bare AKA is ambiguous: UMTS and EPS AKA, EAP-AKA and EAP-AKA'', or ''also known as''.
@@ -85,7 +86,11 @@ review:
     The global tokenizer does not split compound tokens or preserve stars. Plain-spaced 5G aka New
     Radio remains indistinguishable from the exact alias. FiGHT receives ecosystem terms as retrieval
     cues too; these do not establish a method-specific vulnerability. Bare 5G and gNB are too broad
-    even for this topic context and are omitted.'
+    even for this topic context and are omitted. Authentication vector is the shared phrase
+    in the 5G HE AV and 5G SE AV definitions of TS 33.501 clause 6.1.3.2.0. It retrieves
+    FGT1036.501, whose roaming procedure requests an authentication vector under a spoofed
+    PLMN ID. This belongs as authentication threat context shared across methods and generations,
+    not as evidence of a 5G-AKA-specific flaw or an alias selecting the method.'
 references:
 - title: 3GPP TS 33.501 Security architecture and procedures for 5G System (ETSI TS 133 501 V19.7.0)
   uri: https://www.etsi.org/deliver/etsi_ts/133500_133599/133501/19.07.00_60/ts_133501v190700p.pdf
@@ -118,3 +123,6 @@ references:
 - title: CVE-2026-33063 observed spelling
   uri: https://www.cve.org/CVERecord?id=CVE-2026-33063
   locator: Description in the pinned local corpus; observed terminology only
+- title: FiGHT 3.1.0 FGT1036.501
+  uri: https://github.com/mitre/FiGHT/blob/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
+  locator: techniques[id=FGT1036.501].procedureexamples; spoofed PLMN ID on roaming signaling

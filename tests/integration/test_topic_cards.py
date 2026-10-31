@@ -7,13 +7,16 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+from cve_kgrag.adapters.fight.pinned_yaml import PinnedFightYamlSource
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.adapters.topics.yaml_cards import (
     TopicCardError,
     default_topic_dir,
     load_topic_cards,
 )
+from cve_kgrag.application.topic_context import list_topic_terms
 from cve_kgrag.composition import build_topic_context_service
+from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.investigation import (
     InvestigationWarningCode,
     PlannerOutcome,
@@ -27,7 +30,14 @@ from cve_kgrag.domain.topic_context import TopicContextRequest
 from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
 from cve_kgrag.topics.registry import TopicRegistry
 from cve_kgrag.topics.relevance import assess_relevance
-from tests.support.builders import build_bundle_with
+from tests.support.builders import (
+    build_bundle_with,
+    build_catalog,
+    build_fight_document,
+    build_fight_technique,
+    build_known_snapshot,
+)
+from tests.support.clocks import read_fixed_clock
 from tests.support.evaluation import run_deterministically
 from tests.support.investigation import (
     build_investigation_request,
@@ -248,6 +258,45 @@ def test_smf_without_gtp_has_no_gtp_relevance(
 
     assert assess_relevance(bundle.records[-1], topic.topic, {RetrievalChannel.LEXICAL}) is None
     assert topic_registry.resolve("SMF vulnerabilities").matches == ()
+
+
+def test_authentication_vector_procedure_is_retrieved_as_shared_threat_context(
+    topic_registry: TopicRegistry,
+) -> None:
+    # Arrange
+    topic = topic_registry.get_topic("3gpp:5g-aka")
+    assert topic is not None
+    snapshot = build_fight_document(
+        [
+            build_fight_technique(
+                name="[SYNTHETIC] Operator identifier spoofing",
+                bluf="[SYNTHETIC] A radio impersonates an operator.",
+                description="[SYNTHETIC] A roaming partner spoofs an operator identifier.",
+                procedureexamples=[
+                    {
+                        "name": "[SYNTHETIC] Roaming request",
+                        "description": "[SYNTHETIC] A partner requests an authentication vector.",
+                    }
+                ],
+            ),
+        ]
+    )
+    source = PinnedFightYamlSource(
+        snapshot,
+        sha256_hex(snapshot),
+        build_catalog(build_known_snapshot(snapshot)),
+        read_fixed_clock,
+    )
+
+    # Act
+    context = source.search(list_topic_terms(topic.topic), 20)
+    resolution = topic_registry.resolve("authentication vector")
+
+    # Assert
+    assert len(context.items) == 1
+    assert context.items[0].matched_terms == ("authentication vector",)
+    assert context.items[0].matched_fields == ("procedureexamples",)
+    assert resolution.matches == ()
 
 
 @pytest.mark.parametrize(
