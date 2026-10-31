@@ -77,6 +77,10 @@ is reported as validation.
 
 ## Validation cases
 
+This is a new-question validation set: 58/200 candidate pairs are seen in the development
+baseline manifest and 142/200 are unseen. Results are also reported for seen and unseen
+groups; the thresholds remain those set for the whole set.
+
 - **How many and how labelled:** 8 to 10 new cases, written under the M7b gold rules
   ([`m7b-gold-labels.md`](m7b-gold-labels.md)). The assistant drafts the rules, and the
   owner confirms them before any assessor run.

@@ -13,7 +13,7 @@ Usage, with every output under ~/data/cve-kgrag/runs/relevance/ (never committed
   .venv/bin/python scripts/experiments/relevance_assessor.py run \\
       --prepared PREPARED_DIR --repeats 3 [--injected]
   .venv/bin/python scripts/experiments/relevance_assessor.py score \\
-      --prepared PREPARED_DIR --sets eval/gold/m7b_sets.json
+      --prepared PREPARED_DIR --sets eval/gold/m7b_sets.json [--seen-from PREPARED_DIR]
 
 ``prepare`` reads the run's report and the evidence sets of the split's cases only, and
 writes per candidate an opaque key, the English description (cut at 1,000 characters),
@@ -28,7 +28,8 @@ _REASONING_EFFORT and _API_KEY; the key is sent only in the request header and a
 that quotes it is refused unsaved.
 
 ``score`` prints aggregate JSON and per-case figures by case ID; never a record's text or a
-model reply.
+model reply. With ``--seen-from``, every figure is also reported for candidates whose
+CVE ID occurs in that prepared manifest (seen) and for the rest (unseen).
 
 Files in PREPARED_DIR, all local data:
 
@@ -634,7 +635,9 @@ def compare_injected(
                 )
     injected_keys = 0
     for case_id in class_by_key_by_case:
-        injected_keys += len(manifest_cases[case_id]["injected"])
+        for key in manifest_cases[case_id]["injected"]:
+            if key in class_by_key_by_case[case_id]:
+                injected_keys += 1
     return {
         "injected_candidates": injected_keys,
         "injected_flip_rate": measure(flip_count, compared_count),
@@ -651,8 +654,44 @@ def score(arguments: argparse.Namespace) -> None:
         raise SystemExit("the sets file is not the one the prepared run was evaluated with")
     sets_file = RecordedSetsFile.model_validate_json(sets_bytes)
     clean_run: JsonObject = read_json(prepared_dir / "labels.json")
-    clean_labels: JsonObject = clean_run["cases"]
     manifest_cases: JsonObject = manifest["cases"]
+    injected_path = prepared_dir / "labels-injected.json"
+    injected_labels = read_json(injected_path)["cases"] if injected_path.exists() else None
+    figures = score_candidates(manifest_cases, sets_file, clean_run, injected_labels)
+    if arguments.seen_from is not None:
+        seen_manifest = read_json(arguments.seen_from / "manifest.json")
+        seen_cve_ids: set[str] = set()
+        for manifest_case in seen_manifest["cases"].values():
+            seen_cve_ids.update(manifest_case["cve_ids_by_key"].values())
+        unseen_cve_ids: set[str] = set()
+        for case_id, manifest_case in manifest_cases.items():
+            for cve_id in manifest_case["cve_ids_by_key"].values():
+                if cve_id not in seen_cve_ids:
+                    unseen_cve_ids.add(cve_id)
+            set_lists = sets_file.cases[case_id].cves
+            if set_lists is not None:
+                for cve_id in set_lists.required:
+                    if cve_id not in seen_cve_ids:
+                        unseen_cve_ids.add(cve_id)
+        figures["seen"] = score_candidates(
+            manifest_cases, sets_file, clean_run, injected_labels, seen_cve_ids
+        )
+        figures["unseen"] = score_candidates(
+            manifest_cases, sets_file, clean_run, injected_labels, unseen_cve_ids
+        )
+    print(json.dumps(figures, indent=1))
+
+
+def score_candidates(
+    manifest_cases: JsonObject,
+    sets_file: RecordedSetsFile,
+    clean_run: JsonObject,
+    injected_labels: JsonObject | None,
+    cve_ids: set[str] | None = None,
+) -> JsonObject:
+    """Score all candidates or one CVE group, with coverage over that group's gold
+    required pool, including required CVEs that retrieval missed."""
+    clean_labels: JsonObject = clean_run["cases"]
     label_counts: dict[str, dict[str, int]] = {}
     candidate_counts = dict.fromkeys(CLASSES, 0)
     stable_counts = dict.fromkeys(CLASSES, 0)
@@ -664,7 +703,11 @@ def score(arguments: argparse.Namespace) -> None:
     per_case: list[JsonObject] = []
     for case_id, manifest_case in manifest_cases.items():
         set_lists = sets_file.cases[case_id].cves
-        class_by_key = classify_candidates(manifest_case["cve_ids_by_key"], set_lists)
+        cve_ids_by_key: dict[str, str] = {}
+        for key, cve_id in manifest_case["cve_ids_by_key"].items():
+            if cve_ids is None or cve_id in cve_ids:
+                cve_ids_by_key[key] = cve_id
+        class_by_key = classify_candidates(cve_ids_by_key, set_lists)
         class_by_key_by_case[case_id] = class_by_key
         repeat_labels: list[dict[str, str]] = clean_labels[case_id]
         case_classes = dict.fromkeys(CLASSES, 0)
@@ -684,8 +727,13 @@ def score(arguments: argparse.Namespace) -> None:
                 stable_counts[candidate_class] += 1
                 case_stable += 1
         for key in manifest_case["cut_keys"]:
-            cut_counts[class_by_key[key]] += 1
-        required_count = len(set_lists.required) if set_lists is not None else 0
+            if key in class_by_key:
+                cut_counts[class_by_key[key]] += 1
+        required_count = 0
+        if set_lists is not None:
+            for cve_id in set_lists.required:
+                if cve_ids is None or cve_id in cve_ids:
+                    required_count += 1
         # A case with nothing assessed (none returned, or only an exact lookup's named CVE)
         # says nothing about filtering, so it stays out of the coverage average.
         case_coverage = None
@@ -708,14 +756,12 @@ def score(arguments: argparse.Namespace) -> None:
     )
     figures["repeats"] = clean_run["repeats"]
     figures["cases"] = len(manifest_cases)
-    injected_path = prepared_dir / "labels-injected.json"
-    if injected_path.exists():
-        injected_labels: JsonObject = read_json(injected_path)["cases"]
+    if injected_labels is not None:
         figures["injected"] = compare_injected(
             manifest_cases, class_by_key_by_case, clean_labels, injected_labels
         )
     figures["per_case"] = per_case
-    print(json.dumps(figures, indent=1))
+    return figures
 
 
 def summarize_figures(
@@ -804,6 +850,9 @@ def build_parser() -> argparse.ArgumentParser:
     score_parser = subcommands.add_parser("score", help="score the labels against the gold")
     score_parser.add_argument("--prepared", type=Path, required=True)
     score_parser.add_argument("--sets", type=Path, required=True)
+    score_parser.add_argument(
+        "--seen-from", type=Path, help="report seen/unseen CVE groups using this prepared manifest"
+    )
     return parser
 
 

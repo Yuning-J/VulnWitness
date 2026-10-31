@@ -1,0 +1,1302 @@
+# The owner confirmed every case and its labels on 2026-10-31.
+# split: holdout denotes this experiment validation set, separate from M7b holdout.
+# This is a new-question validation set; candidate records are not independent of the
+# development baseline: 58/200 pairs are seen in the prepared inputs the prompt was tuned on, 142/200 are unseen.
+# Labels must not change after seeing the assessor results.
+# "involve" includes inter-function interactions, not only faults local to that function.
+corpus_content_sha256: 0dc90836bb0f02f748ef0bd758909711557cb85413110c58a14d5a4d55c15f3a
+fight_snapshot_sha256: 59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8
+cases:
+- id: rel-smf-core
+  split: holdout
+  goal: Which CVEs involve SMF in a 5G core?
+  request:
+    query: Which CVEs involve SMF in a 5G core?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        all_of:
+        - description_any:
+          - SMF
+          - Session Management Function
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      required:
+        all_of:
+        - description_any:
+          - SMF
+          - Session Management Function
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      irrelevant:
+        all_of:
+        - all_of:
+          - description_any:
+            - SMF
+            - Session Management Function
+          - any_of:
+            - cpe:
+              - simplemachines:smf
+              - simplemachines:simple_machines_forum
+              - simple_machines:smf
+              - simple_machines:simple_machines_forum
+              - sun:sunos
+              - oracle:solaris
+              - google:android
+              - mambo:smf-forum
+            - description_any:
+              - Simple Machines Forum
+              - Simple Machine Forum
+              - SimpleMachines
+              - SimpleMachines Forum
+              - Service Management Facility
+              - SMF-Forum
+        - none_of:
+          - any_of:
+            - any_of:
+              - cpe:
+                - open5gs:open5gs
+              - description_any:
+                - Open5GS
+                - Open 5GS
+            - any_of:
+              - cpe:
+                - free5gc:free5gc
+                - free5gc:smf
+                - free5gc:amf
+                - free5gc:udm
+                - free5gc:udr
+                - free5gc:pcf
+                - free5gc:nrf
+                - free5gc:upf
+                - free5gc:go-upf
+              - description_any:
+                - free5GC
+            - any_of:
+              - cpe:
+                - openairinterface:oai-cn5g-amf
+                - openairinterface:oai-cn5g-smf
+                - openairinterface:oai-cn5g-upf
+                - linuxfoundation:magma
+                - ellanetworks:ella_core
+              - description_any:
+                - OpenAirInterface
+                - oai-cn5g-amf
+                - Magma
+                - Ella Core
+                - omec-project
+                - omec-upf
+                - Ericsson Packet Core Controller
+  label:
+    sufficiency: sufficient
+    reason: SMF has a mobile-core meaning and several unrelated software meanings; only named core
+      implementations with SMF context are required.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-amf-core
+  split: holdout
+  goal: Which CVEs involve the AMF of a mobile core?
+  request:
+    query: Which CVEs involve the AMF of a mobile core?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        all_of:
+        - description_any:
+          - AMF
+          - Access and Mobility Management Function
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      required:
+        all_of:
+        - description_any:
+          - AMF
+          - Access and Mobility Management Function
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      irrelevant:
+        all_of:
+        - all_of:
+          - description_any:
+            - AMF
+            - Access and Mobility Management Function
+          - any_of:
+            - cpe_vendor:
+              - adobe
+              - red5
+              - realnetworks
+              - rtmpdump_project
+              - exadel
+              - slic3r
+              - prusa3d
+              - ezhometech
+              - eibiz
+              - graniteds
+              - pyamf
+              - modplug
+              - nullsoft
+              - microfocus
+              - lifesize
+              - cisco
+            - description_any:
+              - Action Message Format
+              - RTMP
+              - FLVMeta
+              - Apache bRPC
+              - Adobe
+              - BlazeDS
+              - Red5
+              - Slic3r
+              - PrusaSlicer
+        - none_of:
+          - any_of:
+            - any_of:
+              - cpe:
+                - open5gs:open5gs
+              - description_any:
+                - Open5GS
+                - Open 5GS
+            - any_of:
+              - cpe:
+                - free5gc:free5gc
+                - free5gc:smf
+                - free5gc:amf
+                - free5gc:udm
+                - free5gc:udr
+                - free5gc:pcf
+                - free5gc:nrf
+                - free5gc:upf
+                - free5gc:go-upf
+              - description_any:
+                - free5GC
+            - any_of:
+              - cpe:
+                - openairinterface:oai-cn5g-amf
+                - openairinterface:oai-cn5g-smf
+                - openairinterface:oai-cn5g-upf
+                - linuxfoundation:magma
+                - ellanetworks:ella_core
+              - description_any:
+                - OpenAirInterface
+                - oai-cn5g-amf
+                - Magma
+                - Ella Core
+                - omec-project
+                - omec-upf
+                - Ericsson Packet Core Controller
+  label:
+    sufficiency: sufficient
+    reason: Named mobile-core implementations with AMF context are required; media, serialization
+      and other non-core AMF uses are irrelevant.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-udm-core
+  split: holdout
+  goal: Which UDM CVEs concern 5G subscriber management rather than UniFi or Ubuntu Download Manager?
+  request:
+    query: Which UDM CVEs concern 5G subscriber management rather than UniFi or Ubuntu Download Manager?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        all_of:
+        - description_any:
+          - UDM
+          - Unified Data Management
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      required:
+        all_of:
+        - description_any:
+          - UDM
+          - Unified Data Management
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      irrelevant:
+        all_of:
+        - any_of:
+          - cpe:
+            - canonical:ubuntu_download_manager
+            - disk_pool_manager_project:disk_pool_manager
+            - ui:unifi_protect_firmware
+            - ui:unifi_network_application
+          - description_any:
+            - Ubuntu Download Manager
+            - LCG Disk Pool Manager
+            - UniFi
+        - none_of:
+          - any_of:
+            - any_of:
+              - cpe:
+                - open5gs:open5gs
+              - description_any:
+                - Open5GS
+                - Open 5GS
+            - any_of:
+              - cpe:
+                - free5gc:free5gc
+                - free5gc:smf
+                - free5gc:amf
+                - free5gc:udm
+                - free5gc:udr
+                - free5gc:pcf
+                - free5gc:nrf
+                - free5gc:upf
+                - free5gc:go-upf
+              - description_any:
+                - free5GC
+            - any_of:
+              - cpe:
+                - openairinterface:oai-cn5g-amf
+                - openairinterface:oai-cn5g-smf
+                - openairinterface:oai-cn5g-upf
+                - linuxfoundation:magma
+                - ellanetworks:ella_core
+              - description_any:
+                - OpenAirInterface
+                - oai-cn5g-amf
+                - Magma
+                - Ella Core
+                - omec-project
+                - omec-upf
+                - Ericsson Packet Core Controller
+  label:
+    sufficiency: sufficient
+    reason: UDM core implementations and their interactions are in scope; download managers and UniFi
+      are different products; HPE UDM remains unlabelled pending owner review.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-nrf-core
+  split: holdout
+  goal: Which CVEs involve NRF in a 5G core?
+  request:
+    query: Which CVEs involve NRF in a 5G core?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        all_of:
+        - description_any:
+          - NRF
+          - Network Repository Function
+        - none_of:
+          - description_all:
+            - NEF
+            - receive from NRF
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      required:
+        all_of:
+        - description_any:
+          - NRF
+          - Network Repository Function
+        - none_of:
+          - description_all:
+            - NEF
+            - receive from NRF
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      irrelevant:
+        all_of:
+        - all_of:
+          - description_any:
+            - NRF
+            - Network Repository Function
+          - any_of:
+            - cpe:
+              - nordicsemi:android_ble_library
+              - nordicsemi:dfu_library
+              - zephyrproject:zephyr
+              - contiki-ng:contiki-ng
+            - description_any:
+              - Nordic Semiconductor
+              - nRF Connect SDK
+              - Contiki-NG
+              - Zephyr
+        - none_of:
+          - any_of:
+            - any_of:
+              - cpe:
+                - open5gs:open5gs
+              - description_any:
+                - Open5GS
+                - Open 5GS
+            - any_of:
+              - cpe:
+                - free5gc:free5gc
+                - free5gc:smf
+                - free5gc:amf
+                - free5gc:udm
+                - free5gc:udr
+                - free5gc:pcf
+                - free5gc:nrf
+                - free5gc:upf
+                - free5gc:go-upf
+              - description_any:
+                - free5GC
+            - any_of:
+              - cpe:
+                - openairinterface:oai-cn5g-amf
+                - openairinterface:oai-cn5g-smf
+                - openairinterface:oai-cn5g-upf
+                - linuxfoundation:magma
+                - ellanetworks:ella_core
+              - description_any:
+                - OpenAirInterface
+                - oai-cn5g-amf
+                - Magma
+                - Ella Core
+                - omec-project
+                - omec-upf
+                - Ericsson Packet Core Controller
+  label:
+    sufficiency: sufficient
+    reason: NRF in a named mobile-core implementation is required; Nordic radio and IoT software
+      using nRF is irrelevant. A function mentioned only in configuration does not count as
+      involved; CVE-2026-44330 concerns NEF authentication and remains unlabelled.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-pcf-core
+  split: holdout
+  goal: Which CVEs involve PCF in a 5G core?
+  request:
+    query: Which CVEs involve PCF in a 5G core?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        all_of:
+        - description_any:
+          - PCF
+          - Policy Control Function
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      required:
+        all_of:
+        - description_any:
+          - PCF
+          - Policy Control Function
+        - any_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+          - any_of:
+            - cpe:
+              - free5gc:free5gc
+              - free5gc:smf
+              - free5gc:amf
+              - free5gc:udm
+              - free5gc:udr
+              - free5gc:pcf
+              - free5gc:nrf
+              - free5gc:upf
+              - free5gc:go-upf
+            - description_any:
+              - free5GC
+          - any_of:
+            - cpe:
+              - openairinterface:oai-cn5g-amf
+              - openairinterface:oai-cn5g-smf
+              - openairinterface:oai-cn5g-upf
+              - linuxfoundation:magma
+              - ellanetworks:ella_core
+            - description_any:
+              - OpenAirInterface
+              - oai-cn5g-amf
+              - Magma
+              - Ella Core
+              - omec-project
+              - omec-upf
+              - Ericsson Packet Core Controller
+      irrelevant:
+        all_of:
+        - all_of:
+          - description_any:
+            - PCF
+            - Policy Control Function
+          - any_of:
+            - cpe_vendor:
+              - pivotal
+              - pivotal_software
+              - cloudfoundry
+              - freetype
+              - pcf2bdf_project
+            - description_any:
+              - Pivotal
+              - Cloud Foundry
+              - FreeType
+              - libXfont
+              - libXfont2
+              - pcf2bdf
+              - Pillow
+              - IBM MQ
+              - IBM WebSphere MQ
+              - SteelCentral AppInternals
+              - NCP Secure
+        - none_of:
+          - any_of:
+            - any_of:
+              - cpe:
+                - open5gs:open5gs
+              - description_any:
+                - Open5GS
+                - Open 5GS
+            - any_of:
+              - cpe:
+                - free5gc:free5gc
+                - free5gc:smf
+                - free5gc:amf
+                - free5gc:udm
+                - free5gc:udr
+                - free5gc:pcf
+                - free5gc:nrf
+                - free5gc:upf
+                - free5gc:go-upf
+              - description_any:
+                - free5GC
+            - any_of:
+              - cpe:
+                - openairinterface:oai-cn5g-amf
+                - openairinterface:oai-cn5g-smf
+                - openairinterface:oai-cn5g-upf
+                - linuxfoundation:magma
+                - ellanetworks:ella_core
+              - description_any:
+                - OpenAirInterface
+                - oai-cn5g-amf
+                - Magma
+                - Ella Core
+                - omec-project
+                - omec-upf
+                - Ericsson Packet Core Controller
+  label:
+    sufficiency: sufficient
+    reason: PCF in a named mobile-core implementation is required; Cloud Foundry, font parsing and
+      unrelated PCF message formats are irrelevant. CVE-2026-41135 stays required despite
+      inconsistent product naming in the source (UDR once); its CPE, PCF interface and
+      policy-service impact support PCF.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-open5gs-smf
+  split: holdout
+  goal: Which CVEs involve SMF in Open5GS code?
+  request:
+    query: Which CVEs involve SMF in Open5GS code?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        any_of:
+        - cpe:
+          - open5gs:open5gs
+        - description_any:
+          - Open5GS
+          - Open 5GS
+      required:
+        all_of:
+        - description_any:
+          - SMF
+          - Session Management Function
+        - any_of:
+          - cpe:
+            - open5gs:open5gs
+          - description_any:
+            - Open5GS
+            - Open 5GS
+      irrelevant:
+        any_of:
+        - all_of:
+          - all_of:
+            - description_any:
+              - SMF
+              - Session Management Function
+            - any_of:
+              - cpe:
+                - simplemachines:smf
+                - simplemachines:simple_machines_forum
+                - simple_machines:smf
+                - simple_machines:simple_machines_forum
+                - sun:sunos
+                - oracle:solaris
+                - google:android
+                - mambo:smf-forum
+              - description_any:
+                - Simple Machines Forum
+                - Simple Machine Forum
+                - SimpleMachines
+                - SimpleMachines Forum
+                - Service Management Facility
+                - SMF-Forum
+          - none_of:
+            - any_of:
+              - any_of:
+                - cpe:
+                  - open5gs:open5gs
+                - description_any:
+                  - Open5GS
+                  - Open 5GS
+              - any_of:
+                - cpe:
+                  - free5gc:free5gc
+                  - free5gc:smf
+                  - free5gc:amf
+                  - free5gc:udm
+                  - free5gc:udr
+                  - free5gc:pcf
+                  - free5gc:nrf
+                  - free5gc:upf
+                  - free5gc:go-upf
+                - description_any:
+                  - free5GC
+              - any_of:
+                - cpe:
+                  - openairinterface:oai-cn5g-amf
+                  - openairinterface:oai-cn5g-smf
+                  - openairinterface:oai-cn5g-upf
+                  - linuxfoundation:magma
+                  - ellanetworks:ella_core
+                - description_any:
+                  - OpenAirInterface
+                  - oai-cn5g-amf
+                  - Magma
+                  - Ella Core
+                  - omec-project
+                  - omec-upf
+                  - Ericsson Packet Core Controller
+        - all_of:
+          - all_of:
+            - description_any:
+              - SMF
+              - Session Management Function
+            - any_of:
+              - any_of:
+                - cpe:
+                  - open5gs:open5gs
+                - description_any:
+                  - Open5GS
+                  - Open 5GS
+              - any_of:
+                - cpe:
+                  - free5gc:free5gc
+                  - free5gc:smf
+                  - free5gc:amf
+                  - free5gc:udm
+                  - free5gc:udr
+                  - free5gc:pcf
+                  - free5gc:nrf
+                  - free5gc:upf
+                  - free5gc:go-upf
+                - description_any:
+                  - free5GC
+              - any_of:
+                - cpe:
+                  - openairinterface:oai-cn5g-amf
+                  - openairinterface:oai-cn5g-smf
+                  - openairinterface:oai-cn5g-upf
+                  - linuxfoundation:magma
+                  - ellanetworks:ella_core
+                - description_any:
+                  - OpenAirInterface
+                  - oai-cn5g-amf
+                  - Magma
+                  - Ella Core
+                  - omec-project
+                  - omec-upf
+                  - Ericsson Packet Core Controller
+          - none_of:
+            - any_of:
+              - cpe:
+                - open5gs:open5gs
+              - description_any:
+                - Open5GS
+                - Open 5GS
+  label:
+    sufficiency: sufficient
+    reason: The goal is Open5GS SMF and its interactions; other core products and unrelated SMF software
+      do not answer it.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-free5gc-amf
+  split: holdout
+  goal: Which CVEs involve AMF in free5GC code?
+  request:
+    query: Which CVEs involve AMF in free5GC code?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        any_of:
+        - cpe:
+          - free5gc:free5gc
+          - free5gc:smf
+          - free5gc:amf
+          - free5gc:udm
+          - free5gc:udr
+          - free5gc:pcf
+          - free5gc:nrf
+          - free5gc:upf
+          - free5gc:go-upf
+        - description_any:
+          - free5GC
+      required:
+        all_of:
+        - description_any:
+          - AMF
+          - Access and Mobility Management Function
+        - any_of:
+          - cpe:
+            - free5gc:free5gc
+            - free5gc:smf
+            - free5gc:amf
+            - free5gc:udm
+            - free5gc:udr
+            - free5gc:pcf
+            - free5gc:nrf
+            - free5gc:upf
+            - free5gc:go-upf
+          - description_any:
+            - free5GC
+      irrelevant:
+        any_of:
+        - all_of:
+          - all_of:
+            - description_any:
+              - AMF
+              - Access and Mobility Management Function
+            - any_of:
+              - cpe_vendor:
+                - adobe
+                - red5
+                - realnetworks
+                - rtmpdump_project
+                - exadel
+                - slic3r
+                - prusa3d
+                - ezhometech
+                - eibiz
+                - graniteds
+                - pyamf
+                - modplug
+                - nullsoft
+                - microfocus
+                - lifesize
+                - cisco
+              - description_any:
+                - Action Message Format
+                - RTMP
+                - FLVMeta
+                - Apache bRPC
+                - Adobe
+                - BlazeDS
+                - Red5
+                - Slic3r
+                - PrusaSlicer
+          - none_of:
+            - any_of:
+              - any_of:
+                - cpe:
+                  - open5gs:open5gs
+                - description_any:
+                  - Open5GS
+                  - Open 5GS
+              - any_of:
+                - cpe:
+                  - free5gc:free5gc
+                  - free5gc:smf
+                  - free5gc:amf
+                  - free5gc:udm
+                  - free5gc:udr
+                  - free5gc:pcf
+                  - free5gc:nrf
+                  - free5gc:upf
+                  - free5gc:go-upf
+                - description_any:
+                  - free5GC
+              - any_of:
+                - cpe:
+                  - openairinterface:oai-cn5g-amf
+                  - openairinterface:oai-cn5g-smf
+                  - openairinterface:oai-cn5g-upf
+                  - linuxfoundation:magma
+                  - ellanetworks:ella_core
+                - description_any:
+                  - OpenAirInterface
+                  - oai-cn5g-amf
+                  - Magma
+                  - Ella Core
+                  - omec-project
+                  - omec-upf
+                  - Ericsson Packet Core Controller
+        - all_of:
+          - all_of:
+            - description_any:
+              - AMF
+              - Access and Mobility Management Function
+            - any_of:
+              - any_of:
+                - cpe:
+                  - open5gs:open5gs
+                - description_any:
+                  - Open5GS
+                  - Open 5GS
+              - any_of:
+                - cpe:
+                  - free5gc:free5gc
+                  - free5gc:smf
+                  - free5gc:amf
+                  - free5gc:udm
+                  - free5gc:udr
+                  - free5gc:pcf
+                  - free5gc:nrf
+                  - free5gc:upf
+                  - free5gc:go-upf
+                - description_any:
+                  - free5GC
+              - any_of:
+                - cpe:
+                  - openairinterface:oai-cn5g-amf
+                  - openairinterface:oai-cn5g-smf
+                  - openairinterface:oai-cn5g-upf
+                  - linuxfoundation:magma
+                  - ellanetworks:ella_core
+                - description_any:
+                  - OpenAirInterface
+                  - oai-cn5g-amf
+                  - Magma
+                  - Ella Core
+                  - omec-project
+                  - omec-upf
+                  - Ericsson Packet Core Controller
+          - none_of:
+            - any_of:
+              - cpe:
+                - free5gc:free5gc
+                - free5gc:smf
+                - free5gc:amf
+                - free5gc:udm
+                - free5gc:udr
+                - free5gc:pcf
+                - free5gc:nrf
+                - free5gc:upf
+                - free5gc:go-upf
+              - description_any:
+                - free5GC
+  label:
+    sufficiency: sufficient
+    reason: The goal is free5GC AMF and its interactions; other core products and unrelated AMF software
+      do not answer it.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-open5gs-upf
+  split: holdout
+  goal: Which CVEs involve UPF in Open5GS code?
+  request:
+    query: Which CVEs involve UPF in Open5GS code?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        any_of:
+        - cpe:
+          - open5gs:open5gs
+        - description_any:
+          - Open5GS
+          - Open 5GS
+      required:
+        all_of:
+        - description_any:
+          - UPF
+          - User Plane Function
+        - any_of:
+          - cpe:
+            - open5gs:open5gs
+          - description_any:
+            - Open5GS
+            - Open 5GS
+      irrelevant:
+        all_of:
+        - all_of:
+          - description_any:
+            - UPF
+            - User Plane Function
+          - any_of:
+            - any_of:
+              - cpe:
+                - open5gs:open5gs
+              - description_any:
+                - Open5GS
+                - Open 5GS
+            - any_of:
+              - cpe:
+                - free5gc:free5gc
+                - free5gc:smf
+                - free5gc:amf
+                - free5gc:udm
+                - free5gc:udr
+                - free5gc:pcf
+                - free5gc:nrf
+                - free5gc:upf
+                - free5gc:go-upf
+              - description_any:
+                - free5GC
+            - any_of:
+              - cpe:
+                - openairinterface:oai-cn5g-amf
+                - openairinterface:oai-cn5g-smf
+                - openairinterface:oai-cn5g-upf
+                - linuxfoundation:magma
+                - ellanetworks:ella_core
+              - description_any:
+                - OpenAirInterface
+                - oai-cn5g-amf
+                - Magma
+                - Ella Core
+                - omec-project
+                - omec-upf
+                - Ericsson Packet Core Controller
+        - none_of:
+          - any_of:
+            - cpe:
+              - open5gs:open5gs
+            - description_any:
+              - Open5GS
+              - Open 5GS
+  label:
+    sufficiency: sufficient
+    reason: The goal is Open5GS UPF and its interactions; UPF records naming other core implementations
+      are explicitly irrelevant.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-kamailio-sip
+  split: holdout
+  goal: Which CVEs concern the Kamailio SIP server?
+  request:
+    query: Which CVEs concern the Kamailio SIP server?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        any_of:
+        - cpe:
+          - kamailio:kamailio
+        - description_any:
+          - Kamailio
+      required:
+        all_of:
+        - description_any:
+          - SIP
+          - Session Initiation Protocol
+        - any_of:
+          - cpe:
+            - kamailio:kamailio
+          - description_any:
+            - Kamailio
+      irrelevant:
+        all_of:
+        - all_of:
+          - description_any:
+            - SIP
+            - Session Initiation Protocol
+          - any_of:
+            - any_of:
+              - cpe:
+                - opensips:opensips
+              - description_any:
+                - OpenSIPS
+            - any_of:
+              - cpe:
+                - avaya:sip_enablement_services
+                - avaya:communication_manager
+              - description_any:
+                - Verizon IMS
+        - none_of:
+          - any_of:
+            - cpe:
+              - kamailio:kamailio
+            - description_any:
+              - Kamailio
+  label:
+    sufficiency: sufficient
+    reason: Kamailio records explicitly naming SIP are required; other Kamailio records are allowed;
+      SIP records naming OpenSIPS, Avaya SES or Verizon IMS are irrelevant.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
+- id: rel-opensips-sip
+  split: holdout
+  goal: Which CVEs concern the OpenSIPS SIP server?
+  request:
+    query: Which CVEs concern the OpenSIPS SIP server?
+    scope: implementation_only
+  needs:
+  - implementation_cves
+  rules:
+    cves:
+      relevant:
+        any_of:
+        - cpe:
+          - opensips:opensips
+        - description_any:
+          - OpenSIPS
+      required:
+        all_of:
+        - description_any:
+          - SIP
+          - Session Initiation Protocol
+        - any_of:
+          - cpe:
+            - opensips:opensips
+          - description_any:
+            - OpenSIPS
+      irrelevant:
+        all_of:
+        - all_of:
+          - description_any:
+            - SIP
+            - Session Initiation Protocol
+          - any_of:
+            - cpe:
+              - kamailio:kamailio
+            - description_any:
+              - Kamailio
+        - none_of:
+          - any_of:
+            - cpe:
+              - opensips:opensips
+            - description_any:
+              - OpenSIPS
+  label:
+    sufficiency: sufficient
+    reason: OpenSIPS records explicitly naming SIP are required; other OpenSIPS records are allowed
+      and Kamailio SIP records are irrelevant.
+  drafted_by: assistant
+  confirmed_by: owner
+  confirmed_on: '2026-10-31'
