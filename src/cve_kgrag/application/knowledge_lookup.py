@@ -3,15 +3,15 @@ anchor by its evidence ID."""
 
 from cve_kgrag.application.investigation_deployment import InvestigationDeployment
 from cve_kgrag.application.search import SearchService
-from cve_kgrag.domain.search import SearchRequest, SearchResponse
+from cve_kgrag.domain.search import SearchResponse
 from cve_kgrag.domain.tool_contracts import EvidenceLookup
 from cve_kgrag.domain.validation import validate_served_anchor
 
 
 def lookup_cve(search_service: SearchService, cve_id: str) -> SearchResponse:
-    """The search for exactly ``cve_id``, one result at most: ``ok`` with its record, or
+    """Exactly ``cve_id`` with full catalogue associations: ``ok`` with its record, or
     ``no_match`` with an ``unknown_cve_id`` warning."""
-    return search_service.search(SearchRequest(query=cve_id, limit=1))
+    return search_service.lookup(cve_id)
 
 
 def find_served_evidence(

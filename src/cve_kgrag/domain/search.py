@@ -2,6 +2,7 @@
 
 from collections.abc import Hashable
 from enum import StrEnum
+from operator import not_
 from typing import Annotated, Literal, Self
 
 from pydantic import (
@@ -33,7 +34,7 @@ from cve_kgrag.domain.weakness_associations import WeaknessAssociations
 
 # v2 is pre-release until the M7 review freezes it; every bump is a reviewed
 # change to the committed snapshots under schemas/v2/.
-SCHEMA_VERSION = "2.0.0-dev.41"
+SCHEMA_VERSION = "2.0.0-dev.42"
 # The matched term a structured match names for the KEV filter.
 KEV_MATCH_TERM = "listed"
 MAX_QUERY_CHARS = 512
@@ -364,8 +365,11 @@ class Candidate(ContractModel):
     record: CveRecord
     weakness_associations: WeaknessAssociations | None = Field(
         default=None,
+        exclude_if=not_,
         description=(
-            "Catalogue-derived paths, separate from retrieval relevance and FiGHT protocol context."
+            "Full catalogue-derived paths on single-CVE lookup only; omitted from search, "
+            "topic and investigation candidates, including excluded candidates. "
+            "Separate from retrieval evidence and FiGHT protocol context."
         ),
     )
     relevance_score: float = Field(

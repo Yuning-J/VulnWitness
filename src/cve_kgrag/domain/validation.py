@@ -206,8 +206,10 @@ def find_served_violations(
         served_records.append(candidate.record)
     violations: list[str] = []
     for candidate in served_candidates:
-        if candidate.weakness_associations != evidence_catalog.get_weakness_associations(
-            candidate.record.cve_id
+        if (
+            candidate.weakness_associations is not None
+            and candidate.weakness_associations
+            != evidence_catalog.get_weakness_associations(candidate.record.cve_id)
         ):
             violations.append(
                 f"{candidate.record.cve_id}: weakness associations differ from the mapping snapshot"

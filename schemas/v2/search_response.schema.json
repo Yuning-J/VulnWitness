@@ -280,13 +280,12 @@
             }
           ],
           "default": null,
-          "description": "Catalogue-derived paths, separate from retrieval relevance and FiGHT protocol context."
+          "description": "Full catalogue-derived paths on single-CVE lookup only; omitted from search, topic and investigation candidates, including excluded candidates. Separate from retrieval evidence and FiGHT protocol context."
         }
       },
       "required": [
         "rank",
         "record",
-        "weakness_associations",
         "relevance_score",
         "channel_hits",
         "scope_assessment",
@@ -1468,8 +1467,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.41",
-      "default": "2.0.0-dev.41",
+      "const": "2.0.0-dev.42",
+      "default": "2.0.0-dev.42",
       "title": "Schema Version",
       "type": "string"
     },

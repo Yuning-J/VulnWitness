@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.41` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.42` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -359,7 +359,10 @@ Code: MIT ([`LICENSE`](LICENSE)). Third-party data carries its own terms; see
 
 ## Weakness associations
 
-CVE candidates in lookup and investigation answers carry `weakness_associations`:
+Single-CVE `lookup` answers carry full `weakness_associations`. Search, topic and
+investigation candidates, including excluded candidates, omit the field entirely
+so associations cannot displace retrieval results from the context-byte budget.
+Use `cve-kgrag lookup <CVE-ID>` or MCP `lookup_cve` for
 explicit CVE → CWE → CAPEC → ATT&CK paths or paths ending at CAPEC, the source of
 every hop, technique names and tactics when mapped, the snapshot digest, missing
 links and an omitted count. Paths ending at CAPEC have `terminal_reason` set to
@@ -376,7 +379,7 @@ omitted count. Direct mappings precede inherited mappings, then paths ending at
 CAPEC, then lexicographic CWE, CAPEC, technique and inheritance IDs. This order is
 not an importance ranking. No model or keyword inference fills a missing link.
 `missing_links` reports unavailable links without repeating CAPEC terminal reasons.
-Text investigations show, for example, `CWE-120 → CAPEC-100 (no ATT&CK mapping in catalogue)`.
+Text investigations point to `lookup` for the full paths, sources and omitted counts.
 NVD placeholders are normalized to no specific CWE. FiGHT `protocol_context`, needs,
 ranking, affectedness and NVD version notes retain their own meanings.
 

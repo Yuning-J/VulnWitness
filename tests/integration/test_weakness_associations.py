@@ -20,14 +20,19 @@ from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.investigation import InvestigationRequest
 from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
+from cve_kgrag.domain.result_prefix import measure_response_bytes
 from cve_kgrag.domain.search import Candidate, SearchRequest
+from cve_kgrag.domain.topic_context import TopicContextRequest
 from cve_kgrag.domain.validation import EvidenceValidationError, validate_search_response
-from cve_kgrag.domain.weakness_associations import DERIVED_ASSOCIATION_NOTE
 from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
 from cve_kgrag.settings import MitreSnapshotSettings, SettingsError, load_settings
 from tests.support.builders import build_bundle_with, build_cve_record
 from tests.support.clocks import SteppingClock, read_fixed_clock
-from tests.support.investigation import build_test_deployment, reseal_evidence_set
+from tests.support.investigation import (
+    build_test_deployment,
+    build_test_investigation_service,
+    reseal_evidence_set,
+)
 from tests.support.investigation_runs import run_five_g_aka_mixed
 from tests.support.mitre_catalogues import (
     CWE_XML,
@@ -107,7 +112,32 @@ def test_cap_counts_full_and_capec_terminal_paths_across_cwes() -> None:
     assert reversed_associations == associations
 
 
-def test_text_command_shows_a_capec_terminal_path(
+def test_lookup_keeps_the_full_bounded_paths_sources_and_omitted_count(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    # Arrange
+    bundle = build_bundle_with(
+        fixture_bundle, "CVE-9999-5555", "Synthetic weakness", cwe_ids=["CWE-79", "CWE-120"]
+    )
+    deployment = build_serving_data_plane(bundle, clock=read_fixed_clock)
+
+    # Act
+    lookup = deployment.search_service.lookup("CVE-9999-5555")
+    candidate = lookup.candidates[0]
+
+    # Assert
+    associations = candidate.weakness_associations
+    assert associations == deployment.evidence_catalog.get_weakness_associations("CVE-9999-5555")
+    assert associations is not None
+    assert len(associations.paths) == 20
+    assert associations.omitted_count == 2
+    assert associations.paths[0].technique_source is not None
+    assert associations.paths[-1].terminal_reason == "no_attack_mapping"
+    assert "not evidence" in associations.note
+    assert "not an attack path" in associations.note
+
+
+def test_lookup_command_preserves_a_capec_terminal_path(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -128,18 +158,21 @@ def test_text_command_shows_a_capec_terminal_path(
 
     # Act
     exit_code = main(
-        ["investigate", "CVE-9999-0002", "--scope", "implementation_only", "--format", "text"],
+        ["lookup", "CVE-9999-0002"],
         environment=environment,
     )
-    summary = " ".join(capsys.readouterr().out.split())
+    lookup = json.loads(capsys.readouterr().out)
 
     # Assert
     assert exit_code == 0
-    assert "CWE-79 → CAPEC-12 (no ATT&CK mapping in catalogue)" in summary
-    assert DERIVED_ASSOCIATION_NOTE in summary
+    associations = lookup["candidates"][0]["weakness_associations"]
+    assert associations["paths"][0]["capec_id"] == "CAPEC-12"
+    assert associations["paths"][0]["terminal_reason"] == "no_attack_mapping"
+    assert associations["paths"][0]["technique"] is None
+    assert len(associations["paths"][0]["hops"]) == 2
 
 
-def test_search_validator_accepts_capec_terminal_paths_and_rejects_a_forged_one(
+def test_lookup_validator_accepts_capec_terminal_paths_and_rejects_a_forged_one(
     fixture_bundle: FixtureBundle,
 ) -> None:
     # Arrange
@@ -147,7 +180,7 @@ def test_search_validator_accepts_capec_terminal_paths_and_rejects_a_forged_one(
         fixture_bundle, "CVE-9999-5555", "Synthetic memory weakness", cwe_ids=["CWE-120"]
     )
     deployment = build_serving_data_plane(bundle, clock=read_fixed_clock)
-    search_response = deployment.search_service.search(SearchRequest(query="CVE-9999-5555"))
+    search_response = deployment.search_service.lookup("CVE-9999-5555")
 
     # Act / Assert
     validate_search_response(search_response, deployment.evidence_catalog)
@@ -264,22 +297,93 @@ def test_lookup_and_capabilities_report_the_same_packaged_snapshot(
     assert capabilities["weakness_associations"]["coverage"] == "excerpt"
 
 
-def test_investigation_candidates_and_text_include_associations_and_the_note_once(
+def test_investigation_candidates_omit_associations_and_text_points_to_lookup(
     fixture_bundle: FixtureBundle,
 ) -> None:
     # Arrange
     evidence_set = run_five_g_aka_mixed(fixture_bundle)
 
     # Act
-    summary = render_investigation_summary(evidence_set)
-    associations = evidence_set.implementation_candidates[0].candidate.weakness_associations
+    summary = " ".join(render_investigation_summary(evidence_set).split())
+    served_set = evidence_set.model_dump(mode="json")
 
     # Assert
-    assert associations is not None
-    assert associations.paths[0].cwe_id == "CWE-20"
-    assert "CWE-20 → CAPEC-13 → T1574.006" in summary
-    assert " ".join(summary.split()).count(DERIVED_ASSOCIATION_NOTE) == 1
-    assert "paths omitted by the cap" in summary
+    assert evidence_set.implementation_candidates
+    for candidate in served_set["implementation_candidates"]:
+        assert "weakness_associations" not in candidate["candidate"]
+    assert summary.count("Weakness associations (derived catalogue context)") == 1
+    assert "cve-kgrag lookup <CVE-ID> for full paths, sources and omitted counts" in summary
+
+
+def test_associations_cannot_displace_candidates_from_a_small_context_budget(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    # Arrange
+    bundle = fixture_bundle
+    for number in range(2):
+        bundle = build_bundle_with(
+            bundle, f"CVE-9999-{5555 + number}", "payloadregression", cwe_ids=["CWE-79"]
+        )
+    dense_deployment = build_serving_data_plane(
+        bundle, weakness_mapping=build_snippet_mapping(extra_techniques=25), clock=read_fixed_clock
+    )
+    sparse_deployment = build_serving_data_plane(
+        bundle, weakness_mapping=build_snippet_mapping(), clock=read_fixed_clock
+    )
+    request = InvestigationRequest(
+        query="payloadregression", scope="implementation_only", budget={"max_context_bytes": 4000}
+    )
+    dense_service = build_investigation_service(
+        dense_deployment, wall_clock=read_fixed_clock, monotonic_clock=SteppingClock().read
+    )
+    sparse_service = build_investigation_service(
+        sparse_deployment, wall_clock=read_fixed_clock, monotonic_clock=SteppingClock().read
+    )
+    search_response = dense_deployment.search_service.search(SearchRequest(query=request.query))
+    full_candidates: list[Candidate] = []
+    for candidate in search_response.candidates:
+        full_candidates.append(
+            dense_deployment.search_service.lookup(candidate.record.cve_id).candidates[0]
+        )
+    full_response = search_response.model_copy(update={"candidates": tuple(full_candidates)})
+
+    # Act
+    dense_set = dense_service.investigate(request)
+    sparse_set = sparse_service.investigate(request)
+
+    # Assert
+    assert measure_response_bytes(search_response) < 4000 < measure_response_bytes(full_response)
+    assert dense_set.model_dump(mode="json") == sparse_set.model_dump(mode="json")
+    assert tuple(
+        candidate.candidate.record.cve_id for candidate in dense_set.implementation_candidates
+    ) == ("CVE-9999-5555", "CVE-9999-5556")
+    assert dense_set.trajectory.steps[0].prefix_admission is None
+    assert dense_set.trajectory.steps[0].admission == "admitted"
+
+
+def test_protocol_only_excluded_candidates_omit_associations(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    # Arrange
+    deployment = build_test_deployment(fixture_bundle)
+
+    # Act
+    response = deployment.topic_context_service.explore(
+        TopicContextRequest(query="5G-AKA", scope="protocol_context_only")
+    )
+    served_response = response.model_dump(mode="json")
+    evidence_set = build_test_investigation_service(fixture_bundle).investigate(
+        InvestigationRequest(query="5G-AKA", scope="protocol_context_only")
+    )
+    served_set = evidence_set.model_dump(mode="json")
+
+    # Assert
+    assert response.excluded_implementation_candidates
+    for excluded in served_response["excluded_implementation_candidates"]:
+        assert "weakness_associations" not in excluded["candidate"]["candidate"]
+    assert evidence_set.excluded_implementation_candidates
+    for excluded in served_set["excluded_implementation_candidates"]:
+        assert "weakness_associations" not in excluded["candidate"]["candidate"]
 
 
 def test_mapping_contents_leave_needs_stops_ranking_and_protocol_context_unchanged(
@@ -347,13 +451,13 @@ def test_nvd_placeholder_reports_no_specific_cwe_without_a_path(placeholder: str
     assert associations.missing_links[0].reason == "no_specific_cwe"
 
 
-def test_search_validator_rejects_a_forged_catalogue_hop(
+def test_lookup_validator_rejects_a_forged_catalogue_hop(
     fixture_bundle: FixtureBundle,
     packaged_evidence_catalog: EvidenceCatalog,
 ) -> None:
     # Arrange
     service = build_search_service(fixture_bundle)
-    search_response = service.search(SearchRequest(query="CVE-9999-0003"))
+    search_response = service.lookup("CVE-9999-0003")
     forged_candidate = forge_capec_hop(search_response.candidates[0])
     forged_response = search_response.model_copy(update={"candidates": (forged_candidate,)})
     forged_response = forged_response.model_copy(
@@ -365,7 +469,7 @@ def test_search_validator_rejects_a_forged_catalogue_hop(
         validate_search_response(forged_response, packaged_evidence_catalog)
 
 
-@pytest.mark.parametrize("command", ["lookup", "capabilities", "investigate"])
+@pytest.mark.parametrize("command", ["lookup", "capabilities"])
 def test_serving_commands_use_the_operator_pinned_mapping(
     command: str,
     tmp_path: Path,
@@ -383,18 +487,12 @@ def test_serving_commands_use_the_operator_pinned_mapping(
     command_arguments = [command]
     if command == "lookup":
         command_arguments.append("CVE-9999-0003")
-    elif command == "investigate":
-        command_arguments.extend(("CVE-9999-0003", "--scope", "implementation_only"))
 
     # Act
     exit_code = main(command_arguments, environment=environment)
     served_answer = json.loads(capsys.readouterr().out)
     if command == "lookup":
         capability = served_answer["candidates"][0]["weakness_associations"]
-    elif command == "investigate":
-        capability = served_answer["implementation_candidates"][0]["candidate"][
-            "weakness_associations"
-        ]
     else:
         capability = served_answer["weakness_associations"]
 
@@ -446,8 +544,11 @@ def test_investigation_validator_rejects_a_forged_catalogue_hop(
     evidence_set = run_five_g_aka_mixed(fixture_bundle)
     deployment = build_test_deployment(fixture_bundle)
     first_candidate = evidence_set.implementation_candidates[0]
+    lookup_candidate = deployment.search_service.lookup(
+        first_candidate.candidate.record.cve_id
+    ).candidates[0]
     forged_candidate = first_candidate.model_copy(
-        update={"candidate": forge_capec_hop(first_candidate.candidate)}
+        update={"candidate": forge_capec_hop(lookup_candidate)}
     )
     forged_set = reseal_evidence_set(
         evidence_set,

@@ -302,9 +302,10 @@ options select CWEs; CAPEC inheritance is resolved against the full CAPEC input.
 The excerpt's skip counts describe those full inputs, while its mapping counts
 describe the selected entries. Its notice is in `src/cve_kgrag/fixtures/mitre/NOTICE.md`.
 
-Every CVE path retains the NVD record's evidence IDs and each catalogue hop's
-version and input digest. Inheritance retains each explicit CAPEC `ChildOf` hop;
-deprecated CAPECs cannot bridge it. Deprecated or revoked ATT&CK objects cannot
+Single-CVE `lookup` serves full `weakness_associations`. Every CVE path retains the
+NVD record's evidence IDs and each catalogue hop's version and input digest.
+Inheritance retains each explicit CAPEC `ChildOf` hop; deprecated CAPECs cannot
+bridge it. Deprecated or revoked ATT&CK objects cannot
 supply techniques. When no usable direct or inherited ATT&CK mapping exists in the
 loaded snapshot, the path ends at CAPEC with `terminal_reason: "no_attack_mapping"`,
 null `technique` and `technique_source`, and both source-labelled CVE → CWE → CAPEC
@@ -320,15 +321,17 @@ The 20-path cap applies across all CWEs on one CVE and includes full paths and p
 ending at CAPEC, with the exact omitted count. Direct mappings precede inherited
 mappings, then paths ending at CAPEC, followed by lexicographic IDs and parent
 chains. This deterministic order is not an importance ranking. Text investigations
-show one sample per candidate with remaining path and missing-link counts; JSON
-preserves the bounded paths and all missing links. A terminal sample reads
-`CWE-120 → CAPEC-100 (no ATT&CK mapping in catalogue)`. The derived-association note
-states: “This association is derived from official catalogues. It is not evidence
-that the CVE was used with that technique. It is not an attack path. No ATT&CK
-mapping describes only the loaded catalogue snapshot; it does not mean the weakness
-has no attack technique or no way to be exploited.”
+point to `cve-kgrag lookup <CVE-ID>` for the full paths, sources and omitted counts.
+Lookup JSON preserves the bounded paths and all missing links. The
+derived-association note states: “This association is derived from official
+catalogues. It is not evidence that the CVE was used with that technique. It is
+not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot;
+it does not mean the weakness has no attack technique or no way to be exploited.”
 
-Associations accompany candidates; they do not enter retrieval, ranking, planner
-inputs, evidence needs or FiGHT `protocol_context`. As part of a tool response they
-count toward the existing context-byte budget. A forged path or changed snapshot
-digest fails candidate validation against the served mapping.
+Under contract `2.0.0-dev.42`, search, topic and investigation candidates, including
+excluded candidates in protocol-only responses, omit associations entirely. Only
+single-CVE lookup attaches them, so they consume no investigation context bytes and
+cannot change candidate admission. They do not enter retrieval, ranking, planner
+inputs, evidence needs or FiGHT `protocol_context`. Every served association is
+validated against the snapshot; a forged path or changed snapshot digest fails
+validation.

@@ -93,8 +93,27 @@ class SearchService:
         self._semantic_retriever = semantic_retriever
 
     def describe_weakness_snapshot(self) -> WeaknessSnapshotCapability | None:
-        """The mapping served on candidates, separately from retrieval capabilities."""
+        """The mapping served by lookup, separately from retrieval capabilities."""
         return None if self._weakness_mapping is None else self._weakness_mapping.describe()
+
+    def lookup(self, cve_id: str) -> SearchResponse:
+        """Look up one CVE with full, snapshot-validated catalogue association paths."""
+        search_response = self.search(SearchRequest(query=cve_id, limit=1))
+        candidates: list[Candidate] = []
+        for candidate in search_response.candidates:
+            candidates.append(
+                candidate.model_copy(
+                    update={
+                        "weakness_associations": self._evidence_catalog.get_weakness_associations(
+                            candidate.record.cve_id
+                        )
+                    }
+                )
+            )
+        draft = search_response.model_copy(update={"candidates": tuple(candidates)})
+        response = draft.model_copy(update={"result_sha256": draft.compute_result_sha256()})
+        validate_search_response(response, self._evidence_catalog)
+        return response
 
     def has_semantic_channel(self) -> bool:
         """Whether a semantic retriever is wired; it may still report a search failed."""
@@ -358,9 +377,6 @@ class SearchService:
                 Candidate(
                     rank=rank,
                     record=record,
-                    weakness_associations=self._evidence_catalog.get_weakness_associations(
-                        record.cve_id
-                    ),
                     relevance_score=fused_candidate.relevance_score,
                     channel_hits=tuple(fused_candidate.channel_hits),
                     scope_assessment=CVE_SCOPE_ASSESSMENT,
