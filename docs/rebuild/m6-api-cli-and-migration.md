@@ -165,7 +165,7 @@ Decisions: ADR 0004 §1.
 Decisions: ADR 0006.
 
 - This repository starts from CVE-KGRAG commit `53d75e3` without its history
-  (`PROVENANCE.md`). Its first commit carries the package, `schemas/v2`, `eval/gold`, the
+  ([`provenance.md`](provenance.md)). Its first commit carries the package, `schemas/v2`, `eval/gold`, the
   tests and the rebuild docs, already adapted here.
 - The legacy RAG wrapper, its unit test and its test double are not carried. Three
   `SearchService` tests that ran through it run through `VectorSemanticRetriever` with

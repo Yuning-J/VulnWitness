@@ -53,7 +53,7 @@ source.
   notices in the README and site footer, and a U.S. Government contract notice in
   `fight-data/README.md`.
 
-  **Decision (M3 review, 2026-10-15; an engineering decision, not legal advice):**
+  **Attribution policy (reviewed 2026-10-15; an engineering decision, not legal advice):**
   1. FiGHT techniques and data are governed by the FiGHT Terms of Use.
   2. ATT&CK-derived tactics and techniques must also meet the ATT&CK Terms of Use.
   3. The Apache-2.0 header licenses the repository's software and files; it does
@@ -79,8 +79,8 @@ source.
 ## Operator-supplied data
 
 An operator imports NVD feeds and the CISA KEV catalog into a corpus store
-(`cve-kgrag migrate legacy`, ADR 0008) and may supply the full FiGHT `fight.yaml` as a
-pinned snapshot (ADR 0009 §11). Both stay on the operator's machine under the sources'
+(`cve-kgrag migrate legacy`) and may supply the full FiGHT `fight.yaml` as a
+pinned snapshot. Both stay on the operator's machine under the sources'
 own terms; neither belongs in version control. A server over a corpus store gives MCP
 clients the notice NVD asks services that use its data to display: "This product uses
 data from the NVD API but is not endorsed or certified by the NVD." A FiGHT snapshot is

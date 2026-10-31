@@ -18,7 +18,7 @@ own repository and to keep the legacy system, and its security fixes, in CVE-KGR
    `eval/gold` and the rebuild docs. They were imported from CVE-KGRAG at commit
    `53d75e3` without history, and this repository's first commit already contains the
    changes this ADR makes. The original commits are archived by the owner, not
-   published; `PROVENANCE.md` lists the carried paths with their git object IDs at the
+   published; [`provenance.md`](../provenance.md) lists the carried paths with their git object IDs at the
    split commit and the original commits by hash and subject.
 2. **Names unchanged.** The package `cve_kgrag`, the distribution and command
    `cve-kgrag`, the entry-point group `cve_kgrag.adapters`, the MCP server name and the

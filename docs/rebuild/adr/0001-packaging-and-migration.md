@@ -90,7 +90,7 @@ appear.
   handling) is reused when the canonical importer is written, with the defects
   recorded in the baseline fixed in the new code.
 - The legacy modules stay in CVE-KGRAG, with their migration map and
-  characterization tests (ADR 0006, `PROVENANCE.md`). No `_deprecated` markers, aliases or re-exports are
+  characterization tests (ADR 0006, [`provenance.md`](../provenance.md)). No `_deprecated` markers, aliases or re-exports are
   added.
 
 ### 6. `/api/v1` is internal

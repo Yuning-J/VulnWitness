@@ -1,6 +1,6 @@
 # Rebuild plan (live)
 
-Split from CVE-KGRAG at commit `53d75e3` ([`PROVENANCE.md`](../../PROVENANCE.md),
+Split from CVE-KGRAG at commit `53d75e3` ([`provenance.md`](provenance.md),
 ADR 0006); M0 to M5 and the first M6 packages were built there. One atomic commit per
 milestone once its exit criterion is met and the offline lane is green.
 

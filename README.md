@@ -68,4 +68,4 @@ The [runbook](docs/runbook.md) covers local-feed reuse, sizing and recovery.
 [Evaluation](docs/evaluation.md) · [Third-party data](THIRD_PARTY_DATA.md)
 
 Pre-release contracts: [schema manifest](schemas/v2/manifest.json).
-Code: [MIT](LICENSE); origin and source licences: [provenance](PROVENANCE.md).
+Code: [MIT](LICENSE); third-party data: [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md).
