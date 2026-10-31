@@ -671,9 +671,10 @@ CSAF; an allowlisted refresh command; the semantic index build from a store, bou
 its `corpus_content_sha256` (§14), which also settles `KEV-` chunks; the `search_cves`
 filtered seam; the Trustify adapter; the planner round-2 fix (`PLAN.md`, "Follow-up:
 model planner adapter"); hot reload; removing old stores; the corpus content digest in
-the evaluation identity (M7b); a real-feed check of the 512 MiB per-file cap and of
-serving memory; `graph_expand` at scale, as defined below; revisiting the 20-technique
-topic-context cap, whose cuts are reported (§11a); a matched count for `search`
+the evaluation identity (M7b); serving memory on real feeds (the importer's 1 GiB
+per-file cap checks and pending import measurements are recorded in `PLAN.md`);
+`graph_expand` at scale, as defined below; revisiting the 20-technique topic-context
+cap, whose cuts are reported (§11a); a matched count for `search`
 responses; `gc.freeze()` if stalls are measured.
 
 ### The `graph_expand` follow-up

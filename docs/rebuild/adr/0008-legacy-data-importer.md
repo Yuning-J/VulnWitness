@@ -318,8 +318,8 @@ KEV enrichment runs after §5, on the final NVD records only.
   16 MiB), and the store is written in CVE ID order (lexical). Neither the manifest
   order nor the number of files changes the records and anchors.
 - Caps, as code constants with fixed reason codes, never echoing a path or input
-  content: 128 inputs; per file 512 MiB decompressed and 256 MiB for a gzip or zip file
-  (a plain JSON file is its own payload, so the 512 MiB cap bounds it); 8 GiB
+  content: 128 inputs; per file 1 GiB decompressed and 256 MiB for a gzip or zip file
+  (a plain JSON file is its own payload, so the 1 GiB cap bounds it); 8 GiB
   decompressed in total; 1,000,000 NVD candidates; the KEV caps of §6; the
   `--legacy-root` bounds of §1; and 16 GiB for the whole staging directory, the copy
   of the input being read included (§9). Before an input is copied there must be room
@@ -328,9 +328,8 @@ KEV enrichment runs after §5, on the final NVD records only.
   copy is still there, and once the last anchor is staged; between two measurements it
   can pass the cap by what that interval stages. A dry run stages the anchors too, so it
   meets the cap where a real run would. A zip's end record must declare one member and a
-  central directory no larger than one member needs before `zipfile` reads it. Whether
-  512 MiB fits a current 2.0 year feed is checked on the first real run; the cap is a
-  constant, changed by a later decision if a measured feed exceeds it.
+  central directory no larger than one member needs before `zipfile` reads it. The
+  per-file cap is a constant; operator measurements are recorded in `PLAN.md`.
 - An operator lane (not CI) builds 250,000 synthetic records and records the migration's
   peak RSS, temporary disk and run time.
 

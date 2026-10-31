@@ -611,8 +611,8 @@ Decisions: ADR 0008.
   anchor is staged, which a dry run stages too. An NVD input must be a whole feed: 2.0
   from `startIndex` 0 with `totalResults` entries, 1.1 with `CVE_data_numberOfCVEs`
   entries; a page of a larger API result fails as `incomplete_feed`. Containers are told
-  by their first bytes; a gzip or zip file is capped at 256 MiB, a plain one by the 512
-  MiB decompressed cap. A zip's end record must declare one member and a one-member
+  by their first bytes; a gzip or zip file is capped at 256 MiB, a plain one by the 1
+  GiB decompressed cap. A zip's end record must declare one member and a one-member
   directory before `zipfile` reads it, and any damage, CRC included, is
   `bad_compression`. Feeds stream through ijson's `yajl2_c` backend with 64 KiB reads;
   entries are assembled from events, with the cap checked on the stream and on the
@@ -655,9 +655,9 @@ Decisions: ADR 0008.
 
 ### Known limits
 
-- Real feeds were not available offline: the importer is proven on authored synthetic
-  inputs, and the first real run checks the 512 MiB per-file cap against a current 2.0
-  year feed.
+- The per-file decompressed cap is 1 GiB. Input sizes, boundary checks and pending
+  real-feed and synthetic import measurements are recorded in `PLAN.md` under the
+  M6 follow-ups.
 - An integer of magnitude 2^63 or more, which `json.loads` would read, is refused
   as `invalid_json`: the `yajl2_c` backend reads no wider integer.
 - An entry's memory is a bounded multiple of its encoded bytes

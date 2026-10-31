@@ -130,10 +130,18 @@ Recorded when M6 closed; none blocks M7b unless it says so.
 - The `search_cves` filtered seam; hot reload of an activated store; removing old
   stores; a matched count for `search` responses; revisiting the 20-technique cap on
   topic context, whose cuts are now reported.
-- The importer's 512 MiB per-file cap against the current year's feed. On 2026-10-27 the
-  2026 feed decompressed to 493,417,964 bytes (92% of the cap) and grows until the year
-  ends, so a full import will fail once it passes the cap; raise the cap, measured
-  against staging and import memory, before then.
+- The importer accepts at most 1 GiB decompressed per file. Measured on 2026-10-31 with
+  `/usr/bin/time -l`, the peak of the target, staging and partial
+  directories sampled every 2 s:
+
+  | Input | Decompressed | Records imported | Wall time | Peak RSS | Peak disk |
+  |---|---|---|---|---|---|
+  | The 2026-10-27 NVD and KEV feeds (largest file 493,417,964 bytes) | 3,073,040,466 bytes | 396,211 | — | — | — |
+  | One plain synthetic NVD 2.0 file | 736,352,257 bytes | 935,000 | — | — | — |
+
+  A 1,073,741,825-byte file is refused as `decompressed_file_too_large` before it is
+  parsed. Memory grows with the largest file and stays far below serving's; the peak disk
+  is bounded by the 16 GiB staging cap. The other caps are unchanged.
 - Serving cost on real data. The 2026-10-27 store (396,211 records)
   takes time and memory to load (`load_served_corpus`), and uses
   memory for the API's two deployments over one data plane, measured with

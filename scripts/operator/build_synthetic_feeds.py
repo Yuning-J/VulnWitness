@@ -1,11 +1,11 @@
 """Write synthetic NVD 2.0 year feeds, a KEV catalog and an input manifest for the
 importer's scale run (ADR 0008 §8). Every record is a CVE-9999-* ID describing no real
-product. Usage: build_synthetic_feeds.py DIR RECORD_COUNT"""
+product. Usage: build_synthetic_feeds.py DIR RECORD_COUNT [--feed-count N] [--plain]"""
 
+import argparse
 import csv
 import gzip
 import json
-import sys
 from pathlib import Path
 
 FEED_COUNT = 10
@@ -74,10 +74,7 @@ def build_entry(number: int) -> dict[str, object]:
     }
 
 
-def write_feed(path: Path, first_number: int, entry_count: int) -> None:
-    entries: list[dict[str, object]] = []
-    for number in range(first_number, first_number + entry_count):
-        entries.append(build_entry(number))
+def write_feed(path: Path, first_number: int, entry_count: int, is_plain: bool = False) -> None:
     # A whole feed, as NVD publishes one: a single result starting at 0.
     feed = {
         "resultsPerPage": entry_count,
@@ -86,9 +83,18 @@ def write_feed(path: Path, first_number: int, entry_count: int) -> None:
         "format": "NVD_CVE",
         "version": "2.0",
         "timestamp": FEED_TIMESTAMP,
-        "vulnerabilities": entries,
     }
-    path.write_bytes(gzip.compress(json.dumps(feed).encode(), mtime=0))
+    # Stream one entry at a time so a feed near the file cap need not fit in memory.
+    feed_prefix = json.dumps(feed)[:-1] + ', "vulnerabilities": ['
+    with (
+        path.open("wb") if is_plain else gzip.GzipFile(filename=path, mode="wb", mtime=0)
+    ) as feed_file:
+        feed_file.write(feed_prefix.encode())
+        for number in range(first_number, first_number + entry_count):
+            if number > first_number:
+                feed_file.write(b", ")
+            feed_file.write(json.dumps(build_entry(number)).encode())
+        feed_file.write(b"]}")
 
 
 def write_kev(path: Path, record_count: int) -> None:
@@ -114,18 +120,25 @@ def write_kev(path: Path, record_count: int) -> None:
 
 
 def main() -> None:
-    output_dir = Path(sys.argv[1])
-    record_count = int(sys.argv[2])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("output_dir", type=Path)
+    parser.add_argument("record_count", type=int)
+    parser.add_argument("--feed-count", type=int, default=FEED_COUNT, choices=range(1, 129))
+    parser.add_argument("--plain", action="store_true", help="write uncompressed JSON feeds")
+    arguments = parser.parse_args()
+    output_dir = arguments.output_dir
+    record_count = arguments.record_count
     output_dir.mkdir(parents=True, exist_ok=True)
-    per_feed = -(-record_count // FEED_COUNT)
+    per_feed = -(-record_count // arguments.feed_count)
     manifest_lines = ["format_version: 1", "inputs:"]
-    for feed_index in range(FEED_COUNT):
+    for feed_index in range(arguments.feed_count):
         first_number = feed_index * per_feed + 1
         entry_count = min(per_feed, record_count - feed_index * per_feed)
         if entry_count <= 0:
             break
-        file_name = f"nvdcve-2.0-{2002 + feed_index}.json.gz"
-        write_feed(output_dir / file_name, first_number, entry_count)
+        suffix = ".json" if arguments.plain else ".json.gz"
+        file_name = f"nvdcve-2.0-{2002 + feed_index}{suffix}"
+        write_feed(output_dir / file_name, first_number, entry_count, arguments.plain)
         manifest_lines.append(
             f'  - {{source: nvd, path: {file_name}, retrieved_at: "{RETRIEVED_AT}"}}'
         )

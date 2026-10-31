@@ -11,7 +11,7 @@ GIB = 1024 * MIB
 @dataclass(frozen=True)
 class MigrationLimits:
     max_compressed_file_bytes: int = 256 * MIB
-    max_decompressed_file_bytes: int = 512 * MIB
+    max_decompressed_file_bytes: int = 1 * GIB
     max_total_decompressed_bytes: int = 8 * GIB
     max_entry_bytes: int = 16 * MIB
     # The parser reads a feed this many bytes at a time, so it reads at most this far past
