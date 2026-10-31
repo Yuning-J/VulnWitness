@@ -200,10 +200,19 @@ def find_served_violations(
     """The anchor rules, and the catalog re-check of every anchor, CVE record and FiGHT
     technique a response serves, before it is returned."""
     served_anchors = list(anchors)
+    served_candidates = tuple(candidates)
     served_records: list[CveRecord] = []
-    for candidate in candidates:
+    for candidate in served_candidates:
         served_records.append(candidate.record)
-    violations = find_anchor_violations(served_anchors)
+    violations: list[str] = []
+    for candidate in served_candidates:
+        if candidate.weakness_associations != evidence_catalog.get_weakness_associations(
+            candidate.record.cve_id
+        ):
+            violations.append(
+                f"{candidate.record.cve_id}: weakness associations differ from the mapping snapshot"
+            )
+    violations.extend(find_anchor_violations(served_anchors))
     violations.extend(find_uncatalogued_anchor_violations(served_anchors, evidence_catalog))
     violations.extend(find_uncatalogued_record_violations(served_records, evidence_catalog))
     violations.extend(find_uncatalogued_technique_violations(items, evidence_catalog))

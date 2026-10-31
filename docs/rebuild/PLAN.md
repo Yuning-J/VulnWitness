@@ -113,10 +113,14 @@ The migration map lives with the legacy modules it describes, in CVE-KGRAG
   counterpart; M6 WP9 records them, and CSAF is an M6 follow-up below.
 - `export_kg_for_rag` output is detected by the M6 WP9 importer and reported as derived
   data, never imported as a source of record.
-- The CVE→CWE→CAPEC→ATT&CK mapper becomes a derived mapping with its method, inputs,
-  confidence and asserted or inferred status; FiGHT threat context stays matched by
-  reviewed topic terms, or by the question's own words without a card, and is never
-  derived from CVEs.
+- CVE→CWE→CAPEC→ATT&CK associations are served from an offline operator-built,
+  digest-pinned mapping (contract `2.0.0-dev.39`), or the packaged real excerpt.
+  Paths retain every source hop, CAPEC inheritance, technique tactics, missing links
+  and the shared 20-path cap's exact omitted count. Paths may end at CAPEC with
+  `no_attack_mapping`, describing the loaded catalogue only, not exploitability.
+  They are labelled derived, never CVE usage
+  evidence or attack paths. FiGHT `protocol_context`, retrieval and ranking remain
+  independent. The runbook covers building and serving; fixture tests cover integrity.
 - There is no v2 Neo4j adapter; whether one is built is open.
 
 ## Follow-ups from M6 (ADR 0009)

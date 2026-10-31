@@ -245,3 +245,73 @@ A store holds NVD and CISA KEV data under their terms
 ([`THIRD_PARTY_DATA.md`](../THIRD_PARTY_DATA.md)); keep stores and FiGHT snapshots out
 of version control. A server over a store gives MCP clients the NVD notice: "This
 product uses data from the NVD API but is not endorsed or certified by the NVD."
+
+## Weakness association mapping
+
+The derived MITRE mapping is independent of the corpus store and FiGHT snapshot.
+Use local official CWE XML, CAPEC XML and Enterprise ATT&CK STIX JSON. Pin the
+release versions and input SHA-256 values in the operator's download inventory;
+verify that inventory before building. The builder uses only standard-library XML
+and JSON parsers, reads the inputs without modifying them, and contacts no service.
+
+```sh
+cve-kgrag mitre build --cwe /data/cwec_v5.0.xml --capec /data/capec_latest.xml \
+  --attack /data/enterprise-attack.json --out /data/weakness-mapping.json
+export CVE_KGRAG_MITRE_SNAPSHOT_PATH=/data/weakness-mapping.json
+export CVE_KGRAG_MITRE_SNAPSHOT_SHA256=<sha256-printed-by-build>
+cve-kgrag capabilities
+cve-kgrag lookup CVE-2026-12345
+```
+
+The output file must not exist: the builder refuses overwrites, including an input
+path. Build each replacement at a fresh path. The command prints the file size,
+SHA-256 and counts of linked CWEs and CAPECs, direct and inherited mappings,
+deprecated CAPEC entries, and deprecated/revoked ATT&CK objects skipped. ATT&CK
+skip counts include all STIX object types; flags are counted independently.
+Mapping counts count source CAPEC/technique/parent-chain combinations, not CVEs.
+
+The settings must be set together and use an absolute path and lower-case SHA-256.
+Every serving command checks the digest before parsing the mapping. An unreadable,
+non-regular, oversized (over 32 MiB), invalid or mismatched file refuses serving
+with an explicit `mitre_snapshot_*` reason; there is no excerpt fallback. Restart
+running API and MCP services after changing either setting. `capabilities` reports
+`weakness_associations.coverage`, `snapshot_sha256`, source versions and input
+hashes, and build counts. An unset pair serves the manifest-pinned packaged excerpt.
+
+To reproduce the packaged excerpt, run the same build with `--cwe-id CWE-20
+--cwe-id CWE-79 --cwe-id CWE-787 --cwe-id CWE-284 --cwe-id CWE-269 --cwe-id CWE-78
+--cwe-id CWE-120`, using the full inputs pinned in the excerpt's `sources`. These
+options select CWEs; CAPEC inheritance is resolved against the full CAPEC input.
+The excerpt's skip counts describe those full inputs, while its mapping counts
+describe the selected entries. Its notice is in `src/cve_kgrag/fixtures/mitre/NOTICE.md`.
+
+Every CVE path retains the NVD record's evidence IDs and each catalogue hop's
+version and input digest. Inheritance retains each explicit CAPEC `ChildOf` hop;
+deprecated CAPECs cannot bridge it. Deprecated or revoked ATT&CK objects cannot
+supply techniques. When no usable direct or inherited ATT&CK mapping exists in the
+loaded snapshot, the path ends at CAPEC with `terminal_reason: "no_attack_mapping"`,
+null `technique` and `technique_source`, and both source-labelled CVE → CWE → CAPEC
+hops. These terminal reasons are not repeated in `missing_links`; unavailable
+techniques or parents and missing CWE → CAPEC links remain reported there.
+CWE-787 in CWE 5.0 has no related attack pattern, so no path is produced. This is
+not filled from CAPEC's reverse CWE references or a parent CWE. A missing entry in
+the packaged excerpt is reported as absent from that snapshot, not absent from the
+full catalogue. NVD's noinfo/Other placeholders become an empty specific-CWE list
+in record normalization and are reported as no specific CWE.
+
+The 20-path cap applies across all CWEs on one CVE and includes full paths and paths
+ending at CAPEC, with the exact omitted count. Direct mappings precede inherited
+mappings, then paths ending at CAPEC, followed by lexicographic IDs and parent
+chains. This deterministic order is not an importance ranking. Text investigations
+show one sample per candidate with remaining path and missing-link counts; JSON
+preserves the bounded paths and all missing links. A terminal sample reads
+`CWE-120 → CAPEC-100 (no ATT&CK mapping in catalogue)`. The derived-association note
+states: “This association is derived from official catalogues. It is not evidence
+that the CVE was used with that technique. It is not an attack path. No ATT&CK
+mapping describes only the loaded catalogue snapshot; it does not mean the weakness
+has no attack technique or no way to be exploited.”
+
+Associations accompany candidates; they do not enter retrieval, ranking, planner
+inputs, evidence needs or FiGHT `protocol_context`. As part of a tool response they
+count toward the existing context-byte budget. A forged path or changed snapshot
+digest fails candidate validation against the served mapping.

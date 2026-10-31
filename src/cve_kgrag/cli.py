@@ -44,6 +44,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any, NoReturn, TypeVar
+from xml.etree.ElementTree import ParseError
 
 from pydantic import SecretStr, ValidationError
 
@@ -67,6 +68,15 @@ from cve_kgrag.adapters.migration.legacy_migration import (
 )
 from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
 from cve_kgrag.adapters.migration.parser_types import MigrationParsers
+from cve_kgrag.adapters.mitre.catalogue_parser import (
+    build_mapping_snapshot,
+    serialize_mapping_snapshot,
+)
+from cve_kgrag.adapters.mitre.mapping_file import (
+    MitreSnapshotUnavailable,
+    load_weakness_mapping,
+    write_mapping_file,
+)
 from cve_kgrag.adapters.regular_files import NotARegularFileError, open_regular_file
 from cve_kgrag.adapters.store.store_activation import StoreActivation, describe_identity
 from cve_kgrag.adapters.store.store_root import lies_in_store_root
@@ -140,6 +150,7 @@ from cve_kgrag.domain.tool_contracts import (
 )
 from cve_kgrag.domain.topic_context import QueryScope, TopicContextRequest, TopicContextResponse
 from cve_kgrag.domain.validation import EvidenceValidationError
+from cve_kgrag.domain.weakness_mapping import WeaknessMapping
 from cve_kgrag.evaluation.case_runner import (
     EvaluationStopped,
     ModelRuns,
@@ -189,6 +200,7 @@ from cve_kgrag.settings import (
     SERVED_DATA_VARIABLES,
     FightSnapshotSettings,
     HttpSettings,
+    MitreSnapshotSettings,
     ModelPlannerSettings,
     SemanticSettings,
     ServiceSettings,
@@ -315,6 +327,16 @@ def parse_store_name(text: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cve-kgrag", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+
+    mitre_parser = commands.add_parser("mitre", help="build an offline catalogue mapping")
+    mitre_commands = mitre_parser.add_subparsers(dest="mitre_command", required=True)
+    mitre_build_parser = mitre_commands.add_parser("build", help="derive explicit catalogue links")
+    for source_name in ("cwe", "capec", "attack"):
+        mitre_build_parser.add_argument("--" + source_name, type=Path, required=True)
+    mitre_build_parser.add_argument("--out", type=Path, required=True)
+    mitre_build_parser.add_argument(
+        "--cwe-id", action="append", default=[], help="select CWE IDs for an excerpt"
+    )
 
     commands.add_parser("demo", help="run sample queries against the bundled synthetic fixture")
 
@@ -862,12 +884,16 @@ def load_search_service_or_exit(
     store_root: Path | None,
     semantic_settings: SemanticSettings | None = None,
     monotonic_clock: Callable[[], float] = time.monotonic,
+    mitre_snapshot: MitreSnapshotSettings | None = None,
 ) -> SearchService:
     """The search service over the served corpus (``load_served_corpus_or_exit``), saying
     on stderr when a configured store's data is loaded."""
     started_at = monotonic_clock()
     served_corpus = load_served_corpus_or_exit(command, store_root)
-    search_service = build_search_service(served_corpus, semantic_settings)
+    weakness_mapping = load_weakness_mapping_or_exit(command, mitre_snapshot)
+    search_service = build_search_service(
+        served_corpus, semantic_settings, weakness_mapping=weakness_mapping
+    )
     announce_data_loaded(
         command,
         store_root,
@@ -901,6 +927,17 @@ def load_fight_source_or_exit(
         raise SystemExit(2) from None
 
 
+def load_weakness_mapping_or_exit(
+    command: str, settings: MitreSnapshotSettings | None
+) -> WeaknessMapping:
+    """Refuse serving a configured snapshot whose file or digest cannot be verified."""
+    try:
+        return load_weakness_mapping(settings)
+    except MitreSnapshotUnavailable as error:
+        print(f"cve-kgrag {command} cannot serve MITRE snapshot: {error}", file=sys.stderr)
+        raise SystemExit(2) from None
+
+
 def load_data_plane_or_exit(
     command: str,
     settings: ServiceSettings,
@@ -915,8 +952,10 @@ def load_data_plane_or_exit(
     fight_source, pinned_fight_snapshot = load_fight_source_or_exit(
         command, settings.fight_snapshot
     )
+    weakness_mapping = load_weakness_mapping_or_exit(command, settings.mitre_snapshot)
     data_plane = build_serving_data_plane(
         served_corpus,
+        weakness_mapping=weakness_mapping,
         fight_source=fight_source,
         pinned_fight_snapshot=pinned_fight_snapshot,
         semantic_settings=semantic_settings,
@@ -1419,6 +1458,34 @@ def run_store_command(arguments: argparse.Namespace, store_activation: StoreActi
         return 1
 
 
+def run_mitre_build_command(arguments: argparse.Namespace) -> int:
+    """Build a mapping without opening any corpus store or contacting a service."""
+    try:
+        snapshot = build_mapping_snapshot(
+            arguments.cwe.read_bytes(),
+            arguments.capec.read_bytes(),
+            arguments.attack.read_bytes(),
+            tuple(arguments.cwe_id),
+        )
+        snapshot_bytes = serialize_mapping_snapshot(snapshot)
+        write_mapping_file(arguments.out, snapshot_bytes)
+    except (OSError, ValueError, KeyError, TypeError, ParseError) as error:
+        print(f"cve-kgrag mitre build failed: {error}", file=sys.stderr)
+        return 1
+    print(
+        json.dumps(
+            {
+                "sha256": sha256_hex(snapshot_bytes),
+                "size_bytes": len(snapshot_bytes),
+                "coverage": snapshot.coverage,
+                "counts": snapshot.counts.model_dump(),
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def run_schema_command(action: str, schema_dir: Path) -> int:
     if action == "export":
         write_contract_schemas(schema_dir)
@@ -1444,6 +1511,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         settings = load_settings(os.environ if environment is None else environment)
     except SettingsError as error:
         parser.error(str(error))
+    if arguments.command == "mitre":
+        return run_mitre_build_command(arguments)
     if arguments.command == "schema":
         return run_schema_command(arguments.action, arguments.dir)
     if arguments.command == "mcp":
@@ -1497,13 +1566,19 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)
         return print_response(
             lookup_cve(
-                load_search_service_or_exit("lookup", settings.store_root), lookup_request.cve_id
+                load_search_service_or_exit(
+                    "lookup", settings.store_root, mitre_snapshot=settings.mitre_snapshot
+                ),
+                lookup_request.cve_id,
             )
         )
     if arguments.command == "search":
         search_request = build_search_request(parser, arguments)
         service = load_search_service_or_exit(
-            "search", settings.store_root, choose_semantic_settings(settings, arguments)
+            "search",
+            settings.store_root,
+            choose_semantic_settings(settings, arguments),
+            mitre_snapshot=settings.mitre_snapshot,
         )
         try:
             return print_response(service.search(search_request))

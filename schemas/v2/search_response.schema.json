@@ -77,6 +77,136 @@
       "title": "AssertionKind",
       "type": "string"
     },
+    "AssociationHop": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "from_id": {
+          "title": "From Id",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "nvd_cwe",
+            "cwe_related_attack_pattern",
+            "capec_child_of",
+            "capec_attack_taxonomy_mapping"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "NVD record",
+            "CWE catalogue",
+            "CAPEC catalogue"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Sha256"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        },
+        "to_id": {
+          "title": "To Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_id",
+        "to_id",
+        "relation",
+        "source",
+        "source_version",
+        "source_sha256",
+        "evidence_ids"
+      ],
+      "title": "AssociationHop",
+      "type": "object"
+    },
+    "AttackTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "technique",
+            "subtechnique"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parent_technique_id": {
+          "anyOf": [
+            {
+              "pattern": "^T[0-9]{4}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Parent is an ATT&CK technique, never a tactic.",
+          "title": "Parent Technique Id"
+        },
+        "tactics": {
+          "description": "ATT&CK tactic names from this object's mitre-attack kill_chain_phases.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Tactics",
+          "type": "array"
+        },
+        "technique_id": {
+          "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$(?!\\n)",
+          "title": "Technique Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "technique_id",
+        "name",
+        "kind",
+        "parent_technique_id",
+        "tactics"
+      ],
+      "title": "AttackTechnique",
+      "type": "object"
+    },
     "BackendFailureDetail": {
       "description": "The server's sentence for each ``BackendFailure``.",
       "enum": [
@@ -139,17 +269,61 @@
         },
         "scope_assessment": {
           "$ref": "#/$defs/ScopeAssessment"
+        },
+        "weakness_associations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WeaknessAssociations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Catalogue-derived paths, separate from retrieval relevance and FiGHT protocol context."
         }
       },
       "required": [
         "rank",
         "record",
+        "weakness_associations",
         "relevance_score",
         "channel_hits",
         "scope_assessment",
         "missing_fields"
       ],
       "title": "Candidate",
+      "type": "object"
+    },
+    "CatalogueSource": {
+      "additionalProperties": false,
+      "properties": {
+        "catalogue": {
+          "enum": [
+            "CWE",
+            "CAPEC",
+            "ATT&CK Enterprise"
+          ],
+          "title": "Catalogue",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalogue",
+        "version",
+        "sha256"
+      ],
+      "title": "CatalogueSource",
       "type": "object"
     },
     "ChannelHit": {
@@ -779,6 +953,33 @@
       "title": "MatchedField",
       "type": "string"
     },
+    "MissingAssociationLink": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "enum": [
+            "no_specific_cwe",
+            "cwe_not_in_snapshot",
+            "no_related_attack_pattern",
+            "capec_not_in_snapshot",
+            "capec_parent_unavailable",
+            "attack_technique_unavailable"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "reason"
+      ],
+      "title": "MissingAssociationLink",
+      "type": "object"
+    },
     "Reference": {
       "additionalProperties": false,
       "properties": {
@@ -1077,6 +1278,147 @@
       ],
       "title": "VulnerabilityOrigin",
       "type": "string"
+    },
+    "WeaknessAssociationPath": {
+      "additionalProperties": false,
+      "properties": {
+        "capec_id": {
+          "pattern": "^CAPEC-[0-9]+$(?!\\n)",
+          "title": "Capec Id",
+          "type": "string"
+        },
+        "cwe_id": {
+          "pattern": "^CWE-[0-9]+$(?!\\n)",
+          "title": "Cwe Id",
+          "type": "string"
+        },
+        "derived": {
+          "const": true,
+          "default": true,
+          "title": "Derived",
+          "type": "boolean"
+        },
+        "hops": {
+          "items": {
+            "$ref": "#/$defs/AssociationHop"
+          },
+          "title": "Hops",
+          "type": "array"
+        },
+        "inherited_from": {
+          "anyOf": [
+            {
+              "pattern": "^CAPEC-[0-9]+$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inherited From"
+        },
+        "technique": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttackTechnique"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "technique_source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogueSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "terminal_reason": {
+          "anyOf": [
+            {
+              "const": "no_attack_mapping",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "No usable ATT&CK mapping in the loaded catalogue snapshot.",
+          "title": "Terminal Reason"
+        }
+      },
+      "required": [
+        "cwe_id",
+        "capec_id",
+        "technique",
+        "technique_source",
+        "terminal_reason",
+        "inherited_from",
+        "hops",
+        "derived"
+      ],
+      "title": "WeaknessAssociationPath",
+      "type": "object"
+    },
+    "WeaknessAssociations": {
+      "additionalProperties": false,
+      "properties": {
+        "missing_links": {
+          "items": {
+            "$ref": "#/$defs/MissingAssociationLink"
+          },
+          "title": "Missing Links",
+          "type": "array"
+        },
+        "note": {
+          "const": "This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited.",
+          "default": "This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited.",
+          "title": "Note",
+          "type": "string"
+        },
+        "omitted_count": {
+          "minimum": 0,
+          "title": "Omitted Count",
+          "type": "integer"
+        },
+        "ordering": {
+          "const": "direct_then_inherited_then_capec_terminal_then_id_not_importance",
+          "default": "direct_then_inherited_then_capec_terminal_then_id_not_importance",
+          "title": "Ordering",
+          "type": "string"
+        },
+        "paths": {
+          "items": {
+            "$ref": "#/$defs/WeaknessAssociationPath"
+          },
+          "maxItems": 20,
+          "title": "Paths",
+          "type": "array"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "paths",
+        "omitted_count",
+        "missing_links",
+        "note",
+        "snapshot_sha256",
+        "ordering"
+      ],
+      "title": "WeaknessAssociations",
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1126,8 +1468,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.38",
-      "default": "2.0.0-dev.38",
+      "const": "2.0.0-dev.39",
+      "default": "2.0.0-dev.39",
       "title": "Schema Version",
       "type": "string"
     },

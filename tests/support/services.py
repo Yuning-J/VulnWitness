@@ -8,6 +8,7 @@ from cve_kgrag.adapters.graph.in_memory_graph import InMemoryRelationGraph
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
 from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
 from cve_kgrag.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
+from cve_kgrag.adapters.mitre.mapping_file import load_weakness_mapping
 from cve_kgrag.adapters.structured.in_memory_filter import (
     InMemoryStructuredIndex,
     names_package_url,
@@ -25,8 +26,13 @@ def build_fixture_service(bundle: FixtureBundle, **retrievers: Any) -> SearchSer
         "semantic_retriever": None,
     }
     channels.update(retrievers)
-    evidence_catalog = InMemoryEvidenceCatalog(bundle.evidence, bundle.records)
-    return SearchService(repository, evidence_catalog, **channels)
+    weakness_mapping = load_weakness_mapping()
+    evidence_catalog = InMemoryEvidenceCatalog(
+        bundle.evidence, bundle.records, weakness_mapping=weakness_mapping
+    )
+    return SearchService(
+        repository, evidence_catalog, weakness_mapping=weakness_mapping, **channels
+    )
 
 
 def build_purl_free_structured_index(bundle: FixtureBundle) -> InMemoryStructuredIndex:

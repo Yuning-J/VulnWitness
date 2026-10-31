@@ -110,8 +110,8 @@ def run_five_g_aka_mixed(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
 
 
 def run_exact_id(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """One deterministic round: the lookup of CVE-9999-0003 returns it in a 2,513-byte
-    response."""
+    """One deterministic round: the lookup of CVE-9999-0003 returns its
+    evidence-anchored record."""
     return investigate(fixture_bundle, "CVE-9999-0003", "implementation_only")
 
 

@@ -31,6 +31,7 @@ from cve_kgrag.adapters.graph.in_memory_graph import InMemoryRelationGraph
 from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
 from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
 from cve_kgrag.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
+from cve_kgrag.adapters.mitre.mapping_file import load_weakness_mapping
 from cve_kgrag.adapters.nvd.normalizer import NvdNormalizer, SourceTerms
 from cve_kgrag.adapters.provenance.source_registry import (
     default_source_registry_file,
@@ -72,6 +73,7 @@ from cve_kgrag.domain.search import SemanticUnavailableDetail
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import KnowledgeSource
+from cve_kgrag.domain.weakness_mapping import WeaknessMapping
 from cve_kgrag.evaluation.gold_cases import GoldFileError
 from cve_kgrag.evaluation.gold_rules import GoldRuleError
 from cve_kgrag.evaluation.gold_sets import (
@@ -163,6 +165,7 @@ def build_search_service(
     served_corpus: ServedCorpus,
     semantic_settings: SemanticSettings | None = None,
     list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
+    weakness_mapping: WeaknessMapping | None = None,
 ) -> SearchService:
     """The search channels over ``served_corpus``, with the semantic channel
     ``semantic_settings`` enable (none without them), found among the adapters
@@ -172,6 +175,8 @@ def build_search_service(
     (``COLLECTION_NOT_BOUND``) and no adapter is looked up or loaded: no collection
     records the dataset it was built from, and one built from another dataset whose CVE
     IDs overlap the store's would pass every check its hits get (ADR 0009 §14)."""
+    if weakness_mapping is None:
+        weakness_mapping = load_weakness_mapping()
     repository = InMemoryKnowledgeRepository(served_corpus.records, served_corpus.evidence)
     semantic_retriever: SemanticRetriever | SemanticUnavailableDetail | None = None
     if semantic_settings is not None:
@@ -182,11 +187,14 @@ def build_search_service(
             semantic_retriever = discover_semantic_retriever(semantic_settings, list_adapters)
     return SearchService(
         cve_repository=repository,
-        evidence_catalog=InMemoryEvidenceCatalog(served_corpus.evidence, served_corpus.records),
+        evidence_catalog=InMemoryEvidenceCatalog(
+            served_corpus.evidence, served_corpus.records, weakness_mapping=weakness_mapping
+        ),
         lexical_retriever=Bm25LexicalIndex(repository.list_cves()),
         structured_retriever=InMemoryStructuredIndex(repository.list_cves()),
         graph_retriever=InMemoryRelationGraph(repository.list_cves()),
         semantic_retriever=semantic_retriever,
+        weakness_mapping=weakness_mapping,
     )
 
 
@@ -241,15 +249,20 @@ def load_fight_source(
 
 
 def build_evidence_catalog(
-    served_corpus: ServedCorpus, fight_source: FightSource
+    served_corpus: ServedCorpus,
+    fight_source: FightSource,
+    weakness_mapping: WeaknessMapping | None = None,
 ) -> EvidenceCatalog:
     """Everything this deployment serves: the served corpus's CVE records and evidence,
     and the FiGHT snapshot's techniques and anchors. Final validation re-checks each
     served anchor, record and technique against it."""
+    if weakness_mapping is None:
+        weakness_mapping = load_weakness_mapping()
     return InMemoryEvidenceCatalog(
         (*served_corpus.evidence, *fight_source.list_evidence()),
         served_corpus.records,
         fight_source.list_techniques(),
+        weakness_mapping=weakness_mapping,
     )
 
 
@@ -374,6 +387,7 @@ def build_serving_data_plane(
     served_corpus: ServedCorpus,
     *,
     search_service: SearchService | None = None,
+    weakness_mapping: WeaknessMapping | None = None,
     fight_source: FightSource | None = None,
     pinned_fight_snapshot: KnownFightSnapshot | None = None,
     semantic_settings: SemanticSettings | None = None,
@@ -391,8 +405,12 @@ def build_serving_data_plane(
     pin, its anchors stamped by ``clock``; a caller passing its own source also passes the
     pin it chose (``None`` for none).
     """
+    if weakness_mapping is None:
+        weakness_mapping = load_weakness_mapping()
     if search_service is None:
-        search_service = build_search_service(served_corpus, semantic_settings)
+        search_service = build_search_service(
+            served_corpus, semantic_settings, weakness_mapping=weakness_mapping
+        )
     if fight_source is None:
         fight_source, pinned_fight_snapshot = load_packaged_fight_source(clock)
     return ServingDataPlane(
@@ -401,7 +419,7 @@ def build_serving_data_plane(
         search_service=search_service,
         fight_source=fight_source,
         pinned_fight_snapshot=pinned_fight_snapshot,
-        evidence_catalog=build_evidence_catalog(served_corpus, fight_source),
+        evidence_catalog=build_evidence_catalog(served_corpus, fight_source, weakness_mapping),
     )
 
 

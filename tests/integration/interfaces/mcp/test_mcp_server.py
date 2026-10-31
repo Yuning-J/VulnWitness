@@ -341,3 +341,17 @@ async def test_set_returned_by_the_investigate_tool_verifies(
         evidence_set, build_test_deployment(fixture_bundle), DETERMINISTIC_VERIFIER
     )
     assert replay_outcome == ReplayCompleted(())
+
+
+async def test_lookup_exposes_derived_weakness_associations(mcp_client: Client) -> None:
+    # Arrange
+    arguments = {"cve_id": "CVE-9999-0003"}
+
+    # Act
+    lookup = await mcp_client.call_tool(KnowledgeToolName.LOOKUP_CVE.value, arguments)
+    associations = read_structured_content(lookup)["candidates"][0]["weakness_associations"]
+
+    # Assert
+    assert associations["paths"][0]["cwe_id"] == "CWE-20"
+    assert associations["paths"][0]["derived"] is True
+    assert associations["paths"][0]["hops"][1]["relation"] == "cwe_related_attack_pattern"

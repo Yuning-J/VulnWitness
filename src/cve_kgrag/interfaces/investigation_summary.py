@@ -13,6 +13,7 @@ from cve_kgrag.domain.investigation import (
     NeedOutcome,
 )
 from cve_kgrag.domain.relevance import RelevanceLabel
+from cve_kgrag.domain.weakness_associations import DERIVED_ASSOCIATION_NOTE, WeaknessAssociations
 
 STATUS_SENTENCES = {
     "ok": "Every evidence need was met; that does not show the list is complete.",
@@ -140,6 +141,36 @@ def format_table_row(cells: tuple[str, ...]) -> str:
     return "\n".join(lines)
 
 
+def format_weakness_associations(associations: WeaknessAssociations) -> str:
+    """A bounded overview; JSON preserves every source-labelled hop."""
+    summaries: list[str] = []
+    for path in associations.paths[:1]:
+        if path.technique is None:
+            summaries.append(f"{path.cwe_id} → {path.capec_id} (no ATT&CK mapping in catalogue)")
+            continue
+        tactics = ", ".join(path.technique.tactics) or "tactics unspecified"
+        inheritance = ""
+        if path.inherited_from is not None:
+            inheritance = f" [inherited from {path.inherited_from}]"
+        summaries.append(
+            f"{path.cwe_id} → {path.capec_id} → {path.technique.technique_id} "
+            f"({tactics}){inheritance}"
+        )
+    if not summaries:
+        summaries.append("no catalogue association path")
+        if associations.missing_links:
+            missing_link = associations.missing_links[0]
+            summaries.append(f"{missing_link.subject}: {missing_link.reason.replace('_', ' ')}")
+    hidden_count = max(0, len(associations.paths) - 1)
+    if hidden_count:
+        summaries.append(f"{hidden_count} more paths in JSON")
+    if associations.omitted_count:
+        summaries.append(f"{associations.omitted_count} paths omitted by the cap")
+    if associations.missing_links:
+        summaries.append(f"{len(associations.missing_links)} missing links reported in JSON")
+    return format_paragraph("  Weakness associations: " + "; ".join(summaries) + ".")
+
+
 def format_candidates(evidence_set: KnowledgeEvidenceSet) -> str:
     lines = ["CVE candidates:"]
     if not evidence_set.implementation_candidates:
@@ -174,10 +205,17 @@ def format_candidates(evidence_set: KnowledgeEvidenceSet) -> str:
                 )
             )
         )
+        if candidate.candidate.weakness_associations is not None:
+            lines.append(format_weakness_associations(candidate.candidate.weakness_associations))
         for note in candidate.nvd_version_notes or ():
             outcome = note.outcome.replace("_", " ")
             reason = f" [{note.reason_code}]" if note.outcome == "unknown" else ""
             lines.append(format_paragraph(f"  NVD ({note.mention}): {outcome}{reason}."))
+    if any(
+        candidate.candidate.weakness_associations is not None
+        for candidate in evidence_set.implementation_candidates
+    ):
+        lines.append(format_paragraph(DERIVED_ASSOCIATION_NOTE))
     if evidence_set.interpretation.affectedness_mentions:
         lines.append(
             format_paragraph(

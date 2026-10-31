@@ -71,6 +71,7 @@ def describe_knowledge_capabilities(
     and whether the deployment's dataset can execute a ``purls`` filter."""
     return KnowledgeCapabilities(
         source_capabilities=source_capabilities,
+        weakness_associations=deployment.search_service.describe_weakness_snapshot(),
         purl_filter_available=deployment.search_service.serves_purl_filter(),
     )
 

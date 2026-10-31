@@ -51,6 +51,8 @@ HTTP_VARIABLES = {
 # (ADR 0009 §3).
 SERVED_DATA_VARIABLES = {
     "CVE_KGRAG_STORE_ROOT": "store_root",
+    "CVE_KGRAG_MITRE_SNAPSHOT_PATH": "mitre_snapshot_path",
+    "CVE_KGRAG_MITRE_SNAPSHOT_SHA256": "mitre_snapshot_sha256",
     "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": "fight_snapshot_path",
     "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": "fight_snapshot_sha256",
 }
@@ -237,10 +239,12 @@ class ServedDataVariables(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
     store_root: Path | None = None
+    mitre_snapshot_path: Path | None = None
+    mitre_snapshot_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
     fight_snapshot_path: Path | None = None
     fight_snapshot_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
 
-    @field_validator("store_root", "fight_snapshot_path")
+    @field_validator("store_root", "fight_snapshot_path", "mitre_snapshot_path")
     @classmethod
     def check_path(cls, path: Path | None) -> Path | None:
         if path is None:
@@ -251,6 +255,15 @@ class ServedDataVariables(BaseModel):
 class FightSnapshotSettings(BaseModel):
     """An operator FiGHT snapshot: the file and the SHA-256 it must have. Whether the
     catalog lists that hash is checked when a command loads the snapshot (ADR 0009 §11)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
+
+    path: Path
+    sha256: str = Field(pattern=SHA256_PATTERN)
+
+
+class MitreSnapshotSettings(BaseModel):
+    """The operator's derived mapping file and its required SHA-256."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
@@ -270,6 +283,7 @@ class ServiceSettings(BaseModel):
     http: HttpSettings = HttpSettings()
     store_root: Path | None = None
     fight_snapshot: FightSnapshotSettings | None = None
+    mitre_snapshot: MitreSnapshotSettings | None = None
 
 
 def find_section_variable(section_variables: Mapping[str, str], field_name: str) -> str:
@@ -362,6 +376,20 @@ def pair_fight_snapshot(served_data: ServedDataVariables) -> FightSnapshotSettin
     return FightSnapshotSettings(path=path, sha256=sha256)
 
 
+def pair_mitre_snapshot(served_data: ServedDataVariables) -> MitreSnapshotSettings | None:
+    """Require both MITRE variables together; an unset pair serves the packaged excerpt."""
+    path = served_data.mitre_snapshot_path
+    sha256 = served_data.mitre_snapshot_sha256
+    if path is None and sha256 is None:
+        return None
+    if path is None or sha256 is None:
+        raise SettingsError(
+            "invalid settings: CVE_KGRAG_MITRE_SNAPSHOT_PATH and "
+            "CVE_KGRAG_MITRE_SNAPSHOT_SHA256 must be set together"
+        )
+    return MitreSnapshotSettings(path=path, sha256=sha256)
+
+
 def load_settings(environment: Mapping[str, str]) -> ServiceSettings:
     """The settings ``environment`` holds. Raises ``SettingsError``, naming the variables
     and never their values, when any is invalid. A switched section's variables are read
@@ -381,4 +409,5 @@ def load_settings(environment: Mapping[str, str]) -> ServiceSettings:
         http=http_settings,
         store_root=served_data.store_root,
         fight_snapshot=fight_snapshot,
+        mitre_snapshot=pair_mitre_snapshot(served_data),
     )

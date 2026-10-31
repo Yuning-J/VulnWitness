@@ -649,3 +649,20 @@ def test_cve_kgrag_api_on_a_port_in_use_exits_one_saying_why() -> None:
     assert b": ready " not in server_process.stderr
     assert b" ready after " not in server_process.stderr
     assert HTTP_TOKEN.encode() not in server_process.stderr
+
+
+async def test_exact_id_search_exposes_the_packaged_weakness_association_paths(
+    api_client: httpx2.AsyncClient,
+) -> None:
+    # Arrange
+    cve_id = "CVE-9999-0003"
+
+    # Act
+    lookup = await api_client.post("/api/v2/search", json={"query": cve_id})
+
+    # Assert
+    assert lookup.status_code == 200
+    associations = lookup.json()["candidates"][0]["weakness_associations"]
+    assert associations["paths"][0]["cwe_id"] == "CWE-20"
+    assert associations["paths"][0]["derived"] is True
+    assert associations["paths"][0]["hops"][1]["source"] == "CWE catalogue"

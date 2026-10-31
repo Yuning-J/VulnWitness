@@ -841,14 +841,14 @@ def test_admitted_response_relabelled_over_the_byte_cap_passes_the_audit_but_not
     packaged_evidence_catalog: EvidenceCatalog,
     topic_registry: TopicRegistry,
 ) -> None:
-    """The reviewer's forgery: a real 2,513-byte response admitted under the default caps
+    """The reviewer's forgery: a real response admitted under the default caps
     is recorded as 200,001 bytes discarded over the byte cap, with the ``budget_exhausted``
     stop, ``context_bytes`` breach, warning and empty answer that discard gives, and the set
     is resealed. The validator only sees that 200,001 bytes exceed the cap, and the audit
     re-derives the stop from the recorded discard, so both accept it."""
     genuine_set = run_exact_id(fixture_bundle)
     genuine_bytes = genuine_set.trajectory.steps[0].context_bytes
-    assert genuine_bytes == 2513
+    assert 0 < genuine_bytes < genuine_set.request.budget.max_context_bytes
     discarded_set = investigate(
         fixture_bundle,
         "CVE-9999-0003",

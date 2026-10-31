@@ -8,6 +8,8 @@ from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.threat_context import ThreatContextItem
 from cve_kgrag.domain.validation import EvidenceValidationError
+from cve_kgrag.domain.weakness_associations import WeaknessAssociations
+from cve_kgrag.domain.weakness_mapping import WeaknessMapping
 
 CatalogEntry = TypeVar("CatalogEntry", EvidenceAnchor, CveRecord, ThreatContextItem)
 
@@ -42,7 +44,9 @@ class InMemoryEvidenceCatalog:
         anchors: Iterable[EvidenceAnchor],
         records: Iterable[CveRecord],
         techniques: Iterable[ThreatContextItem] = (),
+        weakness_mapping: WeaknessMapping | None = None,
     ) -> None:
+        self._weakness_mapping = weakness_mapping
         violations: list[str] = []
         self._anchors_by_id = index_entries(
             anchors, attrgetter("evidence_id"), "anchors", violations
@@ -68,6 +72,12 @@ class InMemoryEvidenceCatalog:
 
     def get_technique(self, technique_id: str) -> ThreatContextItem | None:
         return self._techniques_by_id.get(technique_id)
+
+    def get_weakness_associations(self, cve_id: str) -> WeaknessAssociations | None:
+        record = self.get_cve(cve_id)
+        if record is None or self._weakness_mapping is None:
+            return None
+        return self._weakness_mapping.associate(record)
 
     def names_product(self, name: str) -> bool:
         return name.casefold() in self._product_names

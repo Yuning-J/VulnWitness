@@ -45,32 +45,33 @@ sources:
   - name: mitre-attack
     official_url: "https://attack.mitre.org"
     terms_or_license_url: "https://attack.mitre.org/resources/legal-and-branding/terms-of-use/"
-    version_strategy: "ATT&CK release version."
+    version_strategy: "Enterprise ATT&CK collection release version (20.0 in the mapping excerpt) and STIX input SHA-256."
     attribution: "© 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation."
     redistribution_allowed: allowed_with_conditions
     redistribution_conditions: "Copies must reproduce MITRE's copyright designation and the license."
     local_storage_policy: committed_excerpt
     terms_verified_on: 2026-10-14
-    notes: "Committed only inside the FiGHT excerpt: five ATT&CK tactic entries and two FiGHT sub-techniques of ATT&CK techniques, with the ATT&CK licence in its NOTICE.md."
+    notes: "FiGHT-derived content and the weakness mapping excerpt (fixtures/mitre/), with source digests and redistribution notices beside each excerpt."
   - name: mitre-cwe
     official_url: "https://cwe.mitre.org"
     terms_or_license_url: "https://cwe.mitre.org/about/termsofuse.html"
-    version_strategy: "CWE list version."
+    version_strategy: "CWE list version (5.0 in the mapping excerpt) and XML input SHA-256."
     attribution: "Copyright © 2006–2026, The MITRE Corporation. CWE, CWSS, CWRAF, and the CWE logo are trademarks of The MITRE Corporation."
     redistribution_allowed: allowed_with_conditions
     redistribution_conditions: "Copies must reproduce MITRE's copyright designation and the license; the grant says use and copy, not distribute."
-    local_storage_policy: not_stored
+    local_storage_policy: committed_excerpt
     terms_verified_on: 2026-10-14
-    notes: "Only CWE IDs that NVD records carry are stored; no CWE content is."
+    notes: "Explicit related attack pattern links in fixtures/mitre/weakness-mapping.json; full mappings are operator-supplied. Notice: fixtures/mitre/NOTICE.md."
   - name: mitre-capec
     official_url: "https://capec.mitre.org"
     terms_or_license_url: "https://capec.mitre.org/about/termsofuse.html"
-    version_strategy: "CAPEC list version."
+    version_strategy: "CAPEC list version (3.9 in the mapping excerpt) and XML input SHA-256."
     attribution: "Copyright © 2007–2026, The MITRE Corporation. CAPEC and the CAPEC logo are trademarks of The MITRE Corporation."
     redistribution_allowed: allowed_with_conditions
     redistribution_conditions: "Copies must reproduce MITRE's copyright designation and the license; the grant says use and copy, not distribute."
-    local_storage_policy: not_stored
+    local_storage_policy: committed_excerpt
     terms_verified_on: 2026-10-14
+    notes: "Explicit ATTACK taxonomy mappings and ChildOf parent chains in fixtures/mitre/weakness-mapping.json; full mappings are operator-supplied. Notice: fixtures/mitre/NOTICE.md."
   - name: 3gpp-ts-33501
     official_url: "https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=3169"
     terms_or_license_url: null

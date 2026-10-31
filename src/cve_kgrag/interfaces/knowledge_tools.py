@@ -109,7 +109,8 @@ KNOWLEDGE_TOOL_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "What each knowledge source of this deployment can serve, why an unavailable "
             "one is unavailable, and whether its dataset can execute a purls filter "
-            "(purl_filter_available). It carries no source text."
+            "(purl_filter_available), plus the served weakness-association mapping digest, "
+            "coverage and catalogue versions. It carries no source text."
         ),
         request_model=CapabilitiesRequest,
         response_model=KnowledgeCapabilities,
@@ -126,7 +127,9 @@ KNOWLEDGE_TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name=KnowledgeToolName.LOOKUP_CVE,
         description=(
-            f"The record of one CVE ID, with its evidence. {PUBLISHER_AFFECTED_STATEMENT} "
+            "The record of one CVE ID, with its evidence and derived weakness associations. "
+            "Catalogue associations are not evidence of technique usage or an attack path. "
+            f"{PUBLISHER_AFFECTED_STATEMENT} "
             f"{UNTRUSTED_RECORD_TEXT}"
         ),
         request_model=CveLookupRequest,

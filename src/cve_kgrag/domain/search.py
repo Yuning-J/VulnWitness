@@ -32,7 +32,9 @@ from cve_kgrag.domain.taxonomy import (
 
 # v2 is pre-release until the M7 review freezes it; every bump is a reviewed
 # change to the committed snapshots under schemas/v2/.
-SCHEMA_VERSION = "2.0.0-dev.38"
+from cve_kgrag.domain.weakness_associations import WeaknessAssociations
+
+SCHEMA_VERSION = "2.0.0-dev.39"
 # The matched term a structured match names for the KEV filter.
 KEV_MATCH_TERM = "listed"
 MAX_QUERY_CHARS = 512
@@ -361,6 +363,12 @@ class Candidate(ContractModel):
 
     rank: int = Field(ge=1)
     record: CveRecord
+    weakness_associations: WeaknessAssociations | None = Field(
+        default=None,
+        description=(
+            "Catalogue-derived paths, separate from retrieval relevance and FiGHT protocol context."
+        ),
+    )
     relevance_score: float = Field(
         ge=0.0,
         allow_inf_nan=False,

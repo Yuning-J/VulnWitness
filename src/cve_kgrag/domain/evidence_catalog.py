@@ -5,6 +5,7 @@ from typing import Protocol
 from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.threat_context import ThreatContextItem
+from cve_kgrag.domain.weakness_associations import WeaknessAssociations
 
 
 class EvidenceCatalog(Protocol):
@@ -28,6 +29,10 @@ class EvidenceCatalog(Protocol):
     def get_technique(self, technique_id: str) -> ThreatContextItem | None:
         """The technique as its source indexes it, with no ``matched_fields`` or
         ``matched_terms``, or ``None`` when the catalog has none."""
+        ...
+
+    def get_weakness_associations(self, cve_id: str) -> WeaknessAssociations | None:
+        """The snapshot-derived associations for this record, or None without a mapping."""
         ...
 
     def names_product(self, name: str) -> bool:

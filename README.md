@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.38` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.39` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -55,7 +55,8 @@ tree are not retained. These annotations do not change retrieval, needs or stop 
 
 The package runs offline on a bundled synthetic fixture (`CVE-9999-*` records), or on a
 corpus store an operator imports from raw NVD feeds and the CISA KEV catalog and
-activates. It commits no NVD, CVE Program, CISA KEV, CWE or CAPEC data; see
+activates. It commits no NVD, CVE Program or CISA KEV feeds. MITRE catalogue
+excerpts carry notices; see
 [`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md).
 
 ## Install
@@ -309,3 +310,39 @@ does not provide or emulate any of them and makes no compatibility promise with 
 
 Code: MIT ([`LICENSE`](LICENSE)). Third-party data carries its own terms; see
 [`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md) and [`PROVENANCE.md`](PROVENANCE.md).
+
+## Weakness associations
+
+CVE candidates in lookup and investigation answers carry `weakness_associations`:
+explicit CVE → CWE → CAPEC → ATT&CK paths or paths ending at CAPEC, the source of
+every hop, technique names and tactics when mapped, the snapshot digest, missing
+links and an omitted count. Paths ending at CAPEC have `terminal_reason` set to
+`"no_attack_mapping"`, with `technique` and `technique_source` set to null. CAPEC mappings
+inherited through `ChildOf` include their parent chain and `inherited_from`.
+
+This association is derived from official catalogues. It is not evidence that the
+CVE was used with that technique. It is not an attack path.
+No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean
+the weakness has no attack technique or no way to be exploited.
+
+Full paths and paths ending at CAPEC share a cap of 20 per CVE, with the exact
+omitted count. Direct mappings precede inherited mappings, then paths ending at
+CAPEC, then lexicographic CWE, CAPEC, technique and inheritance IDs. This order is
+not an importance ranking. No model or keyword inference fills a missing link.
+`missing_links` reports unavailable links without repeating CAPEC terminal reasons.
+Text investigations show, for example, `CWE-120 → CAPEC-100 (no ATT&CK mapping in catalogue)`.
+NVD placeholders are normalized to no specific CWE. FiGHT `protocol_context`, needs,
+ranking, affectedness and NVD version notes retain their own meanings.
+
+Build from local official files, without a corpus store or network:
+
+```sh
+cve-kgrag mitre build --cwe /data/cwec_v5.0.xml --capec /data/capec_latest.xml \
+  --attack /data/enterprise-attack.json --out /data/weakness-mapping.json
+```
+
+Pin the printed digest with `CVE_KGRAG_MITRE_SNAPSHOT_PATH` and
+`CVE_KGRAG_MITRE_SNAPSHOT_SHA256`. Both settings are required together. A mismatch
+refuses serving; without either setting a small packaged real excerpt is served.
+`capabilities` reports its coverage, digest and catalogue versions.
+See [the runbook](docs/runbook.md#weakness-association-mapping) for serving and rebuilding.

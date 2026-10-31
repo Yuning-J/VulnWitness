@@ -24,6 +24,7 @@ from cve_kgrag.domain.search import (
     SchemaVersion,
 )
 from cve_kgrag.domain.topic import TopicResolution
+from cve_kgrag.domain.weakness_associations import WeaknessSnapshotCapability
 
 MAX_INVALID_FIELDS = 20
 MAX_INVALID_FIELD_LOCATION_CHARS = 128
@@ -42,6 +43,7 @@ class KnowledgeCapabilities(ContractModel):
         description=CAPABILITY_ORDER_DESCRIPTION,
         json_schema_extra=pin_capability_order,
     )
+    weakness_associations: WeaknessSnapshotCapability | None = None
     purl_filter_available: StrictBool = Field(
         description=(
             "Whether a search or investigation may filter by package URL (filters.purls): "

@@ -584,6 +584,8 @@ def test_cve_anchor_with_a_forged_source_and_recomputed_id_is_rejected(
         validate_topic_context_response(forged_response, PINNED_EXCERPT, packaged_evidence_catalog)
     # The rewritten record cites the forged ID, so it no longer equals the stored record.
     assert raised.value.violations == (
+        f"{genuine_anchor.authoritative_record_id}: weakness associations differ from the "
+        "mapping snapshot",
         f"{forged_anchor.evidence_id}: not an anchor this service's sources hold",
         f"{genuine_anchor.authoritative_record_id}: differs from the record this service's "
         "sources hold",

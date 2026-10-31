@@ -1228,6 +1228,7 @@ def test_forged_anchor_source_with_a_recomputed_id_is_rejected(
     # The rewrite also reaches the record's and the step's citations of the forged ID.
     cve_id = forged_anchor.authoritative_record_id
     assert raised.value.violations == (
+        f"{cve_id}: weakness associations differ from the mapping snapshot",
         f"{recomputed_evidence_id}: not an anchor this service's sources hold",
         f"{cve_id}: differs from the record this service's sources hold",
         f"step 1 returns evidence {recomputed_evidence_id}, which this service's sources do "

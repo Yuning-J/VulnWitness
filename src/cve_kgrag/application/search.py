@@ -38,6 +38,8 @@ from cve_kgrag.domain.text import (
     tokenize,
 )
 from cve_kgrag.domain.validation import EvidenceValidationError, validate_search_response
+from cve_kgrag.domain.weakness_associations import WeaknessSnapshotCapability
+from cve_kgrag.domain.weakness_mapping import WeaknessMapping
 from cve_kgrag.ports.repositories import CveRepository
 from cve_kgrag.ports.retrieval import (
     GraphRetriever,
@@ -80,13 +82,19 @@ class SearchService:
         structured_retriever: StructuredRetriever,
         graph_retriever: GraphRetriever,
         semantic_retriever: SemanticRetriever | SemanticUnavailableDetail | None = None,
+        weakness_mapping: WeaknessMapping | None = None,
     ) -> None:
+        self._weakness_mapping = weakness_mapping
         self._cve_repository = cve_repository
         self._evidence_catalog = evidence_catalog
         self._lexical_retriever = lexical_retriever
         self._structured_retriever = structured_retriever
         self._graph_retriever = graph_retriever
         self._semantic_retriever = semantic_retriever
+
+    def describe_weakness_snapshot(self) -> WeaknessSnapshotCapability | None:
+        """The mapping served on candidates, separately from retrieval capabilities."""
+        return None if self._weakness_mapping is None else self._weakness_mapping.describe()
 
     def has_semantic_channel(self) -> bool:
         """Whether a semantic retriever is wired; it may still report a search failed."""
@@ -350,6 +358,9 @@ class SearchService:
                 Candidate(
                     rank=rank,
                     record=record,
+                    weakness_associations=self._evidence_catalog.get_weakness_associations(
+                        record.cve_id
+                    ),
                     relevance_score=fused_candidate.relevance_score,
                     channel_hits=tuple(fused_candidate.channel_hits),
                     scope_assessment=CVE_SCOPE_ASSESSMENT,

@@ -12,6 +12,37 @@
       "title": "AffectednessDetail",
       "type": "string"
     },
+    "CatalogueSource": {
+      "additionalProperties": false,
+      "properties": {
+        "catalogue": {
+          "enum": [
+            "CWE",
+            "CAPEC",
+            "ATT&CK Enterprise"
+          ],
+          "title": "Catalogue",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalogue",
+        "version",
+        "sha256"
+      ],
+      "title": "CatalogueSource",
+      "type": "object"
+    },
     "FightUnavailableDetail": {
       "description": "The server's sentence for an unavailable ``mitre_fight`` capability.",
       "enum": [
@@ -28,6 +59,57 @@
       ],
       "title": "KnowledgeSource",
       "type": "string"
+    },
+    "MappingCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "capecs_with_attack_links": {
+          "minimum": 0,
+          "title": "Capecs With Attack Links",
+          "type": "integer"
+        },
+        "cwes_with_capec_links": {
+          "minimum": 0,
+          "title": "Cwes With Capec Links",
+          "type": "integer"
+        },
+        "deprecated_attack_objects_skipped": {
+          "minimum": 0,
+          "title": "Deprecated Attack Objects Skipped",
+          "type": "integer"
+        },
+        "deprecated_capecs_skipped": {
+          "minimum": 0,
+          "title": "Deprecated Capecs Skipped",
+          "type": "integer"
+        },
+        "direct_mappings": {
+          "minimum": 0,
+          "title": "Direct Mappings",
+          "type": "integer"
+        },
+        "inherited_mappings": {
+          "minimum": 0,
+          "title": "Inherited Mappings",
+          "type": "integer"
+        },
+        "revoked_attack_objects_skipped": {
+          "minimum": 0,
+          "title": "Revoked Attack Objects Skipped",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cwes_with_capec_links",
+        "capecs_with_attack_links",
+        "direct_mappings",
+        "inherited_mappings",
+        "deprecated_capecs_skipped",
+        "deprecated_attack_objects_skipped",
+        "revoked_attack_objects_skipped"
+      ],
+      "title": "MappingCounts",
+      "type": "object"
     },
     "ModelPlannerUnavailableDetail": {
       "description": "The server's sentence for a model planner that is configured but cannot plan; the\ndeterministic policy plans in its place.",
@@ -486,6 +568,42 @@
       ],
       "title": "SourceCapabilityState",
       "type": "string"
+    },
+    "WeaknessSnapshotCapability": {
+      "additionalProperties": false,
+      "properties": {
+        "counts": {
+          "$ref": "#/$defs/MappingCounts"
+        },
+        "coverage": {
+          "enum": [
+            "full",
+            "excerpt"
+          ],
+          "title": "Coverage",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/CatalogueSource"
+          },
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "coverage",
+        "snapshot_sha256",
+        "sources",
+        "counts"
+      ],
+      "title": "WeaknessSnapshotCapability",
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -498,8 +616,8 @@
       "type": "boolean"
     },
     "schema_version": {
-      "const": "2.0.0-dev.38",
-      "default": "2.0.0-dev.38",
+      "const": "2.0.0-dev.39",
+      "default": "2.0.0-dev.39",
       "title": "Schema Version",
       "type": "string"
     },
@@ -581,11 +699,23 @@
       ],
       "title": "Source Capabilities",
       "type": "array"
+    },
+    "weakness_associations": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WeaknessSnapshotCapability"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [
     "schema_version",
     "source_capabilities",
+    "weakness_associations",
     "purl_filter_available"
   ],
   "title": "KnowledgeCapabilities",

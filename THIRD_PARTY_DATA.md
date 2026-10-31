@@ -13,9 +13,9 @@ source.
 | CVE Program | https://www.cve.org/Legal/TermsOfUse | allowed with conditions | operator-supplied only |
 | CISA KEV | https://www.cisa.gov/sites/default/files/licenses/kev/license.txt | allowed (CC0 1.0) | operator-supplied catalogs and the corpus stores imported from them only |
 | MITRE FiGHT | https://fight.mitre.org/resources/terms/ | allowed with conditions (FiGHT Terms of Use; ATT&CK terms for derived content) | six-technique excerpt (`src/cve_kgrag/fixtures/fight/`); the full file only as an operator-supplied snapshot |
-| MITRE ATT&CK | https://attack.mitre.org/resources/legal-and-branding/terms-of-use/ | allowed with conditions | inside the FiGHT excerpt only: five ATT&CK tactics and two FiGHT sub-techniques of ATT&CK techniques |
-| MITRE CWE | https://cwe.mitre.org/about/termsofuse.html | copies allowed with conditions | CWE IDs only |
-| MITRE CAPEC | https://capec.mitre.org/about/termsofuse.html | copies allowed with conditions | nothing |
+| MITRE ATT&CK | https://attack.mitre.org/resources/legal-and-branding/terms-of-use/ | allowed with conditions | FiGHT excerpt and the derived weakness mapping excerpt (technique names, IDs and tactics) |
+| MITRE CWE | https://cwe.mitre.org/about/termsofuse.html | copies allowed with conditions | related CAPEC links in the derived weakness mapping excerpt |
+| MITRE CAPEC | https://capec.mitre.org/about/termsofuse.html | copies allowed with conditions | taxonomy mappings and parent chains in the derived weakness mapping excerpt |
 | 3GPP TS 33.501 | not verified | unknown | clause citations only |
 | Trustify software | not verified; no adapter ships | unknown | nothing |
 | Data returned by Trustify | per upstream source; not verified; no adapter ships | unknown | nothing |
@@ -94,7 +94,7 @@ for real inputs; it holds no data from those sources.
 
 ## Committed third-party data
 
-Two excerpts.
+Three excerpts.
 
 `src/cve_kgrag/fixtures/fight/fight-excerpt.yaml` holds six technique entries
 (FGT1499.503, FGT1562.501, FGT5019, FGT5019.005, FGT5040, FGT5044) and their five
@@ -112,3 +112,14 @@ at commit `ac8955f768a5bfef6f1c9a5c1d02ec5b5cf9bf5e`, byte for byte (SHA-256
 `a877d200e29b8aeea33e81c1ee1453b1575e15e33d9cc3613e4158a3332baa64`): the names,
 descriptions and input schemas of its twelve tools. The commit's `LICENSE` sits beside it. Only the
 contract tests read them; the wheel does not include them.
+
+`src/cve_kgrag/fixtures/mitre/weakness-mapping.json` is a derived excerpt built by
+`cve-kgrag mitre build` from CWE 5.0, CAPEC 3.9 and Enterprise ATT&CK 20.0 (STIX 2.1),
+downloaded on 2026-10-31. It selects seven CWEs and their explicit CAPEC associations;
+CAPEC `ChildOf` chains supply separately labelled inherited mappings. ATT&CK names
+and tactics come from active technique objects. Its `sources` pins the SHA-256 of
+each full input; `manifest.json` pins both the excerpt and its adjacent `NOTICE.md`,
+which reproduces MITRE's copyright designations and licence grants. No external
+mapper code is included. The derived mapping has no claim of MITRE endorsement or
+of CVE exploitation with a technique. Full catalogues and derived mapping files stay
+operator-supplied under the same terms.
