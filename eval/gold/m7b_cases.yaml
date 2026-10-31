@@ -70,24 +70,209 @@ cases:
     rules:
       cves:
         relevant:
-          all_of:
-            - description_any: ["GTP", "GTP-U", "GTP-C", "GTPv1", "GTPv2", "GTPv2-C", "GPRS Tunnelling Protocol", "GPRS Tunneling Protocol"]
-            - none_of:
-                - cpe: ["wireshark:wireshark", "tcpdump:tcpdump", "kognetiks:kognetiks_chatbot"]
-                - description_any: ["dissector"]
+          cve_ids:
+            ids:
+            - CVE-2014-3386
+            - CVE-2015-4275
+            - CVE-2016-1436
+            - CVE-2017-12217
+            - CVE-2021-23048
+            - CVE-2022-22235
+            - CVE-2023-23846
+            - CVE-2023-54142
+            - CVE-2024-26754
+            - CVE-2024-26793
+            - CVE-2024-27396
+            - CVE-2024-44999
+            - CVE-2024-46677
+            - CVE-2025-15417
+            - CVE-2025-15418
+            - CVE-2025-15419
+            - CVE-2025-15528
+            - CVE-2025-21678
+            - CVE-2025-21865
+            - CVE-2025-65559
+            - CVE-2026-107166
+            - CVE-2026-108105
+            - CVE-2026-21914
+            - CVE-2026-2517
+            - CVE-2026-37198
+            - CVE-2026-44473
+            - CVE-2026-64577
+            - CVE-2026-75892
+            - CVE-2026-76445
+            - CVE-2026-80851
+            - CVE-2026-8187
+            - CVE-2026-89789
+            - CVE-2026-98401
+            reasons:
+              CVE-2014-3386: Related mitigation without a proven GTP vulnerable path.
+              CVE-2015-4275: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2016-1436: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2017-12217: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2021-23048: Related mitigation without a proven GTP vulnerable path.
+              CVE-2022-22235: Related mitigation without a proven GTP vulnerable path.
+              CVE-2023-23846: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2023-54142: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-26754: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-26793: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-27396: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-44999: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-46677: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-15417: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-15418: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-15419: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-15528: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-21678: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-21865: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-65559: Related mitigation without a proven GTP vulnerable path.
+              CVE-2026-107166: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-108105: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-21914: Related mitigation without a proven GTP vulnerable path.
+              CVE-2026-2517: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-37198: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-44473: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-64577: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-75892: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-76445: Related mitigation without a proven GTP vulnerable path.
+              CVE-2026-80851: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-8187: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-89789: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-98401: Related mitigation without a proven GTP vulnerable path.
         required:
-          all_of:
-            - description_any: ["GTP", "GTP-U", "GTP-C", "GTPv1", "GTPv2", "GTPv2-C", "GPRS Tunnelling Protocol", "GPRS Tunneling Protocol"]
-            - description_any: ["UPF", "SGW", "PGW", "S-GW", "P-GW", "SGW-U", "PGW-U", "GGSN", "SGSN", "SMF", "MME", "user plane", "packet core", "5GC", "EPC"]
-            - none_of:
-                - cpe: ["wireshark:wireshark", "tcpdump:tcpdump", "kognetiks:kognetiks_chatbot"]
-                - description_any: ["dissector"]
+          cve_ids:
+            ids:
+            - CVE-2015-4275
+            - CVE-2016-1436
+            - CVE-2017-12217
+            - CVE-2023-23846
+            - CVE-2023-54142
+            - CVE-2024-26754
+            - CVE-2024-26793
+            - CVE-2024-27396
+            - CVE-2024-44999
+            - CVE-2024-46677
+            - CVE-2025-15417
+            - CVE-2025-15418
+            - CVE-2025-15419
+            - CVE-2025-15528
+            - CVE-2025-21678
+            - CVE-2025-21865
+            - CVE-2026-107166
+            - CVE-2026-108105
+            - CVE-2026-2517
+            - CVE-2026-37198
+            - CVE-2026-44473
+            - CVE-2026-64577
+            - CVE-2026-75892
+            - CVE-2026-80851
+            - CVE-2026-8187
+            - CVE-2026-89789
+            reasons:
+              CVE-2015-4275: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2016-1436: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2017-12217: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2023-23846: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2023-54142: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-26754: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-26793: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-27396: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-44999: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2024-46677: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-15417: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-15418: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-15419: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-15528: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-21678: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2025-21865: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-107166: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-108105: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-2517: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-37198: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-44473: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-64577: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-75892: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-80851: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-8187: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
+              CVE-2026-89789: Direct defect in GTP packet, tunnel, PDP, socket or device-lifecycle handling,
+                including Linux implementations.
         irrelevant:
-          all_of:
-            - description_any: ["GTP", "GTP-U", "GTP-C", "GTPv1", "GTPv2", "GTPv2-C", "GPRS Tunnelling Protocol", "GPRS Tunneling Protocol"]
-            - any_of:
-                - cpe: ["wireshark:wireshark", "tcpdump:tcpdump", "kognetiks:kognetiks_chatbot"]
-                - description_any: ["dissector"]
+          cve_ids:
+            ids:
+            - CVE-2003-0925
+            - CVE-2005-4585
+            - CVE-2006-0237
+            - CVE-2007-2879
+            - CVE-2013-3555
+            - CVE-2014-5163
+            - CVE-2018-19939
+            - CVE-2024-10529
+            - CVE-2024-10530
+            - CVE-2024-10531
+            - CVE-2026-97419
+            reasons:
+              CVE-2003-0925: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2005-4585: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2006-0237: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2007-2879: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2013-3555: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2014-5163: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2018-19939: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2024-10529: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2024-10530: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2024-10531: Name collision or incidental mention without a GTP vulnerable path.
+              CVE-2026-97419: Name collision or incidental mention without a GTP vulnerable path.
       techniques:
         relevant:
           technique_any: ["GTP", "GTP-U", "GTP-C", "GTPv1", "GTPv2", "GPRS Tunnelling Protocol", "GPRS Tunneling Protocol"]
@@ -105,10 +290,10 @@ cases:
               FGT5042: GTP echo requests bypass a telecom signaling firewall
     label:
       sufficiency: sufficient
-      reason: Mobile-core GTP CVEs and GTP techniques both exist; no reviewed topic card covers GTP.
+      reason: "GTP implementation CVEs and protocol techniques support the goal. Required: direct defects in GTP packet, tunnel, PDP, socket or device-lifecycle handling, including Linux. Allowed: related mitigation without a proven GTP vulnerable path; CVE-2025-65559 stays allowed. Irrelevant: name collisions or incidental mentions. Labels are independent of retrieval results."
     drafted_by: assistant
     confirmed_by: owner
-    confirmed_on: 2026-10-27
+    confirmed_on: 2026-10-31
 
   - id: kamailio-version-affected
     split: baseline
