@@ -73,4 +73,5 @@ uv pip install -p "$core_python" pytest jsonschema
   --ignore=tests/integration/interfaces/rest --ignore=tests/integration/adapters/migration \
   --ignore=tests/integration/adapters/store --ignore=tests/integration/test_cli_store_root.py \
   --ignore=tests/integration/test_cli_product_store.py \
+  --ignore=tests/integration/test_operator_refresh.py \
   --ignore=tests/integration/test_cli_gold_sets.py --ignore=tests/integration/test_cli_labelled_eval.py
