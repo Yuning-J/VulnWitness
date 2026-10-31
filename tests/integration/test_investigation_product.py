@@ -17,6 +17,7 @@ from tests.support.investigation import (
 )
 from tests.support.product_investigations import (
     build_lexical_product_bundle,
+    build_network_function_bundle,
     build_product_investigation_bundle,
 )
 from tests.support.services import build_fixture_service
@@ -25,6 +26,130 @@ from tests.support.services import build_fixture_service
 @pytest.fixture
 def product_bundle(fixture_bundle: FixtureBundle) -> FixtureBundle:
     return build_product_investigation_bundle(fixture_bundle)
+
+
+@pytest.mark.parametrize(
+    "acronym",
+    ("udm", "amf", "smf", "upf", "ausf", "nrf", "pcf", "udr", "nssf", "mme", "sgw", "pgw"),
+)
+def test_network_function_without_vendor_omits_product_step(
+    product_bundle: FixtureBundle, acronym: str
+) -> None:
+    # Arrange
+    bundle = build_network_function_bundle(product_bundle, acronym)
+    request = build_investigation_request(
+        f"Vulnerabilities in {acronym.upper()}", "implementation_only"
+    )
+
+    # Act
+    evidence_set = build_test_investigation_service(bundle).investigate(request)
+
+    # Assert
+    assert evidence_set.interpretation.product_recognition is None
+    assert evidence_set.interpretation.ambiguous_product_names == ()
+    assert acronym in evidence_set.interpretation.search_terms
+    assert all(
+        not isinstance(step.call, ProductQueryCall) for step in evidence_set.trajectory.steps
+    )
+
+
+@pytest.mark.parametrize(
+    "query",
+    (
+        "SUCI de-concealment vulnerabilities in UDM",
+        "Is UDM 5.8.2 affected by known vulnerabilities",
+        "prefix-free5gc UDM vulnerabilities",
+        "free5gc-suffix UDM vulnerabilities",
+    ),
+)
+def test_unqualified_udm_question_omits_product_step(
+    product_bundle: FixtureBundle, query: str
+) -> None:
+    # Arrange
+    bundle = build_network_function_bundle(product_bundle, "udm")
+    request = build_investigation_request(query, "implementation_only")
+
+    # Act
+    evidence_set = build_test_investigation_service(bundle).investigate(request)
+
+    # Assert
+    assert evidence_set.interpretation.product_recognition is None
+    assert all(
+        not isinstance(step.call, ProductQueryCall) for step in evidence_set.trajectory.steps
+    )
+
+
+@pytest.mark.parametrize("query", ("free5GC UDM vulnerabilities", "Is free5GC UDM 5.8.2 affected"))
+def test_network_function_with_vendor_adds_one_product_step(
+    product_bundle: FixtureBundle, query: str
+) -> None:
+    # Arrange
+    bundle = build_network_function_bundle(product_bundle, "udm")
+    request = build_investigation_request(query, "implementation_only")
+
+    # Act
+    evidence_set = build_test_investigation_service(bundle).investigate(request)
+
+    # Assert
+    recognition = evidence_set.interpretation.product_recognition
+    assert recognition is not None
+    assert recognition.request.vendor == "free5gc"
+    assert (
+        sum(isinstance(step.call, ProductQueryCall) for step in evidence_set.trajectory.steps) == 1
+    )
+    product_step = evidence_set.trajectory.steps[1]
+    assert "CVE-9999-7215" in product_step.answer_ids
+
+
+@pytest.mark.parametrize("version", ("2.0", "5.8.2"))
+def test_unqualified_network_function_keeps_version_terms_without_version_notes(
+    product_bundle: FixtureBundle, version: str
+) -> None:
+    # Arrange
+    bundle = build_network_function_bundle(product_bundle, "udm")
+    request = build_investigation_request(f"Is UDM {version} affected", "implementation_only")
+
+    # Act
+    evidence_set = build_test_investigation_service(bundle).investigate(request)
+
+    # Assert
+    assert evidence_set.interpretation.product_recognition is None
+    assert evidence_set.interpretation.affectedness_mentions == ()
+    assert evidence_set.interpretation.search_terms == ("udm", *version.split("."), "affected")
+    assert "CVE-9999-7215" in list_implementation_ids(evidence_set)
+    assert all(item.nvd_version_notes is None for item in evidence_set.implementation_candidates)
+    assert all(
+        not isinstance(step.call, ProductQueryCall) for step in evidence_set.trajectory.steps
+    )
+    assert replay_evidence_set(evidence_set, build_test_deployment(bundle)) == ReplayCompleted(())
+
+
+@pytest.mark.parametrize("version", ("2.0", "5.8.2"))
+def test_vendor_qualified_network_function_removes_version_terms_and_adds_version_notes(
+    product_bundle: FixtureBundle, version: str
+) -> None:
+    # Arrange
+    bundle = build_network_function_bundle(product_bundle, "udm")
+    request = build_investigation_request(
+        f"Is free5GC UDM {version} affected", "implementation_only"
+    )
+
+    # Act
+    evidence_set = build_test_investigation_service(bundle).investigate(request)
+
+    # Assert
+    recognition = evidence_set.interpretation.product_recognition
+    assert recognition is not None
+    assert recognition.request.vendor == "free5gc"
+    assert recognition.request.product == "udm"
+    assert recognition.request.version == version
+    assert evidence_set.interpretation.affectedness_mentions == (f"udm {version}",)
+    assert evidence_set.interpretation.search_terms == ("free5gc", "udm", "affected")
+    assert "CVE-9999-7215" in list_implementation_ids(evidence_set)
+    for candidate in evidence_set.implementation_candidates:
+        assert candidate.nvd_version_notes is not None
+        assert candidate.nvd_version_notes[0].mention == f"udm {version}"
+    assert replay_evidence_set(evidence_set, build_test_deployment(bundle)) == ReplayCompleted(())
 
 
 def test_named_product_version_enters_final_top_twenty_without_numeric_search_terms(

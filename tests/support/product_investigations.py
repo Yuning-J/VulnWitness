@@ -5,6 +5,16 @@ from cve_kgrag.domain.cve import VersionRange
 from tests.support.builders import build_bundle_with, build_versioned_product
 
 
+def build_network_function_bundle(bundle: FixtureBundle, acronym: str) -> FixtureBundle:
+    entry = build_versioned_product(vendor="free5gc", product=acronym)
+    return build_bundle_with(
+        bundle,
+        "CVE-9999-7215",
+        f"[SYNTHETIC] {acronym} implementation crash",
+        affected=(entry,),
+    )
+
+
 def build_product_investigation_bundle(bundle: FixtureBundle) -> FixtureBundle:
     specifications = (
         ("CVE-9999-7201", "kamailio", "kamailio", "[SYNTHETIC] componentalpha crash"),

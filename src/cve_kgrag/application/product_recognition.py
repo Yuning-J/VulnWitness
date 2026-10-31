@@ -10,9 +10,47 @@ from cve_kgrag.domain.product_recognition import ProductRecognition
 # Vocabulary exclusions only: these names remain ordinary lexical search terms.
 COLLISION_NAMES = frozenset({"service", "known", "smf"})
 
+# Network functions: 3GPP TS 23.501 (5GC), TS 23.401 (EPC).
+# A function name alone does not identify a vendor's implementation.
+NETWORK_FUNCTION_ACRONYMS = frozenset(
+    {
+        "af",
+        "amf",
+        "ausf",
+        "eir",
+        "hss",
+        "mme",
+        "n3iwf",
+        "nef",
+        "nrf",
+        "nssf",
+        "pcf",
+        "pgw",
+        "p-gw",
+        "scp",
+        "sepp",
+        "sgw",
+        "s-gw",
+        "smf",
+        "udm",
+        "udr",
+        "udsf",
+        "upf",
+    }
+)
+
 
 def find_name_pattern(name: str) -> re.Pattern[str]:
     return re.compile(r"(?<![0-9a-z_.-])" + re.escape(name) + r"(?![0-9a-z_.-])")
+
+
+def is_unqualified_network_function(
+    name: str, vocabulary: set[str], identities: Sequence[ProductIdentity]
+) -> bool:
+    """Whether an NF acronym lacks a whole vendor phrase for a matching identity."""
+    return name in NETWORK_FUNCTION_ACRONYMS and not any(
+        identity.vendor in vocabulary for identity in identities
+    )
 
 
 def recognize_product(
@@ -23,7 +61,8 @@ def recognize_product(
     A vendor may own many products. A product must belong to exactly one vendor;
     a name used as both vendor and product must identify that same vendor. Vendor
     phrases take precedence over product-only phrases. Multiple remaining phrases
-    are ambiguous. Contained shorter names defer to the longest phrase.
+    are ambiguous. Product-only network-function acronyms require a named vendor. Contained
+    shorter names defer to the longest phrase.
     """
     vocabulary = find_question_phrases(query)
     mention_versions: dict[str, str] = {}
@@ -42,6 +81,8 @@ def recognize_product(
                 names.append(name)
     longest_names: list[str] = []
     for name in names:
+        if is_unqualified_network_function(name, vocabulary, catalog.find_product_identities(name)):
+            continue
         if not any(name != other and find_name_pattern(name).search(other) for other in names):
             longest_names.append(name)
     if not longest_names:

@@ -1,4 +1,4 @@
-"""The deterministic investigation policy (version ``m7b.5``): pure functions of the
+"""The deterministic investigation policy (version ``m7b.6``): pure functions of the
 request, its interpretation and the observed steps.
 
 The policy reads a query into an intent, decides whether the query can be answered
@@ -42,7 +42,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import assert_never
 
-from cve_kgrag.application.product_recognition import recognize_product, remove_recognized_versions
+from cve_kgrag.application.product_recognition import (
+    find_question_phrases,
+    is_unqualified_network_function,
+    recognize_product,
+    remove_recognized_versions,
+)
 from cve_kgrag.domain.cve import MAX_CVE_ID_CHARS
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.evidence_needs import (
@@ -90,7 +95,7 @@ from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.topics.registry import TopicRegistry
 
-DETERMINISTIC_POLICY_VERSION = "m7b.5"
+DETERMINISTIC_POLICY_VERSION = "m7b.6"
 # An exact lookup or a CVE search is one backend query.
 CVE_TOOL_COST = 1
 # A direct FiGHT search is one backend query.
@@ -203,14 +208,20 @@ def list_affectedness_mentions(
     """Each product version the query asks affectedness of, once, in query order: a word
     some stored record carries as its whole vendor or product, followed by a dotted
     version, in a query holding an affectedness word. A product and version without such
-    a word is a search, not a question about that version."""
+    a word is a search, not a question about that version. Network-function acronyms
+    require a matching vendor phrase in the query."""
     if not asks_affectedness(normalized_query):
         return ()
+    vocabulary = find_question_phrases(normalized_query)
     affectedness_mentions: list[str] = []
     for word, version in find_version_mentions(normalized_query):
         affectedness_mention = f"{word} {version}"
         is_new = affectedness_mention not in affectedness_mentions
         if is_new and evidence_catalog.names_product(word):
+            if is_unqualified_network_function(
+                word, vocabulary, evidence_catalog.find_product_identities(word)
+            ):
+                continue
             affectedness_mentions.append(affectedness_mention)
     return tuple(affectedness_mentions)
 
