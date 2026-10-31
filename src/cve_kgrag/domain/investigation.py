@@ -1053,6 +1053,7 @@ class InvestigationWarningCode(StrEnum):
     EXCLUDED_TERM = "excluded_term"
     TOPIC_NOT_RESOLVED = "topic_not_resolved"
     TOPIC_PENDING_REVIEW = "topic_pending_review"
+    TOPIC_FAMILY_SCOPE = "topic_family_scope"
     NO_SEARCHABLE_TERMS = "no_searchable_terms"
     APPLICABILITY_UNKNOWN = "applicability_unknown"
     MODEL_PLAN_REJECTED = "model_plan_rejected"
@@ -1080,7 +1081,9 @@ class InvestigationWarning(ContractModel):
     them. It covers only searches whose CVEs can be in the answer, so a
     ``protocol_context_only`` run never raises it. ``term_not_indexed`` names, once each, a
     search term an adopted step warned no CVE record (or, for a direct FiGHT search, no
-    technique) holds; the step's own warning says which source."""
+    technique) holds; the step's own warning says which source.
+    ``topic_family_scope`` explains that the matched GTP alias retrieves the whole
+    family, including GTP-C and GTP-U."""
 
     code: InvestigationWarningCode
     subject: str

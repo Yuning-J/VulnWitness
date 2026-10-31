@@ -100,7 +100,7 @@ trajectories:
       status: partial
       implementation_candidates: []
       excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
-      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
+      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
       claims:
         - "fight:FGT1499.503"
         - "fight:FGT5019"
@@ -165,7 +165,7 @@ trajectories:
       status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
-        - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+        - {cve_id: "CVE-9999-0004", tier: telecom_ecosystem_adjacent}
       excluded_implementation_candidates: []
       protocol_context: []
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
@@ -193,7 +193,7 @@ trajectories:
       status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
-        - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+        - {cve_id: "CVE-9999-0004", tier: telecom_ecosystem_adjacent}
       excluded_implementation_candidates: []
       protocol_context: []
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
@@ -249,7 +249,7 @@ trajectories:
       status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
-        - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+        - {cve_id: "CVE-9999-0004", tier: telecom_ecosystem_adjacent}
       excluded_implementation_candidates: []
       protocol_context: []
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]
@@ -281,7 +281,7 @@ trajectories:
       status: partial
       implementation_candidates:
         - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
-        - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+        - {cve_id: "CVE-9999-0004", tier: telecom_ecosystem_adjacent}
       excluded_implementation_candidates: []
       protocol_context: []
       claims: ["cve:CVE-9999-0003", "cve:CVE-9999-0004"]

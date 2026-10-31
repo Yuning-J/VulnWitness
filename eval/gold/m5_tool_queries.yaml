@@ -87,7 +87,7 @@ rows:
     request: {query: "5gaka"}
     expected:
       status: ok
-      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
+      protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
       implementation_candidates: []
       excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
   # A bare aka resolves to no topic, so FiGHT is not searched.

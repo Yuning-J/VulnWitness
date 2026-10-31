@@ -15,7 +15,7 @@ from cve_kgrag.domain.investigation import (
     StepAdmission,
 )
 from cve_kgrag.domain.planning import PlanRejection, QueryIntent
-from cve_kgrag.domain.topic import ProtocolTopic, ReviewStatus
+from cve_kgrag.domain.topic import ProtocolTopic, ReviewStatus, describe_topic_family_scope
 from cve_kgrag.domain.topic_context import QueryScope
 
 
@@ -26,7 +26,7 @@ def list_interpretation_warnings(
     ran_any_step: bool,
 ) -> list[InvestigationWarning]:
     """Excluded terms, a topic the scope expects but the query did not resolve, a query
-    without searchable terms, and a pending-review card that drove retrieval."""
+    without searchable terms, a pending-review card, and the GTP card's family scope."""
     warnings: list[InvestigationWarning] = []
     for excluded_term in interpretation.resolution.excluded_terms:
         warnings.append(
@@ -56,6 +56,14 @@ def list_interpretation_warnings(
                 code=InvestigationWarningCode.TOPIC_PENDING_REVIEW, subject=topic.topic_id
             )
         )
+    if topic is not None and ran_any_step:
+        family_scope = describe_topic_family_scope(interpretation.resolution.matches[0])
+        if family_scope is not None:
+            warnings.append(
+                InvestigationWarning(
+                    code=InvestigationWarningCode.TOPIC_FAMILY_SCOPE, subject=family_scope
+                )
+            )
     return warnings
 
 

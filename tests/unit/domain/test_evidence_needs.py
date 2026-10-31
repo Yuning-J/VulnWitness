@@ -24,11 +24,13 @@ from tests.support.investigation import (
     choose_fight_source,
 )
 
-DIRECT_SEARCH_REQUEST = [{"source": "mitre_fight", "terms": ["gtp", "threats"], "limit": 20}]
+DIRECT_SEARCH_REQUEST = [
+    {"source": "mitre_fight", "terms": ["unregistered", "threats"], "limit": 20}
+]
 
 
 def build_direct_fight_step(**overrides: Any) -> ToolStep:
-    """An admitted round-1 ``fight_direct_search`` step of ``gtp threats`` that found nothing."""
+    """An admitted round-1 direct search of ``unregistered threats`` that found nothing."""
     fields: dict[str, Any] = {
         "call": {"tool": "fight_direct_search"},
         "reason": "query_terms_fight",
@@ -91,7 +93,7 @@ def test_protocol_need_is_unsupported_only_when_a_block_bars_the_direct_search(
 def test_protocol_need_without_an_admitted_direct_search_is_not_evaluated(
     topic_registry: TopicRegistry, steps: list[ToolStep]
 ) -> None:
-    outcome = judge_protocol_need(topic_registry, "gtp threats", steps)
+    outcome = judge_protocol_need(topic_registry, "unregistered threats", steps)
 
     assert outcome is NeedOutcome.NOT_EVALUATED
 
@@ -102,7 +104,7 @@ def test_protocol_need_is_matches_unassessed_when_the_answer_lists_a_direct_sear
     technique = find_packaged_technique()
     step = build_direct_fight_step(status="ok", answer_ids=[technique.technique_id])
 
-    outcome = judge_protocol_need(topic_registry, "gtp threats", [step], (technique,))
+    outcome = judge_protocol_need(topic_registry, "unregistered threats", [step], (technique,))
 
     assert outcome is NeedOutcome.MATCHES_UNASSESSED
 
@@ -117,7 +119,7 @@ def test_protocol_need_is_not_found_when_the_direct_search_warned_a_word_no_tech
         topic_warnings=[{"code": "term_not_indexed", "subject": "threats"}],
     )
 
-    outcome = judge_protocol_need(topic_registry, "gtp threats", [step], (technique,))
+    outcome = judge_protocol_need(topic_registry, "unregistered threats", [step], (technique,))
 
     assert outcome is NeedOutcome.NOT_FOUND
 
@@ -127,8 +129,8 @@ def test_protocol_need_ignores_a_word_only_the_cve_search_warned_no_record_holds
 ) -> None:
     technique = find_packaged_technique()
     cve_step = build_recorded_step(
-        call={"tool": "cve_search", "query": "gtp threats"},
-        backend_requests=[{"source": "cve_search", "query": "gtp threats", "limit": 20}],
+        call={"tool": "cve_search", "query": "unregistered threats"},
+        backend_requests=[{"source": "cve_search", "query": "unregistered threats", "limit": 20}],
         search_warnings=[{"code": "term_not_indexed", "subject": "threats"}],
     )
     fight_step = build_direct_fight_step(
@@ -136,7 +138,7 @@ def test_protocol_need_ignores_a_word_only_the_cve_search_warned_no_record_holds
     )
 
     outcome = judge_protocol_need(
-        topic_registry, "gtp threats", [cve_step, fight_step], (technique,)
+        topic_registry, "unregistered threats", [cve_step, fight_step], (technique,)
     )
 
     assert outcome is NeedOutcome.MATCHES_UNASSESSED
@@ -145,7 +147,9 @@ def test_protocol_need_ignores_a_word_only_the_cve_search_warned_no_record_holds
 def test_protocol_need_is_not_found_when_the_allowed_direct_search_ran_and_found_nothing(
     topic_registry: TopicRegistry,
 ) -> None:
-    outcome = judge_protocol_need(topic_registry, "gtp threats", [build_direct_fight_step()])
+    outcome = judge_protocol_need(
+        topic_registry, "unregistered threats", [build_direct_fight_step()]
+    )
 
     assert outcome is NeedOutcome.NOT_FOUND
 
@@ -164,7 +168,7 @@ def test_protocol_need_is_source_unavailable_when_the_admitted_direct_search_fai
         ],
     )
 
-    outcome = judge_protocol_need(topic_registry, "gtp threats", [failed_step])
+    outcome = judge_protocol_need(topic_registry, "unregistered threats", [failed_step])
 
     assert outcome is NeedOutcome.SOURCE_UNAVAILABLE
 
@@ -217,13 +221,13 @@ def test_implementation_need_is_matches_unassessed_when_a_search_of_every_word_r
     topic_registry: TopicRegistry,
 ) -> None:
     step = build_recorded_step(
-        call={"tool": "cve_search", "query": "gtp threats"},
-        backend_requests=[{"source": "cve_search", "query": "gtp threats", "limit": 20}],
+        call={"tool": "cve_search", "query": "unregistered threats"},
+        backend_requests=[{"source": "cve_search", "query": "unregistered threats", "limit": 20}],
         status="ok",
         answer_ids=["CVE-9999-0003"],
     )
 
-    outcome = judge_implementation_need(topic_registry, "gtp threats", [step])
+    outcome = judge_implementation_need(topic_registry, "unregistered threats", [step])
 
     assert outcome is NeedOutcome.MATCHES_UNASSESSED
 
@@ -232,14 +236,14 @@ def test_implementation_need_is_not_found_when_a_search_warned_a_word_no_record_
     topic_registry: TopicRegistry,
 ) -> None:
     step = build_recorded_step(
-        call={"tool": "cve_search", "query": "gtp threats"},
-        backend_requests=[{"source": "cve_search", "query": "gtp threats", "limit": 20}],
+        call={"tool": "cve_search", "query": "unregistered threats"},
+        backend_requests=[{"source": "cve_search", "query": "unregistered threats", "limit": 20}],
         status="ok",
         answer_ids=["CVE-9999-0003"],
         search_warnings=[{"code": "term_not_indexed", "subject": "threats"}],
     )
 
-    outcome = judge_implementation_need(topic_registry, "gtp threats", [step])
+    outcome = judge_implementation_need(topic_registry, "unregistered threats", [step])
 
     assert outcome is NeedOutcome.NOT_FOUND
 

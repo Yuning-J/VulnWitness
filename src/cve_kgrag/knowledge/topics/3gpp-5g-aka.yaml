@@ -1,96 +1,120 @@
-# Reviewed knowledge, not model output: change it only through human review.
-topic_schema_version: "1"
-topic_id: "3gpp:5g-aka"
-version: "1.0.1"
-canonical_name: "5G Authentication and Key Agreement"
+# Draft knowledge; pending named human review.
+topic_schema_version: '1'
+topic_id: 3gpp:5g-aka
+version: 1.1.0
+canonical_name: 5G Authentication and Key Agreement
 exact_aliases:
-  - "5G-AKA"
-  - "5G AKA"
-  - "5gaka"
+- 5G-AKA
+- 5G AKA
+- 5gaka
 contextual_aliases: []
 entities:
-  - name: "AUSF"
-    role: >-
-      Authentication Server Function in the home network. In 5G AKA it computes
-      HXRES*, derives K_SEAF from K_AUSF, verifies RES* against XRES*, and on
-      success sends K_SEAF (and the SUPI when a SUCI was used) to the SEAF
-      (TS 33.501 clauses 5.8a, 6.1.3.2.0).
-  - name: "UDM"
-    role: >-
-      Unified Data Management, with the ARPF. It creates the 5G home environment
-      authentication vector, derives K_AUSF, and invokes the SIDF to de-conceal a
-      SUCI (TS 33.501 clauses 6.1.2, 6.1.3.2.0).
-  - name: "SEAF"
-    role: >-
-      Security Anchor Function, co-located with the AMF in the serving network. It
-      compares HRES* with HXRES* and derives K_AMF from K_SEAF (TS 33.501 clauses
-      5.6, 6.1.3.2.0, 6.2.2.1).
-  - name: "SUPI"
-    role: "Subscription Permanent Identifier of the subscriber (TS 33.501 clause 3.1)."
-  - name: "SUCI"
-    role: >-
-      Subscription Concealed Identifier, a one-time concealed form of the SUPI that
-      the SIDF at the UDM de-conceals (TS 33.501 clauses 3.1, 6.12.5).
-  - name: "K_SEAF"
-    role: >-
-      Anchor key derived from K_AUSF, delivered by the AUSF to the SEAF after
-      successful authentication (TS 33.501 clauses 6.1.1.1, 6.1.3.2.0).
+- name: HXRES
+  role: Tokenizer form of HXRES*, the hash of XRES* used in the 5G-AKA serving-network check; TS
+    33.501 V19.7.0 clause 6.1.3.2.0. Requires a second independent card term.
+- name: HRES
+  role: Tokenizer form of HRES*, compared with HXRES* by the SEAF in 5G-AKA; TS 33.501 V19.7.0 clause
+    6.1.3.2.0. Requires a second independent card term.
+- name: 5G HE AV
+  role: 5G home environment authentication vector for 5G-AKA; TS 33.501 V19.7.0 clause 6.1.3.2.0.
+- name: 5G SE AV
+  role: 5G serving environment authentication vector for 5G-AKA; TS 33.501 V19.7.0 clause 6.1.3.2.0.
 ecosystem_terms:
-  - "5G"
-  - "5GC"
-  - "5G core"
-  - "AMF"
-  - "gNB"
-  - "NG-RAN"
+- 5GC
+- 5G core
+- NG-RAN
+- Access and Mobility Management Function
+- 5G AMF
+- Open5GS
+- free5GC
+- AUSF
+- Unified Data Management
+- Security Anchor Function
+- SUPI
+- SUCI
+- K_SEAF
+- Authentication Server Function
+- Nausf UEAuthentication Authenticate
+- Nudm UEAuthentication Get
+- Nausf
+- UEAuthentication
+- Nudm UEAU
+- Authentication Request
+- Authentication Response
+- AUTN
+- RES
+- XRES
+- SIDF
+- SUCI de-concealment
 exclusions:
-  - term: "aka"
-    reason: >-
-      Bare AKA is ambiguous: UMTS and EPS AKA, EAP-AKA and EAP-AKA', or 'also known
-      as'. It names 5G AKA only inside an exact alias.
-  - term: "EAP-AKA'"
-    reason: >-
-      EAP-AKA' is the other 5G primary authentication method (TS 33.501 clause
-      6.1.3.1), not 5G AKA. Matching ignores punctuation, so EAP-AKA is excluded too.
-  - term: "EPS AKA"
-    reason: "EPS AKA is the LTE method that 5G AKA enhances (TS 33.501 clause 6.1.3.2.0), not 5G AKA itself."
+- term: aka
+  reason: 'Bare AKA is ambiguous: UMTS and EPS AKA, EAP-AKA and EAP-AKA'', or ''also known as''.
+    It names 5G AKA only inside an exact alias.'
+- term: EAP-AKA'
+  reason: EAP-AKA' is the other 5G primary authentication method (TS 33.501 clause 6.1.3.1), not
+    5G AKA. Matching ignores punctuation, so EAP-AKA is excluded too.
+- term: EPS AKA
+  reason: EPS AKA is the LTE method that 5G AKA enhances (TS 33.501 clause 6.1.3.2.0), not 5G AKA
+    itself.
 query_templates:
-  - "5G AKA"
-  - "5gaka"
-  - "AUSF SEAF K_SEAF"
-  - "SUCI SUPI UDM"
+- 5G AKA 5gaka
+- Nausf_UEAuthentication_Authenticate Nudm_UEAuthentication_Get nausf-auth ue-authentications nudm-ueau
+- Authentication Response AUSF RES XRES AUTN K_SEAF HXRES HRES 5G HE AV 5G SE AV
+- SUCI SUPI SIDF deconcealment
 review:
-  status: "pending_review"
+  status: pending_review
   reviewer: null
   reviewed_on: null
-  basis: >-
-    The rebuild brief specifies the aliases (5G-AKA, 5G AKA, 5gaka), the six
-    entities and the bare-aka exclusion. Entity roles, the EAP-AKA' and EPS AKA
-    exclusions, ecosystem terms and query templates were drafted by the
-    implementer from ETSI TS 133 501 V19.7.0. On 2026-10-15 a technical review
-    against that release found no factual error in the roles, aliases, exclusions
-    or templates. Scope: this is a cross-release, whole-protocol, high-recall
-    topic. It covers 5G AKA with its initial identity handling, so SUPI, SUCI and
-    UDM stay entities and the wider identity and subscription threat context they
-    match is accepted (30 techniques in full FiGHT 3.1.0; SUPI alone matches 19
-    and UDM 17).
-    The CCS 2018 Tamarin model (TS 33.501 V15.0.0) also models SUCI, SUPI secrecy
-    and the full authentication message flow; it merges AUSF and ARPF into one
-    HSS role and omits the AMF field, so it is a formal-calibration reference and
-    V19.7.0 stays the normative one. EAP-AKA' and EPS AKA are separate topics.
-    There is no contextual alias because AKA beside 5G entities also describes
-    EAP-AKA'. Narrowing to the core authentication exchange, or to identity
-    privacy, belongs to an investigation profile or a separate topic, not to this
-    card. Entity and ecosystem acronyms are ambiguous outside telecom (UDM, AMF,
-    5G), so relevance needs two of them; "5G aka New Radio" written with plain
-    spaces is indistinguishable from the alias "5G AKA" and is an accepted matcher
-    limit. The card stays pending until a named person records the human review.
+  basis: 'Cross-release, whole-protocol, high-recall draft, pending named human review. Exact aliases
+    select 5G-AKA. TS 33.501 V19.7.0 clause 6.1.3.2.0 supplies method-specific entities: HRES*/HXRES*
+    and 5G HE AV/5G SE AV. Card matching loses the stars, so these names need a second independent
+    term. RES*/XRES* lose their distinguishing stars too and stay ecosystem cues. AUSF, UDM, SEAF,
+    K_SEAF, SUPI, SUCI, SIDF, authentication messages and service operations are shared authentication
+    or identity context, not evidence selecting the method. They stay ecosystem terms and lexical
+    retrieval cues; even beside a product they cannot yield protocol_component_implementation. TS
+    29.509 V19.5.0 clause 5.2.2.2 defines both 5G-AKA and EAP-AKA'' within Authenticate. Nausf_UEAuthentication_Authenticate,
+    Nudm_UEAuthentication_Get, Nausf, UEAuthentication, Nudm_UEAU, Authentication Request and Authentication
+    Response therefore never confirm the method. EAP-AKA mentions are not a candidate veto: a record
+    involving both methods can still have specific 5G-AKA evidence. Initial identity handling remains
+    retrievable as ecosystem context. No contextual AKA alias is licensed. Four bounded template
+    searches group protocol, SBI, exchange and identity evidence; templates are lexical queries,
+    not conjunctions. Observed spellings come from the CVE references below; normative roles come
+    from TS 33.501 clauses 3.1, 5.6, 5.8a, 6.1.2, 6.1.3.2.0, 6.2.2.1 and 6.12.5 and TS 29.509 clauses
+    5.2 and 6.1.3.1. The CCS 2018 Tamarin model of TS 33.501 V15.0.0 is formal calibration only.
+    Card matching recognizes spaced and compound renderings and ignores nested terms for corroboration.
+    The global tokenizer does not split compound tokens or preserve stars. Plain-spaced 5G aka New
+    Radio remains indistinguishable from the exact alias. FiGHT receives ecosystem terms as retrieval
+    cues too; these do not establish a method-specific vulnerability. Bare 5G and gNB are too broad
+    even for this topic context and are omitted.'
 references:
-  - title: "3GPP TS 33.501 Security architecture and procedures for 5G System (ETSI TS 133 501 V19.7.0)"
-    uri: "https://www.etsi.org/deliver/etsi_ts/133500_133599/133501/19.07.00_60/ts_133501v190700p.pdf"
-    locator: "6.1.3.2 Authentication procedure for 5G AKA"
-  - title: "3GPP TS 33.501 Security architecture and procedures for 5G System (ETSI TS 133 501 V19.7.0)"
-    uri: "https://www.etsi.org/deliver/etsi_ts/133500_133599/133501/19.07.00_60/ts_133501v190700p.pdf"
-    locator: "6.1.3.1 Authentication procedure for EAP-AKA'"
-  - title: "Basin et al., A Formal Analysis of 5G Authentication (ACM CCS 2018), Tamarin model of 5G AKA per TS 33.501 V15.0.0"
-    uri: "https://github.com/tamarin-prover/tamarin-prover/blob/da8787d5506e2d35bc1c92d7653bf6265fecbddb/examples/ccs18-5G/5G-AKA-nonBindingChannel/5G_AKA.spthy"
-    locator: "Theory 5G_aka header: modelled mechanisms and omissions (formal calibration, not normative)"
+- title: 3GPP TS 33.501 Security architecture and procedures for 5G System (ETSI TS 133 501 V19.7.0)
+  uri: https://www.etsi.org/deliver/etsi_ts/133500_133599/133501/19.07.00_60/ts_133501v190700p.pdf
+  locator: 6.1.3.2 Authentication procedure for 5G AKA
+- title: 3GPP TS 33.501 Security architecture and procedures for 5G System (ETSI TS 133 501 V19.7.0)
+  uri: https://www.etsi.org/deliver/etsi_ts/133500_133599/133501/19.07.00_60/ts_133501v190700p.pdf
+  locator: 6.1.3.1 Authentication procedure for EAP-AKA'
+- title: Basin et al., A Formal Analysis of 5G Authentication (ACM CCS 2018), Tamarin model of 5G
+    AKA per TS 33.501 V15.0.0
+  uri: https://github.com/tamarin-prover/tamarin-prover/blob/da8787d5506e2d35bc1c92d7653bf6265fecbddb/examples/ccs18-5G/5G-AKA-nonBindingChannel/5G_AKA.spthy
+  locator: 'Theory 5G_aka header: modelled mechanisms and omissions (formal calibration, not normative)'
+- title: 3GPP TS 29.509 V19.5.0
+  uri: https://www.etsi.org/deliver/etsi_ts/129500_129599/129509/19.05.00_60/ts_129509v190500p.pdf
+  locator: 5.2, 5.2.2.2.2 and 6.1.3.1
+- title: 3GPP TS 33.501 V19.7.0
+  uri: https://www.etsi.org/deliver/etsi_ts/133500_133599/133501/19.07.00_60/ts_133501v190700p.pdf
+  locator: 5.6, 6.1.2, 6.1.3.2.0 and 6.12.5
+- title: CVE-2024-56921 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2024-56921
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2026-30075 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-30075
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2026-55785 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-55785
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2026-27642 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-27642
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2026-33063 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-33063
+  locator: Description in the pinned local corpus; observed terminology only

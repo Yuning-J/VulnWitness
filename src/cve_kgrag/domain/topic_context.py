@@ -314,6 +314,7 @@ class TopicContextWarningCode(StrEnum):
     TOPIC_NOT_RESOLVED = "topic_not_resolved"
     EXCLUDED_TERM = "excluded_term"
     ADDITIONAL_TOPIC_NOT_EXPLORED = "additional_topic_not_explored"
+    TOPIC_FAMILY_SCOPE = "topic_family_scope"
     UNRELATED_CANDIDATES_DROPPED = "unrelated_candidates_dropped"
     SOURCE_SNAPSHOT_IS_EXCERPT = "source_snapshot_is_excerpt"
     TERM_NOT_INDEXED = "term_not_indexed"
@@ -327,6 +328,7 @@ TOPIC_WARNING_ORDER = {
     TopicContextWarningCode.EXCLUDED_TERM: 0,
     TopicContextWarningCode.TOPIC_NOT_RESOLVED: 1,
     TopicContextWarningCode.ADDITIONAL_TOPIC_NOT_EXPLORED: 1,
+    TopicContextWarningCode.TOPIC_FAMILY_SCOPE: 1,
     TopicContextWarningCode.SOURCE_SNAPSHOT_IS_EXCERPT: 2,
     TopicContextWarningCode.TERM_NOT_INDEXED: 3,
     TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED: 4,
@@ -354,7 +356,8 @@ class TopicContextWarning(ContractModel):
     that no technique holds; a topic's card search never raises it.
     ``result_limit_reached`` names ``max_results_per_search`` when a card's CVE search
     warned it reached that limit, so more matches may exist; it never counts them. A cut changes no
-    status."""
+    status. ``topic_family_scope`` explains that the matched GTP alias retrieves the
+    whole family, including GTP-C and GTP-U."""
 
     code: TopicContextWarningCode
     subject: str

@@ -1,0 +1,157 @@
+# Draft knowledge; pending named human review.
+topic_schema_version: '1'
+topic_id: 3gpp:gtp
+version: 0.1.0
+canonical_name: GPRS Tunnelling Protocol
+exact_aliases:
+- GTP-C
+- GTP-U
+- GTPv1-C
+- GTPv2-C
+- GTPv1-U
+- GTPv1
+- GTPv2
+- gtp2
+- GTP
+- GPRS Tunneling Protocol
+contextual_aliases: []
+entities:
+- name: PGW
+  role: GTP-C gateway context; TS 29.274 V18.7.0 clauses 4 and 7.2.1.
+- name: SGW
+  role: GTP-C gateway context; TS 29.274 V18.7.0 clauses 4 and 7.2.1.
+- name: MME
+  role: GTP-C mobility context; TS 29.274 V18.7.0 clause 7.2.1.
+- name: GGSN
+  role: GTPv1-C gateway context; TS 29.060 V16.1.0 clause 7.3.1.
+- name: SGSN
+  role: GTPv1-C serving-node context; TS 29.060 V16.1.0 clause 7.3.1.
+- name: UPF
+  role: GTP-U context; TS 29.281 V18.2.0 clauses 5.2.2.7 and 6.1. Not evidence of a GTP-C flaw by
+    itself.
+- name: Session Management Function
+  role: Qualified SMF context, observed with GTP handling in CVE-2026-2517. A function spans several
+    protocols and is never a GTP alias.
+- name: Create Session Request
+  role: GTPv2-C evidence; TS 29.274 V18.7.0 clause 7.2.1. Card matching includes CreateSessionRequest.
+- name: Create Session Response
+  role: GTPv2-C evidence; TS 29.274 V18.7.0 clause 7.2.2.
+- name: Modify Bearer Request
+  role: GTPv2-C evidence; TS 29.274 V18.7.0 clause 7.2.7.
+- name: Create PDP Context Request
+  role: GTPv1-C evidence; TS 29.060 V16.1.0 clause 7.3.1.
+- name: F-TEID
+  role: Qualified IE spelling observed in CVE-2025-15417 and CVE-2026-1586; TS 29.274 V18.7.0 clause
+    7.2.1.
+- name: Bearer TFT
+  role: GTP-C IE context; TS 29.274 V18.7.0 clause 7.2.3. Observed parser spelling in CVE-2026-2517.
+- name: GTP Echo Request
+  role: Qualified message evidence; TS 29.281 V18.2.0 clause 7.2.1.
+- name: PDU Session Container
+  role: Qualified GTP-U extension-header evidence; TS 29.281 V18.2.0 clause 5.2.2.7.
+- name: ogs gtp2 parse tft
+  role: Protocol-specific parser identifier ogs_gtp2_parse_tft in CVE-2026-2517. Underscores split
+    into these tokens; not a topic alias.
+- name: ogs gtp2 parse bearer qos
+  role: Protocol-specific parser identifier ogs_gtp2_parse_bearer_qos in CVE-2025-15418.
+- name: gtp decode pdp ctx
+  role: Protocol-specific identifier gtp_decode_pdp_ctx in CVE-2026-75892.
+ecosystem_terms:
+- GTP
+- mobile core
+- PGW-C
+- SGW-C
+- Gn
+- S5
+- S8
+- S11
+- N3
+- N9
+exclusions: []
+query_templates:
+- GTP GTPv1 GTPv2 gtp2
+- GTP-C GTPv1-C GTPv2-C
+- GTP-U GTPv1-U
+- Create Session Request Create PDP Context Request CreateSessionRequest CreatePDPContextRequest
+- ogs_gtp2_parse_tft ogs_gtp2_parse_bearer_qos
+- gtp_decode_pdp_ctx PDU Session Container
+review:
+  status: pending_review
+  reviewer: null
+  reviewed_on: null
+  basis: 'Draft mobile-core topic. GTP-C is control-plane scope: v1 follows TS 29.060 V16.1.0 clauses
+    1, 3, 7.3.1; v2 follows TS 29.274 V18.7.0 clauses 1, 3, 4 and 7.2. GTP-U is a separate user-plane
+    branch under TS 29.281 V18.2.0 clauses 1, 3, 5, 6.1 and 7.2.1. This card gives broad GTP-family
+    retrieval and does not support branch-limited answers. Plane-specific aliases precede bare GTP
+    to record the spelling only. matched_alias=GTP-U does not restrict results to GTP-U; GTP-C candidates
+    remain eligible. GTPv1 without a plane remains ambiguous between C and U; GTPv2 and gtp2 denote
+    control-plane version forms, not GTP-U v2. Observed aliases: GTPv2 in CVE-2015-4275, gtp2 in
+    CVE-2026-2517, GTPv1_U in CVE-2026-8187. Network functions and interfaces qualify records only
+    and never resolve a question alone. Gn is from TS 29.060 V16.1.0 clause 1; S5, S8, S11, PGW-C
+    and SGW-C from TS 29.274 V18.7.0 clauses 4 and 7.2.1; N3 and N9 from TS 29.281 V18.2.0 clauses
+    5.2.2.7 and 6.1. Open5GS and mobile-core implementation context are observed in CVE-2026-2517
+    and CVE-2026-8187. Code identifiers use space-separated tokenizer forms. The lib/gtp path in
+    CVE-2026-2517 is represented by lexical gtp and the specific parser entity: a slash is a hard
+    card-term boundary, so lib is not a generic evidence entity. No bare SMF, AMF, UDM, SEAF, TEID
+    or PDU is an unqualified term. N4 is not included: its presence does not establish a GTP-handling
+    flaw. Bare GTP is also an ecosystem term: this marks its exact alias as needing an independent
+    entity or ecosystem qualifier in candidate relevance. A plane or version spelling, GTP message
+    or IE, network function or interface, or GTP code identifier confirms telecom context. A product
+    name alone does not. GTP iCommerce is a name collision. Wireshark really processes GTP and is
+    not blacklisted; its dissectors remain outside the mobile-core endpoint gold scope. The card
+    cannot filter retrieval by plane. FiGHT 3.1.0 at commit 097cd5f73811dc34916ef84d5acc3fe7aba70450
+    clearly matches FGT1572.501, FGT1572.502, FGT1599.505, FGT5031 and FGT5042. These are reference
+    links, not added runtime aliases. No dedicated technique-link field exists in the current contract.
+    A named owner must review scope and evidence before approval. Compact CreateSessionRequest and
+    CreatePDPContextRequest template terms are card-local renderings of TS 29.274 V18.7.0 clause
+    7.2.1 and TS 29.060 V16.1.0 clause 7.3.1. The single-l Tunneling expanded spelling is observed
+    in CVE-2017-12217; the double-l canonical form follows the cited specifications.'
+references:
+- title: 3GPP TS 29.274 V18.7.0
+  uri: https://www.etsi.org/deliver/etsi_ts/129200_129299/129274/18.07.00_60/ts_129274v180700p.pdf
+  locator: 1, 3, 4, 7.2.1, 7.2.2, 7.2.3 and 7.2.7
+- title: 3GPP TS 29.281 V18.2.0
+  uri: https://www.etsi.org/deliver/etsi_ts/129200_129299/129281/18.02.00_60/ts_129281v180200p.pdf
+  locator: 1, 3, 5.2.2.7, 6.1 and 7.2.1
+- title: 3GPP TS 29.060 V16.1.0
+  uri: https://www.etsi.org/deliver/etsi_ts/129000_129099/129060/16.01.00_60/ts_129060v160100p.pdf
+  locator: 1, 3 and 7.3.1
+- title: CVE-2015-4275 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2015-4275
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2025-15417 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2025-15417
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2025-15418 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2025-15418
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2026-1586 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-1586
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2026-2517 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-2517
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2026-75892 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-75892
+  locator: Description in the pinned local corpus; observed terminology only
+- title: CVE-2026-8187 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-8187
+  locator: Description in the pinned local corpus; observed terminology only
+- title: FiGHT 3.1.0 FGT1572.501
+  uri: https://github.com/mitre/FiGHT/blob/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
+  locator: techniques[id=FGT1572.501]
+- title: FiGHT 3.1.0 FGT1572.502
+  uri: https://github.com/mitre/FiGHT/blob/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
+  locator: techniques[id=FGT1572.502]
+- title: FiGHT 3.1.0 FGT1599.505
+  uri: https://github.com/mitre/FiGHT/blob/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
+  locator: techniques[id=FGT1599.505]
+- title: FiGHT 3.1.0 FGT5031
+  uri: https://github.com/mitre/FiGHT/blob/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
+  locator: techniques[id=FGT5031]
+- title: FiGHT 3.1.0 FGT5042
+  uri: https://github.com/mitre/FiGHT/blob/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
+  locator: techniques[id=FGT5042]
+- title: CVE-2017-12217 observed spelling
+  uri: https://www.cve.org/CVERecord?id=CVE-2017-12217
+  locator: Description in the pinned local corpus; observed terminology only

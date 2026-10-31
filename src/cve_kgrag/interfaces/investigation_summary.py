@@ -54,6 +54,7 @@ WARNING_SENTENCES = {
     "excluded_term": "The query contains a term excluded from topic resolution.",
     "topic_not_resolved": "The query did not resolve to a reviewed topic.",
     "topic_pending_review": "The topic card used for retrieval is pending review.",
+    "topic_family_scope": "The topic card returns results for the whole protocol family.",
     "no_searchable_terms": "The query contained no searchable terms.",
     "applicability_unknown": "Version affectedness was not assessed.",
     "model_plan_rejected": "The proposed plan was rejected by the investigation policy.",

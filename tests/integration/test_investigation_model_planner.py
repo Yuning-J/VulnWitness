@@ -499,7 +499,7 @@ def test_model_searches_that_run_as_one_query_fall_back_to_the_deterministic_pla
     request = build_investigation_request(FILLED_SEARCH_LIMIT_QUERY, "implementation_only")
     model_reply = build_plan_reply(
         {"tool": "cve_search", "query": f"{FILLED_SEARCH_LIMIT_QUERY} ausf"},
-        {"tool": "cve_search", "query": f"{FILLED_SEARCH_LIMIT_QUERY} udm"},
+        {"tool": "cve_search", "query": f"{FILLED_SEARCH_LIMIT_QUERY} sidf"},
     )
     service = build_reviewed_investigation_service(
         fixture_bundle, model_port=ScriptedModelPort([model_reply])

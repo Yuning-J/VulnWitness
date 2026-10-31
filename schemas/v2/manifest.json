@@ -15,7 +15,7 @@
     "http_rejection.schema.json": "688b84058a2f5fcdebeb57aececaecf650031f7b62dd9c73b2e74cbc9555e282",
     "investigation_request.schema.json": "9629ea510a1e516df0561523783906182dcd65049b3c93ad48318db3f0321c96",
     "knowledge_capabilities.schema.json": "760c1e5cfba38ef03b9476246f7e50614d4cad87d5247d267645095202739bea",
-    "knowledge_evidence_set.schema.json": "8592608227be5dc5b758b35b7a91ca148aff1e7df5ebd742ac3d80e0f4ccc967",
+    "knowledge_evidence_set.schema.json": "6383563d2efd994ae9443186d9ed4bf591c3ee4e5d35ddd0b41ac096119cdeaa",
     "migration_report.schema.json": "654e11ba8b52cbc75aa62bb6873669b05f4d823446644449ba6f7b6c3be253fe",
     "product_query_request.schema.json": "af41cdade4bdc53fd63d451081f88881e0828aef496148f3637a0e4e512367b6",
     "product_query_response.schema.json": "406aebd04dff37fc3864f8c1a44dbf3c03e57eef541ccc94ab77b6eba36c05e0",
@@ -27,7 +27,7 @@
     "store_status.schema.json": "f201febff93dcf4009b6d1fd52f1a545f02e6437b0184005ada4d94b2888dc63",
     "tool_failure.schema.json": "23e1e7af83a4ab525f3874097ecaf69667acb2dfc3ae08ff156e9b768f60bb71",
     "topic_context_request.schema.json": "51f7fb5e9f0d4c1d0ea36571c16599acbd91817b84471d4b80b71e11c9c69cb0",
-    "topic_context_response.schema.json": "4be550991025a296f198d6a61a5d870de90481c5d1ecd7f99ec70ac01290d587",
+    "topic_context_response.schema.json": "4d0d401bc1a7f6b1923ddec19db21e08468ffd45ee7f3baa7c4054841ff9791f",
     "verification_report.schema.json": "aae619587fa17980e7e6477d4cc4c5ab2dbf8323acff75c8fdb4de94677ce3a3"
   },
   "schema_version": "2.0.0-dev.42"

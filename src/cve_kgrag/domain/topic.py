@@ -136,6 +136,16 @@ class TopicResolution(ContractModel):
     excluded_terms: tuple[ExcludedTerm, ...]
 
 
+def describe_topic_family_scope(match: TopicMatch) -> str | None:
+    """The GTP card retrieves the whole family for every matched spelling."""
+    if match.topic_id != "3gpp:gtp":
+        return None
+    return (
+        f"matched_alias={match.matched_alias}: results cover the GTP family, including "
+        "GTP-C and GTP-U, and are not limited to GTP-C or GTP-U."
+    )
+
+
 class RelevanceTier(StrEnum):
     """How a candidate relates to a topic. Relevance only: never severity or affectedness."""
 
@@ -148,6 +158,9 @@ class RelevanceTier(StrEnum):
 class RelevanceAssessment(ContractModel):
     tier: RelevanceTier
     matched_terms: tuple[str, ...] = Field(
-        description="Card terms (alias, entity or ecosystem term) found in the record."
+        description=(
+            "Card terms (alias, entity or ecosystem term), or a qualifying network-function "
+            "abbreviation, found in the record."
+        )
     )
     basis: str = Field(min_length=1)

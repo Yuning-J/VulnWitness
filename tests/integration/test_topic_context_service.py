@@ -146,8 +146,8 @@ def test_implementation_only_never_consults_threat_context(fixture_bundle: Fixtu
     ("scope", "query"),
     [
         (QueryScope.MIXED, "aka"),
-        (QueryScope.PROTOCOL_CONTEXT_ONLY, "gtp threats"),
-        (QueryScope.MIXED, "gtp threats"),
+        (QueryScope.PROTOCOL_CONTEXT_ONLY, "unregistered protocol threats"),
+        (QueryScope.MIXED, "unregistered protocol threats"),
     ],
     ids=["excluded_term", "free_text_under_protocol", "free_text_mixed"],
 )
@@ -278,7 +278,9 @@ def test_cve_naming_one_ambiguous_acronym_is_dropped_with_a_warning(
     fixture_bundle: FixtureBundle,
 ) -> None:
     bundle = build_bundle_with(
-        fixture_bundle, "CVE-9999-0501", "[SYNTHETIC] UniFi Dream Machine (UDM) admin bypass."
+        fixture_bundle,
+        "CVE-9999-0501",
+        "[SYNTHETIC] UniFi Dream Machine (UDM) authentication admin bypass.",
     )
     service = build_service(bundle, UnavailableFightSource())
 

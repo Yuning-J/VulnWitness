@@ -49,7 +49,12 @@ from cve_kgrag.domain.threat_context import (
     ThreatContextItem,
     ThreatContextOutcome,
 )
-from cve_kgrag.domain.topic import ProtocolTopic, RelevanceTier, TopicResolution
+from cve_kgrag.domain.topic import (
+    ProtocolTopic,
+    RelevanceTier,
+    TopicResolution,
+    describe_topic_family_scope,
+)
 from cve_kgrag.domain.topic_context import (
     ExcludedCandidate,
     KnowledgeSource,
@@ -88,10 +93,11 @@ RESULT_STATUS_BY_SOURCE_FAILURE = {
 
 
 def list_topic_terms(topic: ProtocolTopic) -> list[str]:
-    """The names a source text may use for the topic: its name, aliases and entities."""
+    """Retrieval cues, including shared context that cannot confirm CVE relevance."""
     topic_terms = [topic.canonical_name, *topic.exact_aliases]
     for entity in topic.entities:
         topic_terms.append(entity.name)
+    topic_terms.extend(topic.ecosystem_terms)
     return topic_terms
 
 
@@ -258,6 +264,13 @@ class TopicContextService:
         if registered_topic is None:
             raise EvidenceValidationError(["a resolved topic is missing from the registry"])
         topic = registered_topic.topic
+        family_scope = describe_topic_family_scope(resolution.matches[0])
+        if family_scope is not None:
+            warnings.append(
+                TopicContextWarning(
+                    code=TopicContextWarningCode.TOPIC_FAMILY_SCOPE, subject=family_scope
+                )
+            )
 
         source_outcomes: list[SourceOutcome] = []
         protocol_context: tuple[ThreatContextItem, ...] = ()

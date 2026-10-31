@@ -24,7 +24,7 @@ context:
   - query: "5gaka"
     scope: protocol_context_only
     status: ok
-    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
+    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
     implementation_candidates: []
     excluded_implementation_candidates: ["CVE-9999-0003", "CVE-9999-0004"]
   - query: "5gaka"
@@ -33,15 +33,15 @@ context:
     protocol_context: []
     implementation_candidates:
       - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
-      - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+      - {cve_id: "CVE-9999-0004", tier: telecom_ecosystem_adjacent}
     excluded_implementation_candidates: []
   - query: "5G Authentication and Key Agreement"
     scope: mixed
     status: ok
-    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019.005", "FGT5019", "FGT5044"]
+    protocol_context: ["FGT1499.503", "FGT5040", "FGT5019", "FGT5019.005", "FGT5044"]
     implementation_candidates:
       - {cve_id: "CVE-9999-0003", tier: explicit_protocol_mention}
-      - {cve_id: "CVE-9999-0004", tier: protocol_component_implementation}
+      - {cve_id: "CVE-9999-0004", tier: telecom_ecosystem_adjacent}
     excluded_implementation_candidates: []
   - query: "aka"
     scope: mixed

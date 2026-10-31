@@ -46,19 +46,47 @@ source, CVE relevance tiers and a scoped topic-context service.
   the shorter; a contextual alias never resolves inside a longer excluded phrase.
 - Known limit: `5G aka New Radio` written with plain spaces is spelled exactly like
   the normative alias `5G AKA` and resolves to it.
-- The 5G-AKA card is `pending_review`: the brief specifies its aliases, six
-  entities and the bare-aka exclusion; the implementer drafted the entity roles,
-  the EAP-AKA' and EPS AKA exclusions, ecosystem terms and query templates from
-  ETSI TS 133 501 V19.7.0 (clauses cited per role). It has no contextual alias,
-  because AKA beside 5G entities also describes EAP-AKA'. Every match reports the
-  card's version, hash and review status.
-- The card is a cross-release, whole-protocol, high-recall topic: SUPI, SUCI and
-  UDM stay entities, so it covers initial identity handling and accepts the wider
-  identity and subscription threat context they match. V19.7.0 is the normative
-  reference; the CCS 2018 Tamarin model (TS 33.501 V15.0.0, tamarin-prover commit
-  `da8787d5`) is cited as a formal-calibration reference only. Narrower scopes
-  (core authentication, identity privacy) belong to an investigation profile or a
-  separate topic.
+- Both cards are `pending_review`; each match reports the card version, hash and
+  review status, and investigations carry `topic_pending_review`.
+- The 5G-AKA card separates method-specific evidence from shared authentication
+  context. TS 33.501 V19.7.0 §6.1.3.2.0 defines HRES*/HXRES* and 5G HE AV/5G SE AV
+  for 5G-AKA. These are confirming entities, requiring an independent second card
+  term. Stars are lost in matching, so RES*/XRES* cannot distinguish the method.
+  AUSF, UDM, SEAF, K_SEAF, SUPI/SUCI, SIDF, authentication messages and service
+  operations stay ecosystem terms and lexical retrieval cues. Shared cues, even
+  beside Open5GS or free5GC, yield at most ecosystem adjacency. TS 29.509 V19.5.0
+  §5.2.2.2 defines both 5G-AKA and EAP-AKA' within Authenticate; the service name
+  cannot select the method. A record mentioning both methods remains eligible
+  when it has 5G-AKA-specific evidence. Candidate exclusions never veto such a
+  record. Generic `5G authentication` does not resolve 5G-AKA.
+- Initial identity handling remains retrievable as ecosystem context. FiGHT uses
+  the card's aliases, entities and ecosystem terms as retrieval cues; those cues
+  alone do not establish a method-specific vulnerability. Bare `5G` and `gNB` are
+  omitted because they also retrieve generic AKA without selecting this method.
+  The CCS 2018 Tamarin model (TS 33.501 V15.0.0, commit `da8787d5`) is a
+  formal-calibration reference; the cited specifications supply normative terms.
+- The GTP card gives broad GTP-family retrieval and does not support branch-limited
+  answers. `matched_alias=GTP-U` records the query spelling and does not restrict
+  results to GTP-U: GTP-C records remain eligible. All templates run for every
+  family alias. Topic responses and investigation answers carry `topic_family_scope`,
+  with the matched alias and an explicit note that results include GTP-C and GTP-U.
+  GTP-C v1 cites TS 29.060 V16.1.0, GTP-C v2 TS 29.274 V18.7.0 and
+  GTP-U TS 29.281 V18.2.0. `GTPv1` without a plane remains ambiguous.
+- Bare `GTP` is both an exact query alias and an ecosystem term. In candidate
+  relevance, a name classified in both fields requires a separate entity or
+  ecosystem qualifier. A plane/version name, GTP message or IE, network function,
+  interface, or known GTP code identifier supplies telecom context. Product names
+  alone do not qualify it. The card's Session Management Function also accepts SMF
+  only in this explicit-mention qualifier step; SMF is neither a topic alias nor
+  standalone relevance evidence. PGW, SGW, MME, UPF, GGSN and SGSN already qualify
+  explicit GTP mentions through their card entities.
+  GTP iCommerce is a real name collision. Wireshark
+  processes GTP: it is outside the mobile-core endpoint gold scope, and has no
+  permanent blacklist. A qualified Wireshark GTP record remains eligible.
+- Card matching joins spaced, compact and underscore spellings; lexical templates
+  retain searchable compounds such as `Nausf`, `UEAuthentication`, `GTPv2` and
+  `gtp2`. A slash remains a hard matching boundary. The global tokenizer is
+  unchanged. Neither card defines contextual aliases.
 
 ## FiGHT
 
@@ -138,16 +166,16 @@ search the exploration sends.
    excluded term, and its response names each sent word no technique holds
    (`term_not_indexed`). `explore` keeps the rule above.
 2. Unless the scope is `implementation_only`, search FiGHT with the topic's name,
-   aliases and entities, for at most `limit` and at most `max_results_per_search`
+   aliases, entities and ecosystem terms, for at most `limit` and at most `max_results_per_search`
    techniques. Results count only from a source that names the verified
    snapshot it served.
-3. Search CVEs once per query template (the 5G-AKA card has `5G AKA`, `5gaka`,
-   `AUSF SEAF K_SEAF`, `SUCI SUPI UDM`; the compact spelling is a separate lexical
-   token), each up to `max_results_per_search` and under the request's filters,
+3. Search CVEs once per query template (the 5G-AKA card groups protocol names,
+   SBI operations, exchange fields and identity cues into four queries), each up to `max_results_per_search` and under the request's filters,
    with the semantic channel when `semantic` is set. Each CVE is assessed once, shown with the candidate from its
    best-ranked search and the union of channels that retrieved it
    (`retrieval_channels`), from the record's own text (`topics/relevance.py`):
-   - `explicit_protocol_mention`: a description names the protocol;
+   - `explicit_protocol_mention`: a description names the protocol; a name also
+     classified as ecosystem context needs an entity or ecosystem qualifier;
    - `protocol_component_implementation`: two distinct topic terms, one an entity;
    - `telecom_ecosystem_adjacent`: two distinct ecosystem terms;
    - `semantic_only`: none of these, but the semantic channel matched it.

@@ -242,7 +242,7 @@ def build_round_one_context(
             "implementation_only",
             [
                 build_search_call(f"{FILLED_SEARCH_LIMIT_QUERY} ausf"),
-                build_search_call(f"{FILLED_SEARCH_LIMIT_QUERY} udm"),
+                build_search_call(f"{FILLED_SEARCH_LIMIT_QUERY} sidf"),
             ],
             {},
             [PlanRejection(step_position=1, code=PlanRejectionCode.REPEATED_CALL)],
@@ -387,9 +387,17 @@ def test_plan_breaking_a_rule_is_rejected_with_its_code(
     [
         ("5G-AKA threats", "protocol_context_only", PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED),
         ("EPS AKA crash", "mixed", PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED),
-        ("CVE-9999-0003 GTP threats", "mixed", PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED),
+        (
+            "CVE-9999-0003 unregistered threats",
+            "mixed",
+            PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED,
+        ),
         ("5Géaka threats", "mixed", PlanRejectionCode.FIGHT_DIRECT_SEARCH_BLOCKED),
-        ("gtp threats", "implementation_only", PlanRejectionCode.TOOL_NOT_PERMITTED_BY_SCOPE),
+        (
+            "unregistered threats",
+            "implementation_only",
+            PlanRejectionCode.TOOL_NOT_PERMITTED_BY_SCOPE,
+        ),
     ],
     ids=[
         "topic_resolved",
@@ -415,7 +423,7 @@ def test_direct_fight_search_the_interpretation_bars_is_rejected(
 def test_second_direct_fight_search_in_a_run_is_a_repeated_call(
     topic_registry: TopicRegistry,
 ) -> None:
-    request = build_investigation_request("gtp threats", "protocol_context_only")
+    request = build_investigation_request("unregistered threats", "protocol_context_only")
     plan_context = build_round_one_context(
         request,
         topic_registry,
@@ -432,7 +440,7 @@ def test_second_direct_fight_search_in_a_run_is_a_repeated_call(
 def test_mixed_free_text_plan_of_a_cve_search_and_a_direct_fight_search_passes(
     topic_registry: TopicRegistry,
 ) -> None:
-    request = build_investigation_request("gtp threats", "mixed")
+    request = build_investigation_request("unregistered threats", "mixed")
     plan_context = build_round_one_context(
         request,
         topic_registry,
@@ -440,7 +448,9 @@ def test_mixed_free_text_plan_of_a_cve_search_and_a_direct_fight_search_passes(
     )
 
     rejections = find_plan_rejections(
-        [build_search_call("gtp"), build_fight_direct_search_call()], plan_context, topic_registry
+        [build_search_call("unregistered"), build_fight_direct_search_call()],
+        plan_context,
+        topic_registry,
     )
 
     assert rejections == []
@@ -449,7 +459,7 @@ def test_mixed_free_text_plan_of_a_cve_search_and_a_direct_fight_search_passes(
 def test_mixed_free_text_model_plan_without_the_direct_fight_search_misses_its_source(
     topic_registry: TopicRegistry,
 ) -> None:
-    request = build_investigation_request("gtp threats", "mixed")
+    request = build_investigation_request("unregistered threats", "mixed")
     plan_context = build_round_one_context(
         request,
         topic_registry,
@@ -457,7 +467,7 @@ def test_mixed_free_text_model_plan_without_the_direct_fight_search_misses_its_s
     )
 
     rejections = find_plan_rejections(
-        [build_search_call("gtp threats")], plan_context, topic_registry
+        [build_search_call("unregistered threats")], plan_context, topic_registry
     )
 
     assert rejections == [PlanRejection(code=PlanRejectionCode.MISSING_BASELINE_SOURCE)]

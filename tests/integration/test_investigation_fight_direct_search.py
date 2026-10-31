@@ -280,7 +280,7 @@ def test_direct_search_whose_fight_source_failed_stops_source_unavailable(
             [NeedOutcome.UNSUPPORTED],
         ),
         (
-            "5G, aka NR GTP threats",
+            "5G, aka NR unregistered threats",
             "mixed",
             FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="aka"),
             [NeedOutcome.UNSUPPORTED],
@@ -292,7 +292,7 @@ def test_direct_search_whose_fight_source_failed_stops_source_unavailable(
             [NeedOutcome.UNSUPPORTED],
         ),
         (
-            "CVE-9999-0003 GTP threats",
+            "CVE-9999-0003 unregistered threats",
             "mixed",
             FightBlock(reason=FightBlockReason.CVE_ID_NAMED, subject="CVE-9999-0003"),
             [],
@@ -366,7 +366,7 @@ def test_excluded_alias_written_against_a_non_ascii_letter_stops_protocol_scope_
     [
         "CVE-9999-0003 EPS AKA crash",
         "CVE-9999-0003 5Géaka threats",
-        "CVE-9999-0003 GTP threats",
+        "CVE-9999-0003 unregistered threats",
         "5G-AKA threats",
     ],
     ids=[
@@ -462,7 +462,7 @@ def test_mixed_free_text_under_one_tool_call_runs_nothing_deterministically(
 
 @pytest.mark.parametrize(
     "query",
-    ["CVE-9999-0003 EPS AKA crash", "CVE-9999-0003 GTP threats", "5G-AKA threats"],
+    ["CVE-9999-0003 EPS AKA crash", "CVE-9999-0003 unregistered threats", "5G-AKA threats"],
     ids=["excluded_term", "cve_id_named", "topic_resolved"],
 )
 def test_planner_is_never_offered_the_direct_search(

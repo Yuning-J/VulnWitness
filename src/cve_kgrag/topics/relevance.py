@@ -3,7 +3,8 @@
 Tiers are checked in order, and the first that applies wins:
 
 1. ``explicit_protocol_mention``: a description names the protocol (canonical
-   name or exact alias);
+   name or exact alias). A name also classified as an ecosystem term needs
+   an independent entity or ecosystem qualifier;
 2. ``protocol_component_implementation``: the record names at least two distinct
    topic terms (entities or ecosystem terms), at least one of them an entity;
 3. ``telecom_ecosystem_adjacent``: it names at least two distinct ecosystem terms;
@@ -111,7 +112,8 @@ def assess_relevance(
     protocol_names = find_named_terms(
         description_terms, (topic.canonical_name, *topic.exact_aliases)
     )
-    if protocol_names:
+    ecosystem_keys = set(map(alias_key, topic.ecosystem_terms))
+    if any(alias_key(name) not in ecosystem_keys for name in protocol_names):
         return build_assessment(RelevanceTier.EXPLICIT_PROTOCOL_MENTION, protocol_names)
 
     record_terms = list_record_terms(record, include_products=True)
@@ -121,6 +123,22 @@ def assess_relevance(
     corroborating_terms = find_corroborating_terms(
         record_terms, (*entity_names, *topic.ecosystem_terms)
     )
+    if protocol_names:
+        qualifier_names: list[str] = []
+        protocol_keys = set(map(alias_key, protocol_names))
+        for card_term in (*entity_names, *topic.ecosystem_terms):
+            if alias_key(card_term) not in protocol_keys:
+                qualifier_names.append(card_term)
+        # The card's expanded function also qualifies its usual abbreviation here,
+        # without making SMF an alias or standalone relevance evidence.
+        if "Session Management Function" in entity_names:
+            qualifier_names.append("SMF")
+        qualifiers = find_named_terms(record_terms, qualifier_names)
+        # A longer term such as GTP Echo Request qualifies its nested bare alias.
+        if qualifiers:
+            return build_assessment(
+                RelevanceTier.EXPLICIT_PROTOCOL_MENTION, (*protocol_names, *qualifiers)
+            )
     named_entities: list[str] = []
     named_ecosystem_terms: list[str] = []
     for corroborating_term in corroborating_terms:

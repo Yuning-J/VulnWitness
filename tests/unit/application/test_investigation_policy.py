@@ -146,7 +146,7 @@ def test_query_is_interpreted_into_intent_ids_and_searchable_terms(
         ("EPS AKA crash", FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="EPS AKA")),
         ("EAP-AKA' threats", FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="EAP-AKA'")),
         (
-            "5G, aka NR GTP threats",
+            "5G, aka NR unregistered threats",
             FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="aka"),
         ),
         ("5Géaka threats", FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="aka")),
@@ -155,14 +155,14 @@ def test_query_is_interpreted_into_intent_ids_and_searchable_terms(
             FightBlock(reason=FightBlockReason.EXCLUDED_TERM, subject="EAP-AKA'"),
         ),
         (
-            "CVE-9999-0003 GTP threats",
+            "CVE-9999-0003 unregistered threats",
             FightBlock(reason=FightBlockReason.CVE_ID_NAMED, subject="CVE-9999-0003"),
         ),
         (
             "5G-AKA threats",
             FightBlock(reason=FightBlockReason.TOPIC_RESOLVED, subject=FIVE_G_AKA_TOPIC_ID),
         ),
-        ("gtp threats", None),
+        ("unregistered threats", None),
     ],
     ids=[
         "bare_excluded_alias",
@@ -217,10 +217,10 @@ def test_excluded_word_only_double_normalization_produces_is_kept_from_fight_not
 @pytest.mark.parametrize(
     ("query", "expected_fight_terms"),
     [
-        ("GTP threats in the mobile core", ("gtp", "threats", "mobile", "core")),
-        ("5G, aka NR GTP threats", ()),
+        ("unregistered threats in the mobile core", ("unregistered", "threats", "mobile", "core")),
+        ("5G, aka NR unregistered threats", ()),
         ("5Géaka threats", ()),
-        ("CVE-9999-0003 GTP threats", ()),
+        ("CVE-9999-0003 unregistered threats", ()),
         ("5G-AKA threats", ()),
     ],
     ids=[
@@ -371,22 +371,22 @@ def test_interpretation_stop_is_decided_before_any_call(
         ),
         ("aka bug in amf", "mixed", [(build_search_call("bug amf"), StepReason.QUERY_TERMS)]),
         (
-            "gtp threats",
+            "unregistered threats",
             "protocol_context_only",
             [(build_fight_direct_search_call(), StepReason.QUERY_TERMS_FIGHT)],
         ),
         (
-            "gtp threats",
+            "unregistered threats",
             "mixed",
             [
-                (build_search_call("gtp threats"), StepReason.QUERY_TERMS),
+                (build_search_call("unregistered threats"), StepReason.QUERY_TERMS),
                 (build_fight_direct_search_call(), StepReason.QUERY_TERMS_FIGHT),
             ],
         ),
         (
-            "gtp threats",
+            "unregistered threats",
             "implementation_only",
-            [(build_search_call("gtp threats"), StepReason.QUERY_TERMS)],
+            [(build_search_call("unregistered threats"), StepReason.QUERY_TERMS)],
         ),
     ],
     ids=[
