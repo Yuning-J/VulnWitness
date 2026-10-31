@@ -30,12 +30,14 @@ from mcp.types import (
 from pydantic import ValidationError
 
 from cve_kgrag.distribution import read_installed_version
+from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.tool_contracts import ToolFailure, ToolFailureCode
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.knowledge_tools import (
     KNOWLEDGE_TOOL_SPECS,
     SERVER_INSTRUCTIONS,
     KnowledgeToolName,
+    ToolAnswer,
     ToolSpec,
     build_tool_failure,
 )
@@ -57,9 +59,13 @@ LifespanState = dict[str, Any]
 class KnowledgeToolHandlers:
     """The ``tools/list`` and ``tools/call`` handlers over one toolbox and its listing."""
 
-    def __init__(self, toolbox: KnowledgeToolbox, tools: tuple[Tool, ...]) -> None:
+    def __init__(self, toolbox: KnowledgeToolbox | None, tools: tuple[Tool, ...]) -> None:
         self._toolbox = toolbox
         self._tools = tools
+
+    def publish_toolbox(self, toolbox: KnowledgeToolbox) -> None:
+        """Make a fully built toolbox available to subsequent calls."""
+        self._toolbox = toolbox
 
     async def list_tools(
         self,
@@ -73,21 +79,26 @@ class KnowledgeToolHandlers:
         self, ctx: ServerRequestContext[LifespanState], params: CallToolRequestParams
     ) -> CallToolResult:
         """The toolbox's answer as structured content and its JSON text, or its failure as
-        an error result. A name that is not one of the eight tools is a JSON-RPC invalid
+        an error result. While loading, every call is a ``data_loading`` failure. Once
+        loaded, a name that is not one of the eight tools is a JSON-RPC invalid
         params error with a fixed message, which never repeats the name."""
-        try:
-            tool_name = KnowledgeToolName(params.name)
-        except ValueError:
-            raise MCPError(INVALID_PARAMS, UNKNOWN_TOOL_MESSAGE) from None
-        try:
-            tool_outcome = await anyio.to_thread.run_sync(
-                self._toolbox.call, tool_name, params.arguments
-            )
-        except Exception:
-            logging.getLogger(__name__).error(
-                "knowledge tool %s failed outside the toolbox", tool_name.value, exc_info=True
-            )
-            tool_outcome = build_tool_failure(ToolFailureCode.INTERNAL_ERROR)
+        tool_outcome: ToolAnswer | ToolFailure
+        if self._toolbox is None:
+            tool_outcome = build_tool_failure(ToolFailureCode.DATA_LOADING)
+        else:
+            try:
+                tool_name = KnowledgeToolName(params.name)
+            except ValueError:
+                raise MCPError(INVALID_PARAMS, UNKNOWN_TOOL_MESSAGE) from None
+            try:
+                tool_outcome = await anyio.to_thread.run_sync(
+                    self._toolbox.call, tool_name, params.arguments
+                )
+            except Exception:
+                logging.getLogger(__name__).error(
+                    "knowledge tool %s failed outside the toolbox", tool_name.value, exc_info=True
+                )
+                tool_outcome = build_tool_failure(ToolFailureCode.INTERNAL_ERROR)
         if isinstance(tool_outcome, ToolFailure):
             return CallToolResult(
                 content=[TextContent(type="text", text=tool_outcome.model_dump_json())],
@@ -138,10 +149,17 @@ def build_knowledge_mcp_server(toolbox: KnowledgeToolbox) -> Server[LifespanStat
     """A server answering ``tools/list`` and ``tools/call`` over ``toolbox``; the listing is
     built once, here."""
     handlers = KnowledgeToolHandlers(toolbox, build_mcp_tools(KNOWLEDGE_TOOL_SPECS))
+    return build_mcp_server(handlers, toolbox.describe_served_dataset().kind)
+
+
+def build_mcp_server(
+    handlers: KnowledgeToolHandlers, dataset_kind: ServedDatasetKind
+) -> Server[LifespanState]:
+    """Build the static protocol surface independently of toolbox availability."""
     server: Server[LifespanState] = Server(
         SERVER_NAME,
         version=read_installed_version(),
-        instructions=SERVER_INSTRUCTIONS[toolbox.describe_served_dataset().kind],
+        instructions=SERVER_INSTRUCTIONS[dataset_kind],
         on_list_tools=handlers.list_tools,
         on_call_tool=handlers.call_tool,
     )

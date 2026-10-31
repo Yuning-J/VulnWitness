@@ -102,6 +102,7 @@ class ToolFailureCode(StrEnum):
     ARGUMENTS_TOO_LARGE = "arguments_too_large"
     UNKNOWN_EVIDENCE_ID = "unknown_evidence_id"
     SERVER_BUSY = "server_busy"
+    DATA_LOADING = "data_loading"
     TIMED_OUT = "timed_out"
     RESPONSE_TOO_LARGE = "response_too_large"
     INTEGRITY_CHECK_FAILED = "integrity_check_failed"
@@ -115,6 +116,7 @@ TOOL_FAILURE_MESSAGES: dict[ToolFailureCode, str] = {
     ToolFailureCode.ARGUMENTS_TOO_LARGE: "The arguments exceed the size limit.",
     ToolFailureCode.UNKNOWN_EVIDENCE_ID: "No evidence anchor has that evidence ID.",
     ToolFailureCode.SERVER_BUSY: "Too many calls are in flight; retry later.",
+    ToolFailureCode.DATA_LOADING: "The data is still loading; retry later.",
     ToolFailureCode.TIMED_OUT: "The call did not finish within the tool's time limit.",
     ToolFailureCode.RESPONSE_TOO_LARGE: (
         "The response exceeds the size limit; lower the limit argument."

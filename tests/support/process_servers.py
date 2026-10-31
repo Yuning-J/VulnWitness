@@ -6,7 +6,7 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,7 +78,7 @@ def wait_until_healthy(server_url: str, server_process: subprocess.Popen[bytes])
 
 
 def run_on_a_port_in_use(
-    command_arguments: Sequence[str], port_variable: str
+    command_arguments: Sequence[str], port_variable: str, settings: Mapping[str, str] | None = None
 ) -> subprocess.CompletedProcess[bytes]:
     """``cve-kgrag`` with ``command_arguments`` run against a loopback port another socket
     is listening on."""
@@ -92,7 +92,10 @@ def run_on_a_port_in_use(
             capture_output=True,
             timeout=SERVER_START_SECONDS,
             check=False,
-            env=build_server_environment(port_variable, "127.0.0.1", taken_port),
+            env={
+                **build_server_environment(port_variable, "127.0.0.1", taken_port),
+                **(settings or {}),
+            },
         )
 
 

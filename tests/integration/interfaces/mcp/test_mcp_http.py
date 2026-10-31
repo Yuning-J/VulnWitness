@@ -439,7 +439,7 @@ def served_mcp_http(request: pytest.FixtureRequest) -> Iterator[ServedHttp]:
     yield from start_served_http(["mcp", "--http"], "CVE_KGRAG_MCP_HTTP_PORT", request.param)
 
 
-async def test_cve_kgrag_mcp_http_serves_the_tools_logs_nothing_and_stops_on_interrupt(
+async def test_cve_kgrag_mcp_http_serves_the_tools_announces_ready_and_stops_on_interrupt(
     served_mcp_http: ServedHttp,
 ) -> None:
     async with (
@@ -465,7 +465,7 @@ async def test_cve_kgrag_mcp_http_serves_the_tools_logs_nothing_and_stops_on_int
     assert oversized_answer.status_code == 413
     assert served_mcp_http.process.returncode == 0
     assert stdout == b""
-    assert stderr == b""
+    assert stderr.decode() == f"cve-kgrag mcp --http: ready on {served_mcp_http.url}\n"
 
 
 def test_cve_kgrag_mcp_http_on_a_port_in_use_exits_one_saying_why() -> None:
@@ -474,4 +474,6 @@ def test_cve_kgrag_mcp_http_on_a_port_in_use_exits_one_saying_why() -> None:
     assert server_process.returncode == 1
     assert server_process.stdout == b""
     assert b"address already in use" in server_process.stderr
+    assert b": ready " not in server_process.stderr
+    assert b" ready after " not in server_process.stderr
     assert HTTP_TOKEN.encode() not in server_process.stderr

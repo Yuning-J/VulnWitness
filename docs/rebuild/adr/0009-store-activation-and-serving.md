@@ -277,7 +277,8 @@ ADR 0004 §1 lists these variables with the others.
   serve synthetic data to an operator who configured real data (owner decision 16).
 - A one-shot command exits 2 with one line; `mcp`, `mcp --http` and `api` print
   `cve-kgrag <command> cannot start: store unavailable: <reason>` and exit 2 before
-  binding. The order is settings, then the HTTP token, then the extra and runner, then
+  binding an HTTP port. Stdio completes its handshake before loading and exits on load
+  failure. The order is settings, then the HTTP token, then the extra and runner, then
   the store, then the FiGHT snapshot (§11), so a core install without an extra exits 1
   before it touches any data, and a broken store is reported before a broken snapshot.
 - Startup reads `ACTIVE` and the store and writes nothing anywhere under the root, so a
@@ -355,7 +356,10 @@ of §11: the operator snapshot when one is configured, the packaged excerpt othe
   `fight_snapshot_invalid` (the catalogued bytes do not parse). Tests cover a file
   without read permission and a read that fails part way.
 - `mcp --http` and `api` load the snapshot before they bind a port, and `mcp` on stdio
-  before the protocol's initialization, as they load the store.
+  loads it in the background after the protocol's initialization, along with the store.
+  Static tool listings are available during loading; tool calls immediately return
+  `data_loading` until the complete toolbox is published. A failure prints its reason
+  and exits non-zero, and a client disconnect or Ctrl+C stops the process promptly.
 - One process holds one loaded source, and every part of it that uses FiGHT holds that
   same instance: topic context, investigation, the MCP tools, `verify` and the REST
   verification route. A part on the excerpt would replay a set sealed under the full
@@ -492,8 +496,11 @@ matched count for `search`. §15 lists the schemas this section changes.
   runbook states the measured figure. A full garbage collection can stall at that
   size; `gc.freeze()` is added only if the lane shows stalls.
 - The runbook states the load and memory figures as lower bounds and names no host
-  size until real feeds are measured. Health probes see connection refused while a
-  server loads, and an MCP stdio client waits for initialize through the load.
+  size until real feeds are measured. Health probes see connection refused while an
+  HTTP server loads. MCP stdio completes initialization before loading, returns a
+  `data_loading` tool error during loading, and announces ready only with a complete
+  toolbox. HTTP servers announce data loaded separately from ready, which follows
+  successful socket startup; a bind failure prints no ready notice.
 - `graph_expand` over 250,000 synthetic records reaches the 10 s tool limit: expanding
   one seed visits every CVE that shares any relation with it, using extra memory
   at peak, and a search with limit 10 times out. These feeds are the graph's worst

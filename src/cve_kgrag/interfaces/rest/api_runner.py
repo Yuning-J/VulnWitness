@@ -97,4 +97,5 @@ def serve_api(
         build_api_app(toolbox, check_evidence_set, host=host, port=port, token=token),
         host,
         port,
+        command="api",
     )

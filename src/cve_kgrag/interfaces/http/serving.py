@@ -8,6 +8,7 @@ import math
 import uvicorn
 
 from cve_kgrag.interfaces.http.guard import HttpGuard
+from cve_kgrag.interfaces.http.serving_server import ServingServer
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 
 # uvicorn answers its own 503 to a request arriving while this many connections (its own
@@ -59,16 +60,17 @@ def build_server_config(guard: HttpGuard, host: str, port: int) -> uvicorn.Confi
     )
 
 
-def serve(guard: HttpGuard, host: str, port: int) -> bool:
+def serve(guard: HttpGuard, host: str, port: int, *, command: str) -> bool:
     """Serve ``guard`` until the process is interrupted, which stops it once the requests
     in flight have ended (a second interrupt stops it at once); ``False`` when it could not
     start serving, such as on a port it cannot bind, after uvicorn has logged why."""
     logging.getLogger(UVICORN_LOGGER).setLevel(logging.ERROR)
+    server = ServingServer(build_server_config(guard, host, port), command)
     try:
-        uvicorn.Server(build_server_config(guard, host, port)).run()
+        server.run()
     except KeyboardInterrupt:
-        return True
+        return server.started
     except SystemExit:
         # uvicorn exits the process when its startup fails; the command decides the status.
         return False
-    return True
+    return server.started

@@ -8,7 +8,7 @@ address, the local planner evaluation (``eval planner``), the legacy-data import
 The serving commands serve the served corpus: the store ``CVE_KGRAG_STORE_ROOT``'s
 ``ACTIVE`` names, or the packaged synthetic fixture when no root is configured
 (ADR 0009 §9, §10). Loading a configured store is announced on stderr, and once more when
-it is ready, so stdout carries only a command's JSON or the MCP protocol.
+its data is loaded, so stdout carries only a command's JSON or the MCP protocol.
 
 Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
 a query that resolves to a topic, an evidence ID the catalogue serves, every
@@ -120,7 +120,7 @@ from cve_kgrag.domain.search import (
     SearchResponse,
     UnsupportedFilter,
 )
-from cve_kgrag.domain.served_dataset import ServedDataset
+from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.domain.store_status import (
     STORE_OPERATION_FAILURE_MESSAGES,
     ActiveStoreCondition,
@@ -176,6 +176,7 @@ from cve_kgrag.evaluation.result_directory import ResultDirectory
 from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
 from cve_kgrag.interfaces.knowledge_toolbox import (
     UNSUPPORTED_FILTER_ERROR,
+    KnowledgeToolbox,
     describe_knowledge_capabilities,
 )
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
@@ -286,7 +287,7 @@ EVAL_FIXTURE_NOTICE = (
 STORE_LOADING_NOTICE = (
     "cve-kgrag {command}: loading store {store_name}; a full NVD store takes minutes"
 )
-STORE_READY_NOTICE = "cve-kgrag {command}: {cve_search_version} ready after {seconds:.0f} s"
+DATA_LOADED_NOTICE = "cve-kgrag {command}: {cve_search_version} data loaded after {seconds:.0f} s"
 UNKNOWN_EVIDENCE_MESSAGE = "no evidence anchor is served under {evidence_id}"
 UNSERVED_EVIDENCE_MESSAGE = (
     "the anchor catalogued under {evidence_id} fails the anchor rules, so it is not served"
@@ -836,7 +837,7 @@ def load_served_corpus_or_exit(command: str, store_root: Path | None) -> ServedC
         raise SystemExit(2) from None
 
 
-def announce_store_ready(
+def announce_data_loaded(
     command: str,
     store_root: Path | None,
     served_dataset: ServedDataset,
@@ -847,7 +848,7 @@ def announce_store_ready(
     if store_root is None:
         return
     print(
-        STORE_READY_NOTICE.format(
+        DATA_LOADED_NOTICE.format(
             command=command,
             cve_search_version=served_dataset.cve_search_version,
             seconds=loading_seconds,
@@ -863,11 +864,11 @@ def load_search_service_or_exit(
     monotonic_clock: Callable[[], float] = time.monotonic,
 ) -> SearchService:
     """The search service over the served corpus (``load_served_corpus_or_exit``), saying
-    on stderr when a configured store is ready."""
+    on stderr when a configured store's data is loaded."""
     started_at = monotonic_clock()
     served_corpus = load_served_corpus_or_exit(command, store_root)
     search_service = build_search_service(served_corpus, semantic_settings)
-    announce_store_ready(
+    announce_data_loaded(
         command,
         store_root,
         served_corpus.describe_served_dataset(),
@@ -908,7 +909,7 @@ def load_data_plane_or_exit(
 ) -> ServingDataPlane:
     """The data plane a command that uses FiGHT serves from: the served corpus, then the
     FiGHT source, so a broken store is reported before a broken snapshot (ADR 0009 §9).
-    A configured store is announced on stderr while it loads and once it is ready."""
+    A configured store is announced on stderr while it loads and once its data is loaded."""
     started_at = monotonic_clock()
     served_corpus = load_served_corpus_or_exit(command, settings.store_root)
     fight_source, pinned_fight_snapshot = load_fight_source_or_exit(
@@ -920,7 +921,7 @@ def load_data_plane_or_exit(
         pinned_fight_snapshot=pinned_fight_snapshot,
         semantic_settings=semantic_settings,
     )
-    announce_store_ready(
+    announce_data_loaded(
         command,
         settings.store_root,
         data_plane.served_dataset,
@@ -941,8 +942,17 @@ def run_mcp_server(
     if isinstance(runner, InterfaceUnavailable):
         print(f"cve-kgrag mcp cannot start: {runner.detail}", file=sys.stderr)
         return 1
-    runner(build_knowledge_toolbox(load_data_plane_or_exit("mcp", settings)))
-    return 0
+    dataset_kind = (
+        ServedDatasetKind.SYNTHETIC_FIXTURE
+        if settings.store_root is None
+        else ServedDatasetKind.CORPUS_STORE
+    )
+    return runner(partial(load_mcp_toolbox, settings), dataset_kind=dataset_kind)
+
+
+def load_mcp_toolbox(settings: ServiceSettings) -> KnowledgeToolbox:
+    """Build the complete stdio toolbox on the runner's background thread."""
+    return build_knowledge_toolbox(load_data_plane_or_exit("mcp", settings))
 
 
 def require_http_token(

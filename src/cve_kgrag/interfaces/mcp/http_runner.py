@@ -80,4 +80,9 @@ def build_mcp_http_app(
 def serve_http(toolbox: KnowledgeToolbox, *, host: str, port: int, token: SecretStr) -> bool:
     """Serve ``toolbox``'s tools over MCP Streamable HTTP until the process is
     interrupted; ``False`` when the server could not start."""
-    return serve(build_mcp_http_app(toolbox, host=host, port=port, token=token), host, port)
+    return serve(
+        build_mcp_http_app(toolbox, host=host, port=port, token=token),
+        host,
+        port,
+        command="mcp --http",
+    )

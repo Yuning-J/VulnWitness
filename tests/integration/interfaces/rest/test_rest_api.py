@@ -82,6 +82,7 @@ EXPECTED_FAILURE_STATUSES = {
     ToolFailureCode.ARGUMENTS_TOO_LARGE: 413,
     ToolFailureCode.UNKNOWN_EVIDENCE_ID: 404,
     ToolFailureCode.SERVER_BUSY: 503,
+    ToolFailureCode.DATA_LOADING: 503,
     ToolFailureCode.TIMED_OUT: 504,
     ToolFailureCode.RESPONSE_TOO_LARGE: 500,
     ToolFailureCode.INTEGRITY_CHECK_FAILED: 500,
@@ -612,7 +613,7 @@ def served_api() -> Iterator[ServedHttp]:
     yield from start_served_http(["api"], "CVE_KGRAG_API_PORT", HTTP_HOST)
 
 
-def test_cve_kgrag_api_serves_the_routes_logs_nothing_and_stops_on_interrupt(
+def test_cve_kgrag_api_serves_the_routes_announces_ready_and_stops_on_interrupt(
     served_api: ServedHttp,
 ) -> None:
     capabilities_answer = httpx2.get(f"{served_api.url}/api/v2/capabilities", headers=AUTHORIZATION)
@@ -636,7 +637,7 @@ def test_cve_kgrag_api_serves_the_routes_logs_nothing_and_stops_on_interrupt(
     assert json.loads(verification_answer.content)["verdict"] == "verified"
     assert served_api.process.returncode == 0
     assert stdout == b""
-    assert stderr == b""
+    assert stderr.decode() == f"cve-kgrag api: ready on {served_api.url}\n"
 
 
 def test_cve_kgrag_api_on_a_port_in_use_exits_one_saying_why() -> None:
@@ -645,4 +646,6 @@ def test_cve_kgrag_api_on_a_port_in_use_exits_one_saying_why() -> None:
     assert server_process.returncode == 1
     assert server_process.stdout == b""
     assert b"address already in use" in server_process.stderr
+    assert b": ready " not in server_process.stderr
+    assert b" ready after " not in server_process.stderr
     assert HTTP_TOKEN.encode() not in server_process.stderr

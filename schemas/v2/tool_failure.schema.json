@@ -30,6 +30,7 @@
         "arguments_too_large",
         "unknown_evidence_id",
         "server_busy",
+        "data_loading",
         "timed_out",
         "response_too_large",
         "integrity_check_failed",
@@ -103,6 +104,22 @@
         "properties": {
           "message": {
             "const": "Too many calls are in flight; retry later."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "data_loading"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The data is still loading; retry later."
           }
         }
       }
@@ -208,8 +225,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.34",
-      "default": "2.0.0-dev.34",
+      "const": "2.0.0-dev.35",
+      "default": "2.0.0-dev.35",
       "title": "Schema Version",
       "type": "string"
     },

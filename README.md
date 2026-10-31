@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.34` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.35` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -217,9 +217,16 @@ outside the repository and builds a store under it once, following the
    macOS), and set `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` and `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`
    ([runbook](docs/runbook.md#the-operator-fight-snapshot)).
 
-Every command and server that serves records loads the whole store before it answers.
-It says so on standard error (`loading store <name>`, then `<dataset version> ready after
-<N> s`); standard output carries only the command's JSON or the MCP protocol. Measurements use
+Commands load the whole store before answering data queries. MCP stdio completes
+`initialize` and lists its static tools while the store loads in the background. A tool
+call during loading immediately returns a `data_loading` tool error: “The data is still
+loading; retry later.” Calls are neither queued nor retried automatically.
+
+Progress goes to standard error: `loading store <name>`, then `<dataset version> data
+loaded after <N> s`. Stdio prints `<dataset version> ready after <N> s` only when its
+complete toolbox is usable. `api` and `mcp --http` load before binding and print
+`ready on http://<host>:<port>` only once they are serving; a bind failure prints no ready
+line. Standard output carries only the command's JSON or the MCP protocol. Measurements use
 the store of 2026-10-27 (396,211 records):
 
 | What | Measured |
@@ -228,15 +235,15 @@ the store of 2026-10-27 (396,211 records):
 | one CLI command (`lookup`, `search`, `capabilities`, ...) | — |
 | `api` ready (`/health` answers) | — |
 | `mcp --http` ready | — |
-| MCP stdio, the answer to `initialize` | — |
+| MCP stdio, store loading | — |
 | peak memory while loading | — |
 
 Once loaded, queries reuse the store. For more than one query, run
 the REST API (`cve-kgrag api`) or the MCP HTTP server (`cve-kgrag mcp --http`) and keep it
-running, rather than a one-shot command per query. An MCP client that starts
-`cve-kgrag mcp` over stdio waits for the whole load before `initialize` is answered, which
-can exceed the client's initialize timeout; the progress lines on standard error do not
-change that. Use `mcp --http` for such a client, or raise its timeout. The fixture is loaded
+running, rather than a one-shot command per query. A client that starts `cve-kgrag mcp`
+over stdio can connect immediately and make data calls after the ready notice. A store
+load failure prints its reason on standard error and exits non-zero; closing stdin or
+pressing Ctrl+C stops the process promptly even during loading. The fixture is loaded
 before use.
 
 ## Development

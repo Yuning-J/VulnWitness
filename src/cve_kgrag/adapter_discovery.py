@@ -20,6 +20,7 @@ from cve_kgrag.domain.planning import (
     PlanningInput,
 )
 from cve_kgrag.domain.search import SemanticUnavailableDetail
+from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.taxonomy import BackendStatus
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.ports.planning import ModelPort
@@ -141,9 +142,11 @@ def discover_semantic_retriever(
 
 
 class McpServerRunner(Protocol):
-    """Serves a toolbox's tools over MCP on stdio until the client disconnects."""
+    """Loads a toolbox after the MCP handshake and serves until the client disconnects."""
 
-    def __call__(self, toolbox: KnowledgeToolbox) -> None: ...
+    def __call__(
+        self, load_toolbox: Callable[[], KnowledgeToolbox], *, dataset_kind: ServedDatasetKind
+    ) -> int: ...
 
 
 class McpHttpServerRunner(Protocol):

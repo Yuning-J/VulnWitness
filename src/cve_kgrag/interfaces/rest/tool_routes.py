@@ -27,6 +27,7 @@ TOOL_FAILURE_STATUSES: dict[ToolFailureCode, int] = {
     ToolFailureCode.ARGUMENTS_TOO_LARGE: 413,
     ToolFailureCode.UNKNOWN_EVIDENCE_ID: 404,
     ToolFailureCode.SERVER_BUSY: 503,
+    ToolFailureCode.DATA_LOADING: 503,
     ToolFailureCode.TIMED_OUT: 504,
     ToolFailureCode.RESPONSE_TOO_LARGE: 500,
     ToolFailureCode.INTEGRITY_CHECK_FAILED: 500,

@@ -79,6 +79,7 @@ from cve_kgrag.domain.search import (
     SearchResponse,
     SemanticUnavailableDetail,
 )
+from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.taxonomy import (
     AssertionKind,
     BackendFailureDetail,
@@ -142,14 +143,16 @@ def run_cli(arguments: list[str], environment: Mapping[str, str] = NO_SETTINGS) 
 
 
 class RecordingMcpServerRunner:
-    """An MCP server runner that records the toolbox it is handed and returns at once, as
-    the stdio runner does when the client closes stdin."""
+    """An MCP runner that loads and records its toolbox, then returns."""
 
     def __init__(self) -> None:
         self.served_toolboxes: list[KnowledgeToolbox] = []
 
-    def __call__(self, toolbox: KnowledgeToolbox) -> None:
-        self.served_toolboxes.append(toolbox)
+    def __call__(
+        self, load_toolbox: Callable[[], KnowledgeToolbox], *, dataset_kind: ServedDatasetKind
+    ) -> int:
+        self.served_toolboxes.append(load_toolbox())
+        return 0
 
 
 class RecordingMcpHttpServerRunner:

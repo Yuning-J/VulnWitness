@@ -138,7 +138,8 @@ the root again, move it aside by hand and activate a store by name.
 `search`, `lookup`, `topic`, `investigate`, `capabilities`, `evidence`, `verify`, `mcp`,
 `mcp --http` and `api` load the active store. A root they cannot serve stops them with
 exit 2 and the line `cve-kgrag <command> cannot start: store unavailable: <reason>`,
-before a server binds a port. The reasons are `store_root_unusable`, `no_active_store`,
+before an HTTP server binds a port; stdio reports the failure after its handshake. The
+reasons are `store_root_unusable`, `no_active_store`,
 `active_unreadable`, `active_store_missing`, `active_store_changed`, `store_invalid` and
 `store_format_unsupported`; `store status` says more. `resolve`, `affectedness`,
 `migrate`, `store` and `schema` load no served store; `demo` always uses the packaged
@@ -147,12 +148,21 @@ error. `eval planner` with an M7b gold file runs on the active store and the ope
 FiGHT snapshot
 ([`m7b-planner-evaluation.md`](rebuild/m7b-planner-evaluation.md#the-command)).
 
-A server loads its store before it answers: health probes see connection refused while
-it loads, and an MCP client on stdio waits for its initialize answer through the load,
-which can exceed the client's initialize timeout. Every command that loads a configured
-store writes `cve-kgrag <command>: loading store <name>; ...` to standard error once the
-store's checks pass, and `cve-kgrag <command>: <dataset version> ready after <N> s` once
-its indexes are built; standard output stays the command's JSON or the MCP protocol.
+HTTP servers load before binding: health probes see connection refused during loading.
+MCP stdio answers `initialize` and static `tools/list` before loading finishes. Every tool
+call during loading immediately returns the explicit `data_loading` tool error, “The
+data is still loading; retry later.” Nothing is queued or retried automatically. A load
+failure prints its reason and exits non-zero; closing stdin or Ctrl+C stops stdio
+promptly even while the loader is blocked.
+
+Every command that loads a configured store writes
+`cve-kgrag <command>: loading store <name>; ...` to standard error once the store's checks
+pass, then `cve-kgrag <command>: <dataset version> data loaded after <N> s` once its
+indexes are built. Stdio prints `cve-kgrag mcp: <dataset version> ready after <N> s` only
+once its complete toolbox is usable. HTTP servers print
+`cve-kgrag <command>: ready on http://<host>:<port>` only after the port is bound and
+serving; bind failures print no ready notice. Standard output stays the command's JSON
+or the MCP protocol.
 
 **Real data.** The figures for a full NVD store (the store of 2026-10-27)
  are in the README's

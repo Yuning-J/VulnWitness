@@ -6,7 +6,7 @@ commands whose row loads no served corpus run whatever state the root is in; and
 
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
@@ -49,8 +49,11 @@ class RecordingMcpServerRunner:
     def __init__(self) -> None:
         self.served_toolboxes: list[KnowledgeToolbox] = []
 
-    def __call__(self, toolbox: KnowledgeToolbox) -> None:
-        self.served_toolboxes.append(toolbox)
+    def __call__(
+        self, load_toolbox: Callable[[], KnowledgeToolbox], *, dataset_kind: ServedDatasetKind
+    ) -> int:
+        self.served_toolboxes.append(load_toolbox())
+        return 0
 
 
 @pytest.fixture
@@ -381,7 +384,7 @@ def test_capabilities_of_the_fixture_report_purl_filtering_available(
 # --- Loading notices on stderr ----------------------------------------------------------
 
 
-def test_loading_a_store_names_it_and_the_seconds_to_ready_on_stderr(
+def test_loading_a_store_names_it_and_the_seconds_to_load_on_stderr(
     active_settings: dict[str, str], store_root: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     loading_clock = SteppingClock(seconds_per_read=12.0)
@@ -395,7 +398,7 @@ def test_loading_a_store_names_it_and_the_seconds_to_ready_on_stderr(
     assert captured.out == ""
     assert captured.err == (
         "cve-kgrag search: loading store second; a full NVD store takes minutes\n"
-        f"cve-kgrag search: {cve_search_version} ready after 12 s\n"
+        f"cve-kgrag search: {cve_search_version} data loaded after 12 s\n"
     )
 
 
@@ -417,7 +420,7 @@ def test_command_over_a_store_announces_loading_on_stderr_and_prints_only_json(
         f"cve-kgrag {arguments[0]}: loading store second; a full NVD store takes minutes"
     )
     assert notice_lines[1].startswith(f"cve-kgrag {arguments[0]}: corpus-store-v1@sha256:")
-    assert " ready after " in notice_lines[1]
+    assert " data loaded after " in notice_lines[1]
 
 
 def test_command_over_the_fixture_announces_no_loading(
@@ -428,7 +431,7 @@ def test_command_over_the_fixture_announces_no_loading(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "loading store" not in captured.err
-    assert "ready after" not in captured.err
+    assert "data loaded after" not in captured.err
 
 
 def test_mcp_over_a_store_announces_loading_on_stderr_and_writes_nothing_to_stdout(
@@ -444,7 +447,7 @@ def test_mcp_over_a_store_announces_loading_on_stderr_and_writes_nothing_to_stdo
     assert captured.err.startswith(
         "cve-kgrag mcp: loading store second; a full NVD store takes minutes\n"
     )
-    assert " ready after " in captured.err
+    assert " data loaded after " in captured.err
 
 
 # --- Commands that load no served corpus ----------------------------------------------
