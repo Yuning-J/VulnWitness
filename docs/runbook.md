@@ -281,7 +281,8 @@ cve-kgrag lookup CVE-2026-12345
 
 The output file must not exist: the builder refuses overwrites, including an input
 path. Build each replacement at a fresh path. The command prints the file size,
-SHA-256 and counts of linked CWEs and CAPECs, direct and inherited mappings,
+SHA-256 and counts of directly linked CWEs, CWEs gaining inherited CAPEC links
+(`cwes_with_inherited_capec_links`), linked CAPECs, direct and CAPEC-inherited mappings,
 deprecated CAPEC entries, and deprecated/revoked ATT&CK objects skipped. ATT&CK
 skip counts include all STIX object types; flags are counted independently.
 Mapping counts count source CAPEC/technique/parent-chain combinations, not CVEs.
@@ -307,7 +308,11 @@ unset path serves the manifest-pinned packaged excerpt.
 To reproduce the packaged excerpt, run the same build with `--cwe-id CWE-20
 --cwe-id CWE-79 --cwe-id CWE-787 --cwe-id CWE-284 --cwe-id CWE-269 --cwe-id CWE-78
 --cwe-id CWE-120`, using the full inputs pinned in the excerpt's `sources`. These
-options select CWEs; CAPEC inheritance is resolved against the full CAPEC input.
+options select CWEs; CWE and CAPEC inheritance are resolved against their full inputs.
+The excerpt includes CWE-787 inheriting links from CWE-119, even though CWE-119 is
+not selected as an excerpt root. Snapshot format version 2 keeps direct links in
+`cwe_capecs` and inferred links with parent chains separately in `cwe_inheritance`.
+Serving requires format version 2; build and pin an operator mapping with the command above.
 The excerpt's skip counts describe those full inputs, while its mapping counts
 describe the selected entries. Its notice is in `src/cve_kgrag/fixtures/mitre/NOTICE.md`.
 
@@ -317,27 +322,45 @@ Inheritance retains each explicit CAPEC `ChildOf` hop; deprecated CAPECs cannot
 bridge it. Deprecated or revoked ATT&CK objects cannot
 supply techniques. When no usable direct or inherited ATT&CK mapping exists in the
 loaded snapshot, the path ends at CAPEC with `terminal_reason: "no_attack_mapping"`,
-null `technique` and `technique_source`, and both source-labelled CVE → CWE → CAPEC
-hops. These terminal reasons are not repeated in `missing_links`; unavailable
-techniques or parents and missing CWE → CAPEC links remain reported there.
-CWE-787 in CWE 5.0 has no related attack pattern, so no path is produced. This is
-not filled from CAPEC's reverse CWE references or a parent CWE. A missing entry in
+null `technique` and `technique_source`, and source-labelled CVE → CWE → CAPEC hops,
+including CWE parent hops when inferred. These terminal reasons are not repeated in
+`missing_links`; unavailable techniques or parents and missing CWE → CAPEC links
+remain reported there.
+When a CWE has no direct `Related_Attack_Patterns`, the builder searches breadth
+first for all linked ancestors at the nearest depth in CWE view 1000 (Complete
+Weakness Hierarchy). Only `Nature="ChildOf"` relations in that view are followed;
+if a weakness has `Ordinal="Primary"` parents there, only those parents are used.
+Without a marked primary parent, all `ChildOf` parents in view 1000 are used.
+`Ordinal` marks a relation within a view; it does not designate a primary view.
+Other views, other relation types and CAPEC's reverse CWE references are excluded.
+Any direct CWE link prevents inheritance, even if its CAPEC is deprecated. A branch
+stops at its first directly linked ancestor. Missing parents cannot bridge a chain;
+encountered cycles refuse the build.
+
+CWE-inherited paths retain each source-labelled `cwe_child_of` hop and mark
+`inherited_from_cwe`, separately from CAPEC inheritance's `inherited_from`. They may
+end at CAPEC or continue through CAPEC inheritance to ATT&CK. CWE-787 in CWE 5.0
+inherits all 12 CAPEC links from CWE-119. This is an inference along the CWE
+hierarchy, not a catalogue link from CWE-787 to those CAPECs. A missing entry in
 the packaged excerpt is reported as absent from that snapshot, not absent from the
 full catalogue. NVD's noinfo/Other placeholders become an empty specific-CWE list
 in record normalization and are reported as no specific CWE.
 
 The 20-path cap applies across all CWEs on one CVE and includes full paths and paths
-ending at CAPEC, with the exact omitted count. Direct mappings precede inherited
-mappings, then paths ending at CAPEC, followed by lexicographic IDs and parent
-chains. This deterministic order is not an importance ranking. Text investigations
+ending at CAPEC, with the exact omitted count. Direct mappings precede CAPEC-inherited
+mappings, then CWE-inherited full paths, then all paths ending at CAPEC, followed by
+lexicographic IDs and parent chains. This deterministic order is not an importance
+ranking. Text investigations
 point to `cve-kgrag lookup <CVE-ID>` for the full paths, sources and omitted counts.
 Lookup JSON preserves the bounded paths and all missing links. The
 derived-association note states: “This association is derived from official
 catalogues. It is not evidence that the CVE was used with that technique. It is
 not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot;
-it does not mean the weakness has no attack technique or no way to be exploited.”
+it does not mean the weakness has no attack technique or no way to be exploited.
+CWE inheritance is an inference along the CWE hierarchy, not a catalogue link
+from the original CWE to CAPEC.”
 
-Under contract `2.0.0-dev.43`, search, topic and investigation candidates, including
+Search, topic and investigation candidates, including
 excluded candidates in protocol-only responses, omit associations entirely. Only
 single-CVE lookup attaches them, so they consume no investigation context bytes and
 cannot change candidate admission. They do not enter retrieval, ranking, planner

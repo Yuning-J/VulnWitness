@@ -16,7 +16,14 @@ CWE_XML = b"""<Weakness_Catalog xmlns="http://cwe.mitre.org/cwe-8" Version="5.0"
 <Weaknesses><Weakness ID="79"><Related_Attack_Patterns>
 <Related_Attack_Pattern CAPEC_ID="10"/><Related_Attack_Pattern CAPEC_ID="11"/>
 <Related_Attack_Pattern CAPEC_ID="12"/><Related_Attack_Pattern CAPEC_ID="13"/>
-</Related_Attack_Patterns></Weakness><Weakness ID="787"/></Weaknesses>
+</Related_Attack_Patterns></Weakness>
+<Weakness ID="119"><Related_Attack_Patterns>
+<Related_Attack_Pattern CAPEC_ID="10"/><Related_Attack_Pattern CAPEC_ID="12"/>
+<Related_Attack_Pattern CAPEC_ID="13"/>
+</Related_Attack_Patterns></Weakness>
+<Weakness ID="787"><Related_Weaknesses>
+<Related_Weakness Nature="ChildOf" CWE_ID="119" View_ID="1000" Ordinal="Primary"/>
+</Related_Weaknesses></Weakness><Weakness ID="788"/></Weaknesses>
 </Weakness_Catalog>"""
 CAPEC_XML = b"""<Attack_Pattern_Catalog xmlns="http://capec.mitre.org/capec-3" Version="3.9">
 <Attack_Patterns>

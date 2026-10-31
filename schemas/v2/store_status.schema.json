@@ -176,7 +176,7 @@
       ]
     },
     "schema_version": {
-      "const": "2.0.0-dev.44",
+      "const": "2.0.0-dev.45",
       "title": "Schema Version",
       "type": "string"
     }

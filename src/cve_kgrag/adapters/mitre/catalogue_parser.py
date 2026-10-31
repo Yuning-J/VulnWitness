@@ -5,12 +5,14 @@ import re
 from typing import Any
 from xml.etree import ElementTree
 
+from cve_kgrag.adapters.mitre.cwe_inheritance import collect_cwe_inheritance, read_cwe_parents
 from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.weakness_associations import (
     AttackTechnique,
     CapecAssociations,
     CapecMapping,
     CatalogueSource,
+    CweCapecInheritance,
     MappingCounts,
     WeaknessMappingSnapshot,
 )
@@ -126,10 +128,10 @@ def build_mapping_snapshot(
     attack_bytes: bytes,
     cwe_ids: tuple[str, ...] = (),
 ) -> WeaknessMappingSnapshot:
-    """Derive only explicit links; optional CWE IDs select a reproducible excerpt.
+    """Derive catalogue links and marked CWE inference; CWE IDs select an excerpt.
 
     Raises XML, JSON or validation errors for malformed catalogues and ValueError for
-    invalid technique IDs, missing release metadata or cyclic CAPEC inheritance.
+    invalid technique IDs, missing release metadata or cyclic CWE/CAPEC inheritance.
     """
     cwe_catalogue = ElementTree.fromstring(cwe_bytes)
     capec_catalogue = ElementTree.fromstring(capec_bytes)
@@ -165,17 +167,30 @@ def build_mapping_snapshot(
             if relation.attrib["Nature"] == "ChildOf":
                 parent_ids.add("CAPEC-" + relation.attrib["CAPEC_ID"])
         parents[capec_id] = tuple(sorted(parent_ids))
-    cwe_capecs: dict[str, tuple[str, ...]] = {}
+    all_cwe_capecs: dict[str, tuple[str, ...]] = {}
+    cwe_parents: dict[str, tuple[str, ...]] = {}
+    cwes_with_direct_links: set[str] = set()
     for weakness in cwe_catalogue.findall("./{*}Weaknesses/{*}Weakness"):
         cwe_id = "CWE-" + weakness.attrib["ID"]
-        if cwe_ids and cwe_id not in cwe_ids:
-            continue
+        cwe_parents[cwe_id] = read_cwe_parents(weakness)
         linked_capecs: set[str] = set()
         for relation in weakness.findall("./{*}Related_Attack_Patterns/{*}Related_Attack_Pattern"):
+            cwes_with_direct_links.add(cwe_id)
             capec_id = "CAPEC-" + relation.attrib["CAPEC_ID"]
             if capec_id not in deprecated_capecs:
                 linked_capecs.add(capec_id)
-        cwe_capecs[cwe_id] = tuple(sorted(linked_capecs))
+        all_cwe_capecs[cwe_id] = tuple(sorted(linked_capecs))
+    cwe_capecs: dict[str, tuple[str, ...]] = {}
+    cwe_inheritance: dict[str, tuple[CweCapecInheritance, ...]] = {}
+    for cwe_id, linked_capecs_tuple in all_cwe_capecs.items():
+        if cwe_ids and cwe_id not in cwe_ids:
+            continue
+        cwe_capecs[cwe_id] = linked_capecs_tuple
+        inheritances = collect_cwe_inheritance(
+            cwe_id, all_cwe_capecs, cwes_with_direct_links, cwe_parents
+        )
+        if inheritances:
+            cwe_inheritance[cwe_id] = inheritances
     if cwe_ids and set(cwe_ids) != set(cwe_capecs):
         raise ValueError("selected CWE IDs are absent from the CWE catalogue")
     included_capecs = set(capec_names)
@@ -183,6 +198,9 @@ def build_mapping_snapshot(
         included_capecs = set()
         for cwe_links in cwe_capecs.values():
             included_capecs.update(cwe_links)
+        for inheritances in cwe_inheritance.values():
+            for inheritance in inheritances:
+                included_capecs.update(inheritance.capec_ids)
     capecs: dict[str, CapecAssociations] = {}
     direct_count = 0
     inherited_count = 0
@@ -226,9 +244,11 @@ def build_mapping_snapshot(
             ),
         ),
         cwe_capecs=cwe_capecs,
+        cwe_inheritance=cwe_inheritance,
         capecs=capecs,
         counts=MappingCounts(
             cwes_with_capec_links=sum(bool(links) for links in cwe_capecs.values()),
+            cwes_with_inherited_capec_links=len(cwe_inheritance),
             capecs_with_attack_links=mapped_capec_count,
             direct_mappings=direct_count,
             inherited_mappings=inherited_count,

@@ -61,7 +61,7 @@ sources:
     redistribution_conditions: "Copies must reproduce MITRE's copyright designation and the license; the grant says use and copy, not distribute."
     local_storage_policy: committed_excerpt
     terms_verified_on: 2026-10-14
-    notes: "Explicit related attack pattern links in fixtures/mitre/weakness-mapping.json; full mappings are operator-supplied. Notice: fixtures/mitre/NOTICE.md."
+    notes: "Explicit related attack pattern links and marked CWE view 1000 ChildOf inference in fixtures/mitre/weakness-mapping.json; full mappings are operator-supplied. Notice: fixtures/mitre/NOTICE.md."
   - name: mitre-capec
     official_url: "https://capec.mitre.org"
     terms_or_license_url: "https://capec.mitre.org/about/termsofuse.html"

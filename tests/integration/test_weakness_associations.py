@@ -215,6 +215,61 @@ def test_operator_build_writes_a_servable_mapping_and_prints_its_digest(
     assert report["size_bytes"] == snapshot_path.stat().st_size
     assert mapping.describe().counts.direct_mappings == 2
     assert mapping.describe().counts.inherited_mappings == 3
+    assert report["counts"]["cwes_with_inherited_capec_links"] == 1
+    inherited_paths = mapping.associate(build_cve_record(cwe_ids=["CWE-787"])).paths
+    assert len(inherited_paths) == 5
+    assert all(path.inherited_from_cwe == "CWE-119" for path in inherited_paths)
+
+
+@pytest.mark.parametrize("forgery", ["ancestor", "capec", "source", "parent-hop"])
+@pytest.mark.parametrize("mapping_kind", ["packaged-terminal", "snippet-full"])
+def test_lookup_validator_accepts_cwe_inheritance_and_rejects_forged_paths(
+    fixture_bundle: FixtureBundle, forgery: str, mapping_kind: str
+) -> None:
+    # Arrange
+    bundle = build_bundle_with(
+        fixture_bundle, "CVE-9999-5555", "Synthetic inherited weakness", cwe_ids=["CWE-787"]
+    )
+    mapping = (
+        load_weakness_mapping() if mapping_kind == "packaged-terminal" else build_snippet_mapping()
+    )
+    deployment = build_serving_data_plane(bundle, clock=read_fixed_clock, weakness_mapping=mapping)
+    lookup = deployment.search_service.lookup("CVE-9999-5555")
+    candidate = lookup.candidates[0]
+    associations = candidate.weakness_associations
+    assert associations is not None
+    path = associations.paths[0]
+    hops = list(path.hops)
+    if forgery == "ancestor":
+        hops[1] = hops[1].model_copy(update={"to_id": "CWE-20"})
+        hops[2] = hops[2].model_copy(update={"from_id": "CWE-20"})
+        forged_path = path.model_copy(update={"inherited_from_cwe": "CWE-20", "hops": tuple(hops)})
+    elif forgery == "capec":
+        hops[2] = hops[2].model_copy(update={"to_id": "CAPEC-9999"})
+        forged_path = path.model_copy(update={"capec_id": "CAPEC-9999", "hops": tuple(hops)})
+    elif forgery == "source":
+        hops[1] = hops[1].model_copy(update={"source_sha256": "0" * 64})
+        forged_path = path.model_copy(update={"hops": tuple(hops)})
+    else:
+        forged_path = path.model_copy(
+            update={"inherited_from_cwe": None, "hops": (hops[0], *hops[2:])}
+        )
+    forged_associations = associations.model_copy(
+        update={"paths": (forged_path, *associations.paths[1:])}
+    )
+    forged_candidate = candidate.model_copy(update={"weakness_associations": forged_associations})
+    forged_candidate = Candidate.model_validate(forged_candidate.model_dump(mode="json"))
+    forged_lookup = lookup.model_copy(update={"candidates": (forged_candidate,)})
+    forged_lookup = forged_lookup.model_copy(
+        update={"result_sha256": forged_lookup.compute_result_sha256()}
+    )
+
+    # Act / Assert
+    validate_search_response(lookup, deployment.evidence_catalog)
+    assert len(associations.paths) == (12 if mapping_kind == "packaged-terminal" else 5)
+    assert all(path.inherited_from_cwe == "CWE-119" for path in associations.paths)
+    with pytest.raises(EvidenceValidationError, match="weakness associations differ"):
+        validate_search_response(forged_lookup, deployment.evidence_catalog)
 
 
 def test_digest_mismatch_refuses_serving_instead_of_loading_the_excerpt(tmp_path: Path) -> None:

@@ -333,7 +333,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     mitre_parser = commands.add_parser("mitre", help="build an offline catalogue mapping")
     mitre_commands = mitre_parser.add_subparsers(dest="mitre_command", required=True)
-    mitre_build_parser = mitre_commands.add_parser("build", help="derive explicit catalogue links")
+    mitre_build_parser = mitre_commands.add_parser(
+        "build", help="derive catalogue links and marked CWE hierarchy inferences"
+    )
     for source_name in ("cwe", "capec", "attack"):
         mitre_build_parser.add_argument("--" + source_name, type=Path, required=True)
     mitre_build_parser.add_argument("--out", type=Path, required=True)

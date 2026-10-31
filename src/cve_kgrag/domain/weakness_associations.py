@@ -1,4 +1,4 @@
-"""Explicit catalogue associations, independent of retrieval and protocol context."""
+"""Catalogue associations and marked inference, independent of retrieval context."""
 
 from typing import Annotated, Final, Literal, Self
 
@@ -13,6 +13,8 @@ DERIVED_ASSOCIATION_NOTE: Final = (
     "CVE was used with that technique. It is not an attack path."
     " No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean "
     "the weakness has no attack technique or no way to be exploited."
+    " CWE inheritance is an inference along the CWE hierarchy, not a catalogue link "
+    "from the original CWE to CAPEC."
 )
 CweId = Annotated[str, Field(pattern=r"^CWE-[0-9]+$")]
 CapecId = Annotated[str, Field(pattern=r"^CAPEC-[0-9]+$")]
@@ -72,6 +74,7 @@ class CapecAssociations(ContractModel):
 
 class MappingCounts(ContractModel):
     cwes_with_capec_links: int = Field(ge=0)
+    cwes_with_inherited_capec_links: int = Field(ge=0)
     capecs_with_attack_links: int = Field(ge=0)
     direct_mappings: int = Field(ge=0)
     inherited_mappings: int = Field(ge=0)
@@ -80,11 +83,26 @@ class MappingCounts(ContractModel):
     revoked_attack_objects_skipped: int = Field(ge=0)
 
 
+class CweCapecInheritance(ContractModel):
+    inherited_from_cwe: CweId
+    parent_chain: tuple[CweId, ...] = Field(min_length=1)
+    capec_ids: tuple[CapecId, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def check_parent_chain(self) -> Self:
+        if self.inherited_from_cwe != self.parent_chain[-1]:
+            raise ValueError("inherited_from_cwe must be the last CWE ChildOf parent")
+        if len(set(self.parent_chain)) != len(self.parent_chain):
+            raise ValueError("CWE ChildOf parent chain must not contain a cycle")
+        return self
+
+
 class WeaknessMappingSnapshot(ContractModel):
-    format_version: Literal[1] = 1
+    format_version: Literal[2] = 2
     coverage: Literal["full", "excerpt"]
     sources: tuple[CatalogueSource, ...] = Field(min_length=3, max_length=3)
     cwe_capecs: dict[CweId, tuple[CapecId, ...]]
+    cwe_inheritance: dict[CweId, tuple[CweCapecInheritance, ...]]
     capecs: dict[CapecId, CapecAssociations]
     counts: MappingCounts
 
@@ -95,6 +113,12 @@ class WeaknessMappingSnapshot(ContractModel):
             catalogue_names.add(source.catalogue)
         if catalogue_names != {"CWE", "CAPEC", "ATT&CK Enterprise"}:
             raise ValueError("snapshot must name each of the three input catalogues exactly once")
+        for cwe_id, inheritances in self.cwe_inheritance.items():
+            if cwe_id not in self.cwe_capecs or self.cwe_capecs[cwe_id]:
+                raise ValueError("CWE inheritance requires a selected CWE without direct links")
+            for inheritance in inheritances:
+                if cwe_id in inheritance.parent_chain:
+                    raise ValueError("CWE inheritance must not return to its starting CWE")
         return self
 
 
@@ -113,7 +137,11 @@ class AssociationHop(ContractModel):
     from_id: str
     to_id: str
     relation: Literal[
-        "nvd_cwe", "cwe_related_attack_pattern", "capec_child_of", "capec_attack_taxonomy_mapping"
+        "nvd_cwe",
+        "cwe_child_of",
+        "cwe_related_attack_pattern",
+        "capec_child_of",
+        "capec_attack_taxonomy_mapping",
     ]
     source: Literal["NVD record", "CWE catalogue", "CAPEC catalogue"]
     source_version: str | None = None
@@ -130,11 +158,24 @@ class WeaknessAssociationPath(ContractModel):
         default=None, description="No usable ATT&CK mapping in the loaded catalogue snapshot."
     )
     inherited_from: CapecId | None = None
+    inherited_from_cwe: CweId | None = Field(
+        default=None,
+        description=(
+            "Linked CWE ancestor used for hierarchy inference, not a direct catalogue link."
+        ),
+    )
     hops: tuple[AssociationHop, ...]
     derived: Literal[True] = True
 
     @model_validator(mode="after")
     def check_path_terminal(self) -> Self:
+        cwe_parents: list[str] = []
+        for hop in self.hops:
+            if hop.relation == "cwe_child_of":
+                cwe_parents.append(hop.to_id)
+        expected_cwe_ancestor = cwe_parents[-1] if cwe_parents else None
+        if self.inherited_from_cwe != expected_cwe_ancestor:
+            raise ValueError("inherited_from_cwe must match the last CWE ChildOf hop")
         if self.terminal_reason is None:
             if self.technique is None or self.technique_source is None:
                 raise ValueError("full paths require a technique and its catalogue source")
@@ -142,7 +183,7 @@ class WeaknessAssociationPath(ContractModel):
             self.technique is not None
             or self.technique_source is not None
             or self.inherited_from is not None
-            or len(self.hops) != 2
+            or len(self.hops) != 2 + len(cwe_parents)
             or self.hops[-1].to_id != self.capec_id
         ):
             raise ValueError("CAPEC-terminal paths must end at CAPEC without a technique")
@@ -170,8 +211,10 @@ class WeaknessAssociations(ContractModel):
         "CVE was used with that technique. It is not an attack path."
         " No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean "
         "the weakness has no attack technique or no way to be exploited."
+        " CWE inheritance is an inference along the CWE hierarchy, not a catalogue link "
+        "from the original CWE to CAPEC."
     ] = DERIVED_ASSOCIATION_NOTE
     snapshot_sha256: str = Field(pattern=SHA256_PATTERN)
-    ordering: Literal["direct_then_inherited_then_capec_terminal_then_id_not_importance"] = (
-        "direct_then_inherited_then_capec_terminal_then_id_not_importance"
-    )
+    ordering: Literal[
+        "direct_then_capec_inherited_then_cwe_inherited_then_capec_terminal_then_id_not_importance"
+    ] = "direct_then_capec_inherited_then_cwe_inherited_then_capec_terminal_then_id_not_importance"

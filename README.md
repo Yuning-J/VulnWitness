@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.44` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.45` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -371,11 +371,19 @@ Single-CVE `lookup` answers carry full `weakness_associations`. Search, topic an
 investigation candidates, including excluded candidates, omit the field entirely
 so associations cannot displace retrieval results from the context-byte budget.
 Use `cve-kgrag lookup <CVE-ID>` or MCP `lookup_cve` for
-explicit CVE → CWE → CAPEC → ATT&CK paths or paths ending at CAPEC, the source of
+catalogue-derived CVE → CWE → CAPEC → ATT&CK paths or paths ending at CAPEC, the source of
 every hop, technique names and tactics when mapped, the snapshot digest, missing
 links and an omitted count. Paths ending at CAPEC have `terminal_reason` set to
 `"no_attack_mapping"`, with `technique` and `technique_source` set to null. CAPEC mappings
 inherited through `ChildOf` include their parent chain and `inherited_from`.
+When a CWE has no direct `Related_Attack_Patterns`, the builder follows CWE
+`ChildOf` relations in view 1000 (Complete Weakness Hierarchy), preferring relations
+marked `Ordinal="Primary"` within that view, or all its `ChildOf` relations if none
+is marked. It takes all linked ancestors at the nearest depth and retains each
+`cwe_child_of` hop with `inherited_from_cwe`. This is an inference along the CWE
+hierarchy, not a catalogue link from the original CWE to CAPEC. Direct CWE links
+always prevent CWE inheritance, including links to deprecated CAPECs. CWE-787
+inherits CWE-119's 12 CAPEC links in CWE 5.0.
 
 This association is derived from official catalogues. It is not evidence that the
 CVE was used with that technique. It is not an attack path.
@@ -383,9 +391,11 @@ No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean
 the weakness has no attack technique or no way to be exploited.
 
 Full paths and paths ending at CAPEC share a cap of 20 per CVE, with the exact
-omitted count. Direct mappings precede inherited mappings, then paths ending at
-CAPEC, then lexicographic CWE, CAPEC, technique and inheritance IDs. This order is
-not an importance ranking. No model or keyword inference fills a missing link.
+omitted count. Direct mappings precede CAPEC-inherited mappings, then CWE-inherited
+full paths, then all paths ending at CAPEC, then lexicographic CWE, CAPEC, technique
+and inheritance IDs. This order is not an importance ranking.
+CWE inference uses only the selected catalogue hierarchy;
+no model or keyword inference fills a missing link.
 `missing_links` reports unavailable links without repeating CAPEC terminal reasons.
 Text investigations point to `lookup` for the full paths, sources and omitted counts.
 NVD placeholders are normalized to no specific CWE. FiGHT `protocol_context`, needs,

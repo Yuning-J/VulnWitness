@@ -201,8 +201,8 @@
       "$ref": "#/$defs/EvidenceAnchor"
     },
     "schema_version": {
-      "const": "2.0.0-dev.44",
-      "default": "2.0.0-dev.44",
+      "const": "2.0.0-dev.45",
+      "default": "2.0.0-dev.45",
       "title": "Schema Version",
       "type": "string"
     }

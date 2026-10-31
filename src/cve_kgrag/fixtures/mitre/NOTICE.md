@@ -1,8 +1,13 @@
 # MITRE catalogue excerpt notice
 
 `weakness-mapping.json` is a derived excerpt of official MITRE data downloaded on
-2026-10-31. It contains only explicit CWE related attack patterns, CAPEC ATTACK
-mappings and ChildOf inheritance, and ATT&CK technique names and kill-chain tactics.
+2026-10-31. It contains explicit CWE related attack patterns, marked CWE hierarchy
+inferences, CAPEC ATTACK mappings and ChildOf inheritance, and ATT&CK technique
+names and kill-chain tactics. CWE inference follows view 1000 (Complete Weakness
+Hierarchy) ChildOf parents, preferring Ordinal="Primary" within that view, and stops
+at the nearest depth with linked ancestors. CWE-787 inherits CWE-119's 12 CAPEC links
+with `inherited_from_cwe` and each CWE parent hop. This is an inference along the CWE
+hierarchy, not a catalogue link from CWE-787 to CAPEC. Direct CWE links prevent it.
 It selects CWE-20, CWE-79, CWE-787, CWE-284, CWE-269, CWE-78 and CWE-120. Empty links
 are retained. It is not a verbatim copy of the catalogues or evidence of CVE usage.
 

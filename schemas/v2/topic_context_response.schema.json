@@ -107,6 +107,7 @@
         "relation": {
           "enum": [
             "nvd_cwe",
+            "cwe_child_of",
             "cwe_related_attack_pattern",
             "capec_child_of",
             "capec_attack_taxonomy_mapping"
@@ -1932,6 +1933,20 @@
           "default": null,
           "title": "Inherited From"
         },
+        "inherited_from_cwe": {
+          "anyOf": [
+            {
+              "pattern": "^CWE-[0-9]+$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Linked CWE ancestor used for hierarchy inference, not a direct catalogue link.",
+          "title": "Inherited From Cwe"
+        },
         "technique": {
           "anyOf": [
             {
@@ -1976,6 +1991,7 @@
         "technique_source",
         "terminal_reason",
         "inherited_from",
+        "inherited_from_cwe",
         "hops",
         "derived"
       ],
@@ -1993,8 +2009,8 @@
           "type": "array"
         },
         "note": {
-          "const": "This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited.",
-          "default": "This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited.",
+          "const": "This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited. CWE inheritance is an inference along the CWE hierarchy, not a catalogue link from the original CWE to CAPEC.",
+          "default": "This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited. CWE inheritance is an inference along the CWE hierarchy, not a catalogue link from the original CWE to CAPEC.",
           "title": "Note",
           "type": "string"
         },
@@ -2004,8 +2020,8 @@
           "type": "integer"
         },
         "ordering": {
-          "const": "direct_then_inherited_then_capec_terminal_then_id_not_importance",
-          "default": "direct_then_inherited_then_capec_terminal_then_id_not_importance",
+          "const": "direct_then_capec_inherited_then_cwe_inherited_then_capec_terminal_then_id_not_importance",
+          "default": "direct_then_capec_inherited_then_cwe_inherited_then_capec_terminal_then_id_not_importance",
           "title": "Ordering",
           "type": "string"
         },
@@ -2091,8 +2107,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.44",
-      "default": "2.0.0-dev.44",
+      "const": "2.0.0-dev.45",
+      "default": "2.0.0-dev.45",
       "title": "Schema Version",
       "type": "string"
     },

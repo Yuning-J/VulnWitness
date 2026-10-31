@@ -73,6 +73,11 @@
           "title": "Cwes With Capec Links",
           "type": "integer"
         },
+        "cwes_with_inherited_capec_links": {
+          "minimum": 0,
+          "title": "Cwes With Inherited Capec Links",
+          "type": "integer"
+        },
         "deprecated_attack_objects_skipped": {
           "minimum": 0,
           "title": "Deprecated Attack Objects Skipped",
@@ -101,6 +106,7 @@
       },
       "required": [
         "cwes_with_capec_links",
+        "cwes_with_inherited_capec_links",
         "capecs_with_attack_links",
         "direct_mappings",
         "inherited_mappings",
@@ -626,8 +632,8 @@
       "type": "boolean"
     },
     "schema_version": {
-      "const": "2.0.0-dev.44",
-      "default": "2.0.0-dev.44",
+      "const": "2.0.0-dev.45",
+      "default": "2.0.0-dev.45",
       "title": "Schema Version",
       "type": "string"
     },
