@@ -725,24 +725,58 @@ def test_broken_store_is_reported_before_a_broken_snapshot(
     assert "store unavailable: no_active_store" in capsys.readouterr().err
 
 
-def test_capabilities_name_the_configured_snapshot_s_pin(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("has_expected_hash", [False, True], ids=["computed", "compared"])
+def test_capabilities_name_the_configured_snapshot_computed_digest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], has_expected_hash: bool
 ) -> None:
+    # Arrange
     snapshot_path = tmp_path / "fight.yaml"
     snapshot_path.write_bytes(EXCERPT_BYTES)
     environment = {
         "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
-        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": EXCERPT_SHA256,
     }
+    if has_expected_hash:
+        environment["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
 
+    # Act
     exit_code = main(["capabilities"], environment)
 
+    # Assert
     capabilities = KnowledgeCapabilities.model_validate_json(capsys.readouterr().out)
     fight_capability = find_capability(capabilities.source_capabilities, "mitre_fight")
     assert exit_code == 0
     assert fight_capability.state is SourceCapabilityState.AVAILABLE
     assert fight_capability.version is not None
     assert fight_capability.version.endswith(f"+sha256:{EXCERPT_SHA256}")
+
+
+def test_path_only_snapshot_binds_evidence_identity_and_replays_with_expected_hash(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Arrange
+    snapshot_path = tmp_path / "fight.yaml"
+    snapshot_path.write_bytes(EXCERPT_BYTES)
+    environment = {"CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path)}
+
+    # Act
+    investigation_exit = main(
+        ["investigate", "subscriber key threats", "--scope", "protocol_context_only"], environment
+    )
+    sealed_set = KnowledgeEvidenceSet.model_validate_json(capsys.readouterr().out)
+    set_path = tmp_path / "set.json"
+    set_path.write_text(sealed_set.model_dump_json())
+    verification_exit = main(["verify", str(set_path)], environment)
+    capsys.readouterr()
+    environment["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
+    compared_verification_exit = main(["verify", str(set_path)], environment)
+    capability = find_capability(sealed_set.source_capabilities, "mitre_fight")
+
+    # Assert
+    assert investigation_exit == 1
+    assert capability.version is not None
+    assert capability.version.endswith(f"+sha256:{EXCERPT_SHA256}")
+    assert verification_exit == 0
+    assert compared_verification_exit == 0
 
 
 def test_store_whose_manifest_nests_too_deep_fails_as_invalid_without_a_traceback(

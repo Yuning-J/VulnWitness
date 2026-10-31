@@ -49,15 +49,16 @@ def store_root(tmp_path: Path) -> Path:
     return store_root
 
 
-@pytest.fixture
-def settings(tmp_path: Path, store_root: Path) -> dict[str, str]:
+@pytest.fixture(params=[False, True], ids=["computed_digest", "expected_digest"])
+def settings(tmp_path: Path, store_root: Path, request: pytest.FixtureRequest) -> dict[str, str]:
     snapshot_path = tmp_path / "fight.yaml"
     snapshot_path.write_bytes(EXCERPT_BYTES)
     environment = {
         "CVE_KGRAG_STORE_ROOT": str(store_root),
         "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
-        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": EXCERPT_SHA256,
     }
+    if request.param:
+        environment["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
     assert main(["store", "activate", "first"], environment) == 0
     return environment
 
@@ -214,7 +215,7 @@ def test_labelled_cases_without_their_sources_are_a_usage_error(
 ) -> None:
     environment = dict(settings)
     for variable in removed_variables:
-        del environment[variable]
+        environment.pop(variable, None)
 
     exit_code = run_usage_error(evaluate(gold_path, sets_path, tmp_path / "results"), environment)
 
@@ -282,7 +283,7 @@ def test_configured_snapshot_other_than_the_gold_file_s_is_refused(
     exit_code, message = run_refused(tmp_path, gold_path, sets_path, settings, capsys)
 
     assert exit_code == 1
-    assert "the configured FiGHT snapshot is not the one" in message
+    assert "FiGHT snapshot is not the one" in message
 
 
 def test_sets_file_naming_another_corpus_than_the_gold_file_is_refused(

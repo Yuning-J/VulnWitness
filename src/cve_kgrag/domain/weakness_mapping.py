@@ -29,15 +29,27 @@ def path_order(path: WeaknessAssociationPath) -> tuple[int, str, str, str, str, 
 
 
 class WeaknessMapping:
-    """A digest-verified snapshot, read without modifying its catalogue links."""
+    """A snapshot bound to its computed digest, with explicit comparison status."""
 
-    def __init__(self, snapshot: WeaknessMappingSnapshot, sha256: str) -> None:
+    def __init__(
+        self,
+        snapshot: WeaknessMappingSnapshot,
+        sha256: str,
+        *,
+        expected_sha256_compared: bool = False,
+    ) -> None:
         self._snapshot = snapshot
         self._sha256 = sha256
+        self._expected_sha256_compared = expected_sha256_compared
 
     def describe(self) -> WeaknessSnapshotCapability:
         return WeaknessSnapshotCapability(
             coverage=self._snapshot.coverage,
+            integrity=(
+                "Compared with expected SHA-256."
+                if self._expected_sha256_compared
+                else "File identity recorded; no expected SHA-256 supplied."
+            ),
             snapshot_sha256=self._sha256,
             sources=self._snapshot.sources,
             counts=self._snapshot.counts,

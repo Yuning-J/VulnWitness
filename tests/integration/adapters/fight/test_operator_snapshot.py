@@ -232,3 +232,30 @@ def test_catalogued_bytes_that_do_not_parse_are_invalid(tmp_path: Path) -> None:
         FightSnapshotFailure.INVALID,
         "unclosed",
     )
+
+
+def test_path_without_expected_digest_serves_computed_catalogued_identity(
+    snapshot_path: Path,
+) -> None:
+    # Arrange
+    settings = FightSnapshotSettings(path=snapshot_path)
+
+    # Act
+    source, catalog_entry = load_fight_source(settings, read_fixed_clock)
+
+    # Assert
+    assert source.describe().snapshot_sha256 == sha256_hex(EXCERPT_BYTES)
+    assert catalog_entry is not None
+    assert catalog_entry.snapshot_sha256 == source.describe().snapshot_sha256
+
+
+def test_snapshot_without_expected_digest_still_requires_reviewed_catalog(
+    snapshot_path: Path, packaged_catalog: FightSnapshotCatalog
+) -> None:
+    # Arrange
+    snapshot_path.write_bytes(EXCERPT_BYTES + b"\n")
+
+    # Act / Assert
+    with pytest.raises(FightSnapshotUnavailable) as raised:
+        load_operator_fight_snapshot(snapshot_path, None, packaged_catalog, read_fixed_clock)
+    assert raised.value.failure is FightSnapshotFailure.NOT_CATALOGUED

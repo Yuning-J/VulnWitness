@@ -42,15 +42,16 @@ def store_root(tmp_path: Path) -> Path:
     return store_root
 
 
-@pytest.fixture
-def settings(tmp_path: Path, store_root: Path) -> dict[str, str]:
+@pytest.fixture(params=[False, True], ids=["computed_digest", "expected_digest"])
+def settings(tmp_path: Path, store_root: Path, request: pytest.FixtureRequest) -> dict[str, str]:
     snapshot_path = tmp_path / "fight.yaml"
     snapshot_path.write_bytes(EXCERPT_BYTES)
     environment = {
         "CVE_KGRAG_STORE_ROOT": str(store_root),
         "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
-        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": EXCERPT_SHA256,
     }
+    if request.param:
+        environment["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
     assert main(["store", "activate", "first"], environment) == 0
     return environment
 
@@ -251,7 +252,7 @@ def test_gold_sets_without_its_sources_is_a_usage_error(
 ) -> None:
     environment = dict(settings)
     for variable in removed_variables:
-        del environment[variable]
+        environment.pop(variable, None)
     gold_path = write_gold_file(tmp_path, UNKNOWN_CORPUS_SHA256)
 
     exit_code = run_usage_error(["eval", "gold-sets", "--gold", str(gold_path)], environment)

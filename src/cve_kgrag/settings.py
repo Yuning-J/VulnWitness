@@ -233,8 +233,7 @@ def check_absolute_path(path: Path) -> Path:
 
 class ServedDataVariables(BaseModel):
     """The served-data variables as read, each checked on its own; ``load_settings``
-    checks that the snapshot's path and hash are set together, so its error names the
-    variable that is missing."""
+    requires a snapshot path when an optional expected hash is supplied."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
@@ -253,22 +252,22 @@ class ServedDataVariables(BaseModel):
 
 
 class FightSnapshotSettings(BaseModel):
-    """An operator FiGHT snapshot: the file and the SHA-256 it must have. Whether the
-    catalog lists that hash is checked when a command loads the snapshot (ADR 0009 §11)."""
+    """An operator FiGHT file and optional expected SHA-256. The computed digest must
+    be in the reviewed catalog when the file is loaded (ADR 0009 §11)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
     path: Path
-    sha256: str = Field(pattern=SHA256_PATTERN)
+    sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
 
 
 class MitreSnapshotSettings(BaseModel):
-    """The operator's derived mapping file and its required SHA-256."""
+    """The operator's derived mapping file and optional expected SHA-256."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
     path: Path
-    sha256: str = Field(pattern=SHA256_PATTERN)
+    sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
 
 
 class ServiceSettings(BaseModel):
@@ -359,33 +358,29 @@ def load_section(
 
 
 def pair_fight_snapshot(served_data: ServedDataVariables) -> FightSnapshotSettings | None:
-    """The snapshot the path and hash name, ``None`` when neither is set. Raises
-    ``SettingsError`` naming the one that is missing when only the other is set."""
+    """The configured file and optional expected hash; a hash alone is refused."""
     path = served_data.fight_snapshot_path
     sha256 = served_data.fight_snapshot_sha256
     if path is None and sha256 is None:
         return None
-    if path is None or sha256 is None:
-        missing_field = "fight_snapshot_path" if path is None else "fight_snapshot_sha256"
-        present_field = "fight_snapshot_sha256" if path is None else "fight_snapshot_path"
-        missing_variable = find_section_variable(SERVED_DATA_VARIABLES, missing_field)
-        present_variable = find_section_variable(SERVED_DATA_VARIABLES, present_field)
+    if path is None:
         raise SettingsError(
-            f"invalid settings: {missing_variable}: required with {present_variable}"
+            "invalid settings: CVE_KGRAG_FIGHT_SNAPSHOT_PATH: "
+            "required with CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"
         )
     return FightSnapshotSettings(path=path, sha256=sha256)
 
 
 def pair_mitre_snapshot(served_data: ServedDataVariables) -> MitreSnapshotSettings | None:
-    """Require both MITRE variables together; an unset pair serves the packaged excerpt."""
+    """The configured file and optional expected hash; a hash alone is refused."""
     path = served_data.mitre_snapshot_path
     sha256 = served_data.mitre_snapshot_sha256
     if path is None and sha256 is None:
         return None
-    if path is None or sha256 is None:
+    if path is None:
         raise SettingsError(
-            "invalid settings: CVE_KGRAG_MITRE_SNAPSHOT_PATH and "
-            "CVE_KGRAG_MITRE_SNAPSHOT_SHA256 must be set together"
+            "invalid settings: CVE_KGRAG_MITRE_SNAPSHOT_PATH: "
+            "required with CVE_KGRAG_MITRE_SNAPSHOT_SHA256"
         )
     return MitreSnapshotSettings(path=path, sha256=sha256)
 

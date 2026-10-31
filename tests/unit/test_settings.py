@@ -629,12 +629,11 @@ def test_snapshot_hash_that_is_not_lower_case_hex_names_the_variable(
 @pytest.mark.parametrize(
     ("present_variable", "value", "missing_variable"),
     [
-        ("CVE_KGRAG_FIGHT_SNAPSHOT_PATH", "/srv/fight.yaml", "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"),
         ("CVE_KGRAG_FIGHT_SNAPSHOT_SHA256", SNAPSHOT_SHA256, "CVE_KGRAG_FIGHT_SNAPSHOT_PATH"),
     ],
-    ids=["path_without_hash", "hash_without_path"],
+    ids=["hash_without_path"],
 )
-def test_snapshot_path_and_hash_are_set_together(
+def test_snapshot_hash_without_a_path_is_refused(
     present_variable: str, value: str, missing_variable: str
 ) -> None:
     with pytest.raises(SettingsError) as raised:
@@ -643,3 +642,18 @@ def test_snapshot_path_and_hash_are_set_together(
     assert str(raised.value) == (
         f"invalid settings: {missing_variable}: required with {present_variable}"
     )
+
+
+@pytest.mark.parametrize("source", ["FIGHT", "MITRE"])
+def test_snapshot_path_without_expected_hash_is_configured(source: str) -> None:
+    # Arrange
+    path = "/srv/snapshot"
+
+    # Act
+    settings = load_settings({f"CVE_KGRAG_{source}_SNAPSHOT_PATH": path})
+    snapshot = settings.fight_snapshot if source == "FIGHT" else settings.mitre_snapshot
+
+    # Assert
+    assert snapshot is not None
+    assert snapshot.path == Path(path)
+    assert snapshot.sha256 is None

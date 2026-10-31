@@ -265,9 +265,6 @@ OUT_INSIDE_THE_PACKAGE = "--out must not lie inside the installed cve_kgrag pack
 OUT_INSIDE_THE_STORE_ROOT = "--out must not lie inside the store root"
 STORE_ROOT_VARIABLE = find_section_variable(SERVED_DATA_VARIABLES, "store_root")
 FIGHT_SNAPSHOT_PATH_VARIABLE = find_section_variable(SERVED_DATA_VARIABLES, "fight_snapshot_path")
-FIGHT_SNAPSHOT_SHA256_VARIABLE = find_section_variable(
-    SERVED_DATA_VARIABLES, "fight_snapshot_sha256"
-)
 STORE_ROOT_REQUIRED = f"invalid settings: {STORE_ROOT_VARIABLE}: required by store"
 SETS_WITHOUT_LABELLED_CASES = "--sets is for a gold file of labelled cases (M7b)"
 LABELLED_CASES_WITHOUT_SETS = (
@@ -279,7 +276,7 @@ EVAL_NEEDS_A_STORE_ROOT = (
 )
 EVAL_NEEDS_A_FIGHT_SNAPSHOT = (
     "invalid settings: eval planner runs labelled cases on the operator FiGHT snapshot, "
-    f"which {FIGHT_SNAPSHOT_PATH_VARIABLE} and {FIGHT_SNAPSHOT_SHA256_VARIABLE} configure"
+    f"which {FIGHT_SNAPSHOT_PATH_VARIABLE} configures"
 )
 GOLD_SETS_NEED_LABELLED_CASES = "eval gold-sets reads a gold file of labelled cases (M7b)"
 GOLD_SETS_NEED_A_STORE_ROOT = (
@@ -288,7 +285,7 @@ GOLD_SETS_NEED_A_STORE_ROOT = (
 )
 GOLD_SETS_NEED_A_FIGHT_SNAPSHOT = (
     "invalid settings: eval gold-sets reads the operator FiGHT snapshot, which "
-    f"{FIGHT_SNAPSHOT_PATH_VARIABLE} and {FIGHT_SNAPSHOT_SHA256_VARIABLE} configure"
+    f"{FIGHT_SNAPSHOT_PATH_VARIABLE} configures"
 )
 # Written once per run of the commands fixed to the fixture, whatever the settings: their
 # gold cases and demo queries name fixture CVEs (ADR 0009 §10).
@@ -1174,7 +1171,10 @@ def find_stated_digest_mismatch(
         return "the sets file names another corpus than the gold file"
     if recorded_sets.fight_snapshot_sha256 != gold_file.fight_snapshot_sha256:
         return "the sets file names another FiGHT snapshot than the gold file"
-    if fight_snapshot.sha256 != gold_file.fight_snapshot_sha256:
+    if (
+        fight_snapshot.sha256 is not None
+        and fight_snapshot.sha256 != gold_file.fight_snapshot_sha256
+    ):
         return "the configured FiGHT snapshot is not the one the gold file was labelled against"
     return None
 

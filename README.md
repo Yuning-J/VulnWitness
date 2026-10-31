@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.42` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.43` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -269,9 +269,10 @@ and answers 204 while a toolbox worker is free and 503 otherwise, so a readiness
 must send the token.
 
 The served data has no switch: `CVE_KGRAG_STORE_ROOT`, an absolute directory, serves the
-store its `ACTIVE` names in place of the fixture, and `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` with
-`CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`, set together, serve a reviewed full FiGHT snapshot in
-place of the packaged excerpt ([`docs/runbook.md`](docs/runbook.md)).
+store its `ACTIVE` names in place of the fixture. `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` serves
+a reviewed FiGHT snapshot in place of the packaged excerpt; its digest is computed at
+load and must be in the reviewed catalog. `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256` is an optional
+expected value, strictly compared when supplied ([`docs/runbook.md`](docs/runbook.md)).
 
 Keep keys and tokens in the environment, never on a command line or in a committed file.
 
@@ -282,18 +283,19 @@ NVD and CISA KEV data, an operator sets `CVE_KGRAG_STORE_ROOT` to an absolute di
 outside the repository and builds a store under it once, following the
 [operator runbook](docs/runbook.md):
 
-1. Fetch the feeds into a directory outside the repository:
-   `scripts/operator/fetch_feeds.sh ~/data/cve-kgrag/feeds/<date>`. It downloads
-   about 270 MB, and writes the `inputs.yaml` manifest the import reads.
-2. Import them into a new store under the root:
-   `uv run cve-kgrag migrate legacy --inputs <feeds>/inputs.yaml --target "$CVE_KGRAG_STORE_ROOT/nvd-<date>"`.
-3. Check and activate it: `uv run cve-kgrag store validate nvd-<date>`, then
-   `uv run cve-kgrag store activate nvd-<date>`.
-4. Optionally serve the full MITRE FiGHT snapshot: fetch `fight.yaml` at the catalogued
-   commit, check that its SHA-256 is
-   `59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8` (`shasum -a 256` on
-   macOS), and set `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` and `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`
-   ([runbook](docs/runbook.md#the-operator-fight-snapshot)).
+1. Fetch, import and explicitly activate a fresh store in one command:
+   `.venv/bin/python scripts/operator/refresh_store.py --feeds-dir ~/data/cve-kgrag/feeds/<date> --store nvd-<date> --activate`.
+   Fetching downloads about 270 MB. The command checks NVD metadata digests,
+   imports, then verifies and activates the store, printing the import report and status.
+   Use `--inputs <feeds>/inputs.yaml` instead of `--feeds-dir` to reuse local feeds;
+   omit `--activate` to import without changing the active store.
+2. Restart API and MCP services to serve the activated store. To undo activation, run
+   `cve-kgrag store rollback` and restart the services again.
+
+Optionally serve the full MITRE FiGHT snapshot by fetching `fight.yaml` at the reviewed
+catalog's commit and setting `CVE_KGRAG_FIGHT_SNAPSHOT_PATH`
+([runbook](docs/runbook.md#the-operator-fight-snapshot)). The server computes the file's
+digest and enforces the catalog; an expected SHA-256 is optional.
 
 Commands load the whole store before answering data queries. MCP stdio completes
 `initialize` and lists its static tools while the store loads in the background. A tool
@@ -390,8 +392,12 @@ cve-kgrag mitre build --cwe /data/cwec_v5.0.xml --capec /data/capec_latest.xml \
   --attack /data/enterprise-attack.json --out /data/weakness-mapping.json
 ```
 
-Pin the printed digest with `CVE_KGRAG_MITRE_SNAPSHOT_PATH` and
-`CVE_KGRAG_MITRE_SNAPSHOT_SHA256`. Both settings are required together. A mismatch
-refuses serving; without either setting a small packaged real excerpt is served.
-`capabilities` reports its coverage, digest and catalogue versions.
+Set `CVE_KGRAG_MITRE_SNAPSHOT_PATH` to the built file. The server computes its digest
+at load and records it as data identity. Optionally set `CVE_KGRAG_MITRE_SNAPSHOT_SHA256`
+to an expected digest; a mismatch refuses serving. MITRE has no reviewed snapshot
+catalog: without an expected digest the file identity is recorded, without verifying
+that it is unchanged. `capabilities.weakness_associations.integrity` says whether the
+digest was compared, alongside coverage, digest and catalogue versions. An unset path
+serves the manifest-pinned packaged excerpt. Restart services after replacing a file
+or changing its settings.
 See [the runbook](docs/runbook.md#weakness-association-mapping) for serving and rebuilding.

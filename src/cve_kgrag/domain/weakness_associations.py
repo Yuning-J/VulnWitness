@@ -100,6 +100,10 @@ class WeaknessMappingSnapshot(ContractModel):
 
 class WeaknessSnapshotCapability(ContractModel):
     coverage: Literal["full", "excerpt"]
+    integrity: Literal[
+        "File identity recorded; no expected SHA-256 supplied.",
+        "Compared with expected SHA-256.",
+    ] = Field(description="Digest recording alone does not verify that a file is unchanged.")
     snapshot_sha256: str = Field(pattern=SHA256_PATTERN)
     sources: tuple[CatalogueSource, ...]
     counts: MappingCounts

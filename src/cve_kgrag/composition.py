@@ -62,6 +62,7 @@ from cve_kgrag.application.topic_context import TopicContextService
 from cve_kgrag.domain.affectedness import AFFECTEDNESS_DETAILS, AffectednessFailure
 from cve_kgrag.domain.corpus_store_manifest import StoreSource
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
+from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.investigation import (
     FightUnavailableDetail,
     SourceCapability,
@@ -140,12 +141,12 @@ def derive_gold_sets(
     for a source that cannot be read, and ``GoldFileError`` when the snapshot or the
     store's corpus is not the one the labels were confirmed against, or a case's sets do
     not support its label."""
-    if fight_snapshot.sha256 != gold_file.fight_snapshot_sha256:
-        raise GoldFileError("the FiGHT snapshot is not the one the gold file was labelled against")
     snapshot_catalog = load_fight_snapshot_catalog(default_fight_snapshot_catalog_file())
     snapshot_bytes = read_operator_fight_snapshot(
         fight_snapshot.path, fight_snapshot.sha256, snapshot_catalog
     )
+    if sha256_hex(snapshot_bytes) != gold_file.fight_snapshot_sha256:
+        raise GoldFileError("the FiGHT snapshot is not the one the gold file was labelled against")
     try:
         techniques = read_technique_subjects(snapshot_bytes)
     except GoldRuleError as error:
@@ -245,7 +246,7 @@ def load_fight_source(
     fight_snapshot: FightSnapshotSettings | None, clock: Callable[[], datetime] = utc_now
 ) -> tuple[FightSource, KnownFightSnapshot | None]:
     """The FiGHT source the settings configure, and its entry in the packaged reviewed
-    catalog: the operator snapshot when one is pinned, the packaged excerpt otherwise. A
+    catalog: the operator snapshot when a path is set, the packaged excerpt otherwise. A
     configured snapshot that cannot be served raises ``FightSnapshotUnavailable``; there is
     no fallback to the excerpt (ADR 0009 §11)."""
     if fight_snapshot is None:
@@ -254,7 +255,7 @@ def load_fight_source(
     operator_source = load_operator_fight_snapshot(
         fight_snapshot.path, fight_snapshot.sha256, snapshot_catalog, clock
     )
-    return operator_source, snapshot_catalog.find(fight_snapshot.sha256)
+    return operator_source, snapshot_catalog.find(operator_source.describe().snapshot_sha256)
 
 
 def build_evidence_catalog(

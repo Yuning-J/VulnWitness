@@ -247,19 +247,12 @@ def test_lookup_refuses_a_configured_snapshot_digest_mismatch(
     assert "mitre_snapshot_hash_mismatch" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(
-    "variable", ["CVE_KGRAG_MITRE_SNAPSHOT_PATH", "CVE_KGRAG_MITRE_SNAPSHOT_SHA256"]
-)
-def test_snapshot_settings_require_both_variables(variable: str) -> None:
+def test_snapshot_expected_hash_without_a_path_is_refused() -> None:
     # Arrange
-    environment = {
-        "CVE_KGRAG_MITRE_SNAPSHOT_PATH": "/tmp/mapping.json",
-        "CVE_KGRAG_MITRE_SNAPSHOT_SHA256": "0" * 64,
-    }
-    del environment[variable]
+    environment = {"CVE_KGRAG_MITRE_SNAPSHOT_SHA256": "0" * 64}
 
     # Act / Assert
-    with pytest.raises(SettingsError, match="must be set together"):
+    with pytest.raises(SettingsError, match="CVE_KGRAG_MITRE_SNAPSHOT_PATH: required with"):
         load_settings(environment)
 
 
@@ -563,3 +556,31 @@ def test_investigation_validator_rejects_a_forged_catalogue_hop(
             deployment.evidence_catalog,
             (*deployment.source_capabilities, *DETERMINISTIC_VERIFIER),
         )
+
+
+@pytest.mark.parametrize("has_expected_hash", [False, True], ids=["computed", "compared"])
+def test_operator_capabilities_record_computed_identity_and_comparison_status(
+    has_expected_hash: bool, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Arrange
+    arguments = write_snippet_catalogues(tmp_path)
+    snapshot_path = tmp_path / "mapping.json"
+    assert main(["mitre", "build", *arguments, "--out", str(snapshot_path)], environment={}) == 0
+    digest = json.loads(capsys.readouterr().out)["sha256"]
+    environment = {"CVE_KGRAG_MITRE_SNAPSHOT_PATH": str(snapshot_path)}
+    expected_integrity = "File identity recorded; no expected SHA-256 supplied."
+    if has_expected_hash:
+        environment["CVE_KGRAG_MITRE_SNAPSHOT_SHA256"] = digest
+        expected_integrity = "Compared with expected SHA-256."
+
+    # Act
+    exit_code = main(["capabilities"], environment=environment)
+    capability = json.loads(capsys.readouterr().out)["weakness_associations"]
+    mapping = load_weakness_mapping(load_settings(environment).mitre_snapshot)
+    associations = mapping.associate(build_cve_record(cwe_ids=["CWE-20"]))
+
+    # Assert
+    assert exit_code == 0
+    assert capability["snapshot_sha256"] == sha256_hex(snapshot_path.read_bytes()) == digest
+    assert capability["integrity"] == expected_integrity
+    assert associations.snapshot_sha256 == digest

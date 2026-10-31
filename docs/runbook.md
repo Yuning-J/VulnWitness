@@ -33,77 +33,62 @@ A store has three identities, which the commands show:
   `cve_search` capability version, `corpus-store-v1@sha256:<digest>`, and an evidence set
   verifies against any store holding byte-for-byte the same records and anchors.
 
-## Fetch the inputs
+## Refresh a store
 
-Raw feeds, the input manifest, stores and evaluation results are data under NVD's and
-CISA's terms, and evaluation results hold queries and model text: keep all of them
-outside every repository, for example under `~/data/cve-kgrag/` (`feeds/`, `stores/`,
-`runs/`), and never commit or push them. The repository's `.gitignore` catches a copy
-made inside the checkout by mistake.
+Keep raw feeds, manifests, stores and run outputs outside every repository, for example
+under `~/data/cve-kgrag/`. They contain data under NVD's and CISA's terms; evaluation
+outputs can also contain queries and model text.
 
-```bash
-scripts/operator/fetch_feeds.sh ~/data/cve-kgrag/feeds/2026-10-27
-```
-
-The script downloads every NVD 2.0 year feed from 2002 to the current year, the
-`modified` feed and the current KEV catalog from their official URLs into a new
-directory, pausing between NVD requests and retrying failed transfers with backoff. It
-checks each NVD feed against the SHA-256 its `.meta` file states for the decompressed
-JSON, then writes `provenance.tsv` (each file's URL, retrieval time, file and payload
-SHA-256 and size) and `inputs.yaml`, the input manifest for the import below. Both
-appear only once every file has arrived and verified; a run that stops leaves them as
-`.partial` files, and is repeated into a new directory. A full fetch downloads
-about 270 MB.
-
-## Import a store
-
-Write an input manifest declaring each raw NVD feed and the CISA KEV catalog with the
-time it was obtained (ADR 0008), or use the one `fetch_feeds.sh` wrote, then import into
-a new directory directly under the root:
+With the store root created, run from the checkout using its installed environment:
 
 ```bash
 export CVE_KGRAG_STORE_ROOT=/srv/cve-kgrag/stores
-uv run cve-kgrag migrate legacy --inputs inputs.yaml --dry-run \
-  --target "$CVE_KGRAG_STORE_ROOT/nvd-2026-10-26"
-uv run cve-kgrag migrate legacy --inputs inputs.yaml \
-  --target "$CVE_KGRAG_STORE_ROOT/nvd-2026-10-26"
+.venv/bin/python scripts/operator/refresh_store.py \
+  --feeds-dir ~/data/cve-kgrag/feeds/2026-10-31 --store nvd-2026-10-31 --activate
 ```
 
-The report names the store by `store_manifest_sha256` and `import_identity_sha256`, and
-its dataset by `corpus_content_sha256`. With the root set, a target that lies in the root
-but is not a validly named store directly under it is refused (`target_in_store_root`),
-and so is a root that is a symbolic link or not a directory (`store_root_unusable`).
-Importing writes nothing but the new store, and never activates it. Before activation,
-undoing an import is deleting its directory.
+Then restart API and MCP services. They keep serving the store loaded at startup;
+activation and rollback do not hot reload it. Rollback is the command below, followed
+by another restart.
 
-## Validate, activate and check
+The refresh command checks the root and fresh store name, then runs these steps,
+stopping on the first failure:
+
+1. `fetch_feeds.sh` downloads NVD 2.0 year feeds from 2002 to the current year, the
+   `modified` feed and CISA KEV into a fresh directory. It paces and retries requests,
+   compares each decompressed NVD feed with its `.meta` SHA-256, and publishes
+   `provenance.tsv` and `inputs.yaml` only after all downloads succeed. A full fetch
+   downloads about 270 MB. Retry an interrupted fetch into a fresh directory.
+2. `migrate legacy` imports into the fresh store under the root, printing its report
+   and the three identities above. It never changes `ACTIVE`; a failed import stops
+   the refresh before activation.
+3. With `--activate`, `store activate` verifies every checksum, size, evidence ID and
+   record-to-anchor rule, then records the store in `ACTIVE` and prints status.
+   It preserves the previous store for rollback. A separate `store validate` is optional.
+
+Use `--inputs /data/feeds/inputs.yaml` instead of `--feeds-dir` to import existing local
+feeds without downloading. Omit `--activate` to leave `ACTIVE` untouched; the command
+prints the separate activation command. No snapshot hashes need to be copied into
+settings for a refresh. FiGHT still requires a reviewed catalog entry, as described below.
+
+For individual checks and activation:
 
 ```bash
-uv run cve-kgrag store validate nvd-2026-10-26   # verify it, change nothing
-uv run cve-kgrag store activate nvd-2026-10-26   # verify it and record it active
-uv run cve-kgrag store status                    # what ACTIVE records, each store checked
+cve-kgrag store validate nvd-2026-10-31
+cve-kgrag store activate nvd-2026-10-31
+cve-kgrag store status
 ```
 
-- `validate` and `activate` check every checksum, size, evidence ID and record-to-anchor
-  rule; at 250,000 synthetic records that requires verification. `validate` prints the store's
-  identity; `activate` and `rollback` print the status after their change.
-- `activate` records the store active before it as the one `rollback` returns to.
-  Activating the store already active verifies it again and keeps the previous store.
-- `status` exits 0 when `ACTIVE` is readable and the active store is `ok`, whatever the
-  previous store's condition, and 1 otherwise, after printing. A store is `ok` when its
-  manifest still hashes to the digest `ACTIVE` records and it verifies; otherwise it is
-  `store_missing` (`active_store_missing` for the active store), `store_changed`
-  (`active_store_changed`), `store_format_unsupported` or `store_invalid`. `status`
-  verifies each store whose manifest matches, so a large root takes up to two
-  verifications.
-
-Servers serve the store that was active when they started: restart `mcp`, `mcp --http`
-and `api` after an activation or a rollback. There is no hot reload.
+`validate` changes nothing. `activate` and `rollback` print status after changing
+`ACTIVE`; activating the already active store verifies it again and keeps the previous
+store. `status` exits 0 when the active store is `ok`, regardless of the previous
+store's condition, and 1 otherwise. It verifies each store whose manifest matches the
+recorded digest, so it can perform two verifications.
 
 ## Roll back
 
 ```bash
-uv run cve-kgrag store rollback
+cve-kgrag store rollback
 ```
 
 Rollback makes the previous store active again, verified again under the digest
@@ -223,16 +208,19 @@ one-shot `cve-kgrag search` has no tool limit and runs to completion.
 
 By default every command that uses FiGHT serves the packaged six-technique excerpt. To
 serve the full catalogued file, fetch `fight.yaml` at the commit the reviewed catalog
-names (`src/cve_kgrag/knowledge/fight_snapshots.yaml`, the `coverage: full` entry), check
-its SHA-256, and set both variables:
+names (`src/cve_kgrag/knowledge/fight_snapshots.yaml`, the `coverage: full` entry), and
+set its path:
 
 ```bash
 curl -fsSLo /srv/cve-kgrag/fight.yaml \
   https://raw.githubusercontent.com/mitre/FiGHT/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
-sha256sum /srv/cve-kgrag/fight.yaml   # or shasum -a 256 on macOS; expect 59a9addb…a7a8
 export CVE_KGRAG_FIGHT_SNAPSHOT_PATH=/srv/cve-kgrag/fight.yaml
-export CVE_KGRAG_FIGHT_SNAPSHOT_SHA256=59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8
 ```
+
+At load the server computes SHA-256 and checks the reviewed catalog before parsing.
+Optionally set `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256` to an expected digest; a mismatch
+refuses serving. The computed digest identifies the snapshot in capabilities, evidence
+sets, evaluation reports and replay. Computing it never bypasses the catalog.
 
 A configured snapshot is served or the command refuses to start, exit 2, with
 `cve-kgrag <command> cannot start: FiGHT snapshot unavailable: <reason>`:
@@ -275,7 +263,6 @@ and JSON parsers, reads the inputs without modifying them, and contacts no servi
 cve-kgrag mitre build --cwe /data/cwec_v5.0.xml --capec /data/capec_latest.xml \
   --attack /data/enterprise-attack.json --out /data/weakness-mapping.json
 export CVE_KGRAG_MITRE_SNAPSHOT_PATH=/data/weakness-mapping.json
-export CVE_KGRAG_MITRE_SNAPSHOT_SHA256=<sha256-printed-by-build>
 cve-kgrag capabilities
 cve-kgrag lookup CVE-2026-12345
 ```
@@ -287,13 +274,23 @@ deprecated CAPEC entries, and deprecated/revoked ATT&CK objects skipped. ATT&CK
 skip counts include all STIX object types; flags are counted independently.
 Mapping counts count source CAPEC/technique/parent-chain combinations, not CVEs.
 
-The settings must be set together and use an absolute path and lower-case SHA-256.
-Every serving command checks the digest before parsing the mapping. An unreadable,
-non-regular, oversized (over 32 MiB), invalid or mismatched file refuses serving
-with an explicit `mitre_snapshot_*` reason; there is no excerpt fallback. Restart
-running API and MCP services after changing either setting. `capabilities` reports
-`weakness_associations.coverage`, `snapshot_sha256`, source versions and input
-hashes, and build counts. An unset pair serves the manifest-pinned packaged excerpt.
+The path must be absolute. Every serving command computes SHA-256 before parsing and
+records it as the mapping's identity. Optionally set `CVE_KGRAG_MITRE_SNAPSHOT_SHA256`
+to a lower-case expected digest (for example the one printed by the build). A supplied
+expected value is compared strictly; a mismatch refuses serving. A digest without a
+path is a settings error.
+
+MITRE has no reviewed snapshot catalog. Without an expected digest,
+`capabilities.weakness_associations.integrity` says “File identity recorded; no expected
+SHA-256 supplied.” This does not verify that the file is unchanged. With an expected
+digest it says “Compared with expected SHA-256.” The manifest-pinned packaged excerpt
+also reports that comparison. Capabilities include coverage, `snapshot_sha256`, source
+versions and input hashes, and build counts.
+
+An unreadable, non-regular, oversized (over 32 MiB), invalid or mismatched file refuses
+serving with an explicit `mitre_snapshot_*` reason; there is no excerpt fallback.
+Restart API and MCP services after replacing the file or changing its settings. An
+unset path serves the manifest-pinned packaged excerpt.
 
 To reproduce the packaged excerpt, run the same build with `--cwe-id CWE-20
 --cwe-id CWE-79 --cwe-id CWE-787 --cwe-id CWE-284 --cwe-id CWE-269 --cwe-id CWE-78
@@ -328,7 +325,7 @@ catalogues. It is not evidence that the CVE was used with that technique. It is
 not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot;
 it does not mean the weakness has no attack technique or no way to be exploited.”
 
-Under contract `2.0.0-dev.42`, search, topic and investigation candidates, including
+Under contract `2.0.0-dev.43`, search, topic and investigation candidates, including
 excluded candidates in protocol-only responses, omit associations entirely. Only
 single-CVE lookup attaches them, so they consume no investigation context bytes and
 cannot change candidate admission. They do not enter retrieval, ranking, planner

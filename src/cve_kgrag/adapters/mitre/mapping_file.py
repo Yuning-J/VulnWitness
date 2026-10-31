@@ -1,4 +1,4 @@
-"""Read a packaged excerpt or an operator mapping pinned by SHA-256."""
+"""Read a mapping, recording its digest and comparing an optional expected SHA-256."""
 
 import json
 from importlib.resources import files
@@ -19,19 +19,22 @@ class MitreSnapshotUnavailable(ValueError):
     """A configured snapshot cannot be served; the message gives the explicit reason."""
 
 
-def parse_mapping_file(snapshot_bytes: bytes, expected_sha256: str) -> WeaknessMapping:
-    """Verify bytes before parsing. A mismatch refuses serving with no fallback."""
-    if sha256_hex(snapshot_bytes) != expected_sha256:
+def parse_mapping_file(snapshot_bytes: bytes, expected_sha256: str | None) -> WeaknessMapping:
+    """Compute identity before parsing; an expected digest mismatch refuses serving."""
+    snapshot_sha256 = sha256_hex(snapshot_bytes)
+    if expected_sha256 is not None and snapshot_sha256 != expected_sha256:
         raise MitreSnapshotUnavailable("mitre_snapshot_hash_mismatch")
     try:
         snapshot = WeaknessMappingSnapshot.model_validate_json(snapshot_bytes)
     except ValidationError:
         raise MitreSnapshotUnavailable("mitre_snapshot_invalid") from None
-    return WeaknessMapping(snapshot, expected_sha256)
+    return WeaknessMapping(
+        snapshot, snapshot_sha256, expected_sha256_compared=expected_sha256 is not None
+    )
 
 
 def load_weakness_mapping(settings: MitreSnapshotSettings | None = None) -> WeaknessMapping:
-    """The pinned operator snapshot, or the manifest-pinned packaged excerpt."""
+    """The operator file with its computed identity, or the manifest-pinned excerpt."""
     if settings is None:
         fixture_dir = files("cve_kgrag").joinpath("fixtures", "mitre")
         manifest = json.loads(fixture_dir.joinpath("manifest.json").read_bytes())
