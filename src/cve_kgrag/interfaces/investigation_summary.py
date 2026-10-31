@@ -12,6 +12,7 @@ from cve_kgrag.domain.investigation import (
     KnowledgeEvidenceSet,
     NeedOutcome,
 )
+from cve_kgrag.domain.relevance import RelevanceLabel
 
 STATUS_SENTENCES = {
     "ok": "Every evidence need was met; that does not show the list is complete.",
@@ -70,7 +71,7 @@ def format_paragraph(text: str) -> str:
     return "\n".join(wrap(text, width=100, subsequent_indent="  "))
 
 
-def format_need(need: EvidenceNeed) -> str:
+def format_need(need: EvidenceNeed, has_relevance_labels: bool = False) -> str:
     label = NEED_LABELS[need.kind]
     if need.subject is not None:
         label += f" ({need.subject})"
@@ -79,6 +80,8 @@ def format_need(need: EvidenceNeed) -> str:
             outcome = "found through an exact lookup"
         else:
             outcome = "found through the reviewed topic"
+    elif need.outcome is NeedOutcome.MATCHES_UNASSESSED and has_relevance_labels:
+        outcome = "matches found; the system has not confirmed that this need is met"
     else:
         outcome = NEED_OUTCOMES[need.outcome]
     return f"{label}: {outcome}."
@@ -147,7 +150,14 @@ def format_candidates(evidence_set: KnowledgeEvidenceSet) -> str:
             ("Rank", "CVE ID", "Severity", "KEV", "Published", "Vendor/product", "Found by")
         )
     )
+    previous_label: RelevanceLabel | None = None
+    has_labels = has_candidate_labels(evidence_set)
     for candidate in evidence_set.implementation_candidates[:20]:
+        if has_labels and (candidate.rank == 1 or candidate.relevance_label != previous_label):
+            label = candidate.relevance_label
+            heading = "Unassessed" if label is None else label.value.replace("_", " ").capitalize()
+            lines.append(heading + ":")
+            previous_label = label
         record = candidate.candidate.record
         kev = "no" if record.kev is None else f"yes {record.kev.date_added.isoformat()}"
         published = "unknown" if record.published is None else record.published.date().isoformat()
@@ -191,7 +201,7 @@ def format_unknowns(evidence_set: KnowledgeEvidenceSet) -> str:
     for need in evidence_set.coverage.needs:
         if need.outcome is NeedOutcome.FOUND:
             continue
-        description = format_need(need)
+        description = format_need(need, has_candidate_labels(evidence_set))
         if need.kind is EvidenceNeedKind.AFFECTEDNESS:
             description += " Version affectedness was not assessed."
             affectedness_subjects.append(need.subject)
@@ -213,6 +223,13 @@ def format_warning(warning: InvestigationWarning) -> str:
     return f"[{warning.code}] {sentence} Subject: {warning.subject}"
 
 
+def has_candidate_labels(evidence_set: KnowledgeEvidenceSet) -> bool:
+    return any(
+        round_record.relevance_assessment is not None and round_record.relevance_assessment.labels
+        for round_record in evidence_set.trajectory.rounds
+    )
+
+
 def render_investigation_summary(evidence_set: KnowledgeEvidenceSet) -> str:
     """Return a summary using only the set's fields, with lines at most 100 columns wide."""
     sections = [
@@ -224,7 +241,17 @@ def render_investigation_summary(evidence_set: KnowledgeEvidenceSet) -> str:
         "Needs:",
     ]
     for need in evidence_set.coverage.needs:
-        sections.append(format_paragraph(format_need(need)))
+        sections.append(format_paragraph(format_need(need, has_candidate_labels(evidence_set))))
+    if has_candidate_labels(evidence_set):
+        sections.extend(
+            (
+                "",
+                format_paragraph(
+                    "The model assessed the candidates' relevance; the system has not "
+                    "confirmed that the evidence need is met."
+                ),
+            )
+        )
     sections.extend(("", format_candidates(evidence_set)))
     if evidence_set.protocol_context:
         sections.extend(("", "Protocol context:"))

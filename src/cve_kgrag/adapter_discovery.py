@@ -19,6 +19,7 @@ from cve_kgrag.domain.planning import (
     PlannerKind,
     PlanningInput,
 )
+from cve_kgrag.domain.relevance import RelevanceInput
 from cve_kgrag.domain.search import SemanticUnavailableDetail
 from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.taxonomy import BackendStatus
@@ -269,8 +270,9 @@ def discover_migration_parsers(
 class ModelPortFactory(Protocol):
     """Builds the model planner adapter an enabled planner's settings describe.
 
-    Building it does no network or file I/O; only ``propose_plan`` talks to the endpoint,
-    within its timeout. Requests stay under the configured base URL: each targets exactly
+    Building it does no network or file I/O. ``propose_plan`` and ``assess_relevance``
+    talk to the endpoint within their timeouts. Requests stay under the configured base
+    URL: each targets exactly
     ``base_url + "/" + route``, since the settings removed one trailing ``/`` from the
     configured URL and any further trailing ``/`` is part of the path. The adapter follows
     no redirect, ignores proxy settings from the environment, sends ``reasoning_effort``
@@ -308,13 +310,14 @@ def check_model_reply(model_reply: object) -> ModelReply | None:
 
 
 class GuardedModelPort:
-    """Implements ``ModelPort`` over a discovered adapter: anything its ``propose_plan``
-    raises or reading its answer raises, and an answer that is not a valid ``ModelReply``,
+    """Implements ``ModelPort`` over a discovered adapter: anything its planning or
+    assessment call raises or reading its answer raises, and an answer that is not a valid
+    ``ModelReply``,
     becomes ``FAILED_ADAPTER_REPLY``, logged without the adapter's text. A valid failed
     reply carries one of the server's sentences, so no exception text and no adapter text,
     which may quote the key, leaves the boundary.
 
-    It catches ``BaseException``: ``propose_plan`` runs on a call-runner worker thread,
+    It catches ``BaseException``: model calls run on a call-runner worker thread,
     where no interrupt signal is delivered, so whatever it raises comes from the adapter.
     """
 
@@ -332,6 +335,24 @@ class GuardedModelPort:
             return FAILED_ADAPTER_REPLY
         if checked_reply is None:
             logger.warning("model planner adapter answered something other than a valid reply")
+            return FAILED_ADAPTER_REPLY
+        return checked_reply
+
+    def assess_relevance(
+        self, assessment_input: RelevanceInput, timeout_seconds: float
+    ) -> ModelReply:
+        try:
+            model_reply: object = self._model_port.assess_relevance(
+                assessment_input, timeout_seconds
+            )
+            checked_reply = check_model_reply(model_reply)
+        except BaseException as error:
+            logging.getLogger(__name__).warning(
+                "model assessor adapter raised %s", type(error).__name__
+            )
+            return FAILED_ADAPTER_REPLY
+        if checked_reply is None:
+            logging.getLogger(__name__).warning("model assessor adapter gave no valid reply")
             return FAILED_ADAPTER_REPLY
         return checked_reply
 

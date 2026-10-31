@@ -167,6 +167,7 @@ from cve_kgrag.domain.planning import (
     list_tool_sources,
 )
 from cve_kgrag.domain.prefix_validation import find_prefix_violations
+from cve_kgrag.domain.relevance_validation import find_relevance_violations
 from cve_kgrag.domain.search import (
     SEMANTIC_UNAVAILABLE_FAILURES,
     Candidate,
@@ -763,6 +764,8 @@ def find_trajectory_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
         round_numbers.append(round_record.round_number)
     if round_numbers != list(range(1, len(round_numbers) + 1)):
         violations.append(f"rounds are numbered {round_numbers}, expected 1..n")
+    if len(round_numbers) > 2:
+        violations.append("an investigation may run at most two rounds")
     if len(round_numbers) > budget.max_rounds:
         violations.append(f"{len(round_numbers)} rounds exceed max_rounds {budget.max_rounds}")
 
@@ -896,8 +899,6 @@ def find_rejection_violations(round_record: RoundRecord) -> list[str]:
     runs_no_plan = not round_record.accepted_plan
     is_policy_planned = planner_outcome in POLICY_PLANNED_OUTCOMES
     is_policy_plan_rejected = is_policy_planned and runs_no_plan
-    if planner_outcome is PlannerOutcome.MODEL_NOT_CONSULTED and round_number != 1:
-        violations.append(f"round {round_number} is {planner_outcome}: only round 1 is")
     if rejection_codes and not is_policy_plan_rejected:
         violations.append(
             f"round {round_number} is {planner_outcome} and runs its plan, but records rejections"
@@ -950,7 +951,16 @@ def find_round_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
                 f"round {round_record.round_number}'s planner outcome {planner_outcome} is not "
                 f"one a {planner_kind} planner records"
             )
+        if planner_outcome is PlannerOutcome.MODEL_NOT_CONSULTED and round_record.round_number == 2:
+            first_assessment = trajectory.rounds[0].relevance_assessment
+            if first_assessment is None or first_assessment.accepted_search is None:
+                violations.append(
+                    "round 2 is model_not_consulted without a gated relevance refinement"
+                )
         if planner_outcome in CONSULTED_MODEL_OUTCOMES:
+            consulted_rounds += 1
+        assessment = round_record.relevance_assessment
+        if assessment is not None and assessment.deadline != "before_start":
             consulted_rounds += 1
         if round_record.accepted_plan:
             planned_rounds += 1
@@ -1245,6 +1255,9 @@ def find_deadline_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
                 f"step {step.step_index} ran into the deadline, but the breach is not wall_time"
             )
     for round_record in trajectory.rounds:
+        assessment = round_record.relevance_assessment
+        if assessment is not None and assessment.deadline is not None and not is_wall_time_breach:
+            violations.append("the assessor found the deadline without a wall_time breach")
         planner_outcome = round_record.planner_outcome
         if planner_outcome not in DEADLINE_PLANNER_OUTCOMES:
             continue
@@ -1756,6 +1769,7 @@ def validate_knowledge_evidence_set(
     when it built the service; the set must report exactly that.
     """
     violations = find_record_and_claim_violations(evidence_set, evidence_catalog)
+    violations.extend(find_relevance_violations(evidence_set, evidence_catalog))
     violations.extend(find_identity_violations(evidence_set))
     violations.extend(find_investigation_scope_violations(evidence_set))
     violations.extend(find_nvd_version_note_violations(evidence_set))

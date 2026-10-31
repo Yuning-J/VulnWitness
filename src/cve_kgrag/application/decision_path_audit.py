@@ -119,6 +119,7 @@ from cve_kgrag.application.investigation_warnings import (
     build_evidence_discarded_warning,
     list_interpretation_warnings,
 )
+from cve_kgrag.application.relevance_assessment import build_relevance_input, gate_relevance_reply
 from cve_kgrag.domain.budget import BudgetBreach
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.evidence_needs import judge_needs
@@ -134,6 +135,7 @@ from cve_kgrag.domain.investigation import (
     RoundRecord,
     StateTransition,
     StepAdmission,
+    StepReason,
     StopReason,
     ToolStep,
     build_prefix_omitted_warning,
@@ -149,10 +151,12 @@ from cve_kgrag.domain.planning import (
     FightDirectSearchCall,
     PlannerKind,
     PlanRejection,
+    QueryIntent,
     TopicContextCall,
 )
 from cve_kgrag.domain.prefix_validation import find_prefix_violations
 from cve_kgrag.domain.topic import ProtocolTopic
+from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.domain.validation import EvidenceValidationError
 from cve_kgrag.topics.registry import TopicRegistry
 
@@ -356,6 +360,7 @@ def derive_round(
             round_record.model_reply,
             evidence_set.trajectory.planner.kind is PlannerKind.MODEL,
             topic_registry,
+            list_relevance_terms(evidence_set, round_number),
         )
     round_steps = list_round_steps(evidence_set.trajectory.steps, round_number)
     path.violations.extend(find_round_plan_violations(round_record, round_steps, round_plan))
@@ -424,7 +429,29 @@ def derive_decision_path(
         return path
     path.move(InvestigationState.ASSESS, InvestigationState.REFINE, DecisionBasis.NEEDS_OPEN)
 
-    refinement_steps = plan_refinement(interpretation, round_one_steps, round_one_needs)
+    assessment = round_one.relevance_assessment
+    if (
+        assessment is None
+        and evidence_set.trajectory.planner.kind is PlannerKind.MODEL
+        and interpretation.intent is QueryIntent.FREE_TEXT
+        and request.scope is not QueryScope.PROTOCOL_CONTEXT_ONLY
+    ):
+        path.violations.append("free-text CVE refinement must record its relevance assessment")
+    if assessment is not None:
+        if assessment.deadline is not None:
+            path.breach = BudgetBreach.WALL_TIME
+            path.end(
+                InvestigationState.REFINE,
+                (StopReason.BUDGET_EXHAUSTED, DecisionBasis.BUDGET_BREACHED),
+            )
+            return path
+        refinement_steps = []
+        if assessment.accepted_search is not None:
+            refinement_steps.append(
+                PlannedStep(assessment.accepted_search, StepReason.RELEVANCE_GAP_SEARCH)
+            )
+    else:
+        refinement_steps = plan_refinement(interpretation, round_one_steps, round_one_needs)
     stop = decide_refinement_stop(request, refinement_steps, round_one_needs, has_answer)
     if stop == ROUND_CAP_STOP:
         path.breach = BudgetBreach.ROUNDS
@@ -446,6 +473,8 @@ def derive_decision_path(
     if path.has_ended():
         return path
     path.breach = find_retrieval_breach(round_two, list_round_steps(steps, 2))
+    if round_two.relevance_assessment is not None and round_two.relevance_assessment.deadline:
+        path.breach = BudgetBreach.WALL_TIME
     needs = judge_set_needs(evidence_set, steps)
     has_answer = evidence_set.has_answer()
     stop = decide_assessment(
@@ -605,12 +634,76 @@ def find_configuration_violations(evidence_set: KnowledgeEvidenceSet) -> list[st
     return violations
 
 
+def list_relevance_terms(evidence_set: KnowledgeEvidenceSet, round_number: int) -> frozenset[str]:
+    terms: set[str] = set()
+    if round_number == 2 and evidence_set.trajectory.rounds:
+        assessment = evidence_set.trajectory.rounds[0].relevance_assessment
+        if assessment is not None and assessment.accepted_search is not None:
+            for source in assessment.term_sources:
+                terms.add(source.term)
+    return frozenset(terms)
+
+
+def find_relevance_gate_violations(
+    evidence_set: KnowledgeEvidenceSet,
+    evidence_catalog: EvidenceCatalog,
+    topic_registry: TopicRegistry,
+) -> list[str]:
+    violations: list[str] = []
+    if not any(
+        round_record.relevance_assessment is not None
+        for round_record in evidence_set.trajectory.rounds
+    ):
+        return []
+    records = []
+    known_ids: set[str] = set()
+    earlier_steps: list[ToolStep] = []
+    for round_record in evidence_set.trajectory.rounds:
+        new_records = []
+        for step in list_round_steps(evidence_set.trajectory.steps, round_record.round_number):
+            earlier_steps.append(step)
+            if step.admission not in ADMITTED_ADMISSIONS:
+                continue
+            for cve_id in step.answer_ids:
+                if cve_id in known_ids:
+                    continue
+                record = evidence_catalog.get_cve(cve_id)
+                if record is not None:
+                    known_ids.add(cve_id)
+                    records.append(record)
+                    new_records.append(record)
+        assessment = round_record.relevance_assessment
+        if assessment is None:
+            continue
+        _, expected_keys = build_relevance_input(evidence_set.request, new_records)
+        if assessment.cve_ids_by_key != expected_keys:
+            violations.append("the assessor keys are not derived from its admitted candidates")
+        if assessment.deadline is not None:
+            continue
+        expected = gate_relevance_reply(
+            evidence_set.request,
+            evidence_set.interpretation,
+            earlier_steps,
+            records,
+            assessment.cve_ids_by_key,
+            assessment.reply,
+            topic_registry,
+            allow_refinement=round_record.round_number == 1,
+        )
+        if assessment != expected:
+            violations.append("the relevance assessment differs from its parsed and gated reply")
+    return violations
+
+
 def find_decision_path_violations(
     evidence_set: KnowledgeEvidenceSet,
     topic_registry: TopicRegistry,
     evidence_catalog: EvidenceCatalog,
 ) -> list[str]:
     violations = find_configuration_violations(evidence_set)
+    violations.extend(
+        find_relevance_gate_violations(evidence_set, evidence_catalog, topic_registry)
+    )
     violations.extend(find_prefix_violations(evidence_set, evidence_catalog))
     interpretation = interpret_request(evidence_set.request, topic_registry, evidence_catalog)
     differing_fields = list_interpretation_differences(evidence_set.interpretation, interpretation)

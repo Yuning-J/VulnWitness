@@ -10,7 +10,7 @@ request, the topic registry and the steps issued before it.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from cve_kgrag.application.investigation_policy import PlannedStep, list_calls
 from cve_kgrag.application.investigation_warnings import build_model_plan_rejected_warning
@@ -210,12 +210,15 @@ def find_policy_plan_rejections(
     issued_steps: Sequence[ToolStep],
     policy_steps: Sequence[PlannedStep],
     topic_registry: TopicRegistry,
+    additional_terms: frozenset[str] = frozenset(),
 ) -> tuple[PlanRejection, ...]:
     """What the gate rejects in the policy's plan, in the context the issued steps leave."""
+    context = build_plan_context(request, interpretation, topic, issued_steps, None)
+    context = replace(context, allowed_terms=context.allowed_terms | additional_terms)
     return tuple(
         find_plan_rejections(
             list_calls(policy_steps),
-            build_plan_context(request, interpretation, topic, issued_steps, None),
+            context,
             topic_registry,
         )
     )
@@ -252,6 +255,7 @@ def choose_round_plan(
     model_reply: ModelReply | None,
     consults_model: bool,
     topic_registry: TopicRegistry,
+    additional_terms: frozenset[str] = frozenset(),
 ) -> RoundPlan:
     """The plan of a round planned before the deadline, from the model's reply when the
     model was consulted (``None`` when no model is configured).
@@ -267,7 +271,7 @@ def choose_round_plan(
     round is the policy's, recorded ``model_not_consulted`` with no reply.
     """
     policy_rejections = find_policy_plan_rejections(
-        request, interpretation, topic, issued_steps, policy_steps, topic_registry
+        request, interpretation, topic, issued_steps, policy_steps, topic_registry, additional_terms
     )
     model_rejections: tuple[PlanRejection, ...] = ()
     planner_outcome = PlannerOutcome.DETERMINISTIC

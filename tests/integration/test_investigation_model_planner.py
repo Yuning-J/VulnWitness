@@ -774,7 +774,7 @@ def list_step_planners(evidence_set: KnowledgeEvidenceSet) -> list[PlannerKind]:
         "protocol_context_only",
     ],
 )
-def test_free_text_question_is_planned_by_the_policy_without_consulting_the_model(
+def test_free_text_keeps_policy_retrieval_when_the_assessor_is_unavailable(
     fixture_bundle: FixtureBundle,
     pinned_fight_snapshot: KnownFightSnapshot,
     packaged_evidence_catalog: EvidenceCatalog,
@@ -789,7 +789,9 @@ def test_free_text_question_is_planned_by_the_policy_without_consulting_the_mode
 
     deterministic_set = investigate_without_planner(fixture_bundle, request)
     assert evidence_set.interpretation.intent is QueryIntent.FREE_TEXT
-    assert evidence_set.trajectory.budget_used.planner_calls == 0
+    assert evidence_set.trajectory.budget_used.planner_calls == (
+        0 if scope == "protocol_context_only" else 1
+    )
     assert describe_rounds(evidence_set) == [("model_not_consulted", [])]
     assert evidence_set.trajectory.rounds[0].model_reply is None
     assert list_accepted_plans(evidence_set) == list_accepted_plans(deterministic_set)
@@ -824,6 +826,10 @@ def test_question_naming_a_reviewed_topic_or_a_cve_id_consults_the_model_once(
 
     assert evidence_set.interpretation.intent is expected_intent
     assert len(model_port.planning_inputs) == 1
+    assert model_port.assessment_inputs == []
+    assert all(
+        round_record.relevance_assessment is None for round_record in evidence_set.trajectory.rounds
+    )
     assert evidence_set.trajectory.budget_used.planner_calls == 1
     assert describe_rounds(evidence_set) == [("model_unavailable", ["planner_unavailable"])]
     verify_as_sealed(

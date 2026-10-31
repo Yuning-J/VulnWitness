@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.37` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.38` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -43,7 +43,9 @@ tree are not retained. These annotations do not change retrieval, needs or stop 
 - **Bounded investigation**: a state machine with budgets, a hard wall time and a
   replayable trajectory, planned by a deterministic policy or by an optional model planner
   behind a plan gate that falls back to the policy. With the planner enabled, the model
-  plans only questions that name a CVE ID or resolve a reviewed topic; free text is
+  plans questions that name a CVE ID or resolve a reviewed topic. For free-text CVE
+  questions it labels admitted candidates and may propose one sourced refined search;
+  relevance labels group the final answer without meeting evidence needs. Round 1 is
   planned by the policy.
 - **Evidence sets** that can be verified and replayed offline (`cve-kgrag verify`).
 - **A read-only MCP server** with eight bounded tools, over stdio or over Streamable
@@ -190,10 +192,16 @@ optional capabilities are off by default:
 - the model planner (an OpenAI-compatible endpoint), `CVE_KGRAG_PLANNER_*`
   ([ADR 0004](docs/rebuild/adr/0004-settings-and-secrets.md),
   [ADR 0005](docs/rebuild/adr/0005-model-planner-adapter.md)). It plans only questions
-  that name a CVE ID or resolve a reviewed topic; free text is planned by the policy, and
-  its rounds record `model_not_consulted` (`model_skipped_at_deadline` when the deadline
-  passed before planning). Only the CLI's `investigate` and `eval planner` use it; the
-  REST API and MCP servers plan with the deterministic policy
+  that name a CVE ID or resolve a reviewed topic. For free-text CVE questions the policy
+  retrieves round 1, then the model labels candidates and may name a question component
+  whose coverage is unclear and propose one refined search. Every term must come from
+  the question or an admitted candidate's vendor, product or parsed CPE product name.
+  The gate enforces the sources and existing budgets; new candidates get one more
+  assessment. The answer groups relevant, cannot tell, not relevant and unassessed
+  candidates before applying the cap of 20. Labels change no evidence need or stop;
+  failures retain round 1's evidence. Both assessor calls and retrieval share the
+  existing deadline, with at most two rounds. Only the CLI's `investigate` and
+  `eval planner` use it; the REST API and MCP servers plan with the deterministic policy
   ([ADR 0007](docs/rebuild/adr/0007-http-surfaces.md));
 - the semantic channel, `CVE_KGRAG_SEMANTIC_*`. It reads a Chroma store in the format
   CVE-KGRAG's pipeline writes, from a directory the operator names; this repository does

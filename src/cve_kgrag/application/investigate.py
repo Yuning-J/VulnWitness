@@ -5,18 +5,20 @@
 miss, a failed source, a breached cap, an answer) decides whether one refinement
 round runs and what it calls. There is no loop over rounds, every call is charged
 before it runs against caps of at most eight backend queries, and the deadline is
-checked before every planner and tool call, so every path ends at
-``validate -> return``. Every planner and tool call runs under the call runner, which
+checked before every planner, assessor and tool call, so every path ends at
+``validate -> return``. Every planner, assessor and tool call runs under the call runner, which
 gives control back at the deadline even when the call has not returned, and no other
 adapter method runs during a request: the planner's identity is built by discovery
 before the service is. So a blocking adapter cannot hold the run past its wall-time cap,
 unless it holds the interpreter lock; ``threaded_call_runner`` says when that happens.
 
-An optional model planner only proposes a ``QueryPlan``. Its reply passes the same
-gate as the deterministic plan; a rejected or failed reply falls back to the
-deterministic plan, and the planner never sees source text or writes a fact. The
-round records the reply as the port returned it, so the decision-path audit parses
-and gates it again; the reply is never logged or quoted in a warning.
+An optional model planner proposes a ``QueryPlan`` for topic and named-CVE questions.
+Its reply passes the same gate as the deterministic plan; a rejected or failed reply
+falls back to the deterministic plan. For free-text CVE questions, its assessor reads
+bounded candidate fields, labels relevance and may propose one sourced search through
+the same gate. Neither model use writes a fact or judges needs. The round records the
+reply as the port returned it, so the decision-path audit parses and gates it again;
+the reply is never logged or quoted in a warning.
 """
 
 from collections.abc import Callable, Sequence
@@ -75,8 +77,10 @@ from cve_kgrag.application.planner_setup import (
     describe_setup_capability,
     describe_setup_planner,
 )
+from cve_kgrag.application.relevance_assessment import build_relevance_input, gate_relevance_reply
 from cve_kgrag.application.threaded_call_runner import CallTimedOut
 from cve_kgrag.domain.budget import PLANNER_SHARE_OF_WALL_TIME, BudgetBreach
+from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.hashing import UNSEALED_SHA256
 from cve_kgrag.domain.investigation import (
@@ -90,6 +94,7 @@ from cve_kgrag.domain.investigation import (
     RunTimings,
     SourceCapability,
     StepAdmission,
+    StepReason,
     StepTiming,
     StopReason,
     ToolStep,
@@ -103,6 +108,7 @@ from cve_kgrag.domain.planning import (
     ModelReply,
     ModelReplyFailureDetail,
     PlanningInput,
+    QueryIntent,
     StepObservation,
     ToolCall,
     ToolCost,
@@ -111,6 +117,7 @@ from cve_kgrag.domain.planning import (
     compute_model_reply_sha256,
     list_tool_name_sources,
 )
+from cve_kgrag.domain.relevance import RelevanceAssessmentRecord, RelevanceLabel
 from cve_kgrag.domain.taxonomy import BackendStatus
 from cve_kgrag.domain.topic_context import QueryScope
 from cve_kgrag.ports.planning import ModelPort
@@ -256,8 +263,8 @@ class InvestigationService:
     result.
 
     ``planner_setup`` is the planner: a model's port with the identity discovery built for
-    it, which every trajectory records, or the deterministic policy. A request only calls
-    the model port's ``propose_plan``, and only under the deployment's call runner. Every
+    it, which every trajectory records, or the deterministic policy. Requests call the
+    port's ``propose_plan`` or ``assess_relevance`` under the deployment's call runner. Every
     set reports the deployment's ``source_capabilities`` followed by the ``model_planner``
     capability describing ``planner_setup`` (``describe_service_capabilities``), and final
     validation requires exactly those. A required affectedness source is reported
@@ -464,6 +471,7 @@ class InvestigationService:
             model_reply,
             consults_model,
             self._topic_registry,
+            self._relevance_terms(run),
         )
 
     def _retrieve(
@@ -574,13 +582,146 @@ class InvestigationService:
 
     def _refine(self, run: InvestigationRun) -> Stop | None:
         """Run the refinement round; ``None`` once it ran and needs assessing."""
-        refinement_steps = plan_refinement(run.interpretation, run.list_round_steps(1), run.needs)
+        if (
+            self._model_port is not None
+            and run.interpretation.intent is QueryIntent.FREE_TEXT
+            and run.request.scope is not QueryScope.PROTOCOL_CONTEXT_ONLY
+        ):
+            self._assess_relevance(run, 1)
+            if run.ledger.breach is BudgetBreach.WALL_TIME:
+                return StopReason.BUDGET_EXHAUSTED, DecisionBasis.BUDGET_BREACHED
+            assessment = run.rounds[0].relevance_assessment
+            refinement_steps = []
+            if assessment is not None and assessment.accepted_search is not None:
+                refinement_steps.append(
+                    PlannedStep(assessment.accepted_search, StepReason.RELEVANCE_GAP_SEARCH)
+                )
+        else:
+            refinement_steps = plan_refinement(
+                run.interpretation, run.list_round_steps(1), run.needs
+            )
         stop = decide_refinement_stop(run.request, refinement_steps, run.needs, run.has_answer)
         if stop == ROUND_CAP_STOP:
             run.ledger.record_breach(BudgetBreach.ROUNDS)
         if stop is not None:
             return stop
-        return self._run_round(run, 2, refinement_steps)
+        stop = self._run_round(run, 2, refinement_steps)
+        if stop is None and run.rounds[0].relevance_assessment is not None:
+            self._assess_relevance(run, 2)
+        return stop
+
+    def _relevance_terms(self, run: InvestigationRun) -> frozenset[str]:
+        terms: set[str] = set()
+        if run.rounds:
+            assessment = run.rounds[0].relevance_assessment
+            if assessment is not None and assessment.accepted_search is not None:
+                for source in assessment.term_sources:
+                    terms.add(source.term)
+        return frozenset(terms)
+
+    def _relevance_labels(self, run: InvestigationRun) -> dict[str, RelevanceLabel]:
+        labels: dict[str, RelevanceLabel] = {}
+        for round_record in run.rounds:
+            assessment = round_record.relevance_assessment
+            if assessment is not None:
+                for key, label in assessment.labels.items():
+                    labels[assessment.cve_ids_by_key[key]] = label
+        return labels
+
+    def _assess_relevance(self, run: InvestigationRun, round_number: RoundNumber) -> None:
+        """Assess only newly admitted CVEs, once, under the run's remaining deadline."""
+        assert self._model_port is not None
+        records: list[CveRecord] = []
+        admitted_records: list[CveRecord] = []
+        known_ids: set[str] = set()
+        for step, execution in list_admitted_executions(run.steps, run.executions):
+            if execution.search_response is None:
+                continue
+            for candidate in execution.search_response.candidates:
+                record = candidate.record
+                if record.cve_id in known_ids:
+                    continue
+                known_ids.add(record.cve_id)
+                admitted_records.append(record)
+                if step.round_number == round_number:
+                    records.append(record)
+        if not records and round_number == 2:
+            return
+        assessment_input, cve_ids_by_key = build_relevance_input(run.request, records)
+        ledger = run.ledger
+        self._reach_checkpoint(
+            DeadlineCheckpoint(round_number, None, DeadlineMoment.BEFORE_START, is_assessor=True)
+        )
+        reply: ModelReply | None = None
+        deadline: Literal["before_start", "during_call", "at_finish"] | None = None
+        if ledger.is_out_of_time():
+            deadline = "before_start"
+        else:
+            started_seconds = ledger.elapsed_seconds()
+            cap_ends_at = started_seconds + (
+                run.request.budget.max_wall_time_seconds * PLANNER_SHARE_OF_WALL_TIME
+            )
+            seconds_left = partial(read_planner_seconds_left, ledger, cap_ends_at)
+            self._reach_checkpoint(
+                DeadlineCheckpoint(round_number, None, DeadlineMoment.DURING_CALL, is_assessor=True)
+            )
+            call_outcome = self._call_runner.run(
+                partial(
+                    self._model_port.assess_relevance,
+                    assessment_input,
+                    timeout_seconds=seconds_left(),
+                ),
+                seconds_left,
+            )
+            if not isinstance(call_outcome, CallTimedOut):
+                self._reach_checkpoint(
+                    DeadlineCheckpoint(
+                        round_number, None, DeadlineMoment.AT_FINISH, is_assessor=True
+                    )
+                )
+            finished_seconds = ledger.elapsed_seconds()
+            ledger.planner_calls += 1
+            run.planner_durations_ms.append(
+                to_milliseconds(finished_seconds) - to_milliseconds(started_seconds)
+            )
+            if isinstance(call_outcome, CallTimedOut):
+                reply = PLANNER_CAP_REPLY
+                if ledger.is_out_of_time():
+                    deadline = "during_call"
+            else:
+                reply = call_outcome
+                if ledger.is_past_deadline(finished_seconds):
+                    deadline = "at_finish"
+                elif finished_seconds >= cap_ends_at:
+                    reply = PLANNER_CAP_REPLY
+        if deadline is not None:
+            ledger.record_breach(BudgetBreach.WALL_TIME)
+            assessment = RelevanceAssessmentRecord(
+                cve_ids_by_key=cve_ids_by_key,
+                reply=reply,
+                deadline=deadline,
+                labels={},
+                gap=None,
+                search=None,
+                term_sources=(),
+                rejections=(),
+                accepted_search=None,
+                issues=("assessor_deadline",),
+            )
+        else:
+            assessment = gate_relevance_reply(
+                run.request,
+                run.interpretation,
+                run.steps,
+                admitted_records,
+                cve_ids_by_key,
+                reply,
+                self._topic_registry,
+                allow_refinement=round_number == 1,
+            )
+        run.rounds[round_number - 1] = run.rounds[round_number - 1].model_copy(
+            update={"relevance_assessment": assessment}
+        )
 
     def _seal(
         self, run: InvestigationRun, stop_reason: StopReason, basis: DecisionBasis
@@ -595,6 +736,7 @@ class InvestigationService:
             stop_reason,
             basis,
             self._affectedness_detail,
+            self._relevance_labels(run),
         )
         answer = returned_answer.answer
         warnings = list_interpretation_warnings(

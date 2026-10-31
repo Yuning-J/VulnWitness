@@ -1,6 +1,6 @@
 # Relevance in the investigation loop
 
-Status: settled by the owner on 2026-10-31; implementation follows. The model drives one
+Status: implemented. The model drives one
 sourced, budgeted refined search. It does not judge whether evidence is sufficient.
 
 ## Rules
@@ -106,3 +106,22 @@ sourced, budgeted refined search. It does not judge whether evidence is sufficie
 - Assessing or refining FiGHT.
 - The topic and exact-lookup paths.
 - Tuning the assessor prompt.
+
+## Development result (2026-10-31, baseline only)
+
+`eval planner --model-runs 2` over the 13 M7b baseline cases, `deepseek-flash`, effort
+`none`. A development result, not a quality acceptance.
+
+- The assessor ran on all 16 free-text model runs, and every reply parsed.
+- It named a gap and a search once: srsRAN, the negative case, "no candidate mentions
+  srsRAN". The refined `srsran` search found nothing new, as it should.
+- It named no gap in `gtp-mobile-core`, `oai-cn5g` or `kamailio-version-affected`, the
+  free-text cases whose required coverage is below 1 (0.33, 0.67, 0.95).
+- Coverage@20 and irrelevant items are unchanged in every case, and so are the
+  gold-judged stop figures.
+- Cost: one assessor call, with additional time per free-text run compared with the
+  deterministic run.
+
+The loop is wired and safe, and it shows labels. On this data the model labels
+candidates but does not find the gaps, so no gain is measured. Eliciting gaps is the
+open question.

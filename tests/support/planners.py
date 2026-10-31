@@ -19,6 +19,7 @@ from cve_kgrag.domain.planning import (
     PlannerKind,
     PlanningInput,
 )
+from cve_kgrag.domain.relevance import RelevanceInput
 from cve_kgrag.domain.taxonomy import BackendStatus
 from cve_kgrag.ports.planning import ModelPort
 from cve_kgrag.settings import ModelPlannerSettings, fingerprint_endpoint
@@ -108,6 +109,8 @@ class ScriptedModelPort:
     timeout. With a ``clock``, each reply first moves it on by ``seconds_per_call``."""
 
     replies: list[ModelReply]
+    assessment_replies: list[ModelReply] = field(default_factory=list)
+    assessment_inputs: list[RelevanceInput] = field(default_factory=list)
     planning_inputs: list[PlanningInput] = field(default_factory=list)
     timeouts: list[float] = field(default_factory=list)
     clock: SteppingClock | None = None
@@ -120,6 +123,18 @@ class ScriptedModelPort:
             self.clock.advance(self.seconds_per_call)
         return self.replies[len(self.planning_inputs) - 1]
 
+    def assess_relevance(
+        self, assessment_input: RelevanceInput, timeout_seconds: float
+    ) -> ModelReply:
+        self.assessment_inputs.append(assessment_input)
+        self.timeouts.append(timeout_seconds)
+        if self.clock is not None:
+            self.clock.advance(self.seconds_per_call)
+        position = len(self.assessment_inputs) - 1
+        if position >= len(self.assessment_replies):
+            return UNAVAILABLE_REPLY
+        return self.assessment_replies[position]
+
 
 class FailingModelPort:
     """A planner the policy must never consult: a call fails the test. The test service
@@ -130,6 +145,11 @@ class FailingModelPort:
             f"the model planner was consulted for round {planning_input.round_number} of "
             f"{planning_input.quoted_query!r}"
         )
+
+    def assess_relevance(
+        self, assessment_input: RelevanceInput, timeout_seconds: float
+    ) -> ModelReply:
+        return UNAVAILABLE_REPLY
 
 
 @dataclass

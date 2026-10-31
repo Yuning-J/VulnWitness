@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from cve_kgrag.domain.planning import ModelReply, PlanningInput
+from cve_kgrag.domain.relevance import RelevanceInput
 
 
 class ModelPort(Protocol):
@@ -20,4 +21,10 @@ class ModelPort(Protocol):
         Returns within ``timeout_seconds``: the core stops waiting at the run's deadline
         and abandons the call, but only the adapter can end its own request.
         """
+        ...
+
+    def assess_relevance(
+        self, assessment_input: RelevanceInput, timeout_seconds: float
+    ) -> ModelReply:
+        """Raw relevance JSON or a typed failure, under the planner's transport rules."""
         ...

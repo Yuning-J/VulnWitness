@@ -2088,7 +2088,7 @@ def relabel_round_two_not_consulted(evidence_set: KnowledgeEvidenceSet) -> Knowl
         (
             run_model_refinement_unavailable,
             relabel_round_two_not_consulted,
-            "round 2 is model_not_consulted: only round 1 is",
+            "round 2 is model_not_consulted without a gated relevance refinement",
         ),
         (
             run_free_text_under_a_model_planner,
@@ -2113,7 +2113,7 @@ def relabel_round_two_not_consulted(evidence_set: KnowledgeEvidenceSet) -> Knowl
         "running_nothing_unrejected_at_the_deadline",
     ],
 )
-def test_round_not_consulting_its_model_is_rejected_unless_it_is_round_one_of_the_policy_plan(
+def test_round_not_consulting_its_model_requires_a_policy_plan_or_gated_relevance_search(
     fixture_bundle: FixtureBundle,
     pinned_fight_snapshot: KnownFightSnapshot,
     packaged_evidence_catalog: EvidenceCatalog,

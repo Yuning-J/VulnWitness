@@ -21,6 +21,7 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
+from cve_kgrag.domain.cpe import split_cpe
 from cve_kgrag.domain.cve import (
     CWE_ID_PATTERN,
     AffectedProduct,
@@ -166,28 +167,6 @@ def _optional_date(container: Mapping[str, Any], key: str) -> date | None:
         ) from error
 
 
-def _split_cpe(cpe: str) -> list[str]:
-    """CPE 2.3 formatted-string components after ``cpe:2.3:``, backslash escapes removed."""
-    components: list[str] = []
-    current: list[str] = []
-    is_escaped = False
-    for character in cpe.removeprefix("cpe:2.3:"):
-        if is_escaped:
-            current.append(character)
-            is_escaped = False
-        elif character == "\\":
-            is_escaped = True
-        elif character == ":":
-            components.append("".join(current))
-            current = []
-        else:
-            current.append(character)
-    if is_escaped:
-        current.append("\\")
-    components.append("".join(current))
-    return components
-
-
 def _walk_cpe_matches(nodes: Iterable[object]) -> Iterable[Mapping[str, Any]]:
     """Every CPE match in NVD configuration nodes (2.0 ``cpeMatch``, 1.1 ``cpe_match``).
 
@@ -239,7 +218,7 @@ def _affected_products(nodes: Iterable[object]) -> tuple[AffectedProduct, ...]:
         if not is_vulnerable:
             continue
         cpe = _optional_text(cpe_match, "criteria") or _required_text(cpe_match, "cpe23Uri")
-        components = _split_cpe(cpe)
+        components = split_cpe(cpe)
         if not cpe.startswith("cpe:2.3:") or len(components) != 11:
             raise NvdNormalizationError(
                 NormalizationFailureCode.INVALID_CPE, f"not a CPE 2.3 formatted string: {cpe!r}"

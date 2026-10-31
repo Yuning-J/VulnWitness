@@ -1169,8 +1169,8 @@ def claim_the_model_planned_free_text(evidence_set: KnowledgeEvidenceSet) -> Kno
             update={"planned_by": PlannerKind.MODEL, "reason": StepReason.MODEL_PROPOSAL}
         )
         steps.append(credited_step)
-    budget_used = evidence_set.trajectory.budget_used.model_copy(update={"planner_calls": 1})
-    timings = evidence_set.timings.model_copy(update={"planner_durations_ms": (0,)})
+    budget_used = evidence_set.trajectory.budget_used.model_copy(update={"planner_calls": 2})
+    timings = evidence_set.timings.model_copy(update={"planner_durations_ms": (0, 0)})
     forged_set = update_trajectory(
         evidence_set, rounds=(accepted_round,), steps=tuple(steps), budget_used=budget_used
     )

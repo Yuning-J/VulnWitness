@@ -21,6 +21,10 @@ from cve_kgrag.adapters.planner.http_transport import (
     PostJson,
     post_json,
 )
+from cve_kgrag.adapters.planner.relevance_prompt import (
+    ASSESSOR_INSTRUCTIONS,
+    REFINEMENT_INSTRUCTIONS,
+)
 from cve_kgrag.domain.budget import MAX_TOOL_CALLS
 from cve_kgrag.domain.planning import (
     MAX_PLAN_TEXT_CHARS,
@@ -28,6 +32,7 @@ from cve_kgrag.domain.planning import (
     ModelReplyFailureDetail,
     PlanningInput,
 )
+from cve_kgrag.domain.relevance import RelevanceInput
 from cve_kgrag.domain.taxonomy import BackendStatus
 
 CHAT_COMPLETIONS_ROUTE = "chat/completions"
@@ -149,12 +154,26 @@ class OpenAiCompatibleModelPort:
         self._send_request = send_request
 
     def propose_plan(self, planning_input: PlanningInput, timeout_seconds: float) -> ModelReply:
+        return self._complete(
+            PLANNER_INSTRUCTIONS, planning_input.model_dump_json(), timeout_seconds
+        )
+
+    def assess_relevance(
+        self, assessment_input: RelevanceInput, timeout_seconds: float
+    ) -> ModelReply:
+        return self._complete(
+            ASSESSOR_INSTRUCTIONS + "\n" + REFINEMENT_INSTRUCTIONS,
+            assessment_input.model_dump_json(),
+            timeout_seconds,
+        )
+
+    def _complete(self, instructions: str, user_content: str, timeout_seconds: float) -> ModelReply:
         if timeout_seconds <= 0:
             return build_failed_reply(ModelReplyFailureDetail.TIMED_OUT, is_temporary=True)
         endpoint_answer = self._send_request(
             url=self._url,
             headers=self._build_headers(),
-            body=self._build_body(planning_input),
+            body=self._build_body(instructions, user_content),
             timeout_seconds=timeout_seconds,
         )
         if not isinstance(endpoint_answer, HttpAnswer):
@@ -174,12 +193,12 @@ class OpenAiCompatibleModelPort:
             "User-Agent": USER_AGENT,
         }
 
-    def _build_body(self, planning_input: PlanningInput) -> bytes:
+    def _build_body(self, instructions: str, user_content: str) -> bytes:
         request_fields: dict[str, object] = {
             "model": self._model_name,
             "messages": [
-                {"role": "system", "content": PLANNER_INSTRUCTIONS},
-                {"role": "user", "content": planning_input.model_dump_json()},
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": user_content},
             ],
             "response_format": {"type": "json_object"},
             "stream": False,

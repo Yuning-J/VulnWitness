@@ -17,6 +17,7 @@ from cve_kgrag.domain.http_rejection import HttpRejection
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.migration_report import MigrationReport
 from cve_kgrag.domain.planning import QueryPlan
+from cve_kgrag.domain.relevance import RelevanceProposal
 from cve_kgrag.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
 from cve_kgrag.domain.store_status import StoreStatus
 from cve_kgrag.domain.timestamps import END_OF_VALUE
@@ -43,6 +44,7 @@ REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
     "investigation_request": InvestigationRequest,
     # A model planner's reply must parse as this plan before the core gates it.
     "query_plan": QueryPlan,
+    "relevance_proposal": RelevanceProposal,
     # Topic cards are input: reviewers author them against this schema.
     "protocol_topic": ProtocolTopic,
     # The MCP tools' inputs.

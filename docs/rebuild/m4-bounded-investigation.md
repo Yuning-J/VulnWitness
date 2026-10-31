@@ -222,7 +222,7 @@ reviewed topic that returned evidence. Matches of a search on the question's own
 (`cve_search`, `fight_direct_search`) leave it `matches_unassessed`: matches were found
 and their relevance was not assessed, which says nothing about whether relevant evidence
 exists. The current version does not judge such matches sufficient automatically. The
-outcome is open, so R2 still explores a resolved topic after it; for free text no rule
+outcome is open, so R2 still explores a resolved topic after it; for deterministic free text no rule
 applies (R3 needs an unsent term, and no rule plans FiGHT), so the run lists its matches
 and stops `needs_unmet` (`partial`, basis `no_refinement_available`) without a second
 search. A topic's `found` is no proof of sufficiency either: the card's mapping can list
@@ -238,7 +238,7 @@ counted in an `unrelated_candidates_dropped` warning. A CVE the caller named by 
 is never dropped: an exact-lookup candidate keeps its relevance when it relates to
 the topic and is kept with `relevance: null` otherwise, so `CVE-9999-0007 5gaka`
 answers CVE-9999-0007. An unassessed candidate sorts with the first relevance tier.
-The merge (`named_then_tier_then_step_then_tool_rank`) puts every candidate an exact
+Without model relevance labels, the merge (`named_then_tier_then_step_then_tool_rank`) puts every candidate an exact
 lookup found ahead of the rest before it cuts the answer to `max_results_per_call`.
 A run names at most that many IDs, so the cut never reaches a named CVE, whatever
 order a model's plan lists its steps in.
@@ -247,7 +247,8 @@ order a model's plan lists its steps in.
 
 `application/investigate.py` runs `interpret → plan → retrieve → assess →
 (refine → retrieve → assess) → validate → return`. There is no loop over rounds:
-round 2 is reachable only through the single `assess → refine` edge. Each stop below
+round 2 is reachable only through the single `assess → refine` edge. A configured
+relevance assessor can propose that refinement for free-text CVE questions. Each stop below
 is decided by a pure function of the recorded observations in
 `application/investigation_decisions.py` (`decide_assessment`,
 `decide_refinement_stop`, `decide_rejected_plan_stop`, `decide_open_stop`) over
@@ -280,8 +281,9 @@ decision-path audit (below) calls the same functions.
 
 Affectedness is needed when the request names a product, by filter or as a product
 version the query asks affectedness of, outside `protocol_context_only`. Round 2 is
-planned, and a configured model consulted for it, only when the policy has a
-refinement. Rule 3 makes an unavailable source an honest typed stop
+planned only when the policy has a refinement or the relevance assessor proposes
+a sourced search that passes the gate. A planning call in round 2 remains limited to
+topic and named-CVE questions. Rule 3 makes an unavailable source an honest typed stop
 without retrying it: a failed call's key is already issued and is never reissued.
 
 ## Model planner
@@ -292,10 +294,43 @@ the settings configure (ADR 0004).
 A configured model plans only a question that names a CVE ID the policy keeps or
 resolves a reviewed topic (`is_model_consultable` in
 `application/investigation_decisions.py`). Free text (intent `free_text`: no kept CVE ID,
-no resolved topic) is planned by the policy in every scope, with the question's search
+no resolved topic) starts with the policy's plan in every scope, with the question's search
 terms as its baseline; that is product policy, not a completeness or sufficiency
 guarantee and not a safety rule. A round 1 whose policy plan is over the source budget
 is not given to the model either (see the table below).
+For free-text CVE questions, the configured model assesses admitted candidates after
+round 1 and may drive one refinement. It receives opaque keys, English descriptions
+capped at 1,000 characters, vendor/product names and CWE IDs. Its JSON reply carries
+`labels`, an optional `gap: {component, reason: coverage_unclear, note}` and an optional
+`search: {tool: cve_search, query}`. Invalid parts are absent and recorded without retry;
+valid labels remain available for presentation. A component must be a contiguous sequence
+of the question's normalized search terms. A proposed search requires a valid gap and
+every term must match the search normalization of a question term or an admitted
+candidate's vendor, product or parsed CPE product name. Each term records its source CVE
+and field, or the question. Unresolved topics, store-wide vocabulary and CWEs supply no
+terms. The existing plan gate checks scope, repeats and budgets before round 2 runs.
+A rejected proposal or failed assessment keeps round 1's evidence.
+
+Only new round-2 CVEs receive a second assessment. The calls and retrieval share the
+existing deadline, and each assessor call has the planner's one-third wall-time share.
+`planner_calls` and `planner_durations_ms` count assessor calls too. The round's optional
+`relevance_assessment` records the raw reply, key mapping, labels, gap, proposal, term
+sources, issues and gate rejections, accepted search and any deadline checkpoint. Replay
+uses those replies and checkpoints. Validation binds labels to the replies and admitted
+CVEs, checks term sources and the grouped capped order; the decision audit repeats the
+gate. Round 2's policy plan carries reason `relevance_gap_search`; `model_not_consulted`
+means no planning call, while the assessment is recorded separately.
+
+The answer merges all admitted CVEs, groups `relevant`, `cannot_tell`, `not_relevant`,
+then unassessed candidates, preserving round-1 rank then round-2 rank within each group,
+and applies `max_results_per_call` (at most 20). The existing omission warning counts the
+cut. No label removes a candidate by itself. The summary says: "The model assessed the
+candidates' relevance; the system has not confirmed that the evidence need is met."
+Needs and stops retain their exact-lookup/reviewed-topic rules; relevance labels do not
+meet needs or establish sufficiency. The topic and named-CVE paths use their planning
+flow. FiGHT is neither assessed nor refined, including in `mixed` runs; REST and MCP
+use the deterministic policy.
+
 For each round the model plans, the core builds a `PlanningInput`: the caller's query as a quoted
 JSON string, the scope, intent, CVE IDs, topic ID, version and review status, the
 allowed tools with their costs (never `fight_direct_search`: only free text has
@@ -358,7 +393,7 @@ two searches that differ only in such a token run as one query and the second is
 | no reply by the deadline | `model_timed_out`, rejection `planner_timed_out`, no reply | nothing; `budget_exhausted` |
 | any reply finishing after the deadline | `model_reply_after_deadline`, rejection `reply_after_deadline`; the reply is recorded but never parsed | nothing; `budget_exhausted` |
 | not called: the deadline had passed before the round was planned | `model_skipped_at_deadline`, no rejection, no reply | nothing; `budget_exhausted` |
-| not called: the question is free text, and the policy plans it | `model_not_consulted`, no reply | the policy's plan, reasons `query_terms` and `query_terms_fight`; or, when the gate rejects that plan (`mixed` free text under `max_tool_calls: 1`), its rejections and nothing (`budget_exhausted`, `plan_over_budget`) |
+| not called: the question is free text, and the policy plans it | `model_not_consulted`, no reply | the policy's plan, reasons `query_terms`, `query_terms_fight` or round 2's `relevance_gap_search`; or, when the gate rejects that plan (`mixed` free text under `max_tool_calls: 1`), its rejections and nothing (`budget_exhausted`, `plan_over_budget`) |
 | not called: the policy's own round-1 plan is over the source budget, and a round-1 model plan must consult the policy's sources, so none could pass the gate | `model_not_consulted`, the policy plan's rejections, no reply | nothing; `budget_exhausted` (`plan_over_budget`) |
 
 Without a model planner every round's outcome is `deterministic`, including a round
@@ -366,13 +401,14 @@ the deadline stopped before planning; with one, no round is `deterministic`. Onc
 the deadline has passed the planner is not called, and the round stops with
 `budget_breached`; the deadline is checked first, so a free-text round whose deadline
 passed before planning records `model_skipped_at_deadline`, not `model_not_consulted`.
-A `model_not_consulted` round is always round 1: after a free-text round 1 the policy
-planned, no refinement rule fires (R1 and R2 need a topic, and R3 needs a term the
+A `model_not_consulted` round uses a policy retrieval plan, including a gated
+`relevance_gap_search` in round 2. Without an assessor, free text has no policy
+refinement (R1 and R2 need a topic, and R3 needs a term the
 admitted searches left unsent). The planner call runs under the call runner (see Budgets), so a
 planner that never replies is abandoned at the deadline. The planner's identity is
 built once, by discovery from the settings and the installed entry point, before the
 service is built (ADR 0004 §5); it gives both the `model_planner` capability's version
-and every trajectory's planner, and the port has no method but `propose_plan`. A model
+and every trajectory's planner, and the port provides `propose_plan` and `assess_relevance`. A model
 planner's identity (`ModelPlannerIdentity`) names its model, adapter, adapter version
 and endpoint fingerprint and no policy version, and a
 deterministic planner's (`DeterministicPlannerIdentity`) names the policy version,
@@ -916,9 +952,6 @@ only.
 - **The pending 5G-AKA card drives retrieval.** Its `pending_review` status is
   reported with a `topic_pending_review` warning; gating retrieval on review is a
   human decision.
-- **No network model adapter.** The port, the `QueryPlan` schema, the gate and a
-  scripted test planner ship now; a provider adapter follows in a separate M4
-  change. There is no schema snapshot of `PlanningInput` until then.
 - **Consistency, not authenticity.** The validator, the audit and replay prove a
   set consistent with itself, with this deployment's catalog, registry and pin, and
   with what its sources return for its calls; they cannot prove the model sent the
@@ -930,8 +963,8 @@ only.
   every other recorded decision rewritable, so it is not the right boundary.
 - **The deadline is measured, not decided.** The audit reads a round recording a
   deadline outcome (`model_timed_out`, `model_reply_after_deadline`,
-  `model_skipped_at_deadline`, or a `deterministic` round that records neither a
-  plan nor a rejection) as one the deadline stopped. Replay puts the deadline back
+  `model_skipped_at_deadline`, a `deterministic` round that records neither a
+  plan nor a rejection, or a relevance assessment's `deadline`) as one the deadline stopped. Replay puts the deadline back
   at the checkpoint where the record says the run found it, and does not re-issue a
   `timed_out` call. The validator ties each deadline outcome to a `wall_time` breach;
   a `wall_time` breach to a run wall time at or past the cap; and a timed-out or

@@ -14,12 +14,18 @@ from cve_kgrag.adapters.planner.openai_compatible import (
     PLANNER_INSTRUCTIONS,
     OpenAiCompatibleModelPort,
 )
+from cve_kgrag.adapters.planner.relevance_prompt import (
+    ASSESSOR_INSTRUCTIONS,
+    REFINEMENT_INSTRUCTIONS,
+)
 from cve_kgrag.domain.planning import (
     MAX_PLAN_TEXT_CHARS,
     ModelReply,
     ModelReplyFailureDetail,
 )
+from cve_kgrag.domain.relevance import AssessorQuestion, RelevanceInput
 from cve_kgrag.domain.taxonomy import BackendStatus
+from cve_kgrag.domain.topic_context import QueryScope
 from tests.support.fake_chat_server import build_completion_body
 from tests.support.planners import EXAMPLE_PLANNING_INPUT
 from tests.support.secrets import assert_secret_absent
@@ -278,3 +284,44 @@ def test_failed_status_is_logged_as_its_number_only(caplog: pytest.LogCaptureFix
         logged_messages.append(log_record.getMessage())
     assert logged_messages == ["model endpoint answered HTTP 401"]
     assert_secret_absent(caplog.text, PLANNER_KEY, "the log")
+
+
+def test_assessor_uses_the_same_transport_timeout_and_keeps_the_key_in_the_header() -> None:
+    # Arrange
+    model_port, transport = build_port(answer_ok(build_completion_body('{"labels": {}}')))
+    assessment_input = RelevanceInput(
+        question=AssessorQuestion(query="gateway", scope=QueryScope.IMPLEMENTATION_ONLY),
+        candidates=(),
+    )
+
+    # Act
+    reply = model_port.assess_relevance(assessment_input, timeout_seconds=2.5)
+
+    # Assert
+    assert reply.plan_text == '{"labels": {}}'
+    sent = transport.sent_requests[0]
+    assert sent.timeout_seconds == 2.5
+    assert sent.headers["Authorization"] == "Bearer " + PLANNER_KEY
+    assert PLANNER_KEY not in sent.body.decode()
+    messages = json.loads(sent.body)["messages"]
+    assert messages[0]["content"] == ASSESSOR_INSTRUCTIONS + "\n" + REFINEMENT_INSTRUCTIONS
+    assert json.loads(messages[1]["content"]) == assessment_input.model_dump(mode="json")
+
+
+@pytest.mark.parametrize("secret", [PLANNER_KEY, escape_every_character()], ids=["raw", "escaped"])
+def test_assessor_refuses_a_reply_quoting_the_configured_key(secret: str) -> None:
+    # Arrange
+    model_port, _ = build_port(
+        answer_ok(build_completion_body('{"labels": {"' + secret + '": "relevant"}}'))
+    )
+    assessment_input = RelevanceInput(
+        question=AssessorQuestion(query="gateway", scope=QueryScope.IMPLEMENTATION_ONLY),
+        candidates=(),
+    )
+
+    # Act
+    reply = model_port.assess_relevance(assessment_input, timeout_seconds=2.5)
+
+    # Assert
+    assert reply.plan_text is None
+    assert reply.detail is ModelReplyFailureDetail.MALFORMED_RESPONSE

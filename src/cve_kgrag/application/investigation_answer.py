@@ -23,6 +23,7 @@ responses; the controller seals every set with it, replayed runs included.
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from functools import partial
 
 from cve_kgrag.application.fusion import RRF_K
 from cve_kgrag.application.investigation_tools import ToolExecution
@@ -57,6 +58,7 @@ from cve_kgrag.domain.investigation import (
 )
 from cve_kgrag.domain.nvd_version_note import list_nvd_version_notes
 from cve_kgrag.domain.planning import CveExactLookupCall
+from cve_kgrag.domain.relevance import LABEL_ORDER, RelevanceLabel
 from cve_kgrag.domain.search import Candidate, ChannelOutcome, SearchFilters
 from cve_kgrag.domain.taxonomy import (
     AssertionKind,
@@ -310,21 +312,30 @@ def collect_evidence(
     return tuple(cited_anchors)
 
 
+def read_label_position(sighting: CandidateSighting, labels: dict[str, RelevanceLabel]) -> int:
+    label = labels.get(sighting.candidate.record.cve_id)
+    return len(LABEL_ORDER) if label is None else LABEL_ORDER.index(label)
+
+
 def assemble_answer(
     scope: QueryScope,
     topic: ProtocolTopic | None,
     admitted_executions: Sequence[tuple[ToolStep, ToolExecution]],
     max_results: int,
     affectedness_mentions: Sequence[str] = (),
+    relevance_labels: dict[str, RelevanceLabel] | None = None,
 ) -> AssembledAnswer:
     collected_sightings = collect_sightings(topic, admitted_executions)
     sightings = collected_sightings.sightings
     sightings.sort(key=CandidateSighting.sort_key)
+    if relevance_labels:
+        sightings.sort(key=partial(read_label_position, labels=relevance_labels))
     ranked_candidates: list[InvestigationCandidate] = []
     for rank, sighting in enumerate(sightings[:max_results], start=1):
         ranked_candidates.append(
             InvestigationCandidate(
                 rank=rank,
+                relevance_label=(relevance_labels or {}).get(sighting.candidate.record.cve_id),
                 candidate=sighting.candidate,
                 relevance=sighting.relevance,
                 found_by_steps=tuple(sighting.found_by_steps),
@@ -550,6 +561,7 @@ def assemble_returned_answer(
     stop_reason: StopReason,
     basis: DecisionBasis,
     affectedness_detail: AffectednessDetail,
+    relevance_labels: dict[str, RelevanceLabel] | None = None,
 ) -> ReturnedAnswer:
     """What a run that stopped for ``stop_reason`` on ``basis`` returns from its steps and
     their executions (one per step, in order). An ``invalid_evidence`` run returns nothing
@@ -565,6 +577,7 @@ def assemble_returned_answer(
         admitted_executions,
         request.budget.max_results_per_call,
         interpretation.affectedness_mentions,
+        relevance_labels,
     )
     admitted_steps: list[ToolStep] = []
     for step, _ in admitted_executions:

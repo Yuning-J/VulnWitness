@@ -34,6 +34,7 @@ class DeadlineCheckpoint:
     round_number: int
     step_index: int | None
     moment: DeadlineMoment
+    is_assessor: bool = False
 
 
 # Where the planner of a round recording each deadline outcome found the deadline.
@@ -69,6 +70,11 @@ def find_deadline_checkpoint(evidence_set: KnowledgeEvidenceSet) -> DeadlineChec
         return None
     last_round = trajectory.rounds[-1]
     round_number = last_round.round_number
+    assessment = last_round.relevance_assessment
+    if assessment is not None and assessment.deadline is not None:
+        return DeadlineCheckpoint(
+            round_number, None, DeadlineMoment(assessment.deadline), is_assessor=True
+        )
     planner_moment = DEADLINE_MOMENT_BY_PLANNER_OUTCOME.get(last_round.planner_outcome)
     if planner_moment is not None:
         return DeadlineCheckpoint(round_number, None, planner_moment)

@@ -1173,7 +1173,7 @@ VALIDATOR_REJECTED_PAYLOADS: list[tuple[EvidenceSetRun, PayloadForgery, str]] = 
     (
         run_model_refinement_unavailable,
         leave_round_two_unconsulted,
-        "round 2 is model_not_consulted: only round 1 is",
+        "round 2 is model_not_consulted without a gated relevance refinement",
     ),
     (run_exact_id, credit_a_policy_step_to_the_model, "step 1 is planned by model"),
     (

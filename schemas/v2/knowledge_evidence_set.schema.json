@@ -1358,6 +1358,17 @@
             }
           ],
           "description": "Relevance to the resolved topic; null when no topic resolved, or for a CVE the caller named by ID that does not relate to the topic."
+        },
+        "relevance_label": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelevanceLabel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1649,7 +1660,7 @@
     },
     "ModelReply": {
       "additionalProperties": false,
-      "description": "What a model port returns: raw plan text, so the core always does the parsing, or\nthe reason it has none, as one of the server's sentences.\n\nA round records the reply it got in full, within the plan text's length cap, so the\naudit can parse and gate it again. Plan text is untrusted model output: data, never\nwritten to a log or a warning and never read as an instruction.",
+      "description": "What a model port returns: raw planning or relevance JSON in ``plan_text``, or\nthe reason it has none, as one of the server's sentences.\n\nA round records the reply it got in full, within the plan text's length cap, so the\naudit can parse and gate it again. Plan text is untrusted model output: data, never\nwritten to a log or a warning and never read as an instruction.",
       "else": {
         "properties": {
           "detail": {
@@ -1694,7 +1705,7 @@
             }
           ],
           "default": null,
-          "description": "Untrusted model output: the plan as the model wrote it.",
+          "description": "Untrusted model output: planning or relevance JSON as the model wrote it.",
           "title": "Plan Text"
         },
         "status": {
@@ -2119,6 +2130,158 @@
       "title": "RelevanceAssessment",
       "type": "object"
     },
+    "RelevanceAssessmentRecord": {
+      "additionalProperties": false,
+      "description": "A reply and the decision it supports, re-derived by validation and replay.",
+      "properties": {
+        "accepted_search": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CveSearchCall"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cve_ids_by_key": {
+          "additionalProperties": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Cve Ids By Key",
+          "type": "object"
+        },
+        "deadline": {
+          "anyOf": [
+            {
+              "enum": [
+                "before_start",
+                "during_call",
+                "at_finish"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deadline"
+        },
+        "gap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelevanceGap"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "labels": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RelevanceLabel"
+          },
+          "title": "Labels",
+          "type": "object"
+        },
+        "rejections": {
+          "items": {
+            "$ref": "#/$defs/PlanRejection"
+          },
+          "title": "Rejections",
+          "type": "array"
+        },
+        "reply": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelReply"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "search": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CveSearchCall"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "term_sources": {
+          "items": {
+            "$ref": "#/$defs/TermSource"
+          },
+          "title": "Term Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cve_ids_by_key",
+        "reply",
+        "labels",
+        "gap",
+        "search",
+        "term_sources",
+        "issues",
+        "rejections",
+        "accepted_search",
+        "deadline"
+      ],
+      "title": "RelevanceAssessmentRecord",
+      "type": "object"
+    },
+    "RelevanceGap": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Component",
+          "type": "string"
+        },
+        "note": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        },
+        "reason": {
+          "const": "coverage_unclear",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "reason",
+        "note"
+      ],
+      "title": "RelevanceGap",
+      "type": "object"
+    },
+    "RelevanceLabel": {
+      "enum": [
+        "relevant",
+        "not_relevant",
+        "cannot_tell"
+      ],
+      "title": "RelevanceLabel",
+      "type": "string"
+    },
     "RelevanceTier": {
       "description": "How a candidate relates to a topic. Relevance only: never severity or affectedness.",
       "enum": [
@@ -2336,24 +2499,6 @@
         {
           "if": {
             "properties": {
-              "planner_outcome": {
-                "enum": [
-                  "model_not_consulted"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "round_number": {
-                "const": 1
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
               "accepted_plan": {
                 "minItems": 1
               },
@@ -2528,6 +2673,17 @@
           },
           "title": "Rejections",
           "type": "array"
+        },
+        "relevance_assessment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelevanceAssessmentRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "round_number": {
           "enum": [
@@ -3497,6 +3653,7 @@
         "topic_for_open_need",
         "query_terms_for_open_need",
         "query_terms_fight",
+        "relevance_gap_search",
         "model_proposal"
       ],
       "title": "StepReason",
@@ -3554,6 +3711,46 @@
       ],
       "title": "TechniqueField",
       "type": "string"
+    },
+    "TermSource": {
+      "additionalProperties": false,
+      "properties": {
+        "cve_id": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cve Id"
+        },
+        "field": {
+          "enum": [
+            "question",
+            "vendor",
+            "product",
+            "cpe_product"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "term": {
+          "title": "Term",
+          "type": "string"
+        }
+      },
+      "required": [
+        "term",
+        "cve_id",
+        "field"
+      ],
+      "title": "TermSource",
+      "type": "object"
     },
     "ThreatContextItem": {
       "additionalProperties": false,
@@ -4183,6 +4380,47 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "rounds": {
+                "contains": {
+                  "properties": {
+                    "planner_outcome": {
+                      "const": "model_not_consulted"
+                    },
+                    "round_number": {
+                      "const": 2
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "rounds": {
+                "prefixItems": [
+                  {
+                    "properties": {
+                      "relevance_assessment": {
+                        "properties": {
+                          "accepted_search": {
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "relevance_assessment"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         }
       ],
       "description": "Everything needed to replay the run's decisions; nothing time-dependent.",
@@ -4716,8 +4954,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.37",
-      "default": "2.0.0-dev.37",
+      "const": "2.0.0-dev.38",
+      "default": "2.0.0-dev.38",
       "title": "Schema Version",
       "type": "string"
     },

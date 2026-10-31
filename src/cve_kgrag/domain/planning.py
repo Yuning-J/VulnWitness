@@ -217,7 +217,7 @@ PlannerIdentity = Annotated[
 
 
 class ModelReply(ContractModel):
-    """What a model port returns: raw plan text, so the core always does the parsing, or
+    """What a model port returns: raw planning or relevance JSON in ``plan_text``, or
     the reason it has none, as one of the server's sentences.
 
     A round records the reply it got in full, within the plan text's length cap, so the
@@ -244,7 +244,7 @@ class ModelReply(ContractModel):
     plan_text: str | None = Field(
         default=None,
         max_length=MAX_PLAN_TEXT_CHARS,
-        description="Untrusted model output: the plan as the model wrote it.",
+        description="Untrusted model output: planning or relevance JSON as the model wrote it.",
     )
     detail: ModelReplyFailureDetail | None = Field(
         default=None, description="The server's sentence for why the planner gave no plan."

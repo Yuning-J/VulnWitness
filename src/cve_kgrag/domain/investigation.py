@@ -37,6 +37,7 @@ from cve_kgrag.domain.planning import (
     ToolName,
     format_planner_version,
 )
+from cve_kgrag.domain.relevance import RelevanceAssessmentRecord, RelevanceLabel
 from cve_kgrag.domain.result_prefix import PrefixAdmission
 from cve_kgrag.domain.search import (
     MAX_QUERY_CHARS,
@@ -218,6 +219,7 @@ class StepReason(StrEnum):
     TOPIC_FOR_OPEN_NEED = "topic_for_open_need"
     QUERY_TERMS_FOR_OPEN_NEED = "query_terms_for_open_need"
     QUERY_TERMS_FIGHT = "query_terms_fight"
+    RELEVANCE_GAP_SEARCH = "relevance_gap_search"
     MODEL_PROPOSAL = "model_proposal"
 
 
@@ -232,6 +234,7 @@ POLICY_STEP_TOOL_AND_ROUND: dict[StepReason, tuple[ToolName, int]] = {
     StepReason.TOPIC_FOR_OPEN_NEED: (ToolName.TOPIC_CONTEXT, 2),
     StepReason.QUERY_TERMS_FOR_OPEN_NEED: (ToolName.CVE_SEARCH, 2),
     StepReason.QUERY_TERMS_FIGHT: (ToolName.FIGHT_DIRECT_SEARCH, 1),
+    StepReason.RELEVANCE_GAP_SEARCH: (ToolName.CVE_SEARCH, 2),
 }
 
 
@@ -510,7 +513,7 @@ def describe_round_shape() -> JsonDict:
     outcome's fixed one first; every other round records none, except a policy plan the
     gate rejected, which a ``deterministic`` or ``model_not_consulted`` round that runs
     nothing records, and never a code only a model reply produces. A
-    ``model_not_consulted`` round is round 1."""
+    ``model_not_consulted`` round uses a policy plan."""
     no_rejections: JsonDict = {"properties": {"rejections": {"maxItems": 0}}}
     rules: list[JsonValue] = [
         {
@@ -573,10 +576,6 @@ def describe_round_shape() -> JsonDict:
             "then": no_rejections,
         },
         {
-            "if": require_outcome_in({PlannerOutcome.MODEL_NOT_CONSULTED}),
-            "then": {"properties": {"round_number": {"const": 1}}},
-        },
-        {
             "if": {
                 "required": ["accepted_plan"],
                 "properties": {
@@ -604,6 +603,8 @@ def describe_round_shape() -> JsonDict:
 
 
 class RoundRecord(ContractModel):
+    relevance_assessment: RelevanceAssessmentRecord | None = Field(default=None, exclude_if=not_)
+
     model_config = ConfigDict(json_schema_extra=describe_round_shape())
 
     round_number: Literal[1, 2]
@@ -670,6 +671,41 @@ def describe_trajectory_shape() -> JsonDict:
                 },
             }
         )
+    rules.append(
+        {
+            "if": {
+                "properties": {
+                    "rounds": {
+                        "contains": {
+                            "properties": {
+                                "round_number": {"const": 2},
+                                "planner_outcome": {
+                                    "const": PlannerOutcome.MODEL_NOT_CONSULTED.value
+                                },
+                            }
+                        }
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "rounds": {
+                        "prefixItems": [
+                            {
+                                "required": ["relevance_assessment"],
+                                "properties": {
+                                    "relevance_assessment": {
+                                        "type": "object",
+                                        "properties": {"accepted_search": {"type": "object"}},
+                                    }
+                                },
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    )
     return {"allOf": rules}
 
 
@@ -928,6 +964,8 @@ class ProductApplicability(ContractModel):
 
 
 class InvestigationCandidate(ContractModel):
+    relevance_label: RelevanceLabel | None = Field(default=None, exclude_if=not_)
+
     rank: int = Field(ge=1)
     candidate: Candidate
     relevance: RelevanceAssessment | None = Field(

@@ -1,0 +1,103 @@
+{
+  "$defs": {
+    "CveSearchCall": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        },
+        "tool": {
+          "const": "cve_search",
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "query"
+      ],
+      "title": "CveSearchCall",
+      "type": "object"
+    },
+    "RelevanceGap": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Component",
+          "type": "string"
+        },
+        "note": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        },
+        "reason": {
+          "const": "coverage_unclear",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "reason",
+        "note"
+      ],
+      "title": "RelevanceGap",
+      "type": "object"
+    },
+    "RelevanceLabel": {
+      "enum": [
+        "relevant",
+        "not_relevant",
+        "cannot_tell"
+      ],
+      "title": "RelevanceLabel",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One reply shape; its parts are validated independently at ingress.",
+  "properties": {
+    "gap": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RelevanceGap"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "labels": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RelevanceLabel"
+      },
+      "title": "Labels",
+      "type": "object"
+    },
+    "search": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CveSearchCall"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "labels"
+  ],
+  "title": "RelevanceProposal",
+  "type": "object"
+}
