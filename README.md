@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.39` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.40` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -48,7 +48,7 @@ tree are not retained. These annotations do not change retrieval, needs or stop 
   relevance labels group the final answer without meeting evidence needs. Round 1 is
   planned by the policy.
 - **Evidence sets** that can be verified and replayed offline (`cve-kgrag verify`).
-- **A read-only MCP server** with eight bounded tools, over stdio or over Streamable
+- **A read-only MCP server** with nine bounded tools, over stdio or over Streamable
   HTTP on a loopback address behind a bearer token.
 - **A v2 REST API** on a loopback address behind the same token: search, investigate,
   evidence, capabilities and evidence-set verification.
@@ -82,6 +82,7 @@ extra.
 ```bash
 uv run cve-kgrag demo                                   # sample queries on the fixture
 uv run cve-kgrag lookup CVE-9999-0001                   # exact CVE-ID lookup
+uv run cve-kgrag product --vendor democorp --version 2.0 --format text
 uv run cve-kgrag search "authentication bypass"         # ranked search
 uv run cve-kgrag search gateway --vendor democorp --severity critical --graph-expand
 uv run cve-kgrag topic 5G-AKA --scope mixed             # scoped topic context
@@ -184,6 +185,47 @@ hashes ([`m7a-planner-baseline.md`](docs/rebuild/m7a-planner-baseline.md)). With
 directory under `--out`; those sets hold the queries and the model's plan text, so keep
 them out of version control (`eval-results/` is ignored).
 
+## Product vulnerabilities
+
+Use explicit product and/or vendor fields for inventory queries:
+
+```bash
+uv run cve-kgrag product --product oai-cn5g-amf --vendor openairinterface --version 2.0 --format text
+uv run cve-kgrag product --vendor openairinterface --limit 20
+```
+
+The same service is `POST /api/v2/product` and MCP `query_product_vulnerabilities`,
+listed by `capabilities.tools`. At least one of `vendor` or `product` is required;
+`version` and `limit` are optional. Names compare exactly after Unicode `casefold()`,
+like the structured filters. Use stored CPE component names (unescaped on import),
+preserving underscores, punctuation and whitespace. Vendor and product must match
+the same implicated entry (`status != unaffected`); there is no recognition from prose.
+
+Each item's `basis.kind` is `product_field` with matched vendor:product pairs, or
+`description_mention` with a matched phrase. Only records with no implicated products
+can match descriptions, using consecutive project-tokenizer tokens: `oai-cn5g-amf`
+reads as `oai cn5g amf`. Without a product, the phrase is the vendor. Mention-only
+evidence cannot establish vendor ownership. CVEs appear once, with field evidence
+taking precedence. The response's `matched_products` shows all matched pairs before
+the cap; shared product names include every vendor, so narrow with `vendor`.
+
+With `version`, each item carries `nvd_version_note`: `hit` means it
+matches a listed NVD CPE version condition; `no_hit` means none of the listed conditions
+matched and **does not show the version is unaffected**; `unknown` gives a reason,
+such as missing version conditions, an uncomparable version or a description mention
+only. Version never becomes search text or removes CVEs. Full configuration and
+environment conditions are not evaluated, and `applicability` remains `unknown`.
+
+This is deterministic grouping, not ranking: with a version, `hit`, `unknown`, then
+`no_hit`; then product-field before mention-only evidence, newest publication first
+(missing dates last), then CVE ID ascending. `items` is capped by `limit` (default 10,
+maximum 20); `total_available` counts matching stored CVEs before the cap. JSON retains
+severity metrics, KEV entries and evidence anchors; text summarizes them. CLI exit 0
+means CVEs were returned, 1 means empty. NVD's enrichment backlog can lack product/version
+data; mention-only evidence and absent matches cannot establish affectedness or safety.
+This view makes no completeness or sufficiency claim. Protocol/technology investigations
+remain a separate entry.
+
 ## Configuration
 
 Settings come from `CVE_KGRAG_*` environment variables, read once at startup; an invalid
@@ -215,7 +257,8 @@ route but `/health` requires, without which they refuse to start
 ([ADR 0007](docs/rebuild/adr/0007-http-surfaces.md)). Generate the token, for example
 with `uv run python -c "import secrets; print(secrets.token_urlsafe(32))"` (or `python3`;
 stock macOS has no `python`). The MCP endpoint is `POST /mcp`. The REST API serves
-`POST /api/v2/search`, `POST /api/v2/investigate`, `GET /api/v2/evidence/{evidence_id}`,
+`POST /api/v2/search`, `POST /api/v2/product`, `POST /api/v2/investigate`,
+`GET /api/v2/evidence/{evidence_id}`,
 `GET /api/v2/capabilities` and `POST /api/v2/verify`; the request bodies are the
 `*_request` schemas under [`schemas/v2/`](schemas/v2/). On both servers `/health`
 answers 204 without the token; `/ready` needs the bearer token like every other route,

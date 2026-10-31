@@ -1,5 +1,5 @@
 """The MCP server, driven through the SDK's in-process client in both connection modes,
-lists exactly the eight read-only tools with the committed contract schemas, answers what
+lists the read-only tools with the committed contract schemas, answers what
 the services answer, and never echoes a caller's input or exception text."""
 
 import json
@@ -18,8 +18,13 @@ from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.adapters.store.corpus_store import load_corpus_store
 from cve_kgrag.application.evidence_set_verification import verify_evidence_set
 from cve_kgrag.application.trajectory_replay import ReplayCompleted
-from cve_kgrag.composition import build_knowledge_toolbox, build_serving_data_plane
+from cve_kgrag.composition import (
+    build_knowledge_toolbox,
+    build_product_query_service,
+    build_serving_data_plane,
+)
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from cve_kgrag.domain.product_query import ProductQueryRequest
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
 from cve_kgrag.domain.tool_contracts import ToolFailure, ToolFailureCode
 from cve_kgrag.interfaces.knowledge_tools import (
@@ -123,7 +128,7 @@ async def call_and_fingerprint(
     fingerprints.append((tool_name, fingerprint_answer(tool_outcome)))
 
 
-async def test_tools_list_names_exactly_the_eight_tools(mcp_client: Client) -> None:
+async def test_tools_list_names_every_available_tool(mcp_client: Client) -> None:
     tool_listing = await mcp_client.list_tools()
 
     tool_names: list[str] = []
@@ -131,6 +136,31 @@ async def test_tools_list_names_exactly_the_eight_tools(mcp_client: Client) -> N
         tool_names.append(tool.name)
     assert tool_names == list(KnowledgeToolName)
     assert tool_listing.next_cursor is None
+
+
+async def test_product_tool_returns_the_shared_service_answer(
+    product_query_bundle: FixtureBundle,
+    client_mode: str,
+) -> None:
+    # Arrange
+    request = ProductQueryRequest(product="oai-cn5g-amf", version="2.0", limit=2)
+    expected = build_product_query_service(product_query_bundle).query(request)
+    server = build_knowledge_mcp_server(build_test_toolbox(product_query_bundle))
+
+    # Act
+    async with Client(server, mode=client_mode) as client:
+        answer = await client.call_tool("query_product_vulnerabilities", request.model_dump())
+
+    # Assert
+    assert read_structured_content(answer) == expected.model_dump(mode="json")
+
+
+async def test_capabilities_tool_lists_product_query(mcp_client: Client) -> None:
+    # Arrange / Act
+    answer = await mcp_client.call_tool("get_knowledge_capabilities", {})
+
+    # Assert
+    assert "query_product_vulnerabilities" in read_structured_content(answer)["tools"]
 
 
 async def test_every_tool_is_annotated_read_only_non_destructive_idempotent_closed_world(

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cve_kgrag.application.investigation_tools import ToolExecutor
+from cve_kgrag.application.product_query import ProductQueryService
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
 from cve_kgrag.application.topic_context import TopicContextService
@@ -39,6 +40,7 @@ class InvestigationDeployment:
     topic_registry: TopicRegistry
     tool_executor: ToolExecutor
     search_service: SearchService
+    product_query_service: ProductQueryService
     topic_context_service: TopicContextService
     trustify_port: TrustifyPort
     source_capabilities: tuple[SourceCapability, ...]

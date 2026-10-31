@@ -135,7 +135,7 @@ the root again, move it aside by hand and activate a store by name.
 
 ## Starting a server against a store
 
-`search`, `lookup`, `topic`, `investigate`, `capabilities`, `evidence`, `verify`, `mcp`,
+`search`, `lookup`, `product`, `topic`, `investigate`, `capabilities`, `evidence`, `verify`, `mcp`,
 `mcp --http` and `api` load the active store. A root they cannot serve stops them with
 exit 2 and the line `cve-kgrag <command> cannot start: store unavailable: <reason>`,
 before an HTTP server binds a port; stdio reports the failure after its handshake. The
@@ -184,6 +184,23 @@ the synthetic store:
 Sharing the data plane saves the second index build; it does not
 lower the peak, which is reached while the store loads. `mcp` builds one deployment, as
 the shared `api` build does once.
+
+## Product inventory queries
+
+`cve-kgrag product --vendor openairinterface --product oai-cn5g-amf --version 2.0 --format text`
+reads the active corpus directly through exact case-folded product fields, with a
+description-token fallback only for records with no implicated products. Omit
+`--product` for all products of the vendor. `--limit` defaults to 10 and is capped at
+20; the answer counts `total_available` and shows every matched vendor:product pair
+before the cap. Use `--format json` for records, bases and evidence anchors.
+
+The server equivalents are authenticated `POST /api/v2/product` and MCP
+`query_product_vulnerabilities`, taking `vendor`, `product`, `version` and `limit`.
+Version annotates the retained NVD conditions without filtering CVEs or deciding
+affectedness. `basis.kind` distinguishes `product_field` from `description_mention`;
+mention-only results cannot confirm vendor ownership or version conditions. See
+[Product vulnerabilities](../README.md#product-vulnerabilities) for the normalization,
+grouping and coverage limits.
 
 ## The semantic channel against a store
 

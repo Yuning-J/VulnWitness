@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "properties": {
+        "vendor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor"
+      ]
+    },
+    {
+      "properties": {
+        "product": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "product"
+      ]
+    }
+  ],
+  "description": "At least one whole vendor or product name; version is never search text.",
+  "properties": {
+    "limit": {
+      "default": 10,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "product": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*[^\\s\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069][^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Exact CPE product name, case-folded; punctuation and whitespace retained.",
+      "title": "Product"
+    },
+    "vendor": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*[^\\s\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069][^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Exact CPE vendor name, case-folded; punctuation and whitespace retained.",
+      "title": "Vendor"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*[^\\s\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069][^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    }
+  },
+  "title": "ProductQueryRequest",
+  "type": "object"
+}

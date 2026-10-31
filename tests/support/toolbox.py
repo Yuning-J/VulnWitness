@@ -46,6 +46,7 @@ TOOL_ARGUMENTS: dict[KnowledgeToolName, dict[str, Any]] = {
     KnowledgeToolName.RESOLVE_TELECOM_CONCEPT: {"query": "5G-AKA"},
     KnowledgeToolName.LOOKUP_CVE: {"cve_id": "CVE-9999-0003"},
     KnowledgeToolName.SEARCH_VULNERABILITIES: {"query": "ausf crash", "limit": 5},
+    KnowledgeToolName.QUERY_PRODUCT_VULNERABILITIES: {"vendor": "democorp", "version": "2.0"},
     KnowledgeToolName.SEARCH_FIGHT: {"query": "5gaka", "limit": 3},
     KnowledgeToolName.CHECK_AFFECTEDNESS: build_affectedness_request().model_dump(mode="json"),
     KnowledgeToolName.GET_EVIDENCE: {"evidence_id": FIXTURE_EVIDENCE_ID},

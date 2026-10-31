@@ -26,6 +26,7 @@ from cve_kgrag.domain.investigation import (
     KnowledgeEvidenceSet,
     SourceCapability,
 )
+from cve_kgrag.domain.product_query import ProductQueryRequest, ProductQueryResponse
 from cve_kgrag.domain.search import SearchRequest, SearchResponse, UnsupportedFilter
 from cve_kgrag.domain.served_dataset import ServedDataset
 from cve_kgrag.domain.tool_contracts import (
@@ -69,7 +70,11 @@ def describe_knowledge_capabilities(
 ) -> KnowledgeCapabilities:
     """The capabilities a service over ``deployment`` reports: its ``source_capabilities``,
     and whether the deployment's dataset can execute a ``purls`` filter."""
+    tool_names: list[str] = []
+    for tool_spec in KNOWLEDGE_TOOL_SPECS:
+        tool_names.append(tool_spec.name.value)
     return KnowledgeCapabilities(
+        tools=tuple(tool_names),
         source_capabilities=source_capabilities,
         weakness_associations=deployment.search_service.describe_weakness_snapshot(),
         purl_filter_available=deployment.search_service.serves_purl_filter(),
@@ -89,7 +94,7 @@ def build_unsupported_filter_failure(error: UnsupportedFilter) -> ToolFailure:
 
 
 class KnowledgeToolbox:
-    """The eight knowledge tools over one deployment's services: its search service,
+    """The knowledge tools over one deployment's services: its search service,
     topic-context service, topic registry, evidence catalog and affectedness port, and
     ``investigation_service``, which runs against the same deployment.
 
@@ -136,6 +141,7 @@ class KnowledgeToolbox:
             KnowledgeToolName.RESOLVE_TELECOM_CONCEPT: self._resolve_concept,
             KnowledgeToolName.LOOKUP_CVE: self._lookup_cve,
             KnowledgeToolName.SEARCH_VULNERABILITIES: self._search_vulnerabilities,
+            KnowledgeToolName.QUERY_PRODUCT_VULNERABILITIES: self._query_product_vulnerabilities,
             KnowledgeToolName.SEARCH_FIGHT: self._search_fight,
             KnowledgeToolName.CHECK_AFFECTEDNESS: self._check_affectedness,
             KnowledgeToolName.GET_EVIDENCE: self._get_evidence,
@@ -258,6 +264,9 @@ class KnowledgeToolbox:
                 query=request.query, scope=QueryScope.PROTOCOL_CONTEXT_ONLY, limit=request.limit
             )
         )
+
+    def _query_product_vulnerabilities(self, request: ProductQueryRequest) -> ProductQueryResponse:
+        return self._deployment.product_query_service.query(request)
 
     def _check_affectedness(self, request: AffectednessRequest) -> AffectednessCheck:
         return check_affectedness(

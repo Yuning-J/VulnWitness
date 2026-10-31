@@ -19,6 +19,7 @@ from cve_kgrag.domain.investigation_validation import find_capability_shape_viol
 from cve_kgrag.domain.search import (
     MAX_RESULTS_PER_CALL,
     SCHEMA_VERSION,
+    FilterName,
     JsonInteger,
     QueryText,
     SchemaVersion,
@@ -39,6 +40,7 @@ class KnowledgeCapabilities(ContractModel):
     search filters its dataset can execute."""
 
     schema_version: SchemaVersion = SCHEMA_VERSION
+    tools: tuple[FilterName, ...] = Field(description="Available deterministic, read-only tools.")
     source_capabilities: tuple[SourceCapability, ...] = Field(
         description=CAPABILITY_ORDER_DESCRIPTION,
         json_schema_extra=pin_capability_order,

@@ -12,7 +12,8 @@ its data is loaded, so stdout carries only a command's JSON or the MCP protocol.
 
 Exit codes: 0 when the answer is a full one: result status ok, the verdict ``verified``,
 a query that resolves to a topic, an evidence ID the catalogue serves, every
-affectedness answer established, capabilities always, an ``eval planner`` run that wrote
+affectedness answer established, capabilities always, a product query with matches,
+an ``eval planner`` run that wrote
 its results, a ``migrate legacy`` run that imported, found its import done or completed
 a dry run, a ``store`` operation that succeeded (for ``status``, a readable ``ACTIVE``
 whose active store is ok), and for ``mcp`` the client closing stdin or, for
@@ -97,6 +98,7 @@ from cve_kgrag.composition import (
     build_investigation_service,
     build_knowledge_toolbox,
     build_nvd_normalizer,
+    build_product_query_service,
     build_search_service,
     build_serving_data_plane,
     build_store_activation,
@@ -123,6 +125,7 @@ from cve_kgrag.domain.hashing import sha256_hex
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.migration_inputs import MAX_MANIFEST_BYTES
 from cve_kgrag.domain.migration_report import MigrationOutcome
+from cve_kgrag.domain.product_query import ProductQueryRequest
 from cve_kgrag.domain.search import (
     MAX_FILTER_VALUES,
     MAX_RESULTS_PER_CALL,
@@ -191,6 +194,7 @@ from cve_kgrag.interfaces.knowledge_toolbox import (
     describe_knowledge_capabilities,
 )
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits
+from cve_kgrag.interfaces.product_query_summary import render_product_query_summary
 from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.ports.sources import FightSource
 from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
@@ -390,6 +394,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     lookup_parser = commands.add_parser("lookup", help="exact CVE-ID lookup; prints JSON")
     lookup_parser.add_argument("cve_id", type=parse_cve_id)
+
+    product_parser = commands.add_parser(
+        "product", help="CVEs for explicit vendor/product names, with optional version notes"
+    )
+    product_parser.add_argument("--vendor")
+    product_parser.add_argument("--product")
+    product_parser.add_argument("--version")
+    product_parser.add_argument("--format", choices=("json", "text"), default="json")
+    add_result_limit_option(product_parser, "--limit")
 
     capabilities_parser = commands.add_parser(
         "capabilities",
@@ -838,6 +851,27 @@ def run_evidence_lookup(evidence_id: str, deployment: InvestigationDeployment) -
         return 1
     print(evidence_lookup.model_dump_json(indent=2))
     return 0
+
+
+def run_product_query(
+    request: ProductQueryRequest, store_root: Path | None, output_format: str
+) -> int:
+    """Read the configured corpus through the product service and print its capped answer."""
+    started_at = time.monotonic()
+    served_corpus = load_served_corpus_or_exit("product", store_root)
+    service = build_product_query_service(served_corpus)
+    announce_data_loaded(
+        "product",
+        store_root,
+        served_corpus.describe_served_dataset(),
+        time.monotonic() - started_at,
+    )
+    vulnerabilities = service.query(request)
+    if output_format == "text":
+        print(render_product_query_summary(vulnerabilities))
+    else:
+        print(vulnerabilities.model_dump_json(indent=2))
+    return 0 if vulnerabilities.items else 1
 
 
 def announce_store_loading(command: str, store_name: str) -> None:
@@ -1572,6 +1606,16 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
                 lookup_request.cve_id,
             )
         )
+    if arguments.command == "product":
+        product_request = build_contract(
+            parser,
+            ProductQueryRequest,
+            vendor=arguments.vendor,
+            product=arguments.product,
+            version=arguments.version,
+            limit=arguments.limit,
+        )
+        return run_product_query(product_request, settings.store_root, arguments.format)
     if arguments.command == "search":
         search_request = build_search_request(parser, arguments)
         service = load_search_service_or_exit(

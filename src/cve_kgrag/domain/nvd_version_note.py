@@ -18,7 +18,10 @@ from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.cve import AffectedProduct, CveRecord, VersionRange
 
 UnknownVersionReason = Literal[
-    "no_matching_product", "no_version_condition", "version_not_comparable"
+    "no_matching_product",
+    "no_version_condition",
+    "version_not_comparable",
+    "description_mention_only",
 ]
 
 
@@ -105,12 +108,25 @@ def build_nvd_version_note(record: CveRecord, mention: str) -> NvdVersionNote:
     otherwise uncomparable versions take precedence over missing version conditions.
     """
     product_name, version = mention.rsplit(" ", 1)
+    matching_entries: list[AffectedProduct] = []
+    for entry in record.list_implicated_products():
+        if product_name.casefold() in (entry.vendor.casefold(), entry.product.casefold()):
+            matching_entries.append(entry)
+    return build_nvd_version_note_for_entries(matching_entries, mention, version)
+
+
+def build_nvd_version_note_for_entries(
+    entries: Sequence[AffectedProduct], mention: str, version: str
+) -> NvdVersionNote:
+    """Apply the NVD condition rule and wording to explicitly matched product entries.
+
+    Entries retain record order. The caller supplies the version separately so an
+    explicit field is not parsed as a natural-language product/version mention.
+    """
     product_identities: list[str] = []
     has_missing_condition = False
     has_uncomparable_version = False
-    for entry in record.list_implicated_products():
-        if product_name.casefold() not in (entry.vendor.casefold(), entry.product.casefold()):
-            continue
+    for entry in entries:
         product_identity = f"{entry.vendor}:{entry.product}"
         if product_identity not in product_identities:
             product_identities.append(product_identity)

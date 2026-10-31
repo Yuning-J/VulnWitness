@@ -17,12 +17,14 @@ from starlette.types import ASGIApp
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from cve_kgrag.application.evidence_set_verification import check_evidence_set
+from cve_kgrag.composition import build_product_query_service
 from cve_kgrag.domain.evidence_set_verification_report import (
     VerificationReport,
     VerificationVerdict,
 )
 from cve_kgrag.domain.http_rejection import HttpRejection, HttpRejectionCode
 from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
+from cve_kgrag.domain.product_query import ProductQueryRequest
 from cve_kgrag.domain.search import SearchResponse
 from cve_kgrag.domain.tool_contracts import (
     EvidenceLookup,
@@ -147,6 +149,40 @@ def test_every_failure_code_has_its_published_rest_status() -> None:
 
 async def test_request_deadline_is_fifty_seconds(fixture_bundle: FixtureBundle) -> None:
     assert build_test_api(fixture_bundle).request_deadline_seconds == 50.0
+
+
+async def test_product_route_returns_the_shared_capped_service_answer(
+    product_query_bundle: FixtureBundle,
+) -> None:
+    # Arrange
+    request = ProductQueryRequest(product="oai-cn5g-amf", version="2.0", limit=2)
+    expected = build_product_query_service(product_query_bundle).query(request)
+    api_app = build_test_api(product_query_bundle)
+
+    # Act
+    answer = await call_api(api_app, "POST", "/api/v2/product", json=request.model_dump())
+
+    # Assert
+    assert answer.status_code == 200
+    assert answer.json() == expected.model_dump(mode="json")
+
+
+async def test_product_route_requires_at_least_one_name(api_client: httpx2.AsyncClient) -> None:
+    # Arrange / Act
+    answer = await api_client.post("/api/v2/product", json={"version": "2.0"})
+
+    # Assert
+    assert answer.status_code == 422
+    assert answer.json()["code"] == "invalid_arguments"
+
+
+async def test_capabilities_route_lists_the_product_tool(api_client: httpx2.AsyncClient) -> None:
+    # Arrange / Act
+    answer = await api_client.get("/api/v2/capabilities")
+
+    # Assert
+    assert answer.status_code == 200
+    assert "query_product_vulnerabilities" in answer.json()["tools"]
 
 
 async def test_capabilities_route_answers_the_capabilities_contract(

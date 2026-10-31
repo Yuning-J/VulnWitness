@@ -16,6 +16,7 @@ from cve_kgrag.domain.affectedness import AffectednessCheck, AffectednessRequest
 from cve_kgrag.domain.budget import MAX_WALL_TIME_SECONDS
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from cve_kgrag.domain.product_query import ProductQueryRequest, ProductQueryResponse
 from cve_kgrag.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
 from cve_kgrag.domain.served_dataset import ServedDatasetKind
 from cve_kgrag.domain.tool_contracts import (
@@ -87,6 +88,7 @@ class KnowledgeToolName(StrEnum):
     RESOLVE_TELECOM_CONCEPT = "resolve_telecom_concept"
     LOOKUP_CVE = "lookup_cve"
     SEARCH_VULNERABILITIES = "search_vulnerabilities"
+    QUERY_PRODUCT_VULNERABILITIES = "query_product_vulnerabilities"
     SEARCH_FIGHT = "search_fight"
     CHECK_AFFECTEDNESS = "check_affectedness"
     GET_EVIDENCE = "get_evidence"
@@ -147,6 +149,21 @@ KNOWLEDGE_TOOL_SPECS: tuple[ToolSpec, ...] = (
         ),
         request_model=SearchRequest,
         response_model=SearchResponse,
+    ),
+    ToolSpec(
+        name=KnowledgeToolName.QUERY_PRODUCT_VULNERABILITIES,
+        description=(
+            "CVEs for explicit vendor and/or product fields, matched as exact case-folded "
+            "names on the same implicated entry. CPE-less records may match consecutive "
+            "description tokens. Each item states its basis; all matched vendor:product "
+            "pairs are shown so the caller can narrow ambiguous names. Version only "
+            "annotates NVD conditions and never excludes a CVE. Grouped by version fact "
+            "(hit, unknown, no_hit), then basis, newest publication, and CVE ID; not ranked. "
+            "The capped items list reports limit and total_available. "
+            f"{PUBLISHER_AFFECTED_STATEMENT} {UNTRUSTED_RECORD_TEXT}"
+        ),
+        request_model=ProductQueryRequest,
+        response_model=ProductQueryResponse,
     ),
     ToolSpec(
         name=KnowledgeToolName.SEARCH_FIGHT,

@@ -225,8 +225,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.39",
-      "default": "2.0.0-dev.39",
+      "const": "2.0.0-dev.40",
+      "default": "2.0.0-dev.40",
       "title": "Schema Version",
       "type": "string"
     },

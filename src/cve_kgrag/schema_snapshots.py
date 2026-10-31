@@ -17,6 +17,7 @@ from cve_kgrag.domain.http_rejection import HttpRejection
 from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from cve_kgrag.domain.migration_report import MigrationReport
 from cve_kgrag.domain.planning import QueryPlan
+from cve_kgrag.domain.product_query import ProductQueryRequest, ProductQueryResponse
 from cve_kgrag.domain.relevance import RelevanceProposal
 from cve_kgrag.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
 from cve_kgrag.domain.store_status import StoreStatus
@@ -39,6 +40,7 @@ MANIFEST_FILE = "manifest.json"
 # The evidence-set schema relies on ``prefixItems``, which earlier drafts read differently.
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
+    "product_query_request": ProductQueryRequest,
     "search_request": SearchRequest,
     "topic_context_request": TopicContextRequest,
     "investigation_request": InvestigationRequest,
@@ -56,6 +58,7 @@ REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
     "affectedness_request": AffectednessRequest,
 }
 RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
+    "product_query_response": ProductQueryResponse,
     "search_response": SearchResponse,
     "topic_context_response": TopicContextResponse,
     "knowledge_evidence_set": KnowledgeEvidenceSet,

@@ -1,4 +1,4 @@
-"""The knowledge tool surface is exactly the brief's eight tools over registered v2
+"""The knowledge tool surface uses the registered v2
 contracts, no tool input can name a location, a query language, a command or a model, every
 source-text field a CVE record or FiGHT technique carries is named untrusted, every tool
 answering with CVE records says their affected entries are no affectedness check, and the
@@ -25,11 +25,12 @@ from cve_kgrag.interfaces.knowledge_tools import (
 )
 from cve_kgrag.schema_snapshots import REQUEST_CONTRACTS, RESPONSE_CONTRACTS, render_schema
 
-BRIEF_TOOL_NAMES = {
+EXPECTED_TOOL_NAMES = {
     "get_knowledge_capabilities",
     "resolve_telecom_concept",
     "lookup_cve",
     "search_vulnerabilities",
+    "query_product_vulnerabilities",
     "search_fight",
     "check_affectedness",
     "get_evidence",
@@ -111,12 +112,12 @@ def list_free_text_fields(record_model: type[BaseModel]) -> set[str]:
     return free_text_fields
 
 
-def test_tool_names_are_exactly_the_eight_brief_tools() -> None:
+def test_tool_names_include_exactly_the_supported_knowledge_reads() -> None:
     tool_names: list[str] = []
     for tool_spec in KNOWLEDGE_TOOL_SPECS:
         tool_names.append(tool_spec.name.value)
 
-    assert sorted(tool_names) == sorted(BRIEF_TOOL_NAMES)
+    assert sorted(tool_names) == sorted(EXPECTED_TOOL_NAMES)
 
 
 def test_each_tool_contract_is_a_registered_v2_contract() -> None:
@@ -152,6 +153,9 @@ def test_no_input_schema_accepts_free_form_keys() -> None:
     object_count = 0
     for input_schema in list_input_schemas():
         for object_schema in list_object_schemas(input_schema):
+            # Conditional property constraints do not declare an independent object.
+            if object_schema.get("type") != "object":
+                continue
             object_count += 1
             if object_schema.get("additionalProperties") is not False:
                 open_object_titles.append(str(object_schema.get("title")))
@@ -217,6 +221,7 @@ def test_every_tool_answering_with_cve_records_says_their_affected_entries_are_n
     assert record_tool_names == [
         "lookup_cve",
         "search_vulnerabilities",
+        "query_product_vulnerabilities",
         "search_fight",
         "investigate_telecom_topic",
     ]

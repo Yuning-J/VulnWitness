@@ -12,6 +12,7 @@ per-request state, and a replay never counts against an investigation's admissio
 
 from dataclasses import dataclass
 
+from cve_kgrag.application.product_query import ProductQueryService
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.served_dataset import ServedDataset
@@ -30,6 +31,7 @@ class ServingDataPlane:
     served_dataset: ServedDataset
     topic_registry: TopicRegistry
     search_service: SearchService
+    product_query_service: ProductQueryService
     fight_source: FightSource
     pinned_fight_snapshot: KnownFightSnapshot | None
     evidence_catalog: EvidenceCatalog

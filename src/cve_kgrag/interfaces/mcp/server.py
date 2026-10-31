@@ -72,7 +72,7 @@ class KnowledgeToolHandlers:
         ctx: ServerRequestContext[LifespanState],
         params: PaginatedRequestParams | None,
     ) -> ListToolsResult:
-        """The eight tools, in one page."""
+        """The available tools, in one page."""
         return ListToolsResult(tools=list(self._tools))
 
     async def call_tool(
@@ -80,7 +80,7 @@ class KnowledgeToolHandlers:
     ) -> CallToolResult:
         """The toolbox's answer as structured content and its JSON text, or its failure as
         an error result. While loading, every call is a ``data_loading`` failure. Once
-        loaded, a name that is not one of the eight tools is a JSON-RPC invalid
+        loaded, a name that is not one of the available tools is a JSON-RPC invalid
         params error with a fixed message, which never repeats the name."""
         tool_outcome: ToolAnswer | ToolFailure
         if self._toolbox is None:

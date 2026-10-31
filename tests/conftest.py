@@ -26,6 +26,7 @@ from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.clocks import read_fixed_clock
 from tests.support.fake_chat_server import FakeChatServers
 from tests.support.network_guard import NetworkGuard, guarded_connect, guarded_connect_ex
+from tests.support.product_queries import build_product_query_bundle
 
 LIVE_TESTS_VARIABLE = "CVE_KGRAG_LIVE_TESTS"
 NETWORK_GUARD_KEY = pytest.StashKey[NetworkGuard]()
@@ -35,6 +36,11 @@ NETWORK_GUARD_PATCH_KEY = pytest.StashKey[pytest.MonkeyPatch]()
 @pytest.fixture
 def fixture_bundle() -> FixtureBundle:
     return load_fixture_bundle(default_fixture_dir())
+
+
+@pytest.fixture
+def product_query_bundle(fixture_bundle: FixtureBundle) -> FixtureBundle:
+    return build_product_query_bundle(fixture_bundle)
 
 
 @pytest.fixture

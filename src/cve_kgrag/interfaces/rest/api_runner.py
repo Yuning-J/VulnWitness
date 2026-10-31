@@ -2,7 +2,7 @@
 Loaded only through the ``api_server`` entry point of the ``cve_kgrag.adapters`` group.
 
 Every route but ``/health`` requires the token, and every route is one toolbox call or
-one verification: ``POST /api/v2/search``, ``POST /api/v2/investigate``,
+one verification: ``POST /api/v2/search``, ``POST /api/v2/product``, ``POST /api/v2/investigate``,
 ``GET /api/v2/evidence/{evidence_id}``, ``GET /api/v2/capabilities`` and
 ``POST /api/v2/verify``.
 """
@@ -48,6 +48,12 @@ def build_api_app(
         f"{API_PREFIX}/search": GuardedRoute(
             methods=POST_ONLY,
             app=ToolRoute(toolbox, KnowledgeToolName.SEARCH_VULNERABILITIES, read_body_arguments),
+        ),
+        f"{API_PREFIX}/product": GuardedRoute(
+            methods=POST_ONLY,
+            app=ToolRoute(
+                toolbox, KnowledgeToolName.QUERY_PRODUCT_VULNERABILITIES, read_body_arguments
+            ),
         ),
         f"{API_PREFIX}/investigate": GuardedRoute(
             methods=POST_ONLY,

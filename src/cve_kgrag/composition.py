@@ -54,6 +54,7 @@ from cve_kgrag.application.investigation_deployment import InvestigationDeployme
 from cve_kgrag.application.investigation_policy import describe_deterministic_planner
 from cve_kgrag.application.investigation_tools import ToolExecutor
 from cve_kgrag.application.planner_setup import DeterministicPlanning, PlannerSetup
+from cve_kgrag.application.product_query import ProductQueryService
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.application.serving_data_plane import ServingDataPlane
 from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
@@ -195,6 +196,14 @@ def build_search_service(
         graph_retriever=InMemoryRelationGraph(repository.list_cves()),
         semantic_retriever=semantic_retriever,
         weakness_mapping=weakness_mapping,
+    )
+
+
+def build_product_query_service(served_corpus: ServedCorpus) -> ProductQueryService:
+    """The product entry over the same corpus records and evidence every surface serves."""
+    return ProductQueryService(
+        InMemoryKnowledgeRepository(served_corpus.records, served_corpus.evidence),
+        InMemoryEvidenceCatalog(served_corpus.evidence, served_corpus.records),
     )
 
 
@@ -417,6 +426,7 @@ def build_serving_data_plane(
         served_dataset=served_corpus.describe_served_dataset(),
         topic_registry=build_topic_registry(),
         search_service=search_service,
+        product_query_service=build_product_query_service(served_corpus),
         fight_source=fight_source,
         pinned_fight_snapshot=pinned_fight_snapshot,
         evidence_catalog=build_evidence_catalog(served_corpus, fight_source, weakness_mapping),
@@ -455,6 +465,7 @@ def build_investigation_deployment(
             data_plane.search_service, topic_context_service, data_plane.topic_registry
         ),
         search_service=data_plane.search_service,
+        product_query_service=data_plane.product_query_service,
         topic_context_service=topic_context_service,
         trustify_port=trustify_port,
         source_capabilities=describe_source_capabilities(

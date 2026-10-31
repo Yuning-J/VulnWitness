@@ -17,6 +17,7 @@ from cve_kgrag.domain.budget import MAX_WALL_TIME_SECONDS
 from cve_kgrag.domain.contract_model import ContractModel
 from cve_kgrag.domain.evidence import EvidenceAnchor, seal_evidence_anchor
 from cve_kgrag.domain.investigation import InvestigationRequest
+from cve_kgrag.domain.product_query import ProductQueryRequest
 from cve_kgrag.domain.search import RetrievalMatch, RetrievalOutcome, SearchRequest
 from cve_kgrag.domain.taxonomy import (
     BACKEND_FAILURE_DETAILS,
@@ -200,6 +201,7 @@ DELEGATING_TOOL_NAMES = [
     KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES,
     KnowledgeToolName.RESOLVE_TELECOM_CONCEPT,
     KnowledgeToolName.SEARCH_VULNERABILITIES,
+    KnowledgeToolName.QUERY_PRODUCT_VULNERABILITIES,
     KnowledgeToolName.GET_EVIDENCE,
     KnowledgeToolName.INVESTIGATE_TELECOM_TOPIC,
 ]
@@ -223,6 +225,10 @@ def answer_directly(
             )
         case KnowledgeToolName.SEARCH_VULNERABILITIES:
             return build_fixture_service(bundle).search(SearchRequest.model_validate(arguments))
+        case KnowledgeToolName.QUERY_PRODUCT_VULNERABILITIES:
+            return deployment.product_query_service.query(
+                ProductQueryRequest.model_validate(arguments)
+            )
         case KnowledgeToolName.GET_EVIDENCE:
             anchor = deployment.evidence_catalog.get_evidence(arguments["evidence_id"])
             assert anchor is not None
