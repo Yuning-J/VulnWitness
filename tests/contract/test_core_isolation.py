@@ -103,7 +103,7 @@ def test_core_distribution_depends_only_on_pydantic_and_pyyaml() -> None:
     for requirement in requires("cve-kgrag") or []:
         if ";" not in requirement:
             core_requirements.append(requirement)
-    assert core_requirements == ["pydantic<3,>=2.9", "pyyaml<7,>=6.0.2"]
+    assert core_requirements == ["pydantic<3,>=2.12", "pyyaml<7,>=6.0.2"]
 
 
 def test_importing_every_core_module_loads_no_heavy_or_optional_dependency() -> None:
