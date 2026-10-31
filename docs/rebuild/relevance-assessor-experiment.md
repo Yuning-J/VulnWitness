@@ -176,3 +176,16 @@ Every exploration gate is met. That means the per-candidate relevance judgement 
 further research. It does not authorise filtering answers or changing `sufficient`, and
 it says nothing about candidates the search never returned; any use of the labels is a
 separate owner decision.
+
+**Failure type.** The eight required drops are four CVEs: two AMF subscription-interface
+flaws in free5GC's UDR, labelled `not_relevant` in all three repeats (6), and two flaws in
+a PFCP helper Open5GS shares between SMF and UPF, dropped once each (2). The weak point is
+relevance through a cross-component interaction or shared code, not random variation. The
+confirmed labels stay as they are, and the prompt is not tuned against this set.
+
+**Conclusion of this round.** On the candidates this batch returned, the model removes
+noise well but misses some indirectly relevant records. That is worth further research;
+it does not show that coverage is complete, and it does not decide sufficiency. The
+injection check shows only that this run observed no obedience to an instruction in a
+candidate. The round ends here: the labels are not wired into answers and no further
+model run is made.
