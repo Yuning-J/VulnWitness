@@ -31,6 +31,7 @@ from cve_kgrag.domain.affectedness import AffectednessDetail, ApplicabilityStatu
 from cve_kgrag.domain.evidence import Claim, EvidenceAnchor
 from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.investigation import (
+    ADMITTED_ADMISSIONS,
     ApplicabilityBasis,
     CoverageAssessment,
     DecisionBasis,
@@ -42,7 +43,6 @@ from cve_kgrag.domain.investigation import (
     InvestigationWarningCode,
     ProductApplicability,
     RankingConfiguration,
-    StepAdmission,
     StopReason,
     ToolStep,
     decide_investigation_status,
@@ -248,7 +248,8 @@ def count_topic_cuts(
 ) -> tuple[set[str], int]:
     """What the adopted topic or direct FiGHT step left out at its limit: the CVE IDs a
     topic step kept and did not list, and the techniques the step matched and did not
-    list. A run issues at most one topic step and at most one step that searches FiGHT,
+    list. Context-budget omissions have their own step warning and are counted separately.
+    A run issues at most one topic step and at most one step that searches FiGHT,
     and its limit is the per-call cap the answer uses, so these are exact."""
     omitted_cve_ids: set[str] = set()
     unlisted_technique_count = 0
@@ -256,9 +257,15 @@ def count_topic_cuts(
         if execution.topic_response is None:
             continue
         omitted_cve_ids.update(execution.omitted_topic_cve_ids)
-        for warning in execution.topic_response.warnings:
+        topic_response = execution.topic_response
+        for warning in topic_response.warnings:
             if warning.code is TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED:
-                unlisted_technique_count += read_count_subject(warning.subject) or 0
+                cut_count = read_count_subject(warning.subject) or 0
+                if execution.prefix_admission is not None:
+                    for count in execution.prefix_admission.counts:
+                        if count.name == "protocol_context":
+                            cut_count -= count.omitted
+                unlisted_technique_count += cut_count
     return omitted_cve_ids, unlisted_technique_count
 
 
@@ -491,7 +498,7 @@ def list_admitted_executions(
     """Each admitted step with its execution; ``executions`` holds one per step, in order."""
     admitted_executions: list[tuple[ToolStep, ToolExecution]] = []
     for step, execution in zip(steps, executions, strict=True):
-        if step.admission is StepAdmission.ADMITTED:
+        if step.admission in ADMITTED_ADMISSIONS:
             admitted_executions.append((step, execution))
     return admitted_executions
 

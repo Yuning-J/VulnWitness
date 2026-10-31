@@ -263,7 +263,7 @@ decision-path audit (below) calls the same functions.
 | plan | the deadline passed before planning, the model had not replied by it, or the model replied after it | validate | `budget_breached` | `budget_exhausted` |
 | plan | the policy's own plan fails another gate check (a defect guard) | validate | `plan_rejected_by_policy` | `policy_blocked` |
 | plan | a plan was accepted | retrieve | `plan_accepted` | – |
-| retrieve | the steps ran, or one stopped the round (failed, timed out, late or oversized) | assess | `steps_finished` | – |
+| retrieve | the steps ran, or one stopped the round (failed, timed out, late or unable to fit its first result) | assess | `steps_finished` | – |
 | assess | 1. a step's evidence failed integrity | validate | `evidence_invalid` | `invalid_evidence` |
 | assess | 2. a cap was breached | validate | `budget_breached` | `budget_exhausted` |
 | assess | 3. an answer source returned neither `ok` nor `no_match` | validate | `answer_source_failed` | `source_unavailable` |
@@ -406,12 +406,31 @@ choose a round's plan with the same function, `choose_round_plan` in
 | `max_sources` | 4 | The union of consulted sources, checked by the gate. |
 | `max_results_per_call` | 20 | The `limit` of every backend request: each CVE tool's search, each template search a `topic_context` call fans out to (`TopicContextRequest.max_results_per_search`), and its FiGHT search, or the one FiGHT search of `fight_direct_search`. Also the cut of each answer section. |
 | `max_wall_time_seconds` | 30 | A ceiling on the run, measured on an injected monotonic clock. It is checked before every planner and tool call, and every such call runs under the call runner, which gives control back when the remaining time reaches zero whether or not the call has returned; see the limits below. |
-| `max_context_bytes` | 200 000 | The canonical JSON size of each tool response; a response that would cross the cap is discarded and the run stops. |
+| `max_context_bytes` | 200 000 | The canonical JSON size of each admitted tool response, including metadata and anchors. An oversized response admits its longest whole-result prefix; if the first result cannot fit, it is discarded and the run stops. |
 
 A caller may lower each cap and never raise it; a value above a cap is rejected,
-not clamped. A late or oversized result is recorded with its hash and admission
-(`discarded_after_deadline`, `discarded_over_context_budget`), never admitted,
-and adds an `evidence_discarded` warning. A call that has not returned when the
+not clamped. An oversized response is admitted as `admitted_prefix` when at least its
+first whole result fits. CVE searches and lookups take candidates in their ranked order;
+direct FiGHT searches take techniques in their ranked order. Topic calls interleave the
+heads of `implementation_candidates`, `protocol_context` and
+`excluded_implementation_candidates`, then their second entries, and so on, stopping
+at the first entry that does not fit. This gives both answer sections a head before
+either receives a tail, with excluded context last at each rank. Every retained entry
+keeps its complete record and all referenced anchors. The step charges the canonical
+JSON size of this retained response, including metadata. Its compact `prefix_admission`
+records `original_result_sha256` (the complete response's sealed digest), per-list kept
+and omitted counts, `charged_bytes`, and `next_result_bytes`. The next-result figure is
+the canonical size of the prefix extended by the first omitted entry minus the admitted
+size, including any added anchors and changed warnings. The set carries no original
+response body; its size depends on admitted content and the existing envelope overhead,
+not the size of omitted records. A prefix is not a breach. Its `evidence_prefix_omitted` warning names the step and
+the exact number of omitted entries. Topic truncation warnings include the entries
+omitted by admission; search-limit warnings still describe the original retrieval. `answer_truncated` describes cuts made by answer
+assembly and retrieval limits, independently of the context-budget cut.
+
+A late result, or one whose first whole result cannot fit, is recorded with its hash
+and admission (`discarded_after_deadline`, `discarded_over_context_budget`), never
+admitted, and adds an `evidence_discarded` warning. A call that has not returned when the
 remaining time reaches zero is abandoned: its step is recorded as `timed_out`,
 charged, with no status, hash, results or bytes, the breach is `wall_time`, the
 run stops `budget_exhausted` and the warning is `evidence_discarded`. A response
@@ -530,8 +549,10 @@ controller defect and raises instead of returning. It checks:
   against the deadline (a `timed_out` or `discarded_after_deadline` step finished
   at or after it, a `discarded_over_context_budget` step before it), the byte cap
   replayed over the steps in order (a step is `discarded_over_context_budget`
-  exactly when its bytes would push the admitted bytes past
-  `max_context_bytes`), one charged tool call per recorded backend request, every
+  when its response exceeds the remaining `max_context_bytes` and its first whole
+  result cannot fit; an `admitted_prefix` step has whole visible records, consistent
+  ranks, per-list counts and omission warning, `charged_bytes == context_bytes`, and
+  `charged_bytes <= remaining < charged_bytes + next_result_bytes`), one charged tool call per recorded backend request, every
   request's limit within `max_results_per_call`, the requests' sources equal to
   the step's, the step's sources those its call consults under the scope, and a
   CVE tool's one request its call's query text (`format_cve_tool_query`, the same
@@ -670,7 +691,11 @@ to say exactly that:
   `topic_not_resolved`, `no_searchable_terms` and `topic_pending_review` from the
   interpretation and the card, then per round one `model_plan_rejected` for a
   model reply the gate rejects (naming its re-derived codes, never its text) and
-  one `evidence_discarded` per step a cap kept out of the answer;
+  one `evidence_discarded` per step a cap kept out of the answer, and one
+  `evidence_prefix_omitted` naming each prefix-admitted step and its omitted count;
+- each compact prefix witness agrees with visible whole records, ranks, per-list counts,
+  anchors and omission warning; its charged bytes equal the step's charge and satisfy
+  `charged <= remaining < charged + next` over the running budget;
 - the coverage's source outcomes are `aggregate_source_outcomes` over the admitted
   steps' outcomes (none in an `invalid_evidence` run) and the answer, and its needs
   are `judge_needs` over the same steps and the answer;
@@ -772,7 +797,11 @@ the controller runs at seal, as the controller does.
 
 - **Validator** (`validate_knowledge_evidence_set`): the set's parts agree with one
   another and with the deployment's evidence catalog, FiGHT pin and source
-  capabilities. It checks structure and served content, never a response.
+  capabilities. For prefix admissions it checks whole visible records and anchors against
+  the catalog, visible search ranks, the deterministic per-list cut order, counts,
+  omission and topic warnings, charge agreement and the remaining-budget inequality.
+  When every search candidate survives with its per-call metadata, it reconstructs the
+  admitted response and checks its exact canonical charge and retained-prefix hash.
 - **Decision-path audit** (`audit_decision_path`): every decision the set records
   (interpretation, round plans over the recorded model replies, assess, refine,
   stop, breach, backend requests, decision warnings and coverage outcomes) is the
@@ -782,7 +811,9 @@ the controller runs at seal, as the controller does.
   controller produces now from the sources, given the recorded model replies and
   the recorded deadline point: every step summary and admission, the stop, status,
   breach, rounds, transitions, warnings, coverage, answer, claims and evidence. It
-  says `ReplayTimedOut` instead when it runs out of its own time.
+  recomputes prefix admissions from complete source responses, checking the original
+  digest, exact maximal prefix, canonical admitted byte charge and next-result increment.
+  It says `ReplayTimedOut` instead when it runs out of its own time.
 
 Run together, the three tie a set's decisions to the sources' responses. The
 service runs the validator and the audit on every set it seals. Replay needs the
@@ -795,8 +826,23 @@ a FiGHT topic step whose failed response's hash is kept while its summary and th
 answer are rewritten to the five catalog techniques; and a 2,513-byte admitted
 response recorded as 200,001 bytes discarded over the byte cap, with the
 `budget_exhausted` stop that follows. A response's size is the length of its
-canonical JSON. The set does not carry the response, so no check without it can
-bound the recorded size beyond the cap.
+canonical JSON. A set does not carry complete response bodies, and answer assembly can
+merge or drop admitted candidates, so the compact witness alone cannot establish the exact
+canonical charge after per-call metadata is lost, or the omitted count or next-result
+increment, if a holder rewrites consistent figures together. Replay proves those figures against complete source responses.
+
+For prefix forgeries, the checks have these boundaries:
+
+| Forgery | Validator and decision-path audit | Replay |
+|---|---|---|
+| Too short | Rejects inconsistent counts, content or a next entry that still fits according to the witness | Recomputes the maximal prefix, including a consistently rewritten witness |
+| Too long | Rejects a charge over the remaining cap or an improper/full cut | Recomputes the maximal prefix |
+| Partial record or anchor | Rejects a mismatch with the catalog | Compares the complete returned content |
+| Wrong counts | Rejects counts inconsistent with IDs, list order, or warnings | Recomputes kept and omitted counts, including a coordinated count/warning forgery |
+| Missing warning | Rejects the absent or incorrect step omission warning | Reproduces warnings |
+| Wrong charged bytes | Rejects charge disagreement, broken fit/budget arithmetic, or a canonical size mismatch for a reconstructible search | Recomputes canonical prefix bytes even when merging or filtering removed per-call metadata |
+| Wrong next-result bytes | Rejects a figure that breaks the fit inequality | Recomputes the exact increment, including a different figure that still satisfies the inequality |
+| Wrong original digest | Checks digest format at parsing | Compares the complete response's sealed digest |
 
 ## Golden trajectories
 

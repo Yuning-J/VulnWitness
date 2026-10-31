@@ -15,7 +15,6 @@ from cve_kgrag.application.investigation_tools import (
     ToolExecution,
     build_search_execution,
     build_tool_step,
-    measure_context_bytes,
 )
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.composition import build_topic_context_service
@@ -36,6 +35,7 @@ from cve_kgrag.domain.planning import (
     TopicContextCall,
     compute_call_key,
 )
+from cve_kgrag.domain.result_prefix import measure_response_bytes
 from cve_kgrag.domain.search import SearchFilters, SearchRequest
 from cve_kgrag.domain.taxonomy import KnowledgeScope, ResultStatus
 from cve_kgrag.domain.topic import ProtocolTopic
@@ -118,7 +118,7 @@ def build_admitted_topic_step(
             None,
             topic_response,
             (),
-            measure_context_bytes(topic_response),
+            measure_response_bytes(topic_response),
             topic_exploration.omitted_cve_ids,
         ),
     )

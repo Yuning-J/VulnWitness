@@ -25,6 +25,11 @@ A run has two external inputs besides its sources, and replay puts both back:
   timed-out or late planner, a step that never started, a timed-out call or a late
   result there, and nowhere else.
 
+Prefix replay executes each tool against the deployment's complete source responses,
+before the controller applies context admission. It recomputes the original digest,
+exact counts, canonical admitted charge and next-result increment. The compact witness
+in the evidence set never supplies or replaces a source response.
+
 The replay is itself bounded by the recorded request's ``max_wall_time_seconds``,
 measured on the deployment's monotonic clock: every tool call runs under the
 deployment's call runner, which gives control back when that time is up. A replay that

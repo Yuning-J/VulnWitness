@@ -55,8 +55,9 @@ Beyond the anchor, record, threat-context and claim rules of ``validation``:
 - the budget usage matches the steps and never exceeds the request's caps, and
   each step is charged one tool call per backend request it records, every one
   within ``max_results_per_call``; a CVE tool's one request is its call's query;
-  a step is discarded over ``max_context_bytes`` exactly when its bytes would push
-  the admitted bytes past the cap, and only before the deadline;
+  an oversized response admits its longest whole-result prefix when the first entry
+  fits, with consistent counts, warning, charge and next-result fit arithmetic;
+  otherwise the step is discarded over ``max_context_bytes``, before the deadline;
 - ``coverage.refinement_applied`` says whether a round-2 step ran;
 - a step that ran into the deadline (timed out, or returned at or after it)
   finished at or after the deadline, and it, a planner that ran into the deadline
@@ -98,6 +99,7 @@ from cve_kgrag.domain.evidence import Claim, EvidenceAnchor
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.evidence_needs import has_unmet_need_beyond_affectedness
 from cve_kgrag.domain.investigation import (
+    ADMITTED_ADMISSIONS,
     ALLOWED_TRANSITIONS,
     CAPABILITY_STATES_BY_SUBJECT,
     CAPABILITY_SUBJECTS,
@@ -163,6 +165,7 @@ from cve_kgrag.domain.planning import (
     is_tool_permitted,
     list_tool_sources,
 )
+from cve_kgrag.domain.prefix_validation import find_prefix_violations
 from cve_kgrag.domain.search import (
     SEMANTIC_UNAVAILABLE_FAILURES,
     Candidate,
@@ -250,7 +253,7 @@ def list_cve_candidates(evidence_set: KnowledgeEvidenceSet) -> list[Candidate]:
 def list_admitted_answer_ids(evidence_set: KnowledgeEvidenceSet) -> set[str]:
     admitted_answer_ids: set[str] = set()
     for step in evidence_set.trajectory.steps:
-        if step.admission is StepAdmission.ADMITTED:
+        if step.admission in ADMITTED_ADMISSIONS:
             admitted_answer_ids.update(step.answer_ids)
     return admitted_answer_ids
 
@@ -420,7 +423,7 @@ def find_citation_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
 
     admitted_step_indices: set[int] = set()
     for step in evidence_set.trajectory.steps:
-        if step.admission is StepAdmission.ADMITTED:
+        if step.admission in ADMITTED_ADMISSIONS:
             admitted_step_indices.add(step.step_index)
     for investigation_candidate in list_investigation_candidates(evidence_set):
         for step_index in investigation_candidate.found_by_steps:
@@ -457,7 +460,7 @@ def find_step_evidence_violations(
                     f"step {step.step_index} answer_ids[{answer_index}]: returned without a "
                     "catalogued anchor for it"
                 )
-        if step.admission is StepAdmission.ADMITTED:
+        if step.admission in ADMITTED_ADMISSIONS:
             admitted_evidence_ids.update(step.evidence_ids)
     for anchor in evidence_set.evidence:
         if anchor.evidence_id not in admitted_evidence_ids:
@@ -497,8 +500,11 @@ def find_search_warning_violations(step: ToolStep, evidence_catalog: EvidenceCat
     # The limit a CVE tool's one search sent, as its warning names it, when the step
     # returned that many CVEs.
     reached_limits: list[str] = []
+    returned_count = len(step.answer_ids)
+    if step.prefix_admission is not None:
+        returned_count += sum(count.omitted for count in step.prefix_admission.counts)
     for backend_request in step.backend_requests:
-        if len(step.answer_ids) == backend_request.limit:
+        if returned_count == backend_request.limit:
             reached_limits.append(str(backend_request.limit))
     unknown_ids: list[str] = []
     for looked_up_id in looked_up_ids:
@@ -620,7 +626,7 @@ def find_step_notice_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]
     adopted_steps: list[ToolStep] = []
     if evidence_set.stop_reason is not StopReason.INVALID_EVIDENCE:
         for step in evidence_set.trajectory.steps:
-            if step.admission is StepAdmission.ADMITTED:
+            if step.admission in ADMITTED_ADMISSIONS:
                 adopted_steps.append(step)
     expected_notices = list_step_notices(adopted_steps, evidence_set.request)
     recorded_notices: list[InvestigationWarning] = []
@@ -754,7 +760,7 @@ def find_trajectory_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
                 f"step {step.step_index} runs after step {ending_step_index}, which was not "
                 "admitted"
             )
-        if ending_step_index is None and step.admission is not StepAdmission.ADMITTED:
+        if ending_step_index is None and step.admission not in ADMITTED_ADMISSIONS:
             ending_step_index = step.step_index
         if step.round_number < previous_round:
             violations.append(f"step {step.step_index} goes back to round {step.round_number}")
@@ -804,7 +810,7 @@ def find_round_step_violations(
         )
     if len(step_calls) < len(accepted_plan):
         stopped_on_step = bool(round_steps) and (
-            round_steps[-1].admission is not StepAdmission.ADMITTED
+            round_steps[-1].admission not in ADMITTED_ADMISSIONS
         )
         if not stopped_on_step and not is_wall_time_breach:
             violations.append(
@@ -1167,12 +1173,12 @@ def find_fight_step_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
                     f"step {step.step_index} searches FiGHT directly, which the interpretation "
                     "does not allow"
                 )
-            elif step.admission is StepAdmission.ADMITTED:
+            elif step.admission in ADMITTED_ADMISSIONS:
                 permitted_fight_steps.append(step)
         if isinstance(step.call, TopicContextCall):
             if not is_topic_resolved:
                 violations.append(f"step {step.step_index} explores a topic, but no topic resolved")
-            elif step.admission is StepAdmission.ADMITTED:
+            elif step.admission in ADMITTED_ADMISSIONS:
                 permitted_fight_steps.append(step)
     if len(fight_step_indices) > 1:
         violations.append(f"steps {fight_step_indices} each search FiGHT; a run holds one")
@@ -1262,15 +1268,15 @@ def find_budget_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
         for source in step.sources:
             if source not in consulted_sources:
                 consulted_sources.append(source)
-        # A step is discarded over the byte cap exactly when it would push the admitted
-        # bytes past it; an admitted step that would is caught by the usage checks.
+        # A discarded response exceeds the remaining cap; a prefix's charged bytes
+        # fit it. Replay proves maximality from the complete source response.
         fits_byte_cap = admitted_context_bytes + step.context_bytes <= budget.max_context_bytes
         if step.admission is StepAdmission.DISCARDED_OVER_CONTEXT_BUDGET and fits_byte_cap:
             violations.append(
                 f"step {step.step_index} was discarded over max_context_bytes, but its "
                 f"{step.context_bytes} bytes fit beside the {admitted_context_bytes} admitted"
             )
-        if step.admission is StepAdmission.ADMITTED:
+        if step.admission in ADMITTED_ADMISSIONS:
             admitted_context_bytes += step.context_bytes
     if usage.tool_calls != charged_tool_calls:
         violations.append(
@@ -1304,7 +1310,7 @@ def find_budget_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     # time that falls on it to whole milliseconds passes.
     for step, step_timing in zip(steps, evidence_set.timings.steps, strict=True):
         finished_ms = step_timing.started_offset_ms + step_timing.duration_ms
-        if step.admission is StepAdmission.ADMITTED and finished_ms > deadline_ms:
+        if step.admission in ADMITTED_ADMISSIONS and finished_ms > deadline_ms:
             violations.append(f"step {step.step_index} was admitted after the deadline")
         # The deadline is checked before the byte cap, so a step past it is never weighed.
         if step.admission is StepAdmission.DISCARDED_OVER_CONTEXT_BUDGET and (
@@ -1620,6 +1626,10 @@ def find_step_topic_warning_violations(
             listed_technique_count += 1
         else:
             listed_candidate_count += 1
+    if step.prefix_admission is not None:
+        for count in step.prefix_admission.counts:
+            if count.name in ("implementation_candidates", "excluded_implementation_candidates"):
+                listed_candidate_count += count.omitted
     returned_items: list[ThreatContextItem] = []
     for item in protocol_context:
         if item.technique_id in step.answer_ids:
@@ -1640,10 +1650,16 @@ def find_step_topic_warning_violations(
 
 
 def read_topic_warning_count(step: ToolStep, code: TopicContextWarningCode) -> int:
-    """The count a step's topic warning states, 0 without one or with a malformed one."""
+    """The original retrieval's cut count, excluding context-budget omissions."""
     for warning in step.topic_warnings:
         if warning.code is code:
-            return read_count_subject(warning.subject) or 0
+            cut_count = read_count_subject(warning.subject) or 0
+            if step.prefix_admission is not None:
+                for count in step.prefix_admission.counts:
+                    is_technique = count.name == "protocol_context"
+                    if (code is TopicContextWarningCode.PROTOCOL_CONTEXT_TRUNCATED) == is_technique:
+                        cut_count -= count.omitted
+            return cut_count
     return 0
 
 
@@ -1668,7 +1684,7 @@ def find_truncation_violations(
                     step, evidence_set.protocol_context, pinned_fight_snapshot
                 )
             )
-        if is_answer_adopted and step.admission is StepAdmission.ADMITTED:
+        if is_answer_adopted and step.admission in ADMITTED_ADMISSIONS:
             adopted_steps.append(step)
     truncation_counts: list[int] = []
     for warning in evidence_set.warnings:
@@ -1697,7 +1713,8 @@ def find_truncation_violations(
         violations.append("answer_truncated counts fewer items than the adopted steps left out")
     listed_cve_count = len(list_investigation_candidates(evidence_set))
     is_under_cap = listed_cve_count < evidence_set.request.budget.max_results_per_call
-    if is_under_cap and truncated_count != unlisted_technique_count:
+    has_prefix = any(step.admission is StepAdmission.ADMITTED_PREFIX for step in adopted_steps)
+    if is_under_cap and not has_prefix and truncated_count != unlisted_technique_count:
         violations.append(
             "an answer listing fewer CVEs than the cap truncates only the techniques the step "
             "that searched FiGHT left out"
@@ -1737,6 +1754,7 @@ def validate_knowledge_evidence_set(
     violations.extend(find_interpretation_fight_violations(evidence_set.interpretation))
     violations.extend(find_fight_step_violations(evidence_set))
     violations.extend(find_budget_violations(evidence_set))
+    violations.extend(find_prefix_violations(evidence_set, evidence_catalog))
     violations.extend(find_deadline_violations(evidence_set))
     violations.extend(find_investigation_fight_violations(evidence_set, pinned_fight_snapshot))
     violations.extend(find_truncation_violations(evidence_set, pinned_fight_snapshot))

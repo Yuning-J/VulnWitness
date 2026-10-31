@@ -28,6 +28,7 @@ from cve_kgrag.domain.evidence_needs import (
     has_unmet_need_beyond_affectedness,
 )
 from cve_kgrag.domain.investigation import (
+    ADMITTED_ADMISSIONS,
     FIRST_REJECTION_BY_OUTCOME,
     DecisionBasis,
     EvidenceNeed,
@@ -147,7 +148,7 @@ def decide_assessment(
         request.scope, request.filters, interpretation.affectedness_mentions
     )
     for step in steps:
-        if step.admission is not StepAdmission.ADMITTED:
+        if step.admission not in ADMITTED_ADMISSIONS:
             continue
         for step_outcome in step.source_outcomes:
             is_answer_source = step_outcome.source in answer_sources

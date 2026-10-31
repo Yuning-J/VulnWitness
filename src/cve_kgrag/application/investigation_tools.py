@@ -9,7 +9,7 @@ built from the same requests the tools run. A response that fails its own eviden
 validation is recorded as an integrity failure, never used as partial data.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, assert_never
 
 from cve_kgrag.application.investigation_policy import count_tool_calls, list_fight_terms
@@ -23,7 +23,6 @@ from cve_kgrag.application.topic_context import (
     list_topic_terms,
 )
 from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.hashing import canonical_json_bytes
 from cve_kgrag.domain.investigation import (
     BackendRequest,
     CveBackendRequest,
@@ -43,6 +42,12 @@ from cve_kgrag.domain.planning import (
     compute_call_key,
     format_cve_tool_query,
     list_tool_sources,
+)
+from cve_kgrag.domain.result_prefix import (
+    PrefixAdmission,
+    build_prefix_admission,
+    find_longest_prefix,
+    measure_response_bytes,
 )
 from cve_kgrag.domain.search import SearchRequest, SearchResponse, SearchWarning
 from cve_kgrag.domain.taxonomy import ResultStatus, RetrievalChannel
@@ -71,6 +76,7 @@ class ToolExecution:
     integrity_violations: tuple[str, ...]
     context_bytes: int
     omitted_topic_cve_ids: tuple[str, ...] = ()
+    prefix_admission: PrefixAdmission | None = None
 
     def result_sha256(self) -> str | None:
         if self.search_response is not None:
@@ -213,7 +219,7 @@ def build_fight_request(request: InvestigationRequest) -> TopicContextRequest:
 
 
 def build_search_execution(search_response: SearchResponse) -> ToolExecution:
-    return ToolExecution(search_response, None, (), measure_context_bytes(search_response))
+    return ToolExecution(search_response, None, (), measure_response_bytes(search_response))
 
 
 def build_topic_execution(
@@ -223,7 +229,7 @@ def build_topic_execution(
         search_response=None,
         topic_response=topic_response,
         integrity_violations=(),
-        context_bytes=measure_context_bytes(topic_response),
+        context_bytes=measure_response_bytes(topic_response),
         omitted_topic_cve_ids=omitted_cve_ids,
     )
 
@@ -232,10 +238,6 @@ def record_cve_request(search_request: SearchRequest) -> CveBackendRequest:
     return CveBackendRequest(
         source=KnowledgeSource.CVE_SEARCH, query=search_request.query, limit=search_request.limit
     )
-
-
-def measure_context_bytes(response: SearchResponse | TopicContextResponse) -> int:
-    return len(canonical_json_bytes(response.model_dump(mode="json")))
 
 
 def describe_search_outcome(search_response: SearchResponse) -> SourceOutcome:
@@ -291,7 +293,7 @@ def issue_step(
 def build_tool_step(
     issued_step: IssuedStep, admission: StepAdmission, execution: ToolExecution
 ) -> ToolStep:
-    """The typed record of a step; it keeps IDs, codes and hashes, never source text."""
+    """Record admitted observations and the compact witness for a prefix."""
     status: ResultStatus | None = None
     channels_executed: tuple[RetrievalChannel, ...] = ()
     source_outcomes: tuple[SourceOutcome, ...] = ()
@@ -343,4 +345,24 @@ def build_tool_step(
         evidence_ids=tuple(evidence_ids),
         result_sha256=execution.result_sha256(),
         context_bytes=execution.context_bytes,
+        prefix_admission=execution.prefix_admission,
+    )
+
+
+def retain_context_prefix(execution: ToolExecution, remaining_bytes: int) -> ToolExecution:
+    """Retain a whole-result prefix only when the complete response exceeds the cap."""
+    if execution.context_bytes <= remaining_bytes:
+        return execution
+    original_response = execution.search_response or execution.topic_response
+    if original_response is None:
+        return execution
+    prefix = find_longest_prefix(original_response, remaining_bytes)
+    if prefix is None:
+        return execution
+    return replace(
+        execution,
+        search_response=prefix if isinstance(prefix, SearchResponse) else None,
+        topic_response=prefix if isinstance(prefix, TopicContextResponse) else None,
+        context_bytes=measure_response_bytes(prefix),
+        prefix_admission=build_prefix_admission(original_response, prefix),
     )

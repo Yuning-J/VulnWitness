@@ -35,6 +35,7 @@ from cve_kgrag.domain.planning import (
     ToolName,
     format_planner_version,
 )
+from cve_kgrag.domain.result_prefix import PrefixAdmission
 from cve_kgrag.domain.search import (
     MAX_QUERY_CHARS,
     MAX_RESULTS_PER_CALL,
@@ -235,16 +236,21 @@ POLICY_STEP_TOOL_AND_ROUND: dict[StepReason, tuple[ToolName, int]] = {
 class StepAdmission(StrEnum):
     """Whether a step's result entered the answer.
 
+    ``admitted_prefix``: the longest whole-result prefix fits the remaining byte cap.
     ``timed_out``: the call had not returned at the deadline and was abandoned, so the
     step has no response; ``discarded_after_deadline``: it returned, but at or after
     the deadline.
     """
 
     ADMITTED = "admitted"
+    ADMITTED_PREFIX = "admitted_prefix"
     DISCARDED_AFTER_DEADLINE = "discarded_after_deadline"
     DISCARDED_OVER_CONTEXT_BUDGET = "discarded_over_context_budget"
     REJECTED_INVALID_EVIDENCE = "rejected_invalid_evidence"
     TIMED_OUT = "timed_out"
+
+
+ADMITTED_ADMISSIONS = frozenset({StepAdmission.ADMITTED, StepAdmission.ADMITTED_PREFIX})
 
 
 # Admissions of a step that has no tool response to record.
@@ -276,7 +282,7 @@ def describe_step_payload_shape() -> JsonDict:
     }
     for field_name in RESPONSE_LIST_FIELDS:
         empty_payload_properties[field_name] = {"maxItems": 0}
-    return {
+    response_shape: JsonDict = {
         "if": {"properties": {"admission": {"enum": responseless_admissions}}},
         "then": {"properties": empty_payload_properties},
         "else": {
@@ -286,6 +292,19 @@ def describe_step_payload_shape() -> JsonDict:
                 "result_sha256": {"type": "string"},
             },
         },
+    }
+    return {
+        "allOf": [
+            response_shape,
+            {
+                "if": {"properties": {"admission": {"const": "admitted_prefix"}}},
+                "then": {
+                    "required": ["prefix_admission"],
+                    "properties": {"prefix_admission": {"not": {"type": "null"}}},
+                },
+                "else": {"properties": {"prefix_admission": {"type": "null"}}},
+            },
+        ]
     }
 
 
@@ -310,7 +329,7 @@ BackendRequest = Annotated[CveBackendRequest | FightBackendRequest, Field(discri
 
 
 class ToolStep(ContractModel):
-    """One executed tool call, recorded with typed fields only, never source text."""
+    """One executed call; a prefix admission records a compact byte-and-count witness."""
 
     model_config = ConfigDict(json_schema_extra=describe_step_payload_shape())
 
@@ -348,14 +367,25 @@ class ToolStep(ContractModel):
         default=None,
         pattern=SHA256_PATTERN,
         description=(
-            "The tool response's own sealed hash; null when its evidence was invalid or the "
-            "call timed out."
+            "The response or retained prefix's sealed hash; null when its evidence was invalid "
+            "or the call timed out."
         ),
     )
-    context_bytes: int = Field(ge=0)
+    context_bytes: int = Field(
+        ge=0,
+        description="Canonical JSON bytes of the admitted response, or full discarded response.",
+    )
+    prefix_admission: PrefixAdmission | None = Field(
+        default=None,
+        description=(
+            "For admitted_prefix: original digest, per-list counts, charged and next-result bytes."
+        ),
+    )
 
     @model_validator(mode="after")
     def check_payload_matches_admission(self) -> Self:
+        if (self.admission is StepAdmission.ADMITTED_PREFIX) != (self.prefix_admission is not None):
+            raise ValueError("exactly an admitted_prefix step records prefix_admission")
         is_responseless = self.admission in RESPONSELESS_ADMISSIONS
         has_payload = bool(
             self.status is not None
@@ -974,6 +1004,7 @@ class InvestigationWarningCode(StrEnum):
     APPLICABILITY_UNKNOWN = "applicability_unknown"
     MODEL_PLAN_REJECTED = "model_plan_rejected"
     EVIDENCE_DISCARDED = "evidence_discarded"
+    EVIDENCE_PREFIX_OMITTED = "evidence_prefix_omitted"
     UNRELATED_CANDIDATES_DROPPED = "unrelated_candidates_dropped"
     ANSWER_TRUNCATED = "answer_truncated"
     RESULT_LIMIT_REACHED = "result_limit_reached"
@@ -986,6 +1017,9 @@ class InvestigationWarning(ContractModel):
     the caller named always kept), those the topic step kept and left out at its limit
     included, less the CVEs the answer lists, plus the techniques the step that searched
     FiGHT (a topic step or a direct FiGHT search) matched and did not list.
+    ``evidence_prefix_omitted`` names a step and the count its context budget omitted;
+    topic truncation warnings include admission omissions, and search-limit warnings
+    describe the original retrieval. ``answer_truncated`` excludes context-budget omissions.
     ``unrelated_candidates_dropped`` counts search-step candidates the
     relevance rule removed, never one ``answer_truncated`` counts.
     ``result_limit_reached`` names ``max_results_per_call`` once when a CVE search of an
@@ -997,6 +1031,15 @@ class InvestigationWarning(ContractModel):
 
     code: InvestigationWarningCode
     subject: str
+
+
+def build_prefix_omitted_warning(step_index: int, prefix: PrefixAdmission) -> InvestigationWarning:
+    """Name the step and the exact number of returned entries its byte prefix omitted."""
+    omitted_count = sum(count.omitted for count in prefix.counts)
+    return InvestigationWarning(
+        code=InvestigationWarningCode.EVIDENCE_PREFIX_OMITTED,
+        subject=f"step {step_index}: {omitted_count} results omitted",
+    )
 
 
 def reaches_result_limit(step: ToolStep) -> bool:

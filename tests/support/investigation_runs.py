@@ -116,14 +116,13 @@ def run_exact_id(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
 
 
 def run_over_the_byte_cap(fixture_bundle: FixtureBundle) -> KnowledgeEvidenceSet:
-    """``5G-AKA`` under a byte cap one byte below its one response: the step is discarded
+    """``5G-AKA`` under a byte cap below its first whole result: the step is discarded
     and the run stops ``budget_exhausted`` on a ``context_bytes`` breach."""
-    step_bytes = run_five_g_aka(fixture_bundle).trajectory.steps[0].context_bytes
     return investigate(
         fixture_bundle,
         "5G-AKA",
         "implementation_only",
-        budget={"max_context_bytes": step_bytes - 1},
+        budget={"max_context_bytes": 1024},
     )
 
 
@@ -380,14 +379,13 @@ def run_fight_direct_search_fight_failing(fixture_bundle: FixtureBundle) -> Know
 def run_fight_direct_search_over_the_byte_cap(
     fixture_bundle: FixtureBundle,
 ) -> KnowledgeEvidenceSet:
-    """The protocol-only direct FiGHT search under a byte cap one byte below its response:
-    the step is discarded, so the protocol need is ``not_evaluated``."""
-    step_bytes = run_fight_direct_search(fixture_bundle).trajectory.steps[0].context_bytes
+    """The protocol-only direct FiGHT search under a byte cap below its first whole
+    result: the step is discarded, so the protocol need is ``not_evaluated``."""
     return investigate(
         fixture_bundle,
         FIGHT_FREE_TEXT_QUERY,
         "protocol_context_only",
-        budget={"max_context_bytes": step_bytes - 1},
+        budget={"max_context_bytes": 1024},
     )
 
 

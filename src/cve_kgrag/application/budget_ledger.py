@@ -49,8 +49,10 @@ class BudgetLedger:
             if source not in self.sources_used:
                 self.sources_used.append(source)
 
-    def decide_admission(self, context_bytes: int, finished_seconds: float) -> StepAdmission:
-        """Admit a result that finished in time and fits the byte cap; a discard is a breach.
+    def decide_admission(
+        self, context_bytes: int, finished_seconds: float, *, is_prefix: bool = False
+    ) -> StepAdmission:
+        """Charge the admitted response bytes; a whole-result prefix is not a breach.
 
         ``finished_seconds`` is the elapsed time the step's own timing records, so the
         admission and the recorded finish time cannot disagree.
@@ -62,7 +64,7 @@ class BudgetLedger:
             self.record_breach(BudgetBreach.CONTEXT_BYTES)
             return StepAdmission.DISCARDED_OVER_CONTEXT_BUDGET
         self.context_bytes_admitted += context_bytes
-        return StepAdmission.ADMITTED
+        return StepAdmission.ADMITTED_PREFIX if is_prefix else StepAdmission.ADMITTED
 
     def record_breach(self, breach: BudgetBreach) -> None:
         """The first breach stops the run, so it is the one reported."""

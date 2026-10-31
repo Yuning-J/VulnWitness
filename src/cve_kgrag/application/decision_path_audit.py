@@ -43,7 +43,11 @@ record to say exactly that:
 - the warnings the interpretation and the decisions give
   (``list_interpretation_warnings``, one ``model_plan_rejected`` per model reply the
   gate rejects, naming its re-derived codes, one ``evidence_discarded`` per step a cap
-  kept out) are exactly the ones recorded, in order;
+  kept out, and one ``evidence_prefix_omitted`` per prefix-admitted step) are exactly
+  the ones recorded, in order;
+- each compact prefix witness agrees with whole visible records, ranks, counts and
+  warnings, charges the recorded admitted bytes and satisfies the next-result fit
+  inequality over the remaining budget;
 - the coverage's source outcomes are ``aggregate_source_outcomes`` over the admitted
   steps' outcomes, the answer and the set's ``affectedness`` capability detail, and its
   needs are ``judge_needs`` over the admitted steps and the answer;
@@ -60,11 +64,12 @@ per backend request, every answer item returned by an admitted step, and a well-
 list of capabilities, whose unavailable ``affectedness`` names a detail.
 
 Limits. The audit trusts the observations a set records: each step's status,
-outcomes, answer IDs, bytes and admission, and the answer assembled from them. It
-proves the decisions follow from them; replay (``replay_evidence_set``) runs the
+outcomes, answer IDs, bytes and admission, and the answer assembled from them. For
+prefix steps it checks the compact witness's internal consistency. It proves the
+decisions follow from those observations; replay (``replay_evidence_set``) runs the
 controller again against the sources and proves the observations, the decisions taken
 on them and the ``unrelated_candidates_dropped`` and ``answer_truncated`` counts,
-which come from the responses the set does not carry, are what the sources give
+which come from the tool responses, are what the sources give
 now. The audit proves the set consistent with itself, not that the model sent the
 reply it records: whoever reseals the set can rewrite the reply, its hash, the plan
 and the steps together, and only an authenticated seal over the whole set could
@@ -118,6 +123,7 @@ from cve_kgrag.domain.budget import BudgetBreach
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.investigation import (
+    ADMITTED_ADMISSIONS,
     DecisionBasis,
     EvidenceNeed,
     Interpretation,
@@ -130,6 +136,7 @@ from cve_kgrag.domain.investigation import (
     StepAdmission,
     StopReason,
     ToolStep,
+    build_prefix_omitted_warning,
     find_affectedness_detail,
     list_answer_sources,
 )
@@ -144,6 +151,7 @@ from cve_kgrag.domain.planning import (
     PlanRejection,
     TopicContextCall,
 )
+from cve_kgrag.domain.prefix_validation import find_prefix_violations
 from cve_kgrag.domain.topic import ProtocolTopic
 from cve_kgrag.domain.validation import EvidenceValidationError
 from cve_kgrag.topics.registry import TopicRegistry
@@ -227,7 +235,7 @@ def find_retrieval_breach(
             return BudgetBreach.CONTEXT_BYTES
     if len(round_steps) == len(round_record.accepted_plan):
         return None
-    stopped_on_step = bool(round_steps) and round_steps[-1].admission is not StepAdmission.ADMITTED
+    stopped_on_step = bool(round_steps) and round_steps[-1].admission not in ADMITTED_ADMISSIONS
     if stopped_on_step:
         return None
     return BudgetBreach.WALL_TIME
@@ -239,7 +247,7 @@ def has_round_one_answer(evidence_set: KnowledgeEvidenceSet) -> bool:
     round_one_step_indices: set[int] = set()
     round_one_answer_ids: set[str] = set()
     for step in evidence_set.trajectory.steps:
-        if step.round_number == 1 and step.admission is StepAdmission.ADMITTED:
+        if step.round_number == 1 and step.admission in ADMITTED_ADMISSIONS:
             round_one_step_indices.add(step.step_index)
             round_one_answer_ids.update(step.answer_ids)
     for investigation_candidate in evidence_set.implementation_candidates:
@@ -360,6 +368,10 @@ def derive_round(
     for step in round_steps:
         if step.admission in CAP_BREACH_ADMISSIONS:
             path.warnings.append(build_evidence_discarded_warning(step.step_index, step.admission))
+        if step.prefix_admission is not None:
+            path.warnings.append(
+                build_prefix_omitted_warning(step.step_index, step.prefix_admission)
+            )
     path.move(from_state, InvestigationState.RETRIEVE, DecisionBasis.PLAN_ACCEPTED)
     path.move(InvestigationState.RETRIEVE, InvestigationState.ASSESS, DecisionBasis.STEPS_FINISHED)
 
@@ -551,7 +563,7 @@ def find_coverage_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
     admitted_steps: list[ToolStep] = []
     if evidence_set.stop_reason is not StopReason.INVALID_EVIDENCE:
         for step in steps:
-            if step.admission is StepAdmission.ADMITTED:
+            if step.admission in ADMITTED_ADMISSIONS:
                 admitted_steps.append(step)
     source_outcomes = aggregate_source_outcomes(
         list_answer_sources(
@@ -599,6 +611,7 @@ def find_decision_path_violations(
     evidence_catalog: EvidenceCatalog,
 ) -> list[str]:
     violations = find_configuration_violations(evidence_set)
+    violations.extend(find_prefix_violations(evidence_set, evidence_catalog))
     interpretation = interpret_request(evidence_set.request, topic_registry, evidence_catalog)
     differing_fields = list_interpretation_differences(evidence_set.interpretation, interpretation)
     if differing_fields:

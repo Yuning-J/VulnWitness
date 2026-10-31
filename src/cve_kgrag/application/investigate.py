@@ -63,6 +63,7 @@ from cve_kgrag.application.investigation_tools import (
     ABANDONED_CALL_EXECUTION,
     build_tool_step,
     issue_step,
+    retain_context_prefix,
 )
 from cve_kgrag.application.investigation_warnings import (
     build_evidence_discarded_warning,
@@ -79,6 +80,7 @@ from cve_kgrag.domain.budget import PLANNER_SHARE_OF_WALL_TIME, BudgetBreach
 from cve_kgrag.domain.evidence_needs import judge_needs
 from cve_kgrag.domain.hashing import UNSEALED_SHA256
 from cve_kgrag.domain.investigation import (
+    ADMITTED_ADMISSIONS,
     DecisionBasis,
     InvestigationRequest,
     InvestigationState,
@@ -92,6 +94,7 @@ from cve_kgrag.domain.investigation import (
     StopReason,
     ToolStep,
     Trajectory,
+    build_prefix_omitted_warning,
     derive_investigation_id,
     find_affectedness_detail,
 )
@@ -511,7 +514,15 @@ class InvestigationService:
                 admission = StepAdmission.REJECTED_INVALID_EVIDENCE
             else:
                 execution = call_outcome
-                admission = ledger.decide_admission(execution.context_bytes, finished_seconds)
+                if not ledger.is_past_deadline(finished_seconds):
+                    execution = retain_context_prefix(
+                        execution, ledger.budget.max_context_bytes - ledger.context_bytes_admitted
+                    )
+                admission = ledger.decide_admission(
+                    execution.context_bytes,
+                    finished_seconds,
+                    is_prefix=execution.prefix_admission is not None,
+                )
             run.steps.append(build_tool_step(issued_step, admission, execution))
             run.executions.append(execution)
             started_offset_ms = to_milliseconds(started_seconds)
@@ -527,7 +538,11 @@ class InvestigationService:
                 run.warnings.append(
                     build_evidence_discarded_warning(issued_step.step_index, admission)
                 )
-            if admission is not StepAdmission.ADMITTED:
+            if execution.prefix_admission is not None:
+                run.warnings.append(
+                    build_prefix_omitted_warning(issued_step.step_index, execution.prefix_admission)
+                )
+            if admission not in ADMITTED_ADMISSIONS:
                 break
         return executed_step_indices
 

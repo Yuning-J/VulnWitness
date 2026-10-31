@@ -1387,7 +1387,7 @@
     },
     "InvestigationWarning": {
       "additionalProperties": false,
-      "description": "What the run could not do or left out. ``answer_truncated`` counts, each once, the\nitems the adopted steps knew and the answer does not list: the CVEs they kept (a CVE\nthe caller named always kept), those the topic step kept and left out at its limit\nincluded, less the CVEs the answer lists, plus the techniques the step that searched\nFiGHT (a topic step or a direct FiGHT search) matched and did not list.\n``unrelated_candidates_dropped`` counts search-step candidates the\nrelevance rule removed, never one ``answer_truncated`` counts.\n``result_limit_reached`` names ``max_results_per_call`` once when a CVE search of an\nadopted step warned it reached that limit, so more matches may exist; it never counts\nthem. It covers only searches whose CVEs can be in the answer, so a\n``protocol_context_only`` run never raises it. ``term_not_indexed`` names, once each, a\nsearch term an adopted step warned no CVE record (or, for a direct FiGHT search, no\ntechnique) holds; the step's own warning says which source.",
+      "description": "What the run could not do or left out. ``answer_truncated`` counts, each once, the\nitems the adopted steps knew and the answer does not list: the CVEs they kept (a CVE\nthe caller named always kept), those the topic step kept and left out at its limit\nincluded, less the CVEs the answer lists, plus the techniques the step that searched\nFiGHT (a topic step or a direct FiGHT search) matched and did not list.\n``evidence_prefix_omitted`` names a step and the count its context budget omitted;\ntopic truncation warnings include admission omissions, and search-limit warnings\ndescribe the original retrieval. ``answer_truncated`` excludes context-budget omissions.\n``unrelated_candidates_dropped`` counts search-step candidates the\nrelevance rule removed, never one ``answer_truncated`` counts.\n``result_limit_reached`` names ``max_results_per_call`` once when a CVE search of an\nadopted step warned it reached that limit, so more matches may exist; it never counts\nthem. It covers only searches whose CVEs can be in the answer, so a\n``protocol_context_only`` run never raises it. ``term_not_indexed`` names, once each, a\nsearch term an adopted step warned no CVE record (or, for a direct FiGHT search, no\ntechnique) holds; the step's own warning says which source.",
       "properties": {
         "code": {
           "$ref": "#/$defs/InvestigationWarningCode"
@@ -1413,6 +1413,7 @@
         "applicability_unknown",
         "model_plan_rejected",
         "evidence_discarded",
+        "evidence_prefix_omitted",
         "unrelated_candidates_dropped",
         "answer_truncated",
         "result_limit_reached",
@@ -1796,6 +1797,47 @@
       "title": "PlannerOutcome",
       "type": "string"
     },
+    "PrefixAdmission": {
+      "additionalProperties": false,
+      "description": "Compact witness for a whole-result cut; tool bodies belong to replay's sources.\n\nThe digest uses the complete response's result_sha256 convention. The next-result\ncharge is the canonical prefix size with its first omitted entry minus charged_bytes,\nincluding any added anchors and changed truncation warnings.",
+      "properties": {
+        "charged_bytes": {
+          "description": "Canonical JSON size of the admitted response.",
+          "minimum": 1,
+          "title": "Charged Bytes",
+          "type": "integer"
+        },
+        "counts": {
+          "items": {
+            "$ref": "#/$defs/ResultListCount"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Counts",
+          "type": "array"
+        },
+        "next_result_bytes": {
+          "description": "Additional canonical bytes for the first omitted entry, including added anchors and changed warnings: size(extended prefix) minus charged_bytes.",
+          "minimum": 1,
+          "title": "Next Result Bytes",
+          "type": "integer"
+        },
+        "original_result_sha256": {
+          "description": "The complete original response's result_sha256, before context admission.",
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Original Result Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "original_result_sha256",
+        "counts",
+        "charged_bytes",
+        "next_result_bytes"
+      ],
+      "title": "PrefixAdmission",
+      "type": "object"
+    },
     "ProductApplicability": {
       "additionalProperties": false,
       "properties": {
@@ -1956,6 +1998,38 @@
       ],
       "title": "RelevanceTier",
       "type": "string"
+    },
+    "ResultListCount": {
+      "additionalProperties": false,
+      "properties": {
+        "kept": {
+          "minimum": 0,
+          "title": "Kept",
+          "type": "integer"
+        },
+        "name": {
+          "enum": [
+            "candidates",
+            "implementation_candidates",
+            "protocol_context",
+            "excluded_implementation_candidates"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "omitted": {
+          "minimum": 0,
+          "title": "Omitted",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "kept",
+        "omitted"
+      ],
+      "title": "ResultListCount",
+      "type": "object"
     },
     "ResultStatus": {
       "description": "Outcome of a request. An unavailable backend is never reported as ``no_match``.",
@@ -3270,9 +3344,10 @@
       "type": "object"
     },
     "StepAdmission": {
-      "description": "Whether a step's result entered the answer.\n\n``timed_out``: the call had not returned at the deadline and was abandoned, so the\nstep has no response; ``discarded_after_deadline``: it returned, but at or after\nthe deadline.",
+      "description": "Whether a step's result entered the answer.\n\n``admitted_prefix``: the longest whole-result prefix fits the remaining byte cap.\n``timed_out``: the call had not returned at the deadline and was abandoned, so the\nstep has no response; ``discarded_after_deadline``: it returned, but at or after\nthe deadline.",
       "enum": [
         "admitted",
+        "admitted_prefix",
         "discarded_after_deadline",
         "discarded_over_context_budget",
         "rejected_invalid_evidence",
@@ -3449,33 +3524,96 @@
     },
     "ToolStep": {
       "additionalProperties": false,
-      "description": "One executed tool call, recorded with typed fields only, never source text.",
-      "else": {
-        "properties": {
-          "result_sha256": {
-            "type": "string"
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "result_sha256": {
+                "type": "string"
+              },
+              "status": {
+                "not": {
+                  "type": "null"
+                }
+              }
+            },
+            "required": [
+              "status",
+              "result_sha256"
+            ]
           },
-          "status": {
-            "not": {
-              "type": "null"
+          "if": {
+            "properties": {
+              "admission": {
+                "enum": [
+                  "rejected_invalid_evidence",
+                  "timed_out"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "answer_ids": {
+                "maxItems": 0
+              },
+              "channels_executed": {
+                "maxItems": 0
+              },
+              "context_bytes": {
+                "const": 0
+              },
+              "evidence_ids": {
+                "maxItems": 0
+              },
+              "result_sha256": {
+                "type": "null"
+              },
+              "search_warnings": {
+                "maxItems": 0
+              },
+              "source_outcomes": {
+                "maxItems": 0
+              },
+              "status": {
+                "type": "null"
+              },
+              "topic_warnings": {
+                "maxItems": 0
+              }
             }
           }
         },
-        "required": [
-          "status",
-          "result_sha256"
-        ]
-      },
-      "if": {
-        "properties": {
-          "admission": {
-            "enum": [
-              "rejected_invalid_evidence",
-              "timed_out"
+        {
+          "else": {
+            "properties": {
+              "prefix_admission": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "admission": {
+                "const": "admitted_prefix"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prefix_admission": {
+                "not": {
+                  "type": "null"
+                }
+              }
+            },
+            "required": [
+              "prefix_admission"
             ]
           }
         }
-      },
+      ],
+      "description": "One executed call; a prefix admission records a compact byte-and-count witness.",
       "properties": {
         "admission": {
           "$ref": "#/$defs/StepAdmission"
@@ -3558,6 +3696,7 @@
           "type": "integer"
         },
         "context_bytes": {
+          "description": "Canonical JSON bytes of the admitted response, or full discarded response.",
           "minimum": 0,
           "title": "Context Bytes",
           "type": "integer"
@@ -3573,6 +3712,18 @@
         "planned_by": {
           "$ref": "#/$defs/PlannerKind"
         },
+        "prefix_admission": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PrefixAdmission"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For admitted_prefix: original digest, per-list counts, charged and next-result bytes."
+        },
         "reason": {
           "$ref": "#/$defs/StepReason"
         },
@@ -3587,7 +3738,7 @@
             }
           ],
           "default": null,
-          "description": "The tool response's own sealed hash; null when its evidence was invalid or the call timed out.",
+          "description": "The response or retained prefix's sealed hash; null when its evidence was invalid or the call timed out.",
           "title": "Result Sha256"
         },
         "round_number": {
@@ -3662,39 +3813,9 @@
         "answer_ids",
         "evidence_ids",
         "result_sha256",
-        "context_bytes"
+        "context_bytes",
+        "prefix_admission"
       ],
-      "then": {
-        "properties": {
-          "answer_ids": {
-            "maxItems": 0
-          },
-          "channels_executed": {
-            "maxItems": 0
-          },
-          "context_bytes": {
-            "const": 0
-          },
-          "evidence_ids": {
-            "maxItems": 0
-          },
-          "result_sha256": {
-            "type": "null"
-          },
-          "search_warnings": {
-            "maxItems": 0
-          },
-          "source_outcomes": {
-            "maxItems": 0
-          },
-          "status": {
-            "type": "null"
-          },
-          "topic_warnings": {
-            "maxItems": 0
-          }
-        }
-      },
       "title": "ToolStep",
       "type": "object"
     },
@@ -4464,8 +4585,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.35",
-      "default": "2.0.0-dev.35",
+      "const": "2.0.0-dev.36",
+      "default": "2.0.0-dev.36",
       "title": "Schema Version",
       "type": "string"
     },

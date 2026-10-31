@@ -408,9 +408,31 @@ one outcome per source it consulted, a lookup's `unknown_cve_id` and
 step warns `term_not_indexed` (a topic warning) only for a term of its own FiGHT
 search that no technique it returned matched, and a `topic_context` step never
 does, and only a CVE
-search under a semantic request runs the semantic channel. The byte cap is a pure
-decision over recorded sizes, so a step is discarded over `max_context_bytes`
-exactly when it would push the admitted bytes past the cap. A topic step's template
+search under a semantic request runs the semantic channel. An oversized response admits
+its longest prefix of whole results and their referenced anchors as `admitted_prefix`.
+Searches and lookups retain ranked CVE candidates; direct FiGHT searches retain ranked
+techniques. Topic calls interleave implementation candidates, techniques and excluded
+candidates at each rank, in that order, so both answer sections receive a head before
+either receives a tail. The first non-fitting entry ends the prefix. Only when the first
+entry cannot fit is the step discarded over `max_context_bytes`.
+
+A prefix step records a compact `prefix_admission`: the complete response's sealed
+`original_result_sha256`, per-list kept and omitted counts, `charged_bytes`, and
+`next_result_bytes`, the additional canonical bytes the first omitted entry would need.
+Its charged `context_bytes` measures the retained response's canonical JSON, including
+metadata and anchors. Original response bodies are not carried in the set; omitted record
+size does not grow the sealed artifact. Prefix admission is not a
+breach. `evidence_prefix_omitted` names the step and omitted entry count; topic truncation
+warnings include admission omissions, search-limit warnings describe the original retrieval, and
+`answer_truncated` counts retrieval-limit and answer-assembly omissions separately.
+The validator and audit check visible whole records, anchors, ranks, consistent per-list
+counts and warnings, agreement between the witness and step charge, and
+`charged <= remaining < charged + next`. Replay runs the tools against complete source
+responses and reproduces the original digest, exact maximal prefix, canonical charge
+and next-result increment. A consistently rewritten witness can pass the local checks;
+exact response sizes after per-call metadata is lost, and omitted counts, require replay.
+A search whose per-call candidates survive in the answer is reconstructed locally to
+check its canonical charge and retained-prefix hash. A topic step's template
 searches depend on its card, which the set does not carry, so for them the
 validator checks only the count, sources and limits; the decision-path audit
 and replay rebuild them from the registry's card.
@@ -446,7 +468,8 @@ the domain validator does not import; it takes only the set and the registry, so
 
 Both checks trust a step's observations: its status, source outcomes, answer
 IDs, byte size and admission, and the answer assembled from them. The set records
-each response's hash, not the response, so a holder can keep a real hash and
+each response's hash, with a compact witness for a prefix admission, so a holder can
+keep a real hash and
 rewrite the summary and the answer around it (a failed FiGHT call shown as served,
 or an admitted response shown as discarded over the byte cap), and both checks
 accept it. Replay (`application/trajectory_replay.py`, `replay_evidence_set`)
@@ -687,7 +710,8 @@ Rejected:
   and `smf` names Simple Machines Forum;
 - searching the question's literal words first for a topic under `implementation_only`:
   its hits would be `matches_unassessed` and need the topic anyway, and a spelled-out
-  phrase can return a response over the byte cap that is then discarded whole.
+  phrase can return a response over the byte cap whose longest whole-result prefix is
+  admitted, or whose first result cannot fit and is discarded.
 
 ## Consequences
 

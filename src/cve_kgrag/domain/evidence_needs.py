@@ -29,13 +29,13 @@ give the rules and their limits.
 from collections.abc import Iterable, Sequence
 
 from cve_kgrag.domain.investigation import (
+    ADMITTED_ADMISSIONS,
     EvidenceNeed,
     EvidenceNeedKind,
     Interpretation,
     InvestigationCandidate,
     InvestigationRequest,
     NeedOutcome,
-    StepAdmission,
     ToolStep,
     list_named_products,
 )
@@ -96,7 +96,7 @@ def derive_needs(
 def list_admitted_steps(steps: Sequence[ToolStep]) -> list[ToolStep]:
     admitted_steps: list[ToolStep] = []
     for step in steps:
-        if step.admission is StepAdmission.ADMITTED:
+        if step.admission in ADMITTED_ADMISSIONS:
             admitted_steps.append(step)
     return admitted_steps
 

@@ -598,47 +598,46 @@ def test_replay_over_changed_data_names_the_step_and_answer_parts_it_changes(
     )
 
 
-def test_replay_of_a_response_that_shrank_under_the_cap_names_the_new_stop(
+def test_replay_of_a_prefix_whose_source_fits_names_full_admission(
     fixture_bundle: FixtureBundle,
 ) -> None:
-    """The reviewer's repro: a ``5G-AKA`` response too big for the byte cap was discarded,
-    so the run stopped ``budget_exhausted`` / ``partial`` with an ``evidence_discarded``
-    warning. The deployment's source now answers in fewer bytes than the cap, so a run
-    today admits it and stops ``sufficient`` / ``ok``; replay names every part of that."""
+    """A prefix-admitted topic response and a fully fitting source response both meet the
+    implementation need; replay identifies the changed evidence and admission."""
+    # Arrange
     bigger_bundle = build_bundle_with_more_five_g_aka_records(fixture_bundle)
     current_bytes = run_five_g_aka(fixture_bundle).trajectory.steps[0].context_bytes
     request = build_investigation_request(
         "5G-AKA", "implementation_only", budget={"max_context_bytes": current_bytes + 1000}
     )
     evidence_set = build_test_investigation_service(bigger_bundle).investigate(request)
-    assert evidence_set.trajectory.steps[0].context_bytes > current_bytes + 1000
+    step = evidence_set.trajectory.steps[0]
+    assert step.admission is StepAdmission.ADMITTED_PREFIX
+    assert step.context_bytes <= current_bytes + 1000
+    assert evidence_set.trajectory.budget_used.breach is None
     assert (evidence_set.stop_reason, evidence_set.status) == (
-        StopReason.BUDGET_EXHAUSTED,
-        ResultStatus.PARTIAL,
+        StopReason.SUFFICIENT,
+        ResultStatus.OK,
     )
 
+    # Act
     replay_outcome = replay_evidence_set(evidence_set, build_test_deployment(fixture_bundle))
 
+    # Assert
     assert replay_outcome == ReplayCompleted(
         (
             ReplayDifference(1, "admission"),
+            ReplayDifference(1, "topic_warnings"),
             ReplayDifference(1, "answer_ids"),
             ReplayDifference(1, "evidence_ids"),
             ReplayDifference(1, "result_sha256"),
             ReplayDifference(1, "context_bytes"),
-            ReplayDifference(None, "status"),
-            ReplayDifference(None, "stop_reason"),
+            ReplayDifference(1, "prefix_admission"),
             ReplayDifference(None, "implementation_candidates"),
             ReplayDifference(None, "claims"),
             ReplayDifference(None, "evidence"),
             ReplayDifference(None, "warnings"),
-            ReplayDifference(None, "trajectory.transitions"),
             ReplayDifference(None, "trajectory.evidence_ids"),
             ReplayDifference(None, "trajectory.budget_used.context_bytes"),
-            ReplayDifference(None, "trajectory.budget_used.breach"),
-            ReplayDifference(None, "coverage.source_outcomes"),
-            ReplayDifference(None, "coverage.basis"),
-            ReplayDifference(None, "coverage.needs"),
         )
     )
 

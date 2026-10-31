@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.35` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.36` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -116,7 +116,7 @@ filter is refused instead of being answered as if nothing matched: the CLI exits
 failure, each naming the filter and never its value. `capabilities` reports
 `purl_filter_available`.
 
-Two warnings explain an answer without reading its trajectory:
+These warnings explain an answer without reading its trajectory:
 
 - `result_limit_reached` names the limit when a search may have cut its matches at it
   (`--limit` for `search`, `--max-results-per-call` for each search of an investigation):
@@ -124,7 +124,15 @@ Two warnings explain an answer without reading its trajectory:
   returned as many as the limit. More matches may exist; nothing counts them, and it does
   not say that relevant ones were left out. An investigation raises it only for searches
   whose CVEs can be in its answer, so never under `protocol_context_only`.
-  `answer_truncated`, by contrast, counts results the answer is known to have left out.
+  `answer_truncated` counts results the admitted steps knew that answer assembly left out.
+- `evidence_prefix_omitted` names a step and the number of returned results its context
+  budget omitted. An oversized step admits the longest prefix of whole results and all
+  their anchors that fits the remaining 200,000-byte cap, as `admitted_prefix`. If the
+  first result cannot fit, the whole step is discarded with `evidence_discarded`.
+  Topic calls interleave implementation CVEs, techniques and excluded CVEs by rank,
+  stopping at the first result that does not fit. Prefix admission is not a budget breach.
+  The step carries the original response's digest, per-list counts, admitted bytes and
+  first-omitted-result byte increment; the original response body stays out of the set.
 - `term_not_indexed`, at the top of an investigation, names once each search word an
   adopted step reported that no CVE record (or, for a direct FiGHT search, no technique)
   holds. Such a word matched nothing, which is often why a need stays unmet.
