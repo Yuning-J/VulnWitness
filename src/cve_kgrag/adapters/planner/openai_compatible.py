@@ -22,8 +22,7 @@ from cve_kgrag.adapters.planner.http_transport import (
     post_json,
 )
 from cve_kgrag.adapters.planner.relevance_prompt import (
-    ASSESSOR_INSTRUCTIONS,
-    REFINEMENT_INSTRUCTIONS,
+    RUNTIME_ASSESSOR_INSTRUCTIONS,
 )
 from cve_kgrag.domain.budget import MAX_TOOL_CALLS
 from cve_kgrag.domain.planning import (
@@ -162,7 +161,7 @@ class OpenAiCompatibleModelPort:
         self, assessment_input: RelevanceInput, timeout_seconds: float
     ) -> ModelReply:
         return self._complete(
-            ASSESSOR_INSTRUCTIONS + "\n" + REFINEMENT_INSTRUCTIONS,
+            RUNTIME_ASSESSOR_INSTRUCTIONS,
             assessment_input.model_dump_json(),
             timeout_seconds,
         )

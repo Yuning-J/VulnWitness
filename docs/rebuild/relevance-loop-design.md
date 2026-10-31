@@ -125,3 +125,21 @@ sourced, budgeted refined search. It does not judge whether evidence is sufficie
 The loop is wired and safe, and it shows labels. On this data the model labels
 candidates but does not find the gaps, so no gain is measured. Eliciting gaps is the
 open question.
+
+## Re-test with one consistent runtime prompt (2026-10-31)
+
+The runtime prompt now states both tasks and the full reply shape once. The experiment's
+prompt is unchanged. Same baseline, two model runs:
+
+- Searches proposed: 3 of 16, up from 1: `gtp-mobile-core` twice and `ueransim` once.
+  One was rejected by the gate, and the others ran.
+- Coverage@20 and irrelevant items are unchanged in every case. Run timing was recorded
+  separately.
+- **Reach.** Of the 12 required CVEs the deterministic run misses in `gtp-mobile-core`,
+  `oai-cn5g` and `kamailio-version-affected`, 2 share a vendor or product term with the
+  sourced vocabulary (the question and the admitted candidates' names). This is an
+  approximation: the search also matches description text.
+
+Most missed CVEs are out of reach of a sourced search under the current source rule. The
+limit lies in the terms a refinement may use more than in whether the model proposes
+one. The prompt iteration on these cases stops here.

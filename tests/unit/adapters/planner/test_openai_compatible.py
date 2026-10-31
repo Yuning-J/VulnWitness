@@ -15,8 +15,7 @@ from cve_kgrag.adapters.planner.openai_compatible import (
     OpenAiCompatibleModelPort,
 )
 from cve_kgrag.adapters.planner.relevance_prompt import (
-    ASSESSOR_INSTRUCTIONS,
-    REFINEMENT_INSTRUCTIONS,
+    RUNTIME_ASSESSOR_INSTRUCTIONS,
 )
 from cve_kgrag.domain.planning import (
     MAX_PLAN_TEXT_CHARS,
@@ -304,7 +303,7 @@ def test_assessor_uses_the_same_transport_timeout_and_keeps_the_key_in_the_heade
     assert sent.headers["Authorization"] == "Bearer " + PLANNER_KEY
     assert PLANNER_KEY not in sent.body.decode()
     messages = json.loads(sent.body)["messages"]
-    assert messages[0]["content"] == ASSESSOR_INSTRUCTIONS + "\n" + REFINEMENT_INSTRUCTIONS
+    assert messages[0]["content"] == RUNTIME_ASSESSOR_INSTRUCTIONS
     assert json.loads(messages[1]["content"]) == assessment_input.model_dump(mode="json")
 
 
