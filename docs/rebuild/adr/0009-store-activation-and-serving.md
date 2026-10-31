@@ -512,8 +512,8 @@ matched count for `search`. §15 lists the schemas this section changes.
   toolbox's call runner until its thread returns, so concurrent timeouts never pass the
   live-call cap. The runbook says that a timeout does not stop the running Python call,
   whose CPU and memory stay in use until it returns, and that the one-shot `search` has
-  no tool limit and runs to completion. The `graph_expand` follow-up below settles the
-  rest.
+  no tool limit and runs to completion. The real-store release check below records the
+  decision for corpus stores.
 
 ### 13. Server instructions and attribution
 
@@ -680,27 +680,49 @@ filtered seam; the Trustify adapter; the planner round-2 fix (`PLAN.md`, "Follow
 model planner adapter"); hot reload; removing old stores; the corpus content digest in
 the evaluation identity (M7b); serving memory on real feeds (the importer's 1 GiB
 per-file cap checks and pending import measurements are recorded in `PLAN.md`);
-`graph_expand` at scale, as defined below; revisiting the 20-technique topic-context
-cap, whose cuts are reported (§11a); a matched count for `search`
-responses; `gc.freeze()` if stalls are measured.
+revisiting the 20-technique topic-context cap, whose cuts are reported (§11a); a matched
+count for `search` responses; `gc.freeze()` if stalls are measured.
 
-### The `graph_expand` follow-up
+### The `graph_expand` real-store release check
 
-Acceptance work, run on a real NVD store:
+The bounded check passed on 2026-10-31 on the 396,211-record NVD store whose
+`corpus_content_sha256` is
+`0dc90836bb0f02f748ef0bd758909711557cb85413110c58a14d5a4d55c15f3a`.
+`scripts/operator/measure_graph_expand.py` fixes the criteria before running: every
+ordinary query must finish inside the 10 s tool limit with a usable graph outcome;
+high-degree queries must finish inside it or give an existing honest bounded outcome,
+not hang or fail; and peak RSS must stay within 1 GiB of the recorded serving baseline.
+It loads the store once, builds the existing shared serving data plane and both API
+deployments, and measures synchronous search calls without a model or network. An
+operator watchdog interrupts any call still running after 60 s and fails the check;
+late successful returns also fail, since `result_limit_reached` bounds only the list
+returned, not the graph traversal.
 
-1. Record the relation degree distribution of the store for CWE, vendor, product, CPE
-   and purl, with the store's `corpus_content_sha256`.
-2. For typical and for high-degree seeds, record latency, peak RSS and the candidate
-   count, with the store's `corpus_content_sha256`.
-3. Try exact optimizations first, which leave every result unchanged: build paths only
-   for the final top-k, and stop building a full `GraphPath` set for every candidate.
-4. Only if exact optimizations are not enough, design pruning of high-degree relations,
-   with its own warning code, such as `graph_expansion_truncated`, and an omitted count.
-   That is a relation the policy left out, not a section cut by its limit, so it is not
-   one of the §11a codes.
-5. If real data shows that ordinary, reasonable graph queries often time out, fix it or
-   disable `graph_expand` in corpus-store mode before the public release; a runbook
-   note is not a lasting answer.
+| Relation | Distinct values | Median degree | p99 degree | Max degree |
+|---|---:|---:|---:|---:|
+| CWE | 811 | 14 | 10,463 | 48,754 |
+| Vendor | 36,595 | 1 | 78 | 17,280 |
+| Product | 121,689 | 1 | 85 | 15,187 |
+| CPE | 374,206 | 1 | 90 | 14,191 |
+| purl | 0 | — | — | — |
+
+Degrees count CVEs per relation value; p99 uses nearest rank. Ten typical seeds, two
+lexical matches each for Open5GS, free5GC, Kamailio, OpenSIPS and OpenAirInterface named
+in the permitted gold cases (M7b baseline only, or relevance), completed.
+Ten high-degree seeds chosen from the four leading CWEs, three vendors and three
+products (degrees 8,366–48,754) completed. All twenty finished within 10 s,
+with an `ok` graph outcome, 10 returned candidates at limit 10, and the existing
+`result_limit_reached` warning. There were no errors or watchdog interruptions.
+
+Python `resource` reported a process peak RSS, equal
+to the same process's serving startup peak. That is below the recorded API serving
+baseline, so the fixed 1 GiB allowance passes as well.
+All criteria pass; `graph_expand` remains available on corpus stores, with no tuning
+or contract change. The operator's `measurement.json` and `summary.md` under
+`~/data/cve-kgrag/runs/graph-expand/` retain the per-seed figures and CVE IDs without
+record text. The check is bounded to these twenty single-CVE queries and does not
+establish a bound for arbitrary multi-seed searches. See also the measured paragraph
+in [`PLAN.md`](../PLAN.md).
 
 ## Deviations from the M6 plan
 

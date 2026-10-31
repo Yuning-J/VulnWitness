@@ -157,15 +157,35 @@ Recorded when M6 closed; none blocks M7b unless it says so.
   vendor or product (`cpe:2.3:h:qualcomm:-:-:…`, `cpe:2.3:o:-:-:-:…`). An alternative
   is keeping the record and dropping only that CPE match; decide it if a gold case turns
   out to need one of them.
-- `graph_expand` at scale, acceptance work on a real NVD store: record the relation
-  degree distribution (CWE, vendor, product, CPE, purl) and, for typical and
-  high-degree seeds, latency, peak memory and candidate count, each with the store's
-  `corpus_content_sha256`; try exact optimizations first (build paths only for the
-  final top-k, no full path set per candidate); only if those are not enough, design
-  pruning of high-degree relations with its own warning (such as
-  `graph_expansion_truncated`) and an omitted count. If ordinary graph queries often time
-  out on real data, fix it or disable `graph_expand` over a corpus store before the
-  public release.
+- `graph_expand` passed the bounded real-store release check on 2026-10-31, using
+  `scripts/operator/measure_graph_expand.py` with one store load and no model or network.
+  The 396,211-record store's `corpus_content_sha256` is
+  `0dc90836bb0f02f748ef0bd758909711557cb85413110c58a14d5a4d55c15f3a`.
+  Relation degrees count the CVEs sharing each distinct relation value; p99 is nearest
+  rank, and the store holds no purls:
+
+  | Relation | Values | Median degree | p99 degree | Max degree |
+  |---|---:|---:|---:|---:|
+  | CWE | 811 | 14 | 10,463 | 48,754 |
+  | Vendor | 36,595 | 1 | 78 | 17,280 |
+  | Product | 121,689 | 1 | 85 | 15,187 |
+  | CPE | 374,206 | 1 | 90 | 14,191 |
+  | purl | 0 | — | — | — |
+
+  Ten typical seeds (two lexical matches each for Open5GS, free5GC, Kamailio, OpenSIPS
+  and OpenAirInterface, named by the M7b baseline or relevance gold cases) ran
+  synchronous searches. Ten high-degree seeds (four leading CWEs,
+  three vendors and three products, with degrees 8,366–48,754) completed.
+  Every search finished inside the 10 s tool limit, with an `ok` graph outcome and
+  10 returned candidates at limit 10, each warning `result_limit_reached`; the warning
+  does not count visited or omitted nodes. The process peak RSS, read with Python's
+  `resource`, was recorded, unchanged from its serving startup
+  peak and below the recorded API serving baseline plus the fixed
+  1 GiB allowance. All fixed criteria passed. Graph expansion remains available,
+  with no tuning or contract change. The operator output contains the degree figures,
+  per-seed timings and peak RSS in `measurement.json` and `summary.md` under
+  `~/data/cve-kgrag/runs/graph-expand/`. This check covers these twenty single-CVE
+  queries, not arbitrary multi-seed searches.
 
 ## Offline lane
 
