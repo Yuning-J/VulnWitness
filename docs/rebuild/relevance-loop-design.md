@@ -135,11 +135,17 @@ prompt is unchanged. Same baseline, two model runs:
   One was rejected by the gate, and the others ran.
 - Coverage@20 and irrelevant items are unchanged in every case. Run timing was recorded
   separately.
-- **Reach.** Of the 12 required CVEs the deterministic run misses in `gtp-mobile-core`,
-  `oai-cn5g` and `kamailio-version-affected`, 2 share a vendor or product term with the
-  sourced vocabulary (the question and the admitted candidates' names). This is an
-  approximation: the search also matches description text.
+- **Reach.** The deterministic run misses 12 required CVEs in `gtp-mobile-core`,
+  `oai-cn5g` and `kamailio-version-affected`.
+  - Only 2 of them share a vendor or product term with the sourced vocabulary.
+  - At least 10 of them hold a term the sources already allow in their description
+    text: all five OAI misses hold `openairinterface`, the Kamailio miss holds
+    `kamailio`, and several GTP misses hold `gtp`.
+  - So they can enter the lexical scoring. Missing the top 20 does not mean the
+    source rule makes them unreachable. Ranking, the budget cut or the merge may be
+    the cause.
 
-Most missed CVEs are out of reach of a sourced search under the current source rule. The
-limit lies in the terms a refinement may use more than in whether the model proposes
-one. The prompt iteration on these cases stops here.
+The term-source rule may limit targeted follow-up searches, but it is not shown to be the
+main bottleneck. Before any recall change, first find where each missed record drops out
+(ranking, budget truncation or the answer merge). Widening the term sources is not a
+proven answer. The prompt iteration on these cases stops here.
