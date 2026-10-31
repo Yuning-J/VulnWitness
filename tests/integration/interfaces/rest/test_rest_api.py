@@ -13,6 +13,7 @@ from typing import Any
 import anyio
 import httpx2
 import pytest
+from jsonschema import Draft202012Validator
 from starlette.types import ASGIApp
 
 from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
@@ -57,6 +58,7 @@ from tests.support.fakes import BlockingRetriever, RaisingRetriever
 from tests.support.investigation import build_test_deployment
 from tests.support.investigation_runs import forge_set_whose_replay_differs
 from tests.support.marker_sweep import ECHO_MARKER
+from tests.support.paths import REPOSITORY_SCHEMA_DIR
 from tests.support.planners import DETERMINISTIC_VERIFIER
 from tests.support.process_servers import (
     SERVER_START_SECONDS,
@@ -64,6 +66,7 @@ from tests.support.process_servers import (
     run_on_a_port_in_use,
     start_served_http,
 )
+from tests.support.product_queries import SMF_PRODUCT_ONLY, SMF_VENDOR_AND_PRODUCT
 from tests.support.toolbox import (
     FIXTURE_EVIDENCE_ID,
     FIXTURE_PURL,
@@ -174,6 +177,38 @@ async def test_product_route_requires_at_least_one_name(api_client: httpx2.Async
     # Assert
     assert answer.status_code == 422
     assert answer.json()["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize(
+    "vendor,expected_ids,excluded_count",
+    [
+        (None, [SMF_PRODUCT_ONLY, SMF_VENDOR_AND_PRODUCT], 0),
+        ("free5gc", [SMF_VENDOR_AND_PRODUCT], 1),
+        ("does-not-exist", [], 2),
+    ],
+)
+async def test_product_route_exports_vendor_qualified_mentions_and_exclusion_count(
+    product_query_bundle: FixtureBundle,
+    vendor: str | None,
+    expected_ids: list[str],
+    excluded_count: int,
+) -> None:
+    api_app = build_test_api(product_query_bundle)
+    schema = json.loads((REPOSITORY_SCHEMA_DIR / "product_query_response.schema.json").read_text())
+
+    answer = await call_api(
+        api_app, "POST", "/api/v2/product", json={"vendor": vendor, "product": "smf"}
+    )
+
+    assert answer.status_code == 200
+    vulnerabilities = answer.json()
+    Draft202012Validator(schema).validate(vulnerabilities)
+    assert vulnerabilities["description_mentions_vendor_unconfirmed"] == excluded_count
+    assert vulnerabilities["total_available"] == len(expected_ids)
+    cve_ids = []
+    for vulnerability in vulnerabilities["items"]:
+        cve_ids.append(vulnerability["record"]["cve_id"])
+    assert cve_ids == expected_ids
 
 
 async def test_capabilities_route_lists_the_product_tool(api_client: httpx2.AsyncClient) -> None:

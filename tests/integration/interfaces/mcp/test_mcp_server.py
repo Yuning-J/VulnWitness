@@ -8,6 +8,7 @@ from typing import Any
 
 import anyio
 import pytest
+from jsonschema import Draft202012Validator
 from mcp import Client
 from mcp.server import Server
 from mcp.shared.exceptions import MCPError
@@ -44,6 +45,7 @@ from tests.support.investigation import (
 )
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
 from tests.support.planners import DETERMINISTIC_VERIFIER
+from tests.support.product_queries import SMF_PRODUCT_ONLY, SMF_VENDOR_AND_PRODUCT
 from tests.support.toolbox import SECRET_ERROR_TEXT, TOOL_ARGUMENTS, build_test_toolbox
 
 pytestmark = pytest.mark.anyio
@@ -161,6 +163,39 @@ async def test_capabilities_tool_lists_product_query(mcp_client: Client) -> None
 
     # Assert
     assert "query_product_vulnerabilities" in read_structured_content(answer)["tools"]
+
+
+@pytest.mark.parametrize(
+    "vendor,expected_ids,excluded_count",
+    [
+        (None, [SMF_PRODUCT_ONLY, SMF_VENDOR_AND_PRODUCT], 0),
+        ("free5gc", [SMF_VENDOR_AND_PRODUCT], 1),
+        ("does-not-exist", [], 2),
+    ],
+)
+async def test_product_tool_exports_vendor_qualified_mentions_and_exclusion_count(
+    product_query_bundle: FixtureBundle,
+    client_mode: str,
+    vendor: str | None,
+    expected_ids: list[str],
+    excluded_count: int,
+) -> None:
+    server = build_knowledge_mcp_server(build_test_toolbox(product_query_bundle))
+    schema = json.loads((REPOSITORY_SCHEMA_DIR / "product_query_response.schema.json").read_text())
+
+    async with Client(server, mode=client_mode) as client:
+        answer = await client.call_tool(
+            "query_product_vulnerabilities", {"vendor": vendor, "product": "smf"}
+        )
+
+    vulnerabilities = read_structured_content(answer)
+    Draft202012Validator(schema).validate(vulnerabilities)
+    assert vulnerabilities["description_mentions_vendor_unconfirmed"] == excluded_count
+    assert vulnerabilities["total_available"] == len(expected_ids)
+    cve_ids = []
+    for vulnerability in vulnerabilities["items"]:
+        cve_ids.append(vulnerability["record"]["cve_id"])
+    assert cve_ids == expected_ids
 
 
 async def test_every_tool_is_annotated_read_only_non_destructive_idempotent_closed_world(

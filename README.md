@@ -12,7 +12,7 @@ Every answer cites evidence: a claim that no served record supports is not retur
 evidence and protocol threat context (MITRE FiGHT, topic cards) stay separate,
 so CVE evidence cannot be relabelled to support a protocol-context claim.
 
-Status: pre-release. The contracts are at `2.0.0-dev.40` and may change between versions
+Status: pre-release. The contracts are at `2.0.0-dev.41` and may change between versions
 without a deprecation window. The roadmap is in [`docs/rebuild/PLAN.md`](docs/rebuild/PLAN.md).
 
 Known limit: the current version does not judge free-text results sufficient
@@ -204,9 +204,12 @@ the same implicated entry (`status != unaffected`); there is no recognition from
 Each item's `basis.kind` is `product_field` with matched vendor:product pairs, or
 `description_mention` with a matched phrase. Only records with no implicated products
 can match descriptions, using consecutive project-tokenizer tokens: `oai-cn5g-amf`
-reads as `oai cn5g amf`. Without a product, the phrase is the vendor. Mention-only
-evidence cannot establish vendor ownership. CVEs appear once, with field evidence
-taking precedence. The response's `matched_products` shows all matched pairs before
+reads as `oai cn5g amf`. With both vendor and product, each must occur separately as
+a whole-token phrase; without a product, the phrase is the vendor.
+`description_mentions_vendor_unconfirmed` counts product mentions left out because
+the vendor was not named, before the cap (zero unless both fields are supplied).
+Mention-only evidence cannot establish vendor ownership. CVEs appear once, with field
+evidence taking precedence. The response's `matched_products` shows all matched pairs before
 the cap; shared product names include every vendor, so narrow with `vendor`.
 
 With `version`, each item carries `nvd_version_note`: `hit` means it

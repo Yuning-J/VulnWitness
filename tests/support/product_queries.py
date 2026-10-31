@@ -21,6 +21,8 @@ UNRELATED_PRODUCT = "CVE-9999-6109"
 UNAFFECTED_ONLY = "CVE-9999-6110"
 CROSS_ENTRY = "CVE-9999-6111"
 UNDATED_FIELD = "CVE-9999-6112"
+SMF_PRODUCT_ONLY = "CVE-9999-6113"
+SMF_VENDOR_AND_PRODUCT = "CVE-9999-6114"
 
 
 def build_product_query_bundle(fixture_bundle: FixtureBundle) -> FixtureBundle:
@@ -115,6 +117,8 @@ def build_product_query_bundle(fixture_bundle: FixtureBundle) -> FixtureBundle:
                 "affected": (unknown_entry,),
             },
         ),
+        (SMF_PRODUCT_ONLY, '[SYNTHETIC] Simple Machines Forum "SMF" crashes.', {}),
+        (SMF_VENDOR_AND_PRODUCT, "[SYNTHETIC] SMF crashes in free5GC.", {}),
     )
     for cve_id, description, fields in specifications:
         fixture_bundle = build_bundle_with(fixture_bundle, cve_id, description, **fields)

@@ -14,6 +14,10 @@ def render_product_query_summary(vulnerabilities: ProductQueryResponse) -> str:
         ),
         f"Showing {len(vulnerabilities.items)} of {vulnerabilities.total_available} "
         f"matching CVEs (cap {vulnerabilities.limit}).",
+        format_paragraph(
+            "Description mentions left out because the requested vendor was not named: "
+            f"{vulnerabilities.description_mentions_vendor_unconfirmed}."
+        ),
         format_paragraph(PRODUCT_ORDER_DESCRIPTION),
         "Affectedness: unknown. NVD backlog and mention-only evidence limit coverage.",
         "",

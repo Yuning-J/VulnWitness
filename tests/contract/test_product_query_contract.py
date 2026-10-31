@@ -97,3 +97,21 @@ def test_response_export_rejects_invalid_product_field_basis(
     assert not Draft202012Validator(schema).is_valid(serialized)
     with pytest.raises(ValidationError):
         ProductQueryResponse.model_validate(serialized)
+
+
+@pytest.mark.parametrize("count", [None, -1, True, "1", 1.5])
+def test_response_export_and_model_reject_missing_or_invalid_exclusion_counts(
+    product_query_bundle: FixtureBundle, count: Any
+) -> None:
+    service = build_product_query_service(product_query_bundle)
+    schema = json.loads((REPOSITORY_SCHEMA_DIR / "product_query_response.schema.json").read_text())
+    vulnerabilities = service.query(ProductQueryRequest(vendor="free5gc", product="smf"))
+    serialized = vulnerabilities.model_dump(mode="json")
+    if count is None:
+        del serialized["description_mentions_vendor_unconfirmed"]
+    else:
+        serialized["description_mentions_vendor_unconfirmed"] = count
+
+    assert not Draft202012Validator(schema).is_valid(serialized)
+    with pytest.raises(ValidationError):
+        ProductQueryResponse.model_validate(serialized)

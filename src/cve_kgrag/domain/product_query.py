@@ -92,6 +92,14 @@ class ProductQueryResponse(ContractModel):
         max_length=MAX_RESULTS_PER_CALL, description=PRODUCT_ORDER_DESCRIPTION
     )
     total_available: JsonInteger = Field(ge=0, description="Matching CVEs before the cap.")
+    description_mentions_vendor_unconfirmed: JsonInteger = Field(
+        ge=0,
+        description=(
+            "CVEs with no implicated products whose descriptions name the requested product "
+            "but not the requested vendor as whole-token phrases, excluded before the cap. "
+            "Zero unless both vendor and product are supplied; mentions do not establish ownership."
+        ),
+    )
     matched_products: tuple[ProductIdentity, ...] = Field(
         description=(
             "All matched vendor:product pairs before the cap, sorted by vendor then product. "

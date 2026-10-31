@@ -88,8 +88,9 @@ class ProductQueryService:
 
     Vendor and product compare as whole case-folded names, as the structured search
     filter does. Both constraints must hold on the same implicated entry. Records with
-    no implicated entries may instead match a description phrase. The repository owns
-    CVE-ID uniqueness, so one record produces at most one item and field matches win.
+    no implicated entries may instead match each explicit name as a description phrase.
+    The repository owns CVE-ID uniqueness, so one record produces at most one item and
+    field matches win.
     """
 
     def __init__(self, repository: CveRepository, evidence_catalog: EvidenceCatalog) -> None:
@@ -105,6 +106,8 @@ class ProductQueryService:
         name = product if product is not None else vendor
         assert name is not None  # The request contract requires one name.
         phrase_tokens = tokenize(name)
+        vendor_tokens = tokenize(vendor) if vendor is not None else None
+        description_mentions_vendor_unconfirmed = 0
         vulnerabilities: list[ProductVulnerability] = []
         matched_entries: list[AffectedProduct] = []
         for record in self._repository.list_cves():
@@ -123,6 +126,13 @@ class ProductQueryService:
                 )
                 matched_entries.extend(matching_entries)
             elif not implicated_entries and description_names_phrase(record, phrase_tokens):
+                if (
+                    product is not None
+                    and vendor_tokens is not None
+                    and not description_names_phrase(record, vendor_tokens)
+                ):
+                    description_mentions_vendor_unconfirmed += 1
+                    continue
                 basis = DescriptionMentionBasis(matched_phrase=" ".join(phrase_tokens))
             else:
                 continue
@@ -144,6 +154,7 @@ class ProductQueryService:
             limit=request.limit,
             items=listed_vulnerabilities,
             total_available=len(vulnerabilities),
+            description_mentions_vendor_unconfirmed=description_mentions_vendor_unconfirmed,
             matched_products=list_product_identities(matched_entries),
             evidence=self._collect_evidence(listed_vulnerabilities),
         )
