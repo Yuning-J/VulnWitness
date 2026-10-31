@@ -56,9 +56,20 @@ entities:
   role: Protocol-specific parser identifier ogs_gtp2_parse_bearer_qos in CVE-2025-15418.
 - name: gtp decode pdp ctx
   role: Protocol-specific identifier gtp_decode_pdp_ctx in CVE-2026-75892.
+- name: gtp encap destroy
+  role: Linux GTP socket teardown identifier __gtp_encap_destroy in CVE-2023-54142.
+- name: gtp genl dump pdp
+  role: Linux GTP PDP-context dump identifier gtp_genl_dump_pdp in CVE-2024-26754.
+- name: gtp dellink
+  role: Linux GTP link deletion identifier gtp_dellink in CVE-2024-27396 and CVE-2026-80851.
+- name: gtp dev xmit
+  role: Linux GTP transmit identifier gtp_dev_xmit in CVE-2024-44999.
+- name: gtp encap recv
+  role: Linux GTP receive identifier gtp_encap_recv in CVE-2026-64577 and CVE-2026-89789.
 ecosystem_terms:
 - GTP
 - mobile core
+- 5G core
 - PGW-C
 - SGW-C
 - Gn
@@ -104,7 +115,11 @@ review:
     links, not added runtime aliases. No dedicated technique-link field exists in the current contract.
     A named owner must review scope and evidence before approval. Compact CreateSessionRequest and
     CreatePDPContextRequest template terms are card-local renderings of TS 29.274 V18.7.0 clause
-    7.2.1 and TS 29.060 V16.1.0 clause 7.3.1. The single-l Tunneling expanded spelling is observed
+    7.2.1 and TS 29.060 V16.1.0 clause 7.3.1. Linux GTP socket, PDP-context, link, transmit and
+    receive identifiers qualify bare GTP through their protocol-specific code names, including
+    call traces. Generic Linux or kernel product names are not qualifiers. The 5G core phrase
+    qualifies the GTP tunnel creation described in CVE-2026-44473; it never selects GTP alone.
+    The single-l Tunneling expanded spelling is observed
     in CVE-2017-12217; the double-l canonical form follows the cited specifications.'
 references:
 - title: 3GPP TS 29.274 V18.7.0
@@ -155,3 +170,27 @@ references:
 - title: CVE-2017-12217 observed spelling
   uri: https://www.cve.org/CVERecord?id=CVE-2017-12217
   locator: Description in the pinned local corpus; observed terminology only
+- title: Linux GTP implementation terminology
+  uri: https://www.cve.org/CVERecord?id=CVE-2023-54142
+  locator: Description; __gtp_encap_destroy socket teardown
+- title: Linux GTP implementation terminology
+  uri: https://www.cve.org/CVERecord?id=CVE-2024-26754
+  locator: Description; gtp_genl_dump_pdp context dump
+- title: Linux GTP implementation terminology
+  uri: https://www.cve.org/CVERecord?id=CVE-2024-27396
+  locator: Description; gtp_dellink link deletion
+- title: Linux GTP implementation terminology
+  uri: https://www.cve.org/CVERecord?id=CVE-2024-44999
+  locator: Description; gtp_dev_xmit transmit path
+- title: Linux GTP implementation terminology
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-64577
+  locator: Description; gtp_encap_recv receive call trace
+- title: Linux GTP implementation terminology
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-80851
+  locator: Description; gtp_dellink serializes PDP-context updates
+- title: Linux GTP implementation terminology
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-89789
+  locator: Description; gtp_encap_recv concurrent receive path
+- title: 5G core GTP tunnel creation context
+  uri: https://www.cve.org/CVERecord?id=CVE-2026-44473
+  locator: Description; 5G core creates a GTP tunnel after a forged setup response

@@ -260,6 +260,79 @@ def test_smf_without_gtp_has_no_gtp_relevance(
     assert topic_registry.resolve("SMF vulnerabilities").matches == ()
 
 
+@pytest.mark.parametrize(
+    ("description", "qualifier"),
+    [
+        (
+            "Linux kernel: gtp: use-after-free in __gtp_encap_destroy() after sock_put().",
+            "gtp encap destroy",
+        ),
+        (
+            "Linux kernel: gtp: register pernet operations before dumping in gtp_genl_dump_pdp().",
+            "gtp genl dump pdp",
+        ),
+        (
+            "Linux kernel: net: gtp: RCU traversal frees an entry during gtp_dellink.",
+            "gtp dellink",
+        ),
+        (
+            "Linux kernel: gtp: pull network headers before transmit. "
+            "Call trace: gtp_dev_xmit drivers/net/gtp.c:100.",
+            "gtp dev xmit",
+        ),
+        (
+            "Example Core is a 5G core. A forged PDUSessionResourceSetupResponse creates "
+            "a GTP tunnel towards a radio without checking its SCTP association.",
+            "5G core",
+        ),
+        (
+            "Linux kernel: gtp: check skb_pull_data() in gtp1u_send_echo_resp(). "
+            "A short echo request panics. Call trace: gtp_encap_recv drivers/net/gtp.c:100.",
+            "gtp encap recv",
+        ),
+        (
+            "Linux kernel: gtp: serialize PDP context updates. Racing GTP_CMD_DELPDP "
+            "with device removal deletes a context twice. Serialize gtp_dellink().",
+            "gtp dellink",
+        ),
+        (
+            "Linux kernel: gtp: gtp_newlink() frees memory before an RCU grace period. "
+            "Concurrent gtp_encap_recv() accesses the freed context.",
+            "gtp encap recv",
+        ),
+    ],
+    ids=[
+        "socket_teardown",
+        "context_dump",
+        "link_deletion",
+        "transmit_trace",
+        "core_tunnel_creation",
+        "echo_receive_trace",
+        "context_update",
+        "link_receive_race",
+    ],
+)
+def test_gtp_implementation_structures_survive_relevance_and_answer_assembly(
+    fixture_bundle: FixtureBundle, description: str, qualifier: str
+) -> None:
+    # Arrange
+    bundle = build_bundle_with(
+        replace(fixture_bundle, records=(), evidence=()),
+        "CVE-9999-0901",
+        "[SYNTHETIC] " + description,
+    )
+
+    # Act
+    investigation = run_deterministically(bundle, "GTP vulnerabilities", "implementation_only")
+
+    # Assert
+    assert len(investigation.implementation_candidates) == 1
+    relevance = investigation.implementation_candidates[0].relevance
+    assert relevance is not None
+    assert relevance.tier is RelevanceTier.EXPLICIT_PROTOCOL_MENTION
+    assert qualifier in relevance.matched_terms
+
+
 def test_authentication_vector_procedure_is_retrieved_as_shared_threat_context(
     topic_registry: TopicRegistry,
 ) -> None:
