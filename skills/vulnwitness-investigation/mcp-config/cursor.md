@@ -51,3 +51,36 @@ Recording stdio (server option verified through MCP stdio on the packaged fixtur
   }
 }
 ```
+
+Workspace stdio (demo): equivalent to
+`vulnwitness mcp --workspace ~/.vulnwitness/workspace` in a shell. Replace the
+placeholder below with the absolute path to your home workspace; do not rely on
+shell tilde expansion in an argument array. Choose this instead of the plain or
+recording entry. The empty store/snapshot settings explicitly unset inherited
+operator data configuration for a reproducible first run. This workspace variant
+is not yet tested inside the clients.
+
+```json
+{
+  "mcpServers": {
+    "vulnwitness": {
+      "type": "stdio",
+      "command": "vulnwitness",
+      "args": [
+        "mcp",
+        "--workspace",
+        "/absolute/path/to/.vulnwitness/workspace"
+      ],
+      "env": {
+        "VULNWITNESS_STORE_ROOT": "",
+        "VULNWITNESS_MITRE_SNAPSHOT_PATH": "",
+        "VULNWITNESS_MITRE_SNAPSHOT_SHA256": "",
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": "",
+        "VULNWITNESS_FIGHT_SNAPSHOT_SHA256": "",
+        "VULNWITNESS_PLANNER_ENABLED": "false",
+        "VULNWITNESS_SEMANTIC_ENABLED": "false"
+      }
+    }
+  }
+}
+```

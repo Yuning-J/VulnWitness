@@ -1,142 +1,36 @@
-# Synthetic demonstration only. Reproduce with VULNWITNESS_* settings unset.
-# Use the packaged fixture, with no store root and no intervening calls:
-# 1: vulnwitness product --vendor democorp --version 2.0 --limit 1 --session DIR
-# 2: repeat call 1 with --cursor equal to call 1's next_cursor
-# 3: repeat call 1 with --cursor equal to call 2's next_cursor
-# 4: vulnwitness lookup CVE-9999-0001 --session DIR
-# 5: vulnwitness lookup CVE-9999-0002 --session DIR
-# Run vulnwitness session check DIR. Deterministic statements render from claims.
+# Synthetic demo only. Unset VULNWITNESS_* settings to serve the packaged fixture.
+# Reproduce triage_product with vendor democorp, version "2.0",
+# lookups 1 and request_key packaged-example in a fresh workspace.
+# Calls: 1 capabilities, 2 product inventory, 3 selected CVE lookup.
+# Read the saved product call with read_call before adding these agent findings.
+# add_findings.request.example.json contains the matching request; replace session_id.
+# The workspace also retains its deterministic workflow findings.
 findings:
-- id: product-entry
-  kind: product_field_match
-  status: confirmed
-  citations:
-  - call: 1
-    evidence_id: ev:d8097ae9c31b754d26a1ef92
+- id: demo-product-entry
   author: agent
+  kind: product_field_match
+  status: unconfirmed
   claim:
     kind: product_field_match
-    call: 1
+    call: 2
     cve_id: CVE-9999-0001
     vendor: democorp
     product: demo_gateway
-- id: version-condition-hit
-  kind: version_note
-  status: confirmed
-  citations:
-  - call: 1
-    evidence_id: ev:d8097ae9c31b754d26a1ef92
-  author: agent
-  claim:
-    kind: version_note
-    call: 1
-    cve_id: CVE-9999-0001
-    version: '2.0'
-    mention: democorp 2.0
-    outcome: hit
-    applicability: unknown
-- id: version-condition-unknown
-  kind: version_note
-  status: confirmed
   citations:
   - call: 2
-    evidence_id: ev:6b8fa8898f46f2fc96d564b2
+    evidence_id: ev:d8097ae9c31b754d26a1ef92
+- id: demo-component-review
   author: agent
-  claim:
-    kind: version_note
-    call: 2
-    cve_id: CVE-9999-0007
-    version: '2.0'
-    mention: democorp 2.0
-    outcome: unknown
-    applicability: unknown
-- id: version-condition-miss
-  kind: version_note
-  status: confirmed
-  citations:
-  - call: 3
-    evidence_id: ev:d456bb87b42dd9e4d806f625
-  author: agent
-  claim:
-    kind: version_note
-    call: 3
-    cve_id: CVE-9999-0002
-    version: '2.0'
-    mention: democorp 2.0
-    outcome: no_hit
-    applicability: unknown
-- id: catalogue-association
-  kind: catalogue_association
-  status: confirmed
-  citations:
-  - call: 5
-    evidence_id: ev:d456bb87b42dd9e4d806f625
-  author: agent
-  claim:
-    kind: catalogue_association
-    call: 5
-    cve_id: CVE-9999-0002
-    cwe_id: CWE-79
-    capec_id: CAPEC-85
-    technique_id: T1082
-    terminal_reason: null
-    inherited_from: CAPEC-580
-    inherited_from_cwe: null
-    hops:
-    - from_id: CVE-9999-0002
-      to_id: CWE-79
-      relation: nvd_cwe
-      source: NVD record
-      source_version: null
-      source_sha256: null
-      evidence_ids:
-      - ev:d456bb87b42dd9e4d806f625
-    - from_id: CWE-79
-      to_id: CAPEC-85
-      relation: cwe_related_attack_pattern
-      source: CWE catalogue
-      source_version: '5.0'
-      source_sha256: 47165a9593def89c69b9ef50c34d99ac68db55df8373613e85e9cc9ceecefb1d
-      evidence_ids: []
-    - from_id: CAPEC-85
-      to_id: CAPEC-580
-      relation: capec_child_of
-      source: CAPEC catalogue
-      source_version: '3.9'
-      source_sha256: 70279a2dff0cb0ad79e546adb07828335a704ad5210e047e09e986172fc9e34d
-      evidence_ids: []
-    - from_id: CAPEC-580
-      to_id: T1082
-      relation: capec_attack_taxonomy_mapping
-      source: CAPEC catalogue
-      source_version: '3.9'
-      source_sha256: 70279a2dff0cb0ad79e546adb07828335a704ad5210e047e09e986172fc9e34d
-      evidence_ids: []
-- id: component-review
-  statement: 'Analyst note: the synthetic administration-login description makes CVE-9999-0001
-    a useful candidate for component review. Relevance to any deployed environment
-    remains unconfirmed.'
   kind: analyst_note
   status: unconfirmed
+  statement: Synthetic product-field match selected for component review; deployment
+    applicability remains unknown.
   citations:
-  - call: 4
+  - call: 2
     evidence_id: ev:d8097ae9c31b754d26a1ef92
-  author: agent
 selections:
-  cve_ids:
-  - CVE-9999-0001
-  product_queries:
-  - vendor: democorp
-    product: null
-    version: '2.0'
-    calls:
-    - 1
-    - 2
-    - 3
-    next_cursor: null
-    complete: true
+  cve_ids: []
+  product_queries: []
 open_questions:
 - Which deployed component and version should an analyst examine?
-- What authoritative deployment evidence could establish applicability?
-- The three pages cover only this synthetic query, not vulnerability completeness.
-- Free narrative is not checked; verified claims describe recorded fields only.
+- Free narrative and real-world applicability are not checked.

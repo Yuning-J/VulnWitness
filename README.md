@@ -17,12 +17,12 @@ timing condensed.*
 - **Command line.** `triage` runs a bounded product investigation and records every call;
   `report` turns any recorded session into a shareable HTML or Markdown report. Individual
   commands (`lookup`, `search`, `product`, `investigate`) return JSON or readable text.
-- **AI agents over MCP.** `vulnwitness mcp` serves nine read-only tools. The
-  [investigation Skill](skills/vulnwitness-investigation/SKILL.md) teaches an agent to chain
-  them, cite evidence and check its findings. The
-  [client snippets](skills/vulnwitness-investigation/mcp-config/README.md) for Claude Code,
-  Codex and Cursor follow each client's documented format and have not yet been tested
-  inside those clients.
+- **AI agents over MCP.** `vulnwitness mcp --workspace ~/.vulnwitness/workspace` lets
+  an agent triage a product, inspect recorded evidence, add findings and deliver a checked
+  report without a shell. The [investigation Skill](skills/vulnwitness-investigation/SKILL.md)
+  guides the flow; [client snippets](skills/vulnwitness-investigation/mcp-config/README.md)
+  for Claude Code, Codex and Cursor follow their documented formats and have not yet been
+  tested inside those clients.
 - **Reports.** Every report runs the session check and shows its layers separately: record
   consistency, citation resolution, structured claims, and narrative that is not checked.
 

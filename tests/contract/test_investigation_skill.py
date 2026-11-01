@@ -10,23 +10,28 @@ from typing import Any, get_args
 import pytest
 import yaml
 from jsonschema import Draft202012Validator
+from mcp import Client
+from pydantic import BaseModel
 
 from tests.support.paths import REPOSITORY_ROOT
-from tests.support.toolbox import build_test_toolbox, require_answer
-from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from tests.support.workspaces import build_test_workspace
 from vulnwitness.domain.affectedness import AffectednessFailure, ApplicabilityStatus
 from vulnwitness.domain.investigation import NeedOutcome, StopReason
 from vulnwitness.domain.nvd_version_note import NvdVersionHit, NvdVersionNoHit, NvdVersionUnknown
 from vulnwitness.domain.product_query import DescriptionMentionBasis, ProductFieldBasis
 from vulnwitness.domain.relevance import RelevanceLabel
-from vulnwitness.domain.session_contracts import CLI_SESSION_CONTRACTS
 from vulnwitness.domain.session_record import SessionFindings
 from vulnwitness.domain.taxonomy import ResultStatus
 from vulnwitness.domain.tool_contracts import ToolFailureCode
 from vulnwitness.domain.topic import ReviewStatus
 from vulnwitness.domain.topic_context import QueryScope
 from vulnwitness.domain.weakness_associations import WeaknessAssociationPath
-from vulnwitness.interfaces.knowledge_tools import KNOWLEDGE_TOOL_SPECS, KnowledgeToolName
+from vulnwitness.domain.workspace import ReportStatus, TriageOutcome, WorkflowStatus
+from vulnwitness.domain.workspace_knowledge import WORKSPACE_KNOWLEDGE_MODELS
+from vulnwitness.interfaces.knowledge_tools import KNOWLEDGE_TOOL_SPECS
+from vulnwitness.interfaces.mcp.server import build_knowledge_mcp_server
+from vulnwitness.interfaces.mcp.workspace_tools import WORKSPACE_TOOL_SPECS
+from vulnwitness.schema_snapshots import REQUEST_CONTRACTS
 
 SKILL_DIRECTORY = REPOSITORY_ROOT / "skills" / "vulnwitness-investigation"
 
@@ -75,78 +80,121 @@ def test_skill_tool_names_and_status_values_match_the_served_contract() -> None:
         "Stop reason": enum_values(StopReason),
         "Tool failure": enum_values(ToolFailureCode),
         "Affectedness blocker": {AffectednessFailure.BLOCKED_UNVERIFIED.value},
+        "Triage outcome": set(get_args(TriageOutcome)),
+        "Workflow": set(get_args(WorkflowStatus)),
+        "Report": set(get_args(ReportStatus)),
         "Catalogue terminal": set(
             get_args(
                 get_args(WeaknessAssociationPath.model_fields["terminal_reason"].annotation)[0]
             )
         ),
     }
-    tool_names: set[str] = set()
-    for member in KnowledgeToolName:
-        tool_names.add(member.value)
+    requests = workspace_request_models()
 
     # Act
-    tool_section = document.split("## Choose the next tool\n", 1)[1].split("\n## ", 1)[0]
+    tool_section = document.split("## Tools and request arguments\n", 1)[1].split("\n## ", 1)[0]
     documented_tools = set(re.findall(r"^\|[^\n|]+\| `([a-z_]+)` \|", tool_section, re.MULTILINE))
     documented_contracts = documented_rows(document)
 
     # Assert
-    assert documented_tools == tool_names
+    assert documented_tools == set(requests)
     assert documented_contracts == expected_contracts
 
 
-@pytest.mark.parametrize("template", sorted((SKILL_DIRECTORY / "templates").glob("*.md")))
-def test_worked_flow_calls_are_accepted_by_the_listed_tool_schemas(template: Path) -> None:
-    # Arrange
-    requests: dict[str, Any] = {}
+def workspace_request_models() -> dict[str, type[BaseModel]]:
+    requests: dict[str, type[BaseModel]] = {}
     for specification in KNOWLEDGE_TOOL_SPECS:
-        requests[specification.name.value] = specification.request_model
-    call_examples = re.findall(r"```json\n(.*?)\n *```", template.read_text(), re.DOTALL)
-
-    # Act
-    accepted_calls: list[str] = []
-    for example in call_examples:
-        call = json.loads(example)
-        requests[call["tool"]].model_validate(call["arguments"])
-        accepted_calls.append(call["tool"])
-
-    # Assert
-    assert len(accepted_calls) == len(call_examples) > 0
+        requests[specification.name.value] = WORKSPACE_KNOWLEDGE_MODELS[specification.request_model]
+    for workspace_specification in WORKSPACE_TOOL_SPECS:
+        requests[workspace_specification.name] = workspace_specification.request_model
+    return requests
 
 
-def test_skill_session_fields_and_values_exist_in_the_published_schemas() -> None:
+def published_request_schema(model: type[BaseModel]) -> dict[str, Any]:
+    for name, request_model in REQUEST_CONTRACTS.items():
+        if request_model is model:
+            return json.loads(
+                (REPOSITORY_ROOT / "schemas" / "v2" / f"{name}.schema.json").read_text()
+            )
+    raise AssertionError(f"No published request schema for {model.__name__}")
+
+
+def documented_flows() -> list[Path]:
+    documents = [SKILL_DIRECTORY / "SKILL.md"]
+    documents.extend(sorted((SKILL_DIRECTORY / "templates").glob("*.md")))
+    return documents
+
+
+def schema_terms(node: Any) -> set[str]:
+    terms: set[str] = set()
+    if isinstance(node, dict):
+        terms.update(node.get("properties", {}))
+        for value in node.get("enum", []):
+            if isinstance(value, str):
+                terms.add(value)
+        if isinstance(node.get("const"), str):
+            terms.add(node["const"])
+        for child in node.values():
+            terms.update(schema_terms(child))
+    elif isinstance(node, list):
+        for child in node:
+            terms.update(schema_terms(child))
+    return terms
+
+
+def test_documented_tool_arguments_exist_on_each_workspace_request() -> None:
     # Arrange
     document = (SKILL_DIRECTORY / "SKILL.md").read_text()
-    session_section = document.split("## Session record contract — alignment point\n", 1)[1]
-    session_section = session_section.split("\n## ", 1)[0]
-    schemas: list[dict[str, Any]] = []
-    for name in ("session_record", "session_call", "session_findings", "session_check_report"):
-        schemas.append(
-            json.loads((REPOSITORY_ROOT / "schemas" / "v2" / f"{name}.schema.json").read_text())
-        )
-    fields: set[str] = set()
-    values: set[str] = {"ok"}
-    for schema in schemas:
-        for model in [schema, *schema.get("$defs", {}).values()]:
-            fields.update(model.get("properties", {}))
-            for property_schema in model.get("properties", {}).values():
-                values.update(property_schema.get("enum", []))
-    values.update(enum_values(ToolFailureCode))
-    values.update(CLI_SESSION_CONTRACTS)
+    requests = workspace_request_models()
+    rows = re.findall(r"^\|[^\n|]+\| `([a-z_]+)` \|([^\n]+)\|", document, re.MULTILINE)
 
     # Act
-    documented_names = set(re.findall(r"`([a-z_]+)`", session_section))
+    arguments_by_tool: dict[str, set[str]] = {}
+    for tool, argument_column in rows:
+        arguments_by_tool[tool] = set(re.findall(r"`([a-z_]+)`", argument_column))
 
     # Assert
-    assert documented_names <= fields | values
-    findings_schema = schemas[2]
-    for model_name in ("SessionFinding", "SessionSelections", "ProductPaginationProgress"):
-        assert set(findings_schema["$defs"][model_name]["properties"]) <= documented_names
-    assert set(findings_schema["properties"]) <= documented_names
-    citation_example = re.search(r"`\{call: .*?\}`", session_section)
-    assert citation_example is not None
-    citation_fields = set(re.findall(r"([a-z_]+):", citation_example.group()))
-    assert citation_fields == set(findings_schema["$defs"]["SessionCitation"]["properties"])
+    assert len(rows) == len(requests)
+    for tool, arguments in arguments_by_tool.items():
+        assert arguments <= set(published_request_schema(requests[tool])["properties"]), tool
+
+
+@pytest.mark.parametrize("document", documented_flows())
+def test_worked_flow_calls_validate_against_published_workspace_schemas(document: Path) -> None:
+    # Arrange
+    requests = workspace_request_models()
+    call_examples = re.findall(r"```json\n(.*?)\n *```", document.read_text(), re.DOTALL)
+
+    # Act
+    for example in call_examples:
+        call = json.loads(example)
+        request_model = requests[call["tool"]]
+        Draft202012Validator(published_request_schema(request_model)).validate(call["arguments"])
+        request_model.model_validate(call["arguments"])
+
+    # Assert
+    assert call_examples or document.name == "SKILL.md"
+
+
+@pytest.mark.parametrize("document", documented_flows())
+def test_documented_identifiers_failures_and_outcomes_exist_in_the_contract(document: Path) -> None:
+    # Arrange
+    known_terms = set(workspace_request_models())
+    for schema_path in (REPOSITORY_ROOT / "schemas" / "v2").glob("*.schema.json"):
+        known_terms.update(schema_terms(json.loads(schema_path.read_text())))
+    # Prompts and resource addresses are a separate workspace surface from tools.
+    instructions = re.sub(
+        r"Resources and prompts are available.*?(?=\nShell users)",
+        "",
+        document.read_text(),
+        flags=re.DOTALL,
+    )
+
+    # Act
+    identifiers = set(re.findall(r"`([a-z][a-z_]+)`", instructions))
+
+    # Assert
+    assert identifiers <= known_terms, identifiers - known_terms
 
 
 @pytest.mark.parametrize(
@@ -183,9 +231,15 @@ def test_client_snippets_parse_and_select_the_packaged_demo(client: str) -> None
         server_entries.append(server)
 
     # Assert
-    assert len(server_entries) == 2
+    assert len(server_entries) == 3
     assert server_entries[0]["args"] == ["mcp"]
     assert server_entries[1]["args"] == ["mcp", "--session", "/absolute/path/to/session"]
+    assert server_entries[2]["args"] == [
+        "mcp",
+        "--workspace",
+        "/absolute/path/to/.vulnwitness/workspace",
+    ]
+    assert "not yet tested inside the clients" in document
     for server in server_entries:
         assert server["command"] == "vulnwitness"
         assert server["env"]["VULNWITNESS_STORE_ROOT"] == ""
@@ -197,45 +251,106 @@ def test_client_snippets_parse_and_select_the_packaged_demo(client: str) -> None
         assert server["env"]["VULNWITNESS_SEMANTIC_ENABLED"] == "false"
 
 
-def test_example_citations_resolve_in_the_corresponding_fixture_call(
-    fixture_bundle: FixtureBundle,
-) -> None:
+def test_add_findings_request_example_validates_and_matches_the_authored_file() -> None:
     # Arrange
-    example = yaml.safe_load((SKILL_DIRECTORY / "examples" / "findings.example.yaml").read_text())
-    toolbox = build_test_toolbox(fixture_bundle)
-    arguments: dict[str, Any] = {"vendor": "democorp", "version": "2.0", "limit": 1}
-    anchors_by_call: dict[int, set[str]] = {}
-    record_ids: list[str] = []
+    request_model = workspace_request_models()["add_findings"]
+    request = json.loads(
+        (SKILL_DIRECTORY / "examples" / "add_findings.request.example.json").read_text()
+    )
+    authored_findings = yaml.safe_load(
+        (SKILL_DIRECTORY / "examples" / "findings.example.yaml").read_text()
+    )
 
     # Act
-    for sequence in (1, 2, 3):
-        page = require_answer(
-            toolbox.call(KnowledgeToolName.QUERY_PRODUCT_VULNERABILITIES, arguments)
-        ).structured_content
-        anchors_by_call[sequence] = set()
-        for anchor in page["evidence"]:
-            anchors_by_call[sequence].add(anchor["evidence_id"])
-        for item in page["items"]:
-            record_ids.append(item["record"]["cve_id"])
-        arguments["cursor"] = page["next_cursor"]
-    lookup = require_answer(
-        toolbox.call(KnowledgeToolName.LOOKUP_CVE, {"cve_id": record_ids[0]})
-    ).structured_content
-    anchors_by_call[4] = set()
-    for anchor in lookup["evidence"]:
-        anchors_by_call[4].add(anchor["evidence_id"])
-    association_lookup = require_answer(
-        toolbox.call(KnowledgeToolName.LOOKUP_CVE, {"cve_id": record_ids[-1]})
-    ).structured_content
-    anchors_by_call[5] = set()
-    for anchor in association_lookup["evidence"]:
-        anchors_by_call[5].add(anchor["evidence_id"])
+    Draft202012Validator(published_request_schema(request_model)).validate(request)
+    accepted = request_model.model_validate(request)
 
     # Assert
-    assert arguments["cursor"] is None
-    assert len(record_ids) == page["total_available"] == 3
-    assert record_ids[0] == example["selections"]["cve_ids"][0]
-    for finding in example["findings"]:
-        assert finding["citations"]
+    assert accepted.findings
+    assert request["findings"] == authored_findings["findings"]
+
+
+@pytest.mark.anyio
+async def test_example_findings_resolve_and_check_against_recorded_packaged_demo(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    request = json.loads(
+        (SKILL_DIRECTORY / "examples" / "add_findings.request.example.json").read_text()
+    )
+    toolbox, workspace = build_test_workspace(tmp_path / "workspace")
+    async with Client(build_knowledge_mcp_server(toolbox, workspace=workspace)) as client:
+        # Act
+        triage = await client.call_tool(
+            "triage_product",
+            {
+                "vendor": "democorp",
+                "version": "2.0",
+                "lookups": 1,
+                "request_key": "packaged-example",
+            },
+        )
+        request["session_id"] = triage.structured_content["session_id"]
+        saved = await client.call_tool(
+            "read_call", {"session_id": request["session_id"], "call": 2}
+        )
+        page = json.loads(saved.structured_content["response_json"])
+        added = await client.call_tool("add_findings", request)
+        retried = await client.call_tool("add_findings", request)
+        checked = await client.call_tool(
+            "check_investigation", {"session_id": request["session_id"]}
+        )
+        rendered = await client.call_tool(
+            "render_report", {"session_id": request["session_id"], "format": "md"}
+        )
+
+    # Assert
+    assert not triage.is_error and triage.structured_content["outcome"] == "complete"
+    assert page["items"][0]["record"]["cve_id"] == request["findings"][0]["claim"]["cve_id"]
+    anchors: set[str] = set()
+    for anchor in page["evidence"]:
+        anchors.add(anchor["evidence_id"])
+    for finding in request["findings"]:
         for citation in finding["citations"]:
-            assert citation["evidence_id"] in anchors_by_call[citation["call"]]
+            assert citation["call"] == saved.structured_content["call"]["sequence"]
+            assert citation["evidence_id"] in anchors
+    assert not added.is_error and added.structured_content["written"]
+    assert not retried.is_error and not retried.structured_content["written"]
+    assert checked.structured_content["record"]["consistent"]
+    assert checked.structured_content["citations"]["resolved"]
+    assert checked.structured_content["claims"]["verified"]
+    assert "demo-component-review" in checked.structured_content["not_checked"]["finding_ids"]
+    assert rendered.structured_content["report"] == "current"
+    assert (
+        Path(rendered.structured_content["local_path"]).read_text()
+        == (rendered.structured_content["markdown"])
+    )
+
+
+@pytest.mark.anyio
+async def test_topic_template_records_the_demo_need_statuses_and_renders(tmp_path: Path) -> None:
+    # Arrange
+    template = (SKILL_DIRECTORY / "templates" / "gtp-mixed-investigation.md").read_text()
+    calls = re.findall(r"```json\n(.*?)\n *```", template, re.DOTALL)
+    toolbox, workspace = build_test_workspace(tmp_path / "workspace")
+    session_id = None
+    answers: dict[str, Any] = {}
+
+    # Act
+    async with Client(build_knowledge_mcp_server(toolbox, workspace=workspace)) as client:
+        for example in calls:
+            call = json.loads(example)
+            if "session_id" in call["arguments"]:
+                call["arguments"]["session_id"] = session_id
+            answer = await client.call_tool(call["tool"], call["arguments"])
+            assert not answer.is_error, answer.structured_content
+            answers[call["tool"]] = answer.structured_content
+            if call["tool"] == "start_investigation":
+                session_id = answer.structured_content["session_id"]
+
+    # Assert
+    checked = answers["check_investigation"]
+    assert checked["record"]["consistent"] and checked["citations"]["resolved"]
+    assert checked["claims"]["verified"]
+    assert len(checked["claims"]["checks"]) == 2
+    assert answers["render_report"]["report"] == "current"

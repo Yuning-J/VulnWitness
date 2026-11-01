@@ -1,42 +1,94 @@
 # Open5GS product triage
 
-1. Confirm Open5GS, the intended component and version, and implementation scope.
-   If vendor or version is unknown, say so. Start recording and check capabilities
-   using the Skill's session contract section before querying.
-2. Query the product, without assuming a vendor identity. The packaged fixture can
-   return no Open5GS records; use the separate synthetic example to practise paging.
+Use workspace mode. Establish the requested component and version; leave unknown
+values unspecified. The packaged demo may have no Open5GS records. JSON blocks
+are tool-call envelopes: send the named tool its arguments. Replace the illustrative
+`session_id` everywhere with the ID returned by creation, and use a fresh request
+key for an intentional new run. Never copy example call numbers without inspecting
+the snapshot.
+
+1. Run bounded triage. Add a version only if the user supplied it. `select` can
+   contain returned CVEs for an intentional selection; automatic selection is an
+   order, not a risk ranking. The workflow records capabilities, pages and lookups.
 
    ```json
-   {"tool": "query_product_vulnerabilities", "arguments": {"product": "open5gs", "limit": 2}}
+   {"tool": "triage_product", "arguments": {"product": "open5gs", "max_pages": 20, "lookups": 5, "goal": "Review Open5GS implementation records; deployed version unknown", "request_key": "open5gs-triage-1"}}
    ```
 
-3. Inspect matched vendor/product pairs and the basis on each item. If the user
-   supplied a version, include it on the first request and every continuation.
-   Follow the returned cursor unchanged; substitute the actual string below.
-   Skip this call if the cursor is null.
+2. Inspect the saved summary, dataset, calls, remaining steps and outcome.
 
    ```json
-   {"tool": "query_product_vulnerabilities", "arguments": {"product": "open5gs", "limit": 2, "cursor": "<next_cursor from the previous page>"}}
+   {"tool": "get_investigation", "arguments": {"session_id": "inv_aaaaaaaaaaaaaaaaaaaa"}}
    ```
 
-   Record progress using the Skill's session contract section. Stop at the final
-   page or agreed budget. State remaining pagination explicitly. No page traversal
-   establishes corpus completeness.
-4. Pick one returned CVE and explain which component or evidence made it useful.
-   Substitute its actual ID; do not run this illustrative ID against a real corpus
-   unless it was returned. If the product query was empty, report that and stop.
+   For `stopped_at_cap`, disclose partial inventory or deep-dive scope and the cap.
+   For `no_match`, report this bounded empty query; do not invent a candidate or
+   infer safety. For `failed`, retain earlier evidence and disclose the failure.
+   On a lost response, retry creation with the same `request_key` and arguments;
+   this returns the existing record without rerunning. `request_key_conflict`
+   requires recovering the original request or intentionally choosing a new key.
+   For `investigation_busy`, wait and retry at most once within budget. For
+   `workspace_full`, ask the operator to prune or choose another workspace.
+   `investigation_interrupted` requires a new triage and key; there is no resume.
+
+3. Read each relevant call using the actual sequence from the snapshot. Call 1
+   is the capabilities call in a fresh successful triage; inspect the product
+   and lookup call references too. `response_json` contains exact saved JSON.
 
    ```json
-   {"tool": "lookup_cve", "arguments": {"cve_id": "CVE-9999-0001"}}
+   {"tool": "read_call", "arguments": {"session_id": "inv_aaaaaaaaaaaaaaaaaaaa", "call": 1}}
    ```
 
-5. Inspect the returned weakness associations, inheritance, missing links, snapshot
-   identity and omitted count. Read the source anchors. Preserve the distinction
-   between product fields, description mentions, and version notes. Do not call
-   the catalogue associations attack paths or infer affectedness from a condition.
-6. Copy [the findings template](findings.yaml), fill it from actual recorded calls,
-   and check it using the Skill's session contract section. Set the author to agent and
-   copy exact claim fields from each product page or lookup; omit deterministic statements
-   so they render from claims. Put candidate-selection reasoning in an analyst note.
-   Finish with Answer, Evidence, What is not established, and Next steps. Cite only
-   actual calls/anchors. Report the check outcome and its support limitation.
+   Optional deeper lookup: substitute an ID actually returned by this inventory.
+   The synthetic ID below demonstrates request shape only. Skip if no candidate.
+
+   ```json
+   {"tool": "lookup_cve", "arguments": {"session_id": "inv_aaaaaaaaaaaaaaaaaaaa", "cve_id": "CVE-9999-0001"}}
+   ```
+
+   Every follow-up knowledge call needs `session_id` to reach the report. Refresh
+   the snapshot to find its call number, then read it. Preserve product-field
+   versus description-mention basis, version uncertainty and catalogue inheritance.
+   Catalogue associations are not attack paths; affectedness remains `unknown`.
+
+4. Add findings using exact fields and call/anchor pairs from saved evidence.
+   The [demo request](../examples/add_findings.request.example.json) shows a
+   product claim generated from packaged data; its IDs are not Open5GS evidence.
+   This anchorless analyst note records a limitation, without claiming source proof:
+
+   ```json
+   {"tool": "add_findings", "arguments": {"session_id": "inv_aaaaaaaaaaaaaaaaaaaa", "findings": [{"id": "open5gs-scope-note", "kind": "analyst_note", "status": "unconfirmed", "statement": "Deployment applicability remains unknown; review the recorded scope and component relevance before use.", "citations": []}]}}
+   ```
+
+   Use client IDs; identical content under the same ID is a retry no-op. For a
+   revision send a new ID with `supersedes` pointing to the earlier effective
+   finding. For example, after the note above:
+
+   ```json
+   {"tool": "add_findings", "arguments": {"session_id": "inv_aaaaaaaaaaaaaaaaaaaa", "findings": [{"id": "open5gs-scope-revision", "supersedes": "open5gs-scope-note", "kind": "analyst_note", "status": "unconfirmed", "statement": "Component relevance and deployed applicability need independent review; the recorded query covers only the served corpus.", "citations": []}]}}
+   ```
+
+   `written: true` is not passed: inspect batch and whole-record checks.
+
+5. Check, then render and present the returned local path or resource URI with
+   evidence, limits and unresolved questions. A passing check compares record,
+   citations and structured claims; it is not a verified answer. Narrative is
+   not checked. Re-render after later calls or findings make a report stale.
+
+   ```json
+   {"tool": "check_investigation", "arguments": {"session_id": "inv_aaaaaaaaaaaaaaaaaaaa"}}
+   ```
+
+   ```json
+   {"tool": "render_report", "arguments": {"session_id": "inv_aaaaaaaaaaaaaaaaaaaa", "format": "html"}}
+   ```
+
+## Appendix: manual chaining
+
+Use `start_investigation` with a goal and `request_key` instead of triage, then
+`get_knowledge_capabilities`, `query_product_vulnerabilities` and `lookup_cve`, all
+with `session_id`. For paging, pass the exact `next_cursor` as `cursor` with the
+same product/vendor/version/limit until null or your cap. Record progress and
+candidate reasoning, read saved calls, add findings, check and render as above.
+Without `session_id`, calls are exploration only and do not reach the report.
+Shell users can run `vulnwitness triage … --session DIR` → `vulnwitness report DIR`.

@@ -426,34 +426,31 @@ def test_shipped_example_has_verified_claims_and_resolved_citations(
     # Arrange
     directory = tmp_path / "example"
     template = REPOSITORY_ROOT / "skills/vulnwitness-investigation/examples/findings.example.yaml"
+
     # Act
-    cursor = None
-    for _ in range(3):
-        arguments = [
-            "product",
+    triage_exit = main(
+        [
+            "triage",
             "--vendor",
             "democorp",
             "--version",
             "2.0",
-            "--limit",
+            "--lookups",
             "1",
             "--session",
             str(directory),
-        ]
-        if cursor is not None:
-            arguments.extend(["--cursor", cursor])
-        assert main(arguments, environment={}) == 0
-        cursor = json.loads(capsys.readouterr().out)["next_cursor"]
-    for cve_id in ("CVE-9999-0001", "CVE-9999-0002"):
-        assert main(["lookup", cve_id, "--session", str(directory)], environment={}) == 0
-        capsys.readouterr()
+        ],
+        environment={},
+    )
+    capsys.readouterr()
     (directory / "findings.yaml").write_bytes(template.read_bytes())
     exit_code, report = check_cli(directory, capsys)
+
     # Assert
-    assert cursor is None and exit_code == 0
+    assert triage_exit == 0 and exit_code == 0
     assert_check_layers_hold(report)
-    assert len(report.claims.checks) == 5
-    assert report.not_checked.finding_ids == ("component-review",)
+    assert len(report.claims.checks) == 1
+    assert report.not_checked.finding_ids == ("demo-component-review",)
 
 
 @pytest.mark.parametrize(

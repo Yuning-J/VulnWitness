@@ -1,0 +1,37 @@
+{
+  "session_id": "inv_hc2omuxejwt7enyntytg",
+  "findings": [
+    {
+      "id": "demo-product-entry",
+      "author": "agent",
+      "kind": "product_field_match",
+      "status": "unconfirmed",
+      "claim": {
+        "kind": "product_field_match",
+        "call": 2,
+        "cve_id": "CVE-9999-0001",
+        "vendor": "democorp",
+        "product": "demo_gateway"
+      },
+      "citations": [
+        {
+          "call": 2,
+          "evidence_id": "ev:d8097ae9c31b754d26a1ef92"
+        }
+      ]
+    },
+    {
+      "id": "demo-component-review",
+      "author": "agent",
+      "kind": "analyst_note",
+      "status": "unconfirmed",
+      "statement": "Synthetic product-field match selected for component review; deployment applicability remains unknown.",
+      "citations": [
+        {
+          "call": 2,
+          "evidence_id": "ev:d8097ae9c31b754d26a1ef92"
+        }
+      ]
+    }
+  ]
+}
