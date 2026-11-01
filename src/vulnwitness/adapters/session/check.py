@@ -1,22 +1,28 @@
-"""Check untrusted session files for consistency and citation resolution only."""
+"""Check untrusted session files for consistency, citation resolution and structured claims."""
 
 import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from yaml import YAMLError
 
 from vulnwitness.adapters.session.files import check_session_path, read_session_file
 from vulnwitness.adapters.session.validation import parse_session_document
 from vulnwitness.adapters.strict_yaml import load_declaration_yaml
 from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.session_claim_check import check_session_claim
 from vulnwitness.domain.session_contracts import CLI_SESSION_CONTRACTS, MCP_SESSION_CONTRACTS
 from vulnwitness.domain.session_record import (
     SessionCall,
     SessionCheckReport,
+    SessionCitationCheck,
+    SessionClaimCheck,
+    SessionClaimsCheck,
     SessionFindings,
+    SessionNotChecked,
     SessionRecord,
+    SessionRecordCheck,
     SessionViolation,
 )
 from vulnwitness.domain.session_response import SESSION_RESPONSE_MODELS
@@ -52,12 +58,20 @@ class SessionChecker:
         self._calls: dict[int, SessionCall] = {}
         self._anchors: dict[int, set[str]] = {}
         self._citations_checked = 0
+        self._citation_violations: list[SessionViolation] = []
+        self._claim_checks: list[SessionClaimCheck] = []
+        self._not_checked: list[str] = []
+        self._responses: dict[int, BaseModel] = {}
 
     def check(self) -> SessionCheckReport:
         self._violations.clear()
         self._calls.clear()
         self._anchors.clear()
         self._citations_checked = 0
+        self._citation_violations.clear()
+        self._claim_checks.clear()
+        self._not_checked.clear()
+        self._responses.clear()
         try:
             check_session_path(self._directory)
             session = parse_session_document(
@@ -75,10 +89,23 @@ class SessionChecker:
 
     def _report(self) -> SessionCheckReport:
         return SessionCheckReport(
-            passed=not self._violations,
-            calls_checked=len(self._calls),
-            citations_checked=self._citations_checked,
-            violations=tuple(self._violations),
+            record=SessionRecordCheck(
+                consistent=not self._violations,
+                calls_checked=len(self._calls),
+                violations=tuple(self._violations),
+            ),
+            citations=SessionCitationCheck(
+                resolved=not self._citation_violations,
+                citations_checked=self._citations_checked,
+                violations=tuple(self._citation_violations),
+            ),
+            claims=SessionClaimsCheck(
+                verified=all(check.status == "verified" for check in self._claim_checks),
+                checks=tuple(self._claim_checks),
+            ),
+            not_checked=SessionNotChecked(
+                count=len(self._not_checked), finding_ids=tuple(self._not_checked)
+            ),
         )
 
     def _list_files(self, name: str) -> list[Path]:
@@ -102,6 +129,7 @@ class SessionChecker:
         if len(call_paths) > session.call_limit:
             self._add("calls", "call count exceeds the session limit")
         for expected_sequence, call_path in enumerate(call_paths, start=1):
+            violation_count = len(self._violations)
             location = f"calls/{call_path.name}"
             if call_path.name != f"{expected_sequence:04d}.json":
                 self._add(location, "sequence numbers must be contiguous starting at 1")
@@ -123,7 +151,13 @@ class SessionChecker:
             expected_responses.add(expected_response)
             if call.response_file != expected_response:
                 self._add(location + ".response_file", "response filename differs from sequence")
-            self._check_response(call, expected_response)
+            answer = self._check_response(call, expected_response)
+            if (
+                answer is not None
+                and call.outcome == "ok"
+                and len(self._violations) == violation_count
+            ):
+                self._responses[call.sequence] = answer
         for response_path in response_paths:
             relative = f"responses/{response_path.name}"
             if relative not in expected_responses:
@@ -146,18 +180,18 @@ class SessionChecker:
             except ValueError:
                 self._add(location + ".request", "request does not match the command contract")
 
-    def _check_response(self, call: SessionCall, location: str) -> None:
+    def _check_response(self, call: SessionCall, location: str) -> BaseModel | None:
         response_model = SESSION_RESPONSE_MODELS.get(call.response_schema)
         if response_model is None:
             self._add(location, "unknown response schema")
-            return
+            return None
         try:
             content = read_session_file(self._directory / location)
             answer = parse_session_document(content, response_model)
             document = json.loads(content)
         except (OSError, ValueError, RecursionError):
             self._add(location, "response is unreadable or does not match its schema")
-            return
+            return None
         if isinstance(answer, ToolFailure):
             if call.outcome != answer.code:
                 self._add(location, "failure kind differs from call outcome")
@@ -166,6 +200,7 @@ class SessionChecker:
         if call.request is None and call.outcome == "ok":
             self._add(f"calls/{call.sequence:04d}.json.request", "successful call needs a request")
         self._anchors[call.sequence] = collect_response_anchors(document)
+        return answer
 
     def _check_findings(self, session: SessionRecord) -> None:
         try:
@@ -178,26 +213,58 @@ class SessionChecker:
             self._add("findings.yaml", "findings are unreadable or invalid")
             return
         for finding_index, finding in enumerate(findings.findings):
+            if finding.claim is None:
+                self._not_checked.append(finding.id)
+            else:
+                self._claim_checks.append(
+                    check_session_claim(
+                        finding.id, finding.claim, self._responses.get(finding.claim.call)
+                    )
+                )
             for citation_index, citation in enumerate(finding.citations):
                 self._citations_checked += 1
                 location = f"findings.yaml.findings[{finding_index}].citations[{citation_index}]"
                 call = self._calls.get(citation.call)
                 if call is None:
-                    self._add(location, "cited call does not exist")
+                    self._add_citation(location, "cited call does not exist")
                 elif call.outcome != "ok":
-                    self._add(location, "cited call did not succeed")
+                    self._add_citation(location, "cited call did not succeed")
                 elif call.dataset != session.dataset:
-                    self._add(location, "cited call belongs to another dataset")
+                    self._add_citation(location, "cited call belongs to another dataset")
                 elif citation.evidence_id not in self._anchors.get(citation.call, set()):
-                    self._add(location, "evidence anchor is absent from the cited response")
+                    self._add_citation(
+                        location, "evidence anchor is absent from the cited response"
+                    )
+
+    def _add_citation(self, location: str, message: str) -> None:
+        self._citation_violations.append(SessionViolation(location=location, message=message))
 
 
 def render_session_check(report: SessionCheckReport) -> str:
     lines = [
-        "Session check: " + ("passed" if report.passed else "failed"),
-        f"Calls checked: {report.calls_checked}; citations checked: {report.citations_checked}.",
+        "Record consistency: " + ("consistent" if report.record.consistent else "violations"),
+        f"Calls checked: {report.record.calls_checked}.",
+        "Citation resolution: " + ("resolved" if report.citations.resolved else "violations"),
+        f"Citations checked: {report.citations.citations_checked}.",
+        "Structured claims: " + ("verified" if report.claims.verified else "not all verified"),
+        f"Claims checked: {len(report.claims.checks)}.",
     ]
-    for violation in report.violations:
-        lines.append(f"{violation.location}: {violation.message}")
+    for violation in (*report.record.violations, *report.citations.violations):
+        location = json.dumps(violation.location, ensure_ascii=True)
+        lines.append(f"{location}: {violation.message}")
+    for check in report.claims.checks:
+        detail = f"; field {check.field}" if check.field else ""
+        finding_id = json.dumps(check.finding_id, ensure_ascii=True)
+        lines.append(f"{finding_id} (call {check.call}): {check.status}{detail}. {check.message}")
+    lines.append(
+        f"Not checked (free narrative): {report.not_checked.count}; IDs: "
+        + (
+            ", ".join(
+                json.dumps(name, ensure_ascii=True) for name in report.not_checked.finding_ids
+            )
+            or "none"
+        )
+        + "."
+    )
     lines.append(report.support_limitation)
     return "\n".join(lines)

@@ -1,5 +1,166 @@
 {
   "$defs": {
+    "JsonValue": {},
+    "SessionCitationCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "citations_checked": {
+          "minimum": 0,
+          "title": "Citations Checked",
+          "type": "integer"
+        },
+        "resolved": {
+          "title": "Resolved",
+          "type": "boolean"
+        },
+        "violations": {
+          "items": {
+            "$ref": "#/$defs/SessionViolation"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "resolved",
+        "citations_checked",
+        "violations"
+      ],
+      "title": "SessionCitationCheck",
+      "type": "object"
+    },
+    "SessionClaimCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "expected": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "finding_id": {
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "recorded": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "contradicted",
+            "unverifiable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "call",
+        "status",
+        "field",
+        "expected",
+        "recorded",
+        "message"
+      ],
+      "title": "SessionClaimCheck",
+      "type": "object"
+    },
+    "SessionClaimsCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/SessionClaimCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "verified": {
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "verified",
+        "checks"
+      ],
+      "title": "SessionClaimsCheck",
+      "type": "object"
+    },
+    "SessionNotChecked": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "finding_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Finding Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "count",
+        "finding_ids"
+      ],
+      "title": "SessionNotChecked",
+      "type": "object"
+    },
+    "SessionRecordCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "calls_checked": {
+          "minimum": 0,
+          "title": "Calls Checked",
+          "type": "integer"
+        },
+        "consistent": {
+          "title": "Consistent",
+          "type": "boolean"
+        },
+        "violations": {
+          "items": {
+            "$ref": "#/$defs/SessionViolation"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "consistent",
+        "calls_checked",
+        "violations"
+      ],
+      "title": "SessionRecordCheck",
+      "type": "object"
+    },
     "SessionViolation": {
       "additionalProperties": false,
       "properties": {
@@ -23,46 +184,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "calls_checked": {
-      "minimum": 0,
-      "title": "Calls Checked",
-      "type": "integer"
+    "citations": {
+      "$ref": "#/$defs/SessionCitationCheck"
     },
-    "citations_checked": {
-      "minimum": 0,
-      "title": "Citations Checked",
-      "type": "integer"
+    "claims": {
+      "$ref": "#/$defs/SessionClaimsCheck"
     },
-    "passed": {
-      "title": "Passed",
-      "type": "boolean"
+    "not_checked": {
+      "$ref": "#/$defs/SessionNotChecked"
+    },
+    "record": {
+      "$ref": "#/$defs/SessionRecordCheck"
     },
     "schema_version": {
-      "const": "2.0.0-dev.48",
-      "default": "2.0.0-dev.48",
+      "const": "2.0.0-dev.49",
+      "default": "2.0.0-dev.49",
       "title": "Schema Version",
       "type": "string"
     },
     "support_limitation": {
-      "const": "This check does not establish that a statement is supported by its evidence. Narrative support is never established by IDs alone.",
-      "default": "This check does not establish that a statement is supported by its evidence. Narrative support is never established by IDs alone.",
+      "const": "Free narrative is not checked. This check does not establish that a statement is supported by cited evidence or prove real-world truth.",
+      "default": "Free narrative is not checked. This check does not establish that a statement is supported by cited evidence or prove real-world truth.",
       "title": "Support Limitation",
       "type": "string"
-    },
-    "violations": {
-      "items": {
-        "$ref": "#/$defs/SessionViolation"
-      },
-      "title": "Violations",
-      "type": "array"
     }
   },
   "required": [
     "schema_version",
-    "passed",
-    "calls_checked",
-    "citations_checked",
-    "violations",
+    "record",
+    "citations",
+    "claims",
+    "not_checked",
     "support_limitation"
   ],
   "title": "SessionCheckReport",

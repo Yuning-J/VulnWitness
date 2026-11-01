@@ -2,7 +2,10 @@
 
 Status: accepted
 
-Contract: `2.0.0-dev.47`
+Contract: `2.0.0-dev.49`
+
+Structured claims extend this ADR because they govern the same findings artifact and
+checker trust boundary; a separate decision would split that contract across documents.
 
 ## Purpose and boundary
 
@@ -17,10 +20,13 @@ tool.
 
 ## Facts and authored interpretation
 
-The server records requests, outcomes and the response bytes it actually returns. It never
-creates or edits findings, claims, selections or questions. Users and agents author
-`findings.yaml` separately; they cite saved calls instead of copying model-rendered
-versions of responses into the record.
+The recorder records requests, outcomes and the response bytes it actually returns. It
+never creates or edits findings, claims, selections or questions. Users, agents and a
+workflow may author `findings.yaml` separately. A workflow may write deterministic kinds
+only and must write them as `unconfirmed`. To confirm one, a user or agent takes authorship
+of that finding. Status remains authored and never changes the check result. No triage or
+report command is introduced by the claim contract. Findings cite saved calls instead of
+copying model-rendered versions of responses into the record.
 
 A response can itself contain source text or an investigation's existing model judgement.
 Recording preserves that interface response verbatim; the recorder supplies no judgement.
@@ -51,9 +57,47 @@ fields, and checks that it is the response contract for the named command. CLI a
 keeps its JSON list, with a normalized request containing all requested checks. Verification
 records the validated input filename and the returned verification report.
 
-Findings have an ID, statement, declared kind, confirmed/unconfirmed status and citations
-`{call: 1, evidence_id: 'ev:...'}`. Kinds are `product_field_match`, `description_mention`,
-`catalogue_association`, `version_note`, `need_status`, `model_judgement`, `analyst_note`.
+Findings have an ID, author (`user`, `agent`, `workflow`), declared kind,
+confirmed/unconfirmed status and citations `{call: 1, evidence_id: 'ev:...'}`. Deterministic
+kinds require a typed `claim` with the same `kind`; `model_judgement` and `analyst_note`
+require free-text `statement` and have no claim. Deterministic statements may be omitted
+or null: parsing supplies the canonical rendering from the claim. An explicit statement
+must equal that rendering exactly, otherwise the findings file is invalid. Consumers must
+parse findings with this contract before presenting them. This retains human-readable
+statements while preventing independently authored prose from contradicting checked fields.
+Canonical sentences quote claim values as ASCII-escaped JSON; version and catalogue wording
+repeats their limits. JSON Schema expresses kind and author constraints; the model enforces
+canonical text equality because JSON Schema cannot compute a statement from claim values. More interpretation belongs in a separate narrative finding.
+
+### Structured claim fields
+
+Each claim has `kind` and the recorded integer `call`. No claim recomputes search,
+version comparison, catalogue inference or controller sufficiency: it checks fields the
+recorded interface actually returned. Claim calls need not have an evidence anchor;
+citation resolution remains a separate layer, and empty citations grant no source support.
+
+| Kind | Exact assertion |
+| --- | --- |
+| `product_field_match` | `cve_id`, `vendor`, `product`: that product page item has basis `product_field` and one matched pair containing both names |
+| `description_mention` | `cve_id`, `phrase`: that product page item's basis is `description_mention` with that exact `matched_phrase` |
+| `version_note` | `cve_id`, `version`, `mention`, `outcome`, `applicability`: page version, item's NVD note mention and outcome, and applicability exactly `unknown` |
+| `catalogue_association` | `cve_id`, `cwe_id`, `capec_id`, optional `technique_id`, required nullable `terminal_reason`, optional `inherited_from` and `inherited_from_cwe`, and `hops`: one lookup association path matches every field, including hop sources, versions and identities |
+| `need_status` | `need_kind`, nullable `subject`, `outcome`: the investigation's coverage need with that exact kind and subject has that outcome |
+| `record_fact` | `cve_id` and typed `fact`: a returned record's publication timestamp, complete ordered CWE list, complete KEV entry, or selected CVSS metric severity |
+
+A record fact's nested `fact.field` discriminates `published` (timestamp `value`), `cwe_ids`
+(nonempty list `value`), `kev` (KEV object `value`), and `cvss.base_severity` (severity `value`
+plus metric `version`, `scorer` and nullable `scorer_type`). Records can come from product,
+search/lookup or included investigation candidates. CVSS selects exactly one metric;
+missing, null or ambiguous selected metrics are unverifiable. Null publication/KEV and
+empty CWEs mean absent source fields, never a verified negative. Values compare as their
+canonical JSON serialization, including exact strings and ordered lists. Product identities
+and phrases must use returned spellings; the checker performs no additional normalization.
+Catalogue hops and inheritance prevent an indirect path from verifying a direct-link claim.
+An empty but present association-path list contradicts a claimed path. A missing subject,
+response family or required field is unverifiable. A present field with a different value is
+contradicted, identifying the first differing field and its expected and recorded values.
+
 `selections.cve_ids` holds selected CVE IDs. Each `selections.product_queries` entry holds
 vendor, product, version, the page-call sequence numbers, next cursor and a completion
 flag. These selections are authored bookkeeping, not server conclusions. `open_questions`
@@ -150,8 +194,9 @@ regular-file and store-root identity helpers enforce those boundaries.
 ## Checking and trust
 
 `vulnwitness session check DIR` emits a typed JSON check report;
-`--format text` emits a readable report. Exit 0 means all checks passed; exit 1 means
-violations, each with its file or field location.
+`--format text` emits a readable report. Exit 0 requires record consistency, citation
+resolution and verification of every deterministic claim; exit 1 means a violation,
+contradiction or unverifiable claim. There is no aggregate `passed` field.
 
 Consistency checks cover format and contract parsing, contiguous sequences, unique call
 numbers, response pairing, response contracts, normalized request contracts, failure
@@ -159,10 +204,19 @@ outcomes, call limits, composite dataset equality and authored findings validati
 Resolution checks apply the per-call citation rules above. Missing or invalid findings
 are violations, and findings IDs must be unique.
 
-**The check does not establish that a statement is supported by its evidence.** A later
-phase adds deterministic-claim checks. Narrative support is never established by IDs alone.
-The typed report and text report both state this limitation. Selection pagination and
-confirmed/unconfirmed statuses are authored declarations, not deterministic claim checks.
+The report separates `record` (`consistent`, `calls_checked`, located `violations`),
+`citations` (`resolved`, `citations_checked`, located `violations`), and `claims` (`verified`,
+per-finding `checks`). Each claim check identifies `finding_id`, `call`, `status`
+(`verified`, `contradicted`, `unverifiable`), nullable `field`, `expected`, `recorded`, and
+`message`. Failed, missing, invalid or dataset-mismatched calls cannot verify claims.
+The checker retains validated responses in memory and reads no deployment data.
+`not_checked` contains `count` and `finding_ids` for model and analyst findings, regardless
+of their authored status. Empty layers have zero checks and no violations; a malformed
+findings file is a record violation and supplies no claim or narrative checks.
+
+Both JSON and text repeat `support_limitation`: free narrative is not checked and field
+agreement does not establish source support or real-world truth. Selection pagination,
+selection reasoning and confirmed/unconfirmed statuses remain authored declarations.
 
 Everything read back from a session directory is untrusted input, including server-looking
 JSON, filenames, source excerpts, statements and questions. Reads are bounded, only regular

@@ -1,5 +1,6 @@
 """Version-one session files: recorded facts and separately authored findings."""
 
+from operator import not_
 from typing import Annotated, Literal, Self
 
 from pydantic import BeforeValidator, ConfigDict, Field, JsonValue, StrictBool, model_validator
@@ -14,10 +15,10 @@ from vulnwitness.domain.search import (
     require_json_number,
 )
 from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
+from vulnwitness.domain.session_claim import SessionClaim, SessionSequence, render_claim
 from vulnwitness.domain.timestamps import Timestamp
 from vulnwitness.domain.tool_contracts import ToolFailureCode
 
-SessionSequence = Annotated[int, Field(ge=1, le=100), BeforeValidator(require_json_number)]
 Digest = Annotated[str, Field(pattern=SHA256_PATTERN)]
 
 
@@ -86,20 +87,86 @@ class SessionCitation(ContractModel):
     evidence_id: EvidenceId
 
 
+def describe_finding_shape() -> dict[str, JsonValue]:
+    rules: list[JsonValue] = []
+    for kind in (
+        "product_field_match",
+        "description_mention",
+        "catalogue_association",
+        "version_note",
+        "need_status",
+        "record_fact",
+    ):
+        rules.append(
+            {
+                "if": {"properties": {"kind": {"const": kind}}},
+                "then": {
+                    "required": ["claim"],
+                    "properties": {
+                        "claim": {"type": "object", "properties": {"kind": {"const": kind}}}
+                    },
+                },
+            }
+        )
+    rules.append(
+        {
+            "if": {"properties": {"kind": {"enum": ["model_judgement", "analyst_note"]}}},
+            "then": {
+                "required": ["statement"],
+                "properties": {
+                    "statement": {"type": "string"},
+                    "claim": {"type": "null"},
+                    "author": {"enum": ["user", "agent"]},
+                },
+            },
+        }
+    )
+    rules.append(
+        {
+            "if": {"properties": {"author": {"const": "workflow"}}},
+            "then": {"properties": {"status": {"const": "unconfirmed"}}},
+        }
+    )
+    return {"allOf": rules}
+
+
 class SessionFinding(ContractModel):
+    model_config = ConfigDict(json_schema_extra=describe_finding_shape())
+
     id: str = Field(min_length=1, max_length=128)
-    statement: str = Field(min_length=1)
+    statement: str | None = Field(default=None, min_length=1)
+    author: Literal["user", "agent", "workflow"]
+    claim: SessionClaim | None = Field(default=None, exclude_if=not_)
     kind: Literal[
         "product_field_match",
         "description_mention",
         "catalogue_association",
         "version_note",
         "need_status",
+        "record_fact",
         "model_judgement",
         "analyst_note",
     ]
     status: Literal["confirmed", "unconfirmed"]
     citations: tuple[SessionCitation, ...]
+
+    @model_validator(mode="after")
+    def check_authorship_and_statement(self) -> Self:
+        if self.kind in {"model_judgement", "analyst_note"}:
+            if self.claim is not None or self.statement is None:
+                raise ValueError("narrative findings require a statement and no claim")
+            if self.author == "workflow":
+                raise ValueError("workflows may author deterministic findings only")
+        else:
+            if self.claim is None or self.claim.kind != self.kind:
+                raise ValueError("deterministic findings require a claim of the same kind")
+            statement = render_claim(self.claim)
+            if self.statement is not None and self.statement != statement:
+                raise ValueError("statement must equal the canonical claim rendering or be omitted")
+            object.__setattr__(self, "statement", statement)
+        if self.author == "workflow" and self.status != "unconfirmed":
+            raise ValueError("workflow findings must start unconfirmed; user or agent may confirm")
+        return self
 
 
 class ProductPaginationProgress(ContractModel):
@@ -138,18 +205,50 @@ class SessionViolation(ContractModel):
     message: str
 
 
-class SessionCheckReport(ContractModel):
-    schema_version: SchemaVersion = SCHEMA_VERSION
-    passed: StrictBool
+class SessionRecordCheck(ContractModel):
+    consistent: StrictBool
     calls_checked: JsonInteger = Field(ge=0)
+    violations: tuple[SessionViolation, ...]
+
+
+class SessionCitationCheck(ContractModel):
+    resolved: StrictBool
     citations_checked: JsonInteger = Field(ge=0)
     violations: tuple[SessionViolation, ...]
+
+
+class SessionClaimCheck(ContractModel):
+    finding_id: str
+    call: SessionSequence
+    status: Literal["verified", "contradicted", "unverifiable"]
+    field: str | None = None
+    expected: JsonValue = None
+    recorded: JsonValue = None
+    message: str
+
+
+class SessionClaimsCheck(ContractModel):
+    verified: StrictBool
+    checks: tuple[SessionClaimCheck, ...]
+
+
+class SessionNotChecked(ContractModel):
+    count: JsonInteger = Field(ge=0)
+    finding_ids: tuple[str, ...]
+
+
+class SessionCheckReport(ContractModel):
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    record: SessionRecordCheck
+    citations: SessionCitationCheck
+    claims: SessionClaimsCheck
+    not_checked: SessionNotChecked
     support_limitation: Literal[
-        "This check does not establish that a statement is supported by its evidence. "
-        "Narrative support is never established by IDs alone."
+        "Free narrative is not checked. This check does not establish that a statement is "
+        "supported by cited evidence or prove real-world truth."
     ] = (
-        "This check does not establish that a statement is supported by its evidence. "
-        "Narrative support is never established by IDs alone."
+        "Free narrative is not checked. This check does not establish that a statement is "
+        "supported by cited evidence or prove real-world truth."
     )
 
 

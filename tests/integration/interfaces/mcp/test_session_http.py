@@ -17,7 +17,7 @@ from tests.support.asgi import (
     running_lifespan,
 )
 from tests.support.clocks import read_fixed_clock
-from tests.support.session_files import write_findings
+from tests.support.session_files import assert_check_layers_hold, write_findings
 from vulnwitness.adapters.session.check import SessionChecker
 from vulnwitness.adapters.session.recorder import SessionRecorder
 from vulnwitness.composition import (
@@ -59,4 +59,4 @@ async def test_http_calls_record_normalized_requests_and_typed_failures(tmp_path
     assert (
         json.loads((directory / "calls/0003.json").read_bytes())["outcome"] == "invalid_arguments"
     )
-    assert SessionChecker(directory).check().passed
+    assert_check_layers_hold(SessionChecker(directory).check())

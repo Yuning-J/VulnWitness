@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from mcp import StdioServerParameters
 
-from tests.support.session_files import write_findings
+from tests.support.session_files import assert_check_layers_hold, write_findings
 from tests.support.stdio_client import observe_stdio_client, read_until_notice
 from vulnwitness.adapters.session.check import SessionChecker
 
@@ -48,4 +48,4 @@ async def test_mcp_stdio_records_success_failures_and_refuses_calls_over_the_lim
     assert json.loads(refused.content[0].text)["code"] == "session_call_limit"
     assert len(list((directory / "calls").iterdir())) == 2
     write_findings(directory, [])
-    assert SessionChecker(directory).check().passed
+    assert_check_layers_hold(SessionChecker(directory).check())

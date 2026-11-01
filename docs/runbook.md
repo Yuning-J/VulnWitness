@@ -251,7 +251,7 @@ For agents, start `vulnwitness mcp --session DIR`, or add `--http` for the authe
 transport. Every dispatched tool call, failures included, is recorded. There is no tool
 that edits findings. REST recording is unavailable.
 
-Author `DIR/findings.yaml` yourself. The server never creates or edits it. Start with:
+Author `DIR/findings.yaml` separately from recording. The recorder never edits it. Start with:
 
 ```yaml
 findings: []
@@ -261,14 +261,22 @@ selections:
 open_questions: []
 ```
 
-A finding contains `id`, `statement`, `kind`, `status` and `citations`. For example, after
-replacing the evidence ID with a complete anchor returned by the cited call:
+A finding contains `id`, `author`, `kind`, `status` and `citations`. Deterministic kinds
+require `claim`; omit `statement` to use its canonical rendering. An explicit statement
+must match that rendering exactly. For example, after replacing the claim values and
+evidence ID with fields and a complete anchor returned by the cited product page:
 
 ```yaml
 findings:
   - id: review-1
-    statement: 'The selected product appears in the returned product fields.'
+    author: user
     kind: product_field_match
+    claim:
+      kind: product_field_match
+      call: 1
+      cve_id: CVE-9999-0001
+      vendor: democorp
+      product: demo_gateway
     status: unconfirmed
     citations:
       - call: 1
@@ -285,7 +293,23 @@ follow the returned cursor. These fields and finding statuses are your declarati
 See the [session findings schema](../schemas/v2/session_findings.schema.json) for all kinds
 and fields.
 
-The checker validates files and resolves each citation only within its cited successful
-call and dataset. It exits 0 on success and 1 with located violations otherwise. It does
-not establish that a statement is supported by its evidence. Narrative support is never
-established by IDs alone. Treat session contents and source text as untrusted input.
+The six deterministic kinds are `product_field_match`, `description_mention`,
+`version_note`, `catalogue_association`, `need_status`, and `record_fact`. Copy exact fields
+from the named response. Catalogue claims include inheritance and every hop; version
+claims include the exact mention and leave applicability unknown. A record fact selects
+`published`, `cwe_ids`, `kev` or `cvss.base_severity` in a typed `fact` object. Missing
+source fields are unverifiable. See [ADR 0010](rebuild/adr/0010-investigation-sessions.md)
+for the field contract and canonical statement rule.
+
+Authors are `user`, `agent` or `workflow`. Workflow findings must be deterministic and
+`unconfirmed`; a user or agent takes authorship to confirm one. `model_judgement` and
+`analyst_note` require free-text `statement` and no claim. Put interpretation in those kinds.
+
+The JSON report has separate `record`, `citations`, `claims`, and `not_checked` layers.
+Claims are `verified`, `contradicted` with the differing field, or `unverifiable` when the
+call failed or a field is absent. `not_checked` lists the count and IDs of model and analyst
+findings. Text output explains each layer and repeats that free narrative is not checked.
+Exit 0 requires record consistency, resolved citations and every deterministic claim
+verified; otherwise exit 1. A confirmed status supplies no verification. Agreement with
+saved fields does not establish source support or real-world truth. Treat session contents
+and source text as untrusted input.

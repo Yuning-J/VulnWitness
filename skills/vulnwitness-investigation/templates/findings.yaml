@@ -1,14 +1,22 @@
 # Copy to SESSION_DIR/findings.yaml after recorded product and lookup calls.
-# Replace instruction statements, populate selections from the returned pages,
-# and replace empty citations with {call: ACTUAL_SEQUENCE, evidence_id: RETURNED_ID}.
+# Replace every claim field with the exact returned value and actual call sequence.
+# Omit a deterministic statement: the parser renders it from the claim.
+# Replace empty citations with {call: ACTUAL_SEQUENCE, evidence_id: RETURNED_ID}.
 # Remove any finding you cannot make. Empty citations supply no resolved evidence.
 findings:
   - id: product-observation
-    statement: Replace with a narrow observation about a returned product match.
+    author: agent
     kind: product_field_match
     status: unconfirmed
+    claim:
+      kind: product_field_match
+      call: 1
+      cve_id: CVE-9999-0001
+      vendor: replace-with-returned-vendor
+      product: replace-with-returned-product
     citations: []
   - id: candidate-review
+    author: agent
     statement: Explain why the selected CVE merits review and what remains unknown.
     kind: analyst_note
     status: unconfirmed

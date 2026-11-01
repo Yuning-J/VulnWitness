@@ -1,6 +1,7 @@
 """Authored citation sequences have the same bounds in models and published schemas."""
 
 import json
+from typing import Any
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -32,6 +33,7 @@ def test_citation_sequence_bounds_agree_with_the_published_schema(
                 "id": "review",
                 "statement": "An authored observation",
                 "kind": "analyst_note",
+                "author": "user",
                 "status": "unconfirmed",
                 "citations": [{"call": sequence, "evidence_id": "ev:" + "0" * 24}],
             }
@@ -77,6 +79,73 @@ def test_dataset_store_names_agree_with_the_published_schema(
     schema_accepts = validator.is_valid(document)
     try:
         SessionCorpusIdentity.model_validate(document)
+        model_accepts = True
+    except ValidationError:
+        model_accepts = False
+    # Assert
+    assert schema_accepts == model_accepts == accepted
+
+
+@pytest.mark.parametrize(
+    "change,accepted",
+    [
+        ("valid", True),
+        ("no_claim", False),
+        ("no_claim_kind", False),
+        ("wrong_kind", False),
+        ("no_author", False),
+        ("workflow", True),
+        ("workflow_confirmed", False),
+        ("narrative", True),
+        ("workflow_narrative", False),
+        ("narrative_claim", False),
+        ("narrative_no_statement", False),
+    ],
+)
+def test_finding_claim_and_author_rules_agree_with_the_published_schema(
+    change: str,
+    accepted: bool,
+) -> None:
+    # Arrange
+    finding: dict[str, Any] = {
+        "id": "assertion",
+        "author": "agent",
+        "kind": "product_field_match",
+        "status": "unconfirmed",
+        "citations": [],
+        "claim": {
+            "kind": "product_field_match",
+            "call": 1,
+            "cve_id": "CVE-9999-0001",
+            "vendor": "democorp",
+            "product": "demo_gateway",
+        },
+    }
+    if change == "no_claim":
+        del finding["claim"]
+    elif change == "no_claim_kind":
+        del finding["claim"]["kind"]
+    elif change == "wrong_kind":
+        finding["kind"] = "description_mention"
+    elif change == "no_author":
+        del finding["author"]
+    elif change.startswith("workflow"):
+        finding["author"] = "workflow"
+        if change == "workflow_confirmed":
+            finding["status"] = "confirmed"
+    if "narrative" in change:
+        finding["kind"] = "analyst_note"
+        finding["statement"] = "A free narrative."
+        if change != "narrative_claim":
+            del finding["claim"]
+        if change == "narrative_no_statement":
+            del finding["statement"]
+    document = {"findings": [finding], "selections": {}, "open_questions": []}
+    validator = Draft202012Validator(json.loads(render_schema(SessionFindings, "validation")))
+    # Act
+    schema_accepts = validator.is_valid(document)
+    try:
+        SessionFindings.model_validate(document)
         model_accepts = True
     except ValidationError:
         model_accepts = False

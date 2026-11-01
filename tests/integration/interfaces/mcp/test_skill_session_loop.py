@@ -74,8 +74,13 @@ async def test_mcp_product_and_lookup_findings_pass_and_a_broken_citation_fails(
         )
     assert product_call.command == "query_product_vulnerabilities"
     assert lookup_call.command == "lookup_cve"
-    assert valid_exit == 0 and valid_report.passed
-    assert valid_report.calls_checked == valid_report.citations_checked == 2
-    assert invalid_exit == 1 and not invalid_report.passed
-    assert len(invalid_report.violations) == 1
-    assert invalid_report.violations[0].location == "findings.yaml.findings[0].citations[0]"
+    assert valid_exit == 0
+    assert valid_report.record.consistent and valid_report.citations.resolved
+    assert valid_report.claims.verified
+    assert valid_report.record.calls_checked == valid_report.citations.citations_checked == 2
+    assert invalid_exit == 1 and not invalid_report.citations.resolved
+    assert invalid_report.record.consistent and invalid_report.claims.verified
+    assert len(invalid_report.citations.violations) == 1
+    assert (
+        invalid_report.citations.violations[0].location == "findings.yaml.findings[0].citations[0]"
+    )

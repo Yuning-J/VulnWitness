@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.support.clocks import read_fixed_clock
-from tests.support.session_files import write_findings
+from tests.support.session_files import assert_check_layers_hold, write_findings
 from vulnwitness.adapters.session.check import SessionChecker, collect_response_anchors
 from vulnwitness.adapters.session.recorder import SessionRecorder
 from vulnwitness.application.search import SearchService
@@ -92,7 +92,7 @@ def test_all_records_each_product_page_with_its_validated_cursor(
         assert (directory / call.response_file).read_bytes() == encode_cli_answer(page)[0]
         cursor = page.next_cursor
     assert cursor is None
-    assert SessionChecker(directory).check().passed
+    assert_check_layers_hold(SessionChecker(directory).check())
 
 
 @pytest.mark.parametrize("export", [None, "csv", "jsonl"])
@@ -128,7 +128,7 @@ def test_mid_traversal_call_limit_leaves_only_complete_page_calls(
     )
     assert last_page.next_cursor is not None
     assert not list(directory.rglob("*.tmp-*"))
-    assert SessionChecker(directory).check().passed
+    assert_check_layers_hold(SessionChecker(directory).check())
     if export is not None:
         assert output.read_text() == "keep existing export"
     else:
@@ -187,7 +187,7 @@ def test_export_records_product_pages_without_adding_the_export_to_the_session(
     assert len(rows) == 3
     for row, cve_id in zip(rows, cve_ids, strict=True):
         assert row["cve_id"] == cve_id
-    assert SessionChecker(directory).check().passed
+    assert_check_layers_hold(SessionChecker(directory).check())
     assert sorted(directory.iterdir()) == [
         directory / ".lock",
         directory / "calls",
@@ -255,7 +255,8 @@ def test_product_then_lookup_with_citations_to_both_calls_passes(
     report = SessionCheckReport.model_validate_json(capsys.readouterr().out)
     # Assert
     assert (product_exit, lookup_exit, check_exit) == (0, 0, 0)
-    assert report.passed and report.citations_checked == 2
+    assert_check_layers_hold(report)
+    assert report.citations.citations_checked == 2
     assert (directory / "responses/0001.json").read_bytes() == product_bytes
     assert (directory / "responses/0002.json").read_bytes() == lookup_bytes
     assert (
@@ -303,8 +304,8 @@ def test_citation_of_a_failed_call_fails(
     assert failed_exit == 1
     assert json.loads(failure_bytes)["code"] == "unknown_evidence_id"
     assert (directory / "responses/0001.json").read_bytes() == failure_bytes
-    assert not report.passed
-    assert any("did not succeed" in violation.message for violation in report.violations)
+    assert not report.citations.resolved
+    assert any("did not succeed" in violation.message for violation in report.citations.violations)
 
 
 def test_anchor_in_another_call_does_not_resolve_a_citation(
@@ -322,8 +323,10 @@ def test_anchor_in_another_call_does_not_resolve_a_citation(
     # Act
     report = SessionChecker(directory).check()
     # Assert
-    assert not report.passed
-    assert any("absent from the cited response" in issue.message for issue in report.violations)
+    assert not report.citations.resolved
+    assert any(
+        "absent from the cited response" in issue.message for issue in report.citations.violations
+    )
 
 
 def test_changed_dataset_is_refused_without_recording(
@@ -480,8 +483,8 @@ def test_inconsistent_session_fails_with_a_location(
     # Act
     report = SessionChecker(directory).check()
     # Assert
-    assert not report.passed
-    assert report.violations and all(issue.location for issue in report.violations)
+    assert not report.record.consistent
+    assert report.record.violations and all(issue.location for issue in report.record.violations)
 
 
 @pytest.mark.parametrize(
@@ -510,7 +513,7 @@ def test_recorded_cli_commands_have_valid_response_contracts(
     report = SessionChecker(directory).check()
     # Assert
     assert (directory / "responses/0001.json").read_bytes() == printed
-    assert report.passed, report.violations
+    assert_check_layers_hold(report)
 
 
 def test_recorded_verification_has_a_valid_response_contract(
@@ -528,7 +531,7 @@ def test_recorded_verification_has_a_valid_response_contract(
     write_findings(directory, [])
     # Assert
     assert (directory / "responses/0001.json").read_bytes() == printed
-    assert SessionChecker(directory).check().passed
+    assert_check_layers_hold(SessionChecker(directory).check())
 
 
 def obstruct_call_commit(directory: Path, service: SearchService) -> SearchResponse:

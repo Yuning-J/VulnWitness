@@ -7,6 +7,7 @@ import yaml
 
 from vulnwitness.domain.product_query import ProductQueryResponse
 from vulnwitness.domain.search import SearchResponse
+from vulnwitness.domain.session_record import SessionCheckReport
 
 
 def write_findings(directory: Path, citations: list[dict[str, Any]]) -> None:
@@ -16,6 +17,7 @@ def write_findings(directory: Path, citations: list[dict[str, Any]]) -> None:
                 "id": "review-1",
                 "statement": "An analyst reviewed these returned anchors.",
                 "kind": "analyst_note",
+                "author": "user",
                 "status": "unconfirmed",
                 "citations": citations,
             }
@@ -36,10 +38,16 @@ def populate_product_findings(
     """Fill the shipped template from a product page and its selected candidate lookup."""
     findings: dict[str, Any] = yaml.safe_load(template.read_text())
     cve_id = page.items[0].record.cve_id
-    findings["findings"][0]["statement"] = (
-        f"Synthetic {cve_id} returned a product-field match for vendor {page.vendor}. "
-        "This does not establish deployed applicability."
-    )
+    basis = page.items[0].basis
+    assert basis.kind == "product_field"
+    findings["findings"][0].pop("statement", None)
+    findings["findings"][0]["claim"] = {
+        "kind": "product_field_match",
+        "call": product_call,
+        "cve_id": cve_id,
+        "vendor": basis.matched_products[0].vendor,
+        "product": basis.matched_products[0].product,
+    }
     findings["findings"][0]["status"] = "confirmed"
     findings["findings"][0]["citations"] = [
         {"call": product_call, "evidence_id": page.evidence[0].evidence_id}
@@ -65,6 +73,12 @@ def populate_product_findings(
     findings["open_questions"] = [
         "Which deployed component and version should be reviewed?",
         "Unvisited pages remain; this query does not establish vulnerability completeness.",
-        "Citation resolution does not establish statement support.",
+        "Free narrative is not checked.",
     ]
     return findings
+
+
+def assert_check_layers_hold(report: SessionCheckReport) -> None:
+    assert report.record.consistent, report.record.violations
+    assert report.citations.resolved, report.citations.violations
+    assert report.claims.verified, report.claims.checks

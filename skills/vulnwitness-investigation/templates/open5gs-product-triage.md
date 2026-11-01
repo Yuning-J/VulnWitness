@@ -35,6 +35,8 @@
    between product fields, description mentions, and version notes. Do not call
    the catalogue associations attack paths or infer affectedness from a condition.
 6. Copy [the findings template](findings.yaml), fill it from actual recorded calls,
-   and check it using the Skill's session contract section.
+   and check it using the Skill's session contract section. Set the author to agent and
+   copy exact claim fields from each product page or lookup; omit deterministic statements
+   so they render from claims. Put candidate-selection reasoning in an analyst note.
    Finish with Answer, Evidence, What is not established, and Next steps. Cite only
    actual calls/anchors. Report the check outcome and its support limitation.

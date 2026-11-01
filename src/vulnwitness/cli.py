@@ -644,7 +644,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     session_parser = commands.add_parser("session", help="check an investigation session")
     session_commands = session_parser.add_subparsers(dest="session_command", required=True)
-    session_check_parser = session_commands.add_parser("check", help="check files and citations")
+    session_check_parser = session_commands.add_parser(
+        "check", help="check records, citations and structured claims"
+    )
     session_check_parser.add_argument("directory", type=Path)
     session_check_parser.add_argument("--format", choices=("json", "text"), default="json")
     for command_name in (*SESSION_CLI_COMMANDS, "mcp"):
@@ -1748,7 +1750,11 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             if arguments.format == "text"
             else report.model_dump_json(indent=2)
         )
-        return 0 if report.passed else 1
+        return (
+            0
+            if report.record.consistent and report.citations.resolved and report.claims.verified
+            else 1
+        )
     session_directory = getattr(arguments, "session", None)
     if session_directory is not None:
         try:

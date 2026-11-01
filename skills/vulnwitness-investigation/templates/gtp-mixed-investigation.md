@@ -36,6 +36,8 @@
    from FiGHT context; neither demonstrates an exploit chain or protocol-design flaw.
 7. Copy [the findings template](findings.yaml), fill it from actual recorded calls,
    and check it using the Skill's session contract section. Replace the product
-   observation with the appropriate finding kind; omit unused product pagination.
-   Report unmet needs, pending review, family scope, truncation, and any failures.
+   observation with a need-status claim bound to the investigation call's coverage need,
+   including its kind, subject and outcome. Set the author to agent, omit the deterministic
+   statement, and put interpretation in a separate analyst note. Omit unused product
+   pagination. Report unmet needs, pending review, family scope, truncation, and any failures.
    Finish with Answer, Evidence, What is not established, and Next steps.

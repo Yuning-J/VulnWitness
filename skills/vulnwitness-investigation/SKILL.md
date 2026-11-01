@@ -82,6 +82,9 @@ Keep these finding meanings distinct. Their record kind names are centralized be
   not establish safety. Affectedness always remains `unknown`.
 - **Need status:** copy the controller's need outcome, status, stop reason,
   warnings, and budget usage. A need being found does not prove coverage.
+- **Record fact:** copy an exact publication timestamp, ordered CWE list, KEV entry,
+  or a CVSS severity selected by metric version, scorer and scorer type. Missing source
+  fields remain unknown.
 - **Model judgement:** distinguish an assessor's relevance label from source
   facts and from your own reasoning. REST/MCP investigations use deterministic
   policy; do not claim that an assessor ran. Labels never grant sufficiency.
@@ -161,11 +164,24 @@ separately; exports are outside the record. Keep export files outside `DIR`.
 
 Write `DIR/findings.yaml` as the agent-authored conclusion document:
 
-- `findings`: entries with `id`, `statement`, `kind`, `status`, and `citations`.
+- `findings`: entries with `id`, `author`, `kind`, `status`, `citations`, and either a
+  deterministic `claim` or free-text `statement`. Authors are `user`, `agent`, `workflow`.
   Use kinds `product_field_match`, `description_mention`, `catalogue_association`,
-  `version_note`, `need_status`, `model_judgement`, or `analyst_note`.
+  `version_note`, `need_status`, `record_fact`, `model_judgement`, or `analyst_note`.
   Use status `confirmed` or `unconfirmed` for the narrow statement, never for
-  affectedness or real-world truth of synthetic data.
+  affectedness or real-world truth of synthetic data. Workflow authors may write only
+  deterministic kinds as unconfirmed. A user or agent takes authorship to confirm one.
+  Status never supplies verification.
+- `claim`: required for the six deterministic kinds and forbidden on narrative findings.
+  Include the same kind and actual call. Copy exact returned values: CVE/vendor/product
+  for a product match; CVE and phrase for a description mention; CVE, version, mention,
+  outcome and unknown applicability for a version note; CVE/CWE/CAPEC/technique,
+  terminal reason, inheritance and every hop for a catalogue path; need kind, subject
+  and outcome for coverage; a typed fact for a returned record field. The schema supplies
+  exact names and types. Do not infer absent fields or invent paths. Omit a deterministic
+  statement to render it from the claim; supplied text must equal that canonical rendering.
+  Model and analyst findings require a statement and no claim. Put further interpretation
+  there. Parse findings with the contract before displaying their statements.
 - `citations`: `{call: <recorded integer>, evidence_id: <returned anchor ID>}`.
   Cite a successful call whose response actually contains the anchor. Keep
   cross-call evidence bound to the session's dataset identity. An anchor ID alone
@@ -187,12 +203,17 @@ Start from [the findings template](templates/findings.yaml); replace its instruc
 with observations and actual call/anchor pairs. See [the synthetic example](examples/findings.example.yaml)
 for a filled file; its numbers describe the sequence in its comments, not your session.
 Run `vulnwitness session check DIR` (JSON), or add `--format text` for a readable report.
-Exit 0 passes; exit 1 reports violations. The JSON report includes `passed`,
-`calls_checked`, `citations_checked`, `violations` (each with `location` and `message`),
-and `support_limitation`. Fix every reported violation and rerun.
+Exit 0 requires all checked layers to hold; exit 1 reports a failed layer. The JSON report
+separates `record` with `consistent`, `calls_checked`, `violations`; `citations` with
+`resolved`, `citations_checked`, `violations`; `claims` with `verified` and per-finding
+`checks`; and `not_checked` with `count` and `finding_ids`. Violations have `location` and
+`message`. Claim checks identify `finding_id`, `call`, status, differing field, expected
+and recorded values. Claims are verified, contradicted, or unverifiable. Missing or failed
+calls and absent fields are unverifiable. Fix every reported issue and rerun.
 If citations cannot resolve, remove or qualify the unsupported claim and report
-the remaining violation. The checker establishes resolution and record consistency;
-it does not establish that a statement is supported by the cited evidence.
+the remaining violation. The `support_limitation` repeats that free narrative is not
+checked. The checker compares structured claims with saved fields; it does not establish
+source support or real-world truth. Narrative findings are always counted as not checked.
 
 ## Deliver the answer
 

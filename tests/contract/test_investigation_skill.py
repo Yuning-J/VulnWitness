@@ -224,6 +224,12 @@ def test_example_citations_resolve_in_the_corresponding_fixture_call(
     anchors_by_call[4] = set()
     for anchor in lookup["evidence"]:
         anchors_by_call[4].add(anchor["evidence_id"])
+    association_lookup = require_answer(
+        toolbox.call(KnowledgeToolName.LOOKUP_CVE, {"cve_id": record_ids[-1]})
+    ).structured_content
+    anchors_by_call[5] = set()
+    for anchor in association_lookup["evidence"]:
+        anchors_by_call[5].add(anchor["evidence_id"])
 
     # Assert
     assert arguments["cursor"] is None
