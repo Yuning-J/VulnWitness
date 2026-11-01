@@ -64,7 +64,7 @@ class LocalWorkspaceFiles:
         root: Path,
         store_root: Path | None = None,
         *,
-        lock_wait: float = 0.25,
+        lock_wait: float = 2.0,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:

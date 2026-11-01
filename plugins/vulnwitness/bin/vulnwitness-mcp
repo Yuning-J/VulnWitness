@@ -1,4 +1,6 @@
 #!/bin/sh
-set -eu
-. "${0%/*}/vulnwitness-common.sh" || exit 127
+set -u
+. "${0%/*}/vulnwitness-common.sh"
+binary=$(find_vulnwitness) || exit 127
+isolate_demo_environment
 exec "$binary" mcp --workspace "${VULNWITNESS_WORKSPACE:-$HOME/.vulnwitness/workspace}"

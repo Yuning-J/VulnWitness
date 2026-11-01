@@ -1,4 +1,7 @@
 #!/bin/sh
-set -eu
-. "${0%/*}/vulnwitness-common.sh" || exit 0
+set -u
+. "${0%/*}/vulnwitness-common.sh"
+# A missing CLI must never block or fail the Claude Code session.
+binary=$(find_vulnwitness) || exit 0
+isolate_demo_environment
 exec "$binary" hook "$@"
