@@ -144,8 +144,8 @@ Configured roots must serve their active store or startup fails (exit 2), includ
 `no_active_store`, `active_store_missing` or `active_store_changed`; use status to diagnose.
 Resolve, affectedness, migrate, store and schema do not load a served store; demo and
 fixture-format evaluation use fixtures. All other data commands load the whole store.
-For a full NVD corpus, budget minutes per startup/one-shot query, disk per store (including space
-at the import peak) plus feeds and rollback, and 16 GB RAM (recommended; see the README).
+For a full NVD corpus, expect minutes per startup/one-shot query, several GB of disk for
+stores, feeds and rollback, and see the README for the recommended memory.
 Keep servers running for repeated queries. These are sizing guides, not guarantees.
 HTTP loads before binding: probes see connection refused meanwhile. MCP stdio answers
 initialize/tools-list during loading; calls immediately fail `data_loading`, without
