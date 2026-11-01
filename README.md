@@ -7,9 +7,6 @@ matches and NVD version notes leave affectedness `unknown`.
 
 ![Architecture walkthrough: the flow from client through interfaces and services to the store and knowledge files on the left; the current question, its steps and its output on the right](docs/architecture.webp)
 
-*Illustrative walkthrough with synthetic IDs ([still image](docs/architecture.png)). Source
-text and model replies are untrusted data. Panel style after
-[@thedelost](https://x.com/thedelost/status/2105398038026195279).*
 See [Architecture](docs/architecture.md) for behaviour and trust boundaries.
 
 | Question | Service | What comes back |
