@@ -24,8 +24,17 @@ def render_markdown_table(table: ReportTable) -> str:
         "| " + " | ".join(escape_markdown(cell) for cell in table.headings) + " |",
         "| " + " | ".join("---" for _ in table.headings) + " |",
     ]
+    links: dict[str, str] = {}
+    for link in table.links:
+        links[link.text] = link.target
     for row in table.rows:
-        lines.append("| " + " | ".join(escape_markdown(cell) for cell in row) + " |")
+        cells: list[str] = []
+        for cell in row:
+            literal = escape_markdown(cell)
+            if cell in links:
+                literal = f"[{literal}]({links[cell]})"
+            cells.append(literal)
+        lines.append("| " + " | ".join(cells) + " |")
     if not table.rows:
         lines.extend(("", "None recorded."))
     return "\n".join(lines)
@@ -33,6 +42,27 @@ def render_markdown_table(table: ReportTable) -> str:
 
 def render_markdown_section(section: ReportSection, level: int) -> str:
     lines = ["#" * min(level, 6) + " " + escape_markdown(section.title), ""]
+    if section.folded:
+        lines.extend(("<details>", f"<summary>{html.escape(section.title)}</summary>", ""))
+    if section.anchor:
+        lines.extend((f'<a id="{html.escape(section.anchor, quote=True)}"></a>', ""))
+    if section.heading_note:
+        lines.extend((escape_markdown(section.heading_note), ""))
+    for stat in section.stats:
+        lines.extend(
+            (
+                f"**{escape_markdown(stat.label)}:** {escape_markdown(stat.value)} "
+                f"· {escape_markdown(stat.note)}",
+                "",
+            )
+        )
+    for badge in section.badges:
+        mark = {"ok": "✓", "bad": "✗", "warn": "!", "neutral": ""}[badge.tone]
+        lines.extend((f"{mark} {escape_markdown(badge.text)}", ""))
+    for chip in section.chips:
+        lines.extend((escape_markdown(chip), ""))
+    for link in section.links:
+        lines.extend((f"[{escape_markdown(link.text)}]({link.target})", ""))
     for paragraph in section.paragraphs:
         text = escape_markdown(paragraph.text)
         lines.extend((f"**{text}**" if paragraph.warning else text, ""))
@@ -47,8 +77,22 @@ def render_markdown_section(section: ReportSection, level: int) -> str:
         lines.append("")
     for table in section.tables:
         lines.extend((render_markdown_table(table), ""))
+    if section.facts:
+        rows: list[tuple[str, ...]] = []
+        for fact in section.facts:
+            value = fact.value
+            if fact.badge is not None:
+                value = f"{fact.badge.text} {value}".rstrip()
+            if fact.detail:
+                value += f" · {fact.detail}"
+            rows.append((fact.label, value))
+        lines.extend(
+            (render_markdown_table(ReportTable(("Fact", "Recorded value"), tuple(rows))), "")
+        )
     for subsection in section.sections:
         lines.append(render_markdown_section(subsection, level + 1))
+    if section.folded:
+        lines.extend(("</details>", ""))
     return "\n".join(lines)
 
 

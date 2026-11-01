@@ -32,13 +32,12 @@ def test_both_formats_show_ordered_sections_and_recorded_limits(
 ) -> None:
     # Arrange
     sections = (
-        "Header",
-        "Check results",
-        "Findings",
-        "CVEs",
-        "Weakness paths",
-        "What is not established",
-        "Call log",
+        "Overview",
+        "Key facts and limits",
+        "CVE details",
+        "Read inventory",
+        "Execution and checks",
+        "Technical appendix",
     )
 
     # Act
@@ -56,20 +55,28 @@ def test_both_formats_show_ordered_sections_and_recorded_limits(
     assert "Review demonstration product records" in document
     assert "Which deployed version needs review" in document
     assert "Affectedness" in document and "unknown" in document
-    assert "product_field" in document or r"product\_field" in document
+    assert "NVD product field" in document
     assert "call 1 · evidence ev" in document
-    assert "Not checked" in document and "narrative" in document
+    assert "Free text is never checked" in document
     assert "Record consistency" in document
+    assert document.count("This association is derived from official catalogues.") == 1
+    assert (
+        document.count(
+            "Catalogue associations, not attack paths; “no ATT&amp;CK mapping” "
+            "describes this snapshot only."
+        )
+        == 1
+    )
     if report_format == "html":
-        assert "<h2>Check results</h2>" in document
-        assert "<h3>Not checked: narrative</h3>" in document
+        assert "<h3>Check layers</h3>" in document
+        assert "<summary>Full check JSON</summary>" in document
         assert "&quot;count&quot;: 2" in document
         assert escape(DERIVED_ASSOCIATION_NOTE) in document
         assert "prefers-color-scheme: dark" in document and "@media print" in document
     else:
         assert '    "consistent": true,' in document
         assert '    "count": 2,' in document
-        assert "## Call log\n" in document
+        assert "## Execution and checks\n" in document
 
 
 @pytest.mark.parametrize("report_format", ("md", "html"))
@@ -87,9 +94,13 @@ def test_contradicted_claim_is_visibly_flagged_and_exits_one(
 
     # Assert
     assert exit_code == 1
-    assert "WARNING" in document and "Claim verification" in document and "contradicted" in document
+    assert "Structured claims failed" in document
+    assert "✗" in document and "1 violations" in document
+    assert "contradicted" in document
+    if report_format == "html":
+        assert 'class="pill bad"' in document
     assert "Recorded field differs from the claim." in document
-    assert "Call log" in document
+    assert "Execution and checks" in document
 
 
 @pytest.mark.parametrize("report_format", ("md", "html"))
@@ -245,7 +256,7 @@ def test_broken_citation_renders_the_checker_failure_and_exits_one(
     assert exit_code == 1
     assert "evidence anchor is absent from the cited response" in document
     assert "source URI unavailable" in document
-    assert "Call log" in document
+    assert "Execution and checks" in document
 
 
 def test_invalid_findings_render_a_record_violation_without_presenting_invalid_prose(
@@ -261,7 +272,7 @@ def test_invalid_findings_render_a_record_violation_without_presenting_invalid_p
     # Assert
     assert exit_code == 1
     assert "findings are unreadable or invalid" in document
-    assert "Call log" in document
+    assert "Execution and checks" in document
 
 
 def test_unreadable_session_is_a_usage_error_without_a_report(
@@ -297,16 +308,11 @@ def test_report_does_not_load_configured_services_or_store(
     assert "Synthetic demonstration data" in capsys.readouterr().out
 
 
-def test_triage_metadata_only_adds_workflow_scope_and_cannot_replace_findings(
+def test_invalid_triage_shape_is_labelled_unavailable_and_cannot_replace_findings(
     report_session: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Arrange
-    triage = {
-        "inventory": {"pages_read": 1, "items_seen": 3, "total_available": 10, "complete": False},
-        "deep_dive": {"looked_up": ["CVE-9999-0002"]},
-        "caps_hit": ["max_pages"],
-    }
-    (report_session / "triage.json").write_text(json.dumps(triage))
+    (report_session / "triage.json").write_text('{"inventory": {"items_seen": 3000}}')
 
     # Act
     exit_code = main(["report", str(report_session)], environment={})
@@ -314,27 +320,16 @@ def test_triage_metadata_only_adds_workflow_scope_and_cannot_replace_findings(
 
     # Assert
     assert exit_code == 0
-    assert "Inventory versus deep" in document
-    assert '"items_seen": 3' in document and '"total_available": 10' in document
-    assert document.index('"items_seen": 3') > document.index("What is not established")
-    assert document.index('"items_seen": 3') < document.index("## Call log")
+    assert "triage.json is unreadable or invalid" in document
+    assert "Recorded workflow scope (not checked)" in document
+    assert "Record consistency" in document
 
 
-def test_cited_topic_response_contributes_only_its_recorded_cves(
+def test_manual_session_inventory_contains_all_recorded_product_pages(
     report_session: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Arrange
-    main(
-        ["topic", "5gaka", "--scope", "implementation_only", "--session", str(report_session)],
-        environment={},
-    )
-    capsys.readouterr()
-    topic = read_document(report_session, 5)
-    findings = read_findings(report_session)
-    findings["findings"][4]["citations"] = [
-        {"call": 5, "evidence_id": topic["evidence"][0]["evidence_id"]}
-    ]
-    save_findings(report_session, findings)
+    page = read_document(report_session, 1)
 
     # Act
     exit_code = main(["report", str(report_session), "--format", "html"], environment={})
@@ -342,10 +337,10 @@ def test_cited_topic_response_contributes_only_its_recorded_cves(
 
     # Assert
     assert exit_code == 0
-    assert topic["implementation_candidates"]
-    cve_section = document.split("<h2>CVEs</h2>")[1].split("<h2>Weakness paths</h2>")[0]
-    for topic_candidate in topic["implementation_candidates"]:
-        assert topic_candidate["candidate"]["record"]["cve_id"] in cve_section
+    assert '<div class="stat">' not in document
+    inventory = document.split("Read inventory")[1].split("Execution and checks")[0]
+    for vulnerability in page["items"]:
+        assert vulnerability["record"]["cve_id"] in inventory
 
 
 def test_unassessed_investigation_needs_remain_visible(

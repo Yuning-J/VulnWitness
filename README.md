@@ -53,6 +53,16 @@ deep-dive scopes separately; `--format json` prints that artifact. Selection tak
 N by the stated order. Use a new or empty directory for each run. See the
 [triage runbook](docs/runbook.md#one-command-product-triage) for caps and selection details.
 
+Product pages default to the maximum size of 20 (`--limit`).
+
+Triage exit codes are `0` when the planned scope is complete and checks pass (reaching
+`--lookups` is complete), `1` for a complete query with no matches, `2` for argument,
+call, recording or check failures, and `3` for a page cap with unfinished inventory or
+a time limit before planned lookups finish, with results saved and checks passing.
+Failures take precedence over `3`. Exit `3` is non-zero for shells; automation that
+accepts partial results should handle `0` and `3` explicitly and inspect `triage.json`
+for the stop reason and remaining steps. `--lookups 0` completes after the inventory.
+
 ## Real data
 
 Create a store root outside the repository, then fetch, import and activate:

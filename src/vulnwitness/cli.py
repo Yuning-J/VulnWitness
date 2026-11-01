@@ -437,7 +437,9 @@ def build_parser() -> argparse.ArgumentParser:
     product_parser.add_argument("--output", type=Path, help="write CVE rows to a file atomically")
     product_parser.add_argument("--export", choices=("jsonl", "csv"), help="--output row format")
     product_parser.add_argument("--force", action="store_true", help="allow overwriting --output")
-    add_result_limit_option(product_parser, "--limit")
+    add_result_limit_option(
+        product_parser, "--limit", default=20, help_text="product page size (default 20)"
+    )
 
     capabilities_parser = commands.add_parser(
         "capabilities",

@@ -42,7 +42,7 @@ def test_product_text_shows_basis_severity_kev_cap_and_nvd_limits(
     summary = capsys.readouterr().out
     assert exit_code == 0
     assert "Product vulnerabilities:" in summary
-    assert "Showing 2 of 2 matching CVEs (page size 10)." in summary
+    assert "Showing 2 of 2 matching CVEs (page size 20)." in summary
     assert "Basis: product_field (democorp:demo_gateway)" in summary
     assert "Severity: CRITICAL" in summary
     assert "KEV:" in summary

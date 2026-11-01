@@ -149,7 +149,7 @@ def test_page_cap_reports_unfinished_inventory_and_completed_deep_dive(
     # Assert
     text = capsys.readouterr().out
     summary = TriageSummary.model_validate_json((directory / "triage.json").read_bytes())
-    assert exit_code == 2 and summary.stop_reason == "max_pages"
+    assert exit_code == 3 and summary.stop_reason == "max_pages"
     assert summary.inventory.pages_read == summary.inventory.items_seen == 1
     assert summary.inventory.total_available == 3 and not summary.inventory.complete
     assert summary.deep_dive.lookups_completed == 1
@@ -246,7 +246,7 @@ def test_time_limit_stops_after_recorded_capabilities_and_lists_unstarted_steps(
     summary, check, exit_code = workflow.run(ProductQueryRequest(vendor="democorp"))
 
     # Assert
-    assert exit_code == 2 and summary.stop_reason == "time_limit"
+    assert exit_code == 3 and summary.stop_reason == "time_limit"
     assert summary.caps_hit == ("time_limit",)
     assert summary.inventory.pages_read == summary.deep_dive.lookups_completed == 0
     assert summary.inventory.total_available is None and not summary.inventory.complete
@@ -350,7 +350,7 @@ def test_time_limit_between_lookups_keeps_finished_deep_dive_and_remaining_ids(
     summary, check, exit_code = workflow.run(ProductQueryRequest(vendor="democorp"))
 
     # Assert
-    assert exit_code == 2 and summary.stop_reason == "time_limit"
+    assert exit_code == 3 and summary.stop_reason == "time_limit"
     assert summary.inventory.complete
     assert summary.deep_dive.looked_up_ids == ("CVE-9999-0007",)
     assert summary.remaining_steps == ("lookup: CVE-9999-0002", "lookup: CVE-9999-0001")

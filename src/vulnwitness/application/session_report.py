@@ -1,24 +1,32 @@
 """Compose report sections from recorded content and the existing layered check."""
 
 import json
+from datetime import UTC
 
 from pydantic import BaseModel
 
-from vulnwitness.domain.cve import CveRecord
+from vulnwitness.application.triage_workflow import triage_selection_key
+from vulnwitness.domain.cve import CveRecord, CvssMetric
+from vulnwitness.domain.cvss_ranking import rank_cvss_metric
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.investigation import KnowledgeEvidenceSet, NeedOutcome
-from vulnwitness.domain.product_query import ProductQueryResponse
+from vulnwitness.domain.product_query import ProductQueryResponse, ProductVulnerability
 from vulnwitness.domain.search import Candidate, SearchResponse
 from vulnwitness.domain.served_dataset import ServedDatasetKind
 from vulnwitness.domain.session_record import SessionFinding
 from vulnwitness.domain.session_report import (
     CheckedSession,
+    ReportBadge,
+    ReportFact,
+    ReportLink,
     ReportParagraph,
     ReportSection,
+    ReportStat,
     ReportTable,
     SessionReport,
 )
-from vulnwitness.domain.topic_context import TopicContextResponse
+from vulnwitness.domain.triage import TriageSummary
+from vulnwitness.domain.weakness_associations import DERIVED_ASSOCIATION_NOTE, WeaknessAssociations
 
 
 def collect_anchors(answer: BaseModel) -> dict[str, EvidenceAnchor]:
@@ -47,7 +55,6 @@ def build_header(contents: CheckedSession) -> ReportSection:
         raise ValueError("session metadata is unreadable or invalid")
     identity = session.dataset
     paragraphs = (
-        ReportParagraph("Question: not separately recorded in session.json."),
         ReportParagraph(f"Goal: {session.goal or 'not recorded'}"),
         ReportParagraph(f"Scope: {session.scope or 'not recorded'}"),
         ReportParagraph(f"Created at: {session.created_at.isoformat()}"),
@@ -62,44 +69,8 @@ def build_header(contents: CheckedSession) -> ReportSection:
         ("FiGHT snapshot identity", identity.fight_snapshot_sha256 or "not served"),
         ("MITRE snapshot identity", identity.mitre_snapshot_sha256 or "not served"),
     )
-    return ReportSection("Header", paragraphs, (ReportTable(("Identity", "Recorded value"), rows),))
-
-
-def build_checks(contents: CheckedSession) -> ReportSection:
-    check = contents.check
-    layers = (
-        (
-            "Record consistency",
-            "Checks the structure and consistency of recorded files.",
-            check.record,
-        ),
-        (
-            "Citation resolution",
-            "Checks that citations resolve to anchors in successful calls with the same dataset.",
-            check.citations,
-        ),
-        (
-            "Structured claims",
-            "Compares claim fields with recorded fields; it does not establish source support.",
-            check.claims,
-        ),
-        (
-            "Not checked: narrative",
-            "Counts model and analyst narrative; its support is not checked.",
-            check.not_checked,
-        ),
-    )
-    sections: list[ReportSection] = []
-    for title, meaning, layer in layers:
-        sections.append(
-            ReportSection(
-                title,
-                (ReportParagraph(meaning),),
-                verbatim=layer.model_dump_json(indent=2),
-            )
-        )
     return ReportSection(
-        "Check results", (ReportParagraph(check.support_limitation),), sections=tuple(sections)
+        "Dataset identity", paragraphs, (ReportTable(("Identity", "Recorded value"), rows),)
     )
 
 
@@ -168,261 +139,653 @@ def build_findings(contents: CheckedSession) -> ReportSection:
     return ReportSection("Findings", paragraphs, sections=tuple(sections))
 
 
-def summarize_record(record: CveRecord) -> tuple[str, str, str, str]:
-    published = "unknown" if record.published is None else record.published.date().isoformat()
-    severities: list[str] = []
-    for metric in record.cvss:
-        severities.append(
-            f"{metric.base_severity or 'unknown'} {metric.base_score:g} v{metric.version}"
+def format_metric(metric: CvssMetric) -> str:
+    scorer = "NVD" if metric.scorer == "nvd@nist.gov" else metric.scorer
+    label = f"{(metric.base_severity or 'unknown').title()} {metric.base_score:g}"
+    return (
+        f"{label} · CVSS {metric.version} · {scorer} · {metric.scorer_type or 'type not recorded'}"
+    )
+
+
+def format_severity(record: CveRecord) -> str:
+    if not record.cvss:
+        return "Severity unknown"
+    return format_metric(max(record.cvss, key=rank_cvss_metric))
+
+
+def published_date(record: CveRecord) -> str:
+    return "unknown" if record.published is None else record.published.date().isoformat()
+
+
+def basis_label(vulnerability: ProductVulnerability) -> str:
+    basis = vulnerability.basis
+    if basis.kind == "description_mention":
+        return f"Description mention · {basis.matched_phrase}"
+    identities: list[str] = []
+    for identity in basis.matched_products:
+        identities.append(f"{identity.vendor}/{identity.product}")
+    return "NVD product field · " + ", ".join(identities)
+
+
+def build_version_fact(vulnerability: ProductVulnerability | None) -> ReportFact:
+    if vulnerability is None or vulnerability.nvd_version_note is None:
+        return ReportFact("NVD version condition", "not recorded")
+    note = vulnerability.nvd_version_note
+    comparison = ""
+    if note.outcome == "hit":
+        condition = note.matched_condition
+        bounds: list[str] = []
+        for operator, bound in (
+            ("=", condition.exact),
+            ("≥", condition.start_including),
+            (">", condition.start_excluding),
+            ("≤", condition.end_including),
+            ("<", condition.end_excluding),
+        ):
+            if bound is not None:
+                bounds.append(f"{operator} {bound}")
+        comparison = f"{note.mention.rsplit(' ', 1)[-1]} vs {', '.join(bounds)}"
+    return ReportFact("NVD version condition", comparison, ReportBadge(note.outcome), note.wording)
+
+
+def path_counts(associations: WeaknessAssociations) -> tuple[int, set[str]]:
+    reaching = 0
+    techniques: set[str] = set()
+    for path in associations.paths:
+        if path.technique is not None:
+            reaching += 1
+            techniques.add(path.technique.technique_id)
+    return reaching, techniques
+
+
+def build_associations(associations: WeaknessAssociations | None) -> ReportSection:
+    note = ReportParagraph(
+        "Catalogue associations, not attack paths; “no ATT&CK mapping” "
+        "describes this snapshot only."
+    )
+    if associations is None:
+        return ReportSection(
+            "Weakness associations", (note, ReportParagraph("No catalogue paths recorded."))
         )
+    groups: dict[str, dict[str, set[str]]] = {}
+    group_path_counts: dict[str, int] = {}
+    group_reaching_counts: dict[str, int] = {}
+    paths: list[ReportSection] = []
+    for index, path in enumerate(associations.paths, 1):
+        group_path_counts[path.cwe_id] = group_path_counts.get(path.cwe_id, 0) + 1
+        techniques = groups.setdefault(path.cwe_id, {}).setdefault(path.capec_id, set())
+        if path.technique is not None:
+            group_reaching_counts[path.cwe_id] = group_reaching_counts.get(path.cwe_id, 0) + 1
+            techniques.add(path.technique.technique_id)
+        hops: list[str] = []
+        for hop in path.hops:
+            hops.append(
+                f"{hop.from_id} → {hop.to_id} [{hop.relation}] · {hop.source} · "
+                f"version {hop.source_version or 'not recorded'} · "
+                f"identity {hop.source_sha256 or 'not recorded'}"
+            )
+        if path.inherited_from is not None:
+            hops.append(f"CAPEC-parent inheritance: {path.inherited_from}")
+        if path.inherited_from_cwe is not None:
+            hops.append(f"CWE-parent inheritance: {path.inherited_from_cwe}")
+        if path.technique_source is not None:
+            source = path.technique_source
+            hops.append(
+                f"Terminal catalogue: {source.catalogue} · version {source.version} "
+                f"· {source.sha256}"
+            )
+        hops.append(f"Terminal reason: {path.terminal_reason or 'reaches ATT&CK'}")
+        paths.append(
+            ReportSection(f"Path {index}: {path.cwe_id} → {path.capec_id}", bullets=tuple(hops))
+        )
+    overview: list[ReportSection] = []
+    for cwe_id, capecs in groups.items():
+        chips: list[str] = []
+        for capec_id, techniques in capecs.items():
+            chips.append(
+                f"{capec_id} → {', '.join(sorted(techniques))}" if techniques else capec_id
+            )
+        hidden: tuple[ReportSection, ...] = ()
+        if len(chips) > 4:
+            hidden = (
+                ReportSection(
+                    f"+{len(chips) - 4} more", chips=tuple(chips[4:]), folded=True, layout="inline"
+                ),
+            )
+        reaching = group_reaching_counts.get(cwe_id, 0)
+        overview.append(
+            ReportSection(
+                cwe_id,
+                chips=tuple(chips[:4]),
+                sections=hidden,
+                layout="paths",
+                heading_note=f"→ {len(capecs)} CAPEC · {group_path_counts[cwe_id]} paths",
+                badges=(
+                    ReportBadge(
+                        f"{reaching} reach ATT&CK"
+                        if reaching
+                        else "No ATT&CK mapping in this snapshot",
+                        "ok" if reaching else "warn",
+                    ),
+                ),
+            )
+        )
+    reaching, distinct = path_counts(associations)
+    missing: list[str] = []
+    for link in associations.missing_links:
+        missing.append(f"Missing link: {link.subject}: {link.reason}")
+    overview.append(
+        ReportSection("Each original path", sections=tuple(paths), folded=True, layout="inline")
+    )
+    return ReportSection(
+        "Weakness associations",
+        paragraphs=(
+            note,
+            ReportParagraph(
+                f"Showing {len(associations.paths)} returned paths; {reaching} "
+                f"paths reaching ATT&CK; "
+                f"{len(distinct)} distinct techniques; {associations.omitted_count} "
+                f"paths omitted by the cap."
+            ),
+        ),
+        bullets=tuple(missing),
+        sections=tuple(overview),
+    )
+
+
+def build_card(
+    candidate: Candidate,
+    sequence: int,
+    anchors: dict[str, EvidenceAnchor],
+    vulnerability: ProductVulnerability | None,
+    rank: int | None,
+    triage: TriageSummary | None,
+) -> ReportSection:
+    record = candidate.record
+    preferred_metric = max(record.cvss, key=rank_cvss_metric) if record.cvss else None
     description = next(
         (entry.value for entry in record.descriptions if entry.lang == "en"),
         record.descriptions[0].value,
     )
-    # A single physical table line; renderers wrap the bounded text to their available width.
-    description = " ".join(description.split())
-    if len(description) > 160:
-        description = description[:157] + "…"
-    return record.cve_id, published, "; ".join(severities) or "unknown", description
+    clipped = description if len(description) <= 480 else description[:477].rsplit(" ", 1)[0] + " …"
+    if triage is not None and triage.deep_dive.selection_mode == "user-chosen IDs":
+        selection = "selected by the user."
+    elif vulnerability is not None and rank is not None and triage is not None:
+        outcome = (
+            vulnerability.nvd_version_note.outcome
+            if vulnerability.nvd_version_note
+            else "not recorded"
+        )
+        selection = (
+            f"#{rank} by the stated order: {basis_label(vulnerability)} match, "
+            f"version note “{outcome}”, published {published_date(record)}. "
+            f"Order, not risk ranking."
+        )
+    else:
+        selection = "Recorded lookup; selection reason not recorded."
+    sections = [
+        ReportSection(
+            "NVD description · untrusted text",
+            (ReportParagraph(clipped),),
+            layout="desc",
+            sections=(
+                ReportSection(
+                    "Full recorded NVD description · untrusted text",
+                    verbatim=description,
+                    folded=True,
+                    layout="inline",
+                ),
+            ),
+        ),
+        ReportSection(
+            "Facts",
+            facts=(
+                ReportFact(
+                    "Match basis", basis_label(vulnerability) if vulnerability else "not recorded"
+                ),
+                build_version_fact(vulnerability),
+                ReportFact(
+                    "Affectedness",
+                    badge=ReportBadge("unknown", "warn"),
+                    detail="configuration and environment not evaluated",
+                ),
+            ),
+            chips=record.cwe_ids,
+            layout="facts",
+        ),
+    ]
+    if len(record.cvss) > 1:
+        metrics: list[str] = []
+        for metric in record.cvss:
+            if metric is not preferred_metric:
+                metrics.append(format_metric(metric))
+        sections.append(
+            ReportSection(
+                "Other severity metrics", bullets=tuple(metrics), folded=True, layout="inline"
+            )
+        )
+    sections.append(build_associations(candidate.weakness_associations))
+    sources: list[str] = []
+    links: list[ReportLink] = []
+    for evidence_id in record.evidence_ids:
+        anchor = anchors.get(evidence_id)
+        if anchor is None:
+            sources.append(f"{evidence_id} · source unavailable · call {sequence}")
+        else:
+            filename = anchor.source_uri.rsplit("/", 1)[-1]
+            sources.append(
+                f"{evidence_id} · {anchor.source_name} · feed {filename} · call {sequence}"
+            )
+    links.append(ReportLink("NVD record", f"https://nvd.nist.gov/vuln/detail/{record.cve_id}"))
+    sections.append(ReportSection("Sources", bullets=tuple(sources), links=tuple(links)))
+    return ReportSection(
+        record.cve_id,
+        (
+            ReportParagraph(f"Published {published_date(record)}"),
+            ReportParagraph(f"Why selected: {selection}"),
+        ),
+        sections=tuple(sections),
+        layout="card",
+        anchor=record.cve_id,
+        badges=(
+            ReportBadge(
+                format_severity(record),
+                severity=preferred_metric.base_severity if preferred_metric is not None else None,
+            ),
+        ),
+    )
 
 
-def build_cves(contents: CheckedSession) -> ReportSection:
-    cited_calls: set[int] = set()
+def build_checks(contents: CheckedSession) -> ReportSection:
+    check = contents.check
+    claim_failures = sum(entry.status != "verified" for entry in check.claims.checks)
+    rows: list[tuple[str, ...]] = []
+    for name, passed, count, failures, meaning in (
+        (
+            "Record consistency",
+            check.record.consistent,
+            f"{check.record.calls_checked} calls",
+            len(check.record.violations),
+            "Files are complete and consistent with one dataset.",
+        ),
+        (
+            "Citation resolution",
+            check.citations.resolved,
+            f"{check.citations.citations_checked} citations",
+            len(check.citations.violations),
+            "Each citation points to an anchor in a successful recorded call.",
+        ),
+        (
+            "Structured claims",
+            check.claims.verified,
+            f"{len(check.claims.checks)} claims",
+            claim_failures,
+            "Claim fields equal the recorded response fields; this is not source support.",
+        ),
+    ):
+        mark = "✓" if passed else f"✗ · {failures} violations"
+        rows.append((mark, name, count, meaning))
+    rows.append(
+        (
+            "\u2013",
+            "Narrative",
+            f"{check.not_checked.count} not checked",
+            "Free text is never checked.",
+        )
+    )
+    return ReportSection(
+        "Check layers", tables=(ReportTable(("Status", "Layer", "Count", "Meaning"), tuple(rows)),)
+    )
+
+
+def build_execution(contents: CheckedSession, triage: TriageSummary | None) -> ReportSection:
+    groups: list[ReportSection] = []
+    index = 0
+    while index < len(contents.calls):
+        first = contents.calls[index]
+        last = first
+        index += 1
+        while (
+            index < len(contents.calls)
+            and contents.calls[index].command == first.command
+            and contents.calls[index].interface == first.interface
+        ):
+            last = contents.calls[index]
+            index += 1
+        label = (
+            f"Call {first.sequence}"
+            if first.sequence == last.sequence
+            else f"Calls {first.sequence}\u2013{last.sequence}"
+        )
+        groups.append(
+            ReportSection(
+                label, (ReportParagraph(f"{first.interface}: {first.command}"),), layout="step"
+            )
+        )
+    stop = triage.stop_reason if triage else "End of recorded calls; stop reason not recorded."
+    groups.append(ReportSection("Stopped", (ReportParagraph(stop),), layout="step"))
+    return ReportSection(
+        "Execution and checks",
+        sections=(
+            ReportSection("Call timeline", sections=tuple(groups), layout="timeline"),
+            build_checks(contents),
+        ),
+    )
+
+
+def build_appendix(contents: CheckedSession, triage_scope: str | None) -> ReportSection:
+    header = build_header(contents)
+    findings = build_findings(contents)
+    sections = [ReportSection("Dataset identity", header.paragraphs, header.tables, folded=True)]
+    counts: dict[tuple[str, str], int] = {}
     if contents.findings is not None:
         for finding in contents.findings.findings:
-            for citation in finding.citations:
-                cited_calls.add(citation.call)
+            key = (finding.kind, finding.author)
+            counts[key] = counts.get(key, 0) + 1
     rows: list[tuple[str, ...]] = []
-    for sequence in sorted(cited_calls):
-        answer = contents.responses.get(sequence)
-        if isinstance(answer, ProductQueryResponse):
-            for item in answer.items:
-                cve_id, published, severity, description = summarize_record(item.record)
-                note = item.nvd_version_note
-                outcome = "not recorded" if note is None else f"{note.mention}: {note.outcome}"
-                rows.append(
-                    (
-                        str(sequence),
-                        cve_id,
-                        published,
-                        severity,
-                        item.basis.kind,
-                        outcome,
-                        "unknown",
-                        description,
-                    )
-                )
-        elif isinstance(answer, SearchResponse | TopicContextResponse):
-            candidates: list[Candidate] = []
-            if isinstance(answer, SearchResponse):
-                candidates.extend(answer.candidates)
-            else:
-                for topic_candidate in answer.implementation_candidates:
-                    candidates.append(topic_candidate.candidate)
-            for candidate in candidates:
-                cve_id, published, severity, description = summarize_record(candidate.record)
-                rows.append(
-                    (
-                        str(sequence),
-                        cve_id,
-                        published,
-                        severity,
-                        "not recorded",
-                        "not recorded",
-                        "not recorded",
-                        description,
-                    )
-                )
-        elif isinstance(answer, KnowledgeEvidenceSet):
-            for investigation_candidate in answer.implementation_candidates:
-                cve_id, published, severity, description = summarize_record(
-                    investigation_candidate.candidate.record
-                )
-                outcomes: list[str] = []
-                for note in investigation_candidate.nvd_version_notes or ():
-                    outcomes.append(f"{note.mention}: {note.outcome}")
-                applicability = "unknown" if answer.product_applicability else "not recorded"
-                rows.append(
-                    (
-                        str(sequence),
-                        cve_id,
-                        published,
-                        severity,
-                        "not recorded",
-                        "; ".join(outcomes) or "not recorded",
-                        applicability,
-                        description,
-                    )
-                )
-    table = ReportTable(
-        (
-            "Call",
-            "ID",
-            "Published",
-            "Severity",
-            "Basis kind",
-            "Version-note outcome",
-            "Applicability",
-            "Description",
-        ),
-        tuple(rows),
-    )
-    return ReportSection(
-        "CVEs",
-        (
-            ReportParagraph(
-                "Only recorded responses cited by findings are included. "
-                "Version-note hits do not establish affectedness."
-            ),
-        ),
-        (table,),
-    )
-
-
-def build_weakness_paths(contents: CheckedSession) -> ReportSection:
-    sections: list[ReportSection] = []
-    for call in contents.calls:
-        answer = contents.responses.get(call.sequence)
-        if call.command not in {"lookup", "lookup_cve"} or not isinstance(answer, SearchResponse):
-            continue
-        for candidate in answer.candidates:
-            associations = candidate.weakness_associations
-            if associations is None:
-                continue
-            paragraphs = [ReportParagraph(associations.note)]
-            paths: list[ReportSection] = []
-            for path in associations.paths:
-                hops: list[str] = []
-                for hop in path.hops:
-                    hops.append(
-                        f"{hop.from_id} → {hop.to_id} [{hop.relation}] · {hop.source} · "
-                        f"version {hop.source_version or 'not recorded'} · "
-                        f"identity {hop.source_sha256 or 'not recorded'}"
-                    )
-                technique = "no ATT&CK mapping"
-                if path.technique is not None:
-                    technique = f"{path.technique.technique_id} {path.technique.name}"
-                paths.append(
-                    ReportSection(
-                        f"Path: {path.cwe_id} · {path.capec_id} · {technique}", bullets=tuple(hops)
-                    )
-                )
-            paragraphs.append(ReportParagraph(f"Omitted paths: {associations.omitted_count}"))
-            for missing in associations.missing_links:
-                paragraphs.append(
-                    ReportParagraph(f"Missing link: {missing.subject}: {missing.reason}")
-                )
-            if not associations.paths:
-                paragraphs.append(ReportParagraph("No paths recorded."))
-            sections.append(
-                ReportSection(
-                    f"call {call.sequence} · {candidate.record.cve_id}",
-                    tuple(paragraphs),
-                    sections=tuple(paths),
-                )
-            )
-    empty_paths = () if sections else (ReportParagraph("No recorded lookup paths."),)
-    return ReportSection("Weakness paths", empty_paths, sections=tuple(sections))
-
-
-def build_unknowns(contents: CheckedSession, triage_scope: str | None) -> ReportSection:
-    paragraphs = [
-        ReportParagraph(
-            "Affectedness: unknown. Matches and version notes do not "
-            "establish whether a deployment is affected."
+    for (kind, author), count in sorted(counts.items()):
+        rows.append((kind, author, str(count)))
+    sections.append(
+        ReportSection(
+            "Findings by kind and author",
+            tables=(ReportTable(("Kind", "Author", "Count"), tuple(rows)),),
+            sections=findings.sections,
+            paragraphs=findings.paragraphs,
+            folded=True,
         )
-    ]
-    if contents.findings is not None:
-        for question in contents.findings.open_questions:
-            paragraphs.append(ReportParagraph(f"Open question: {question}"))
-        for progress in contents.findings.selections.product_queries:
-            if not progress.complete:
-                paragraphs.append(
-                    ReportParagraph(
-                        f"Inventory traversal unfinished: {progress.vendor or '(any vendor)'}/"
-                        f"{progress.product or '(any product)'}; more pages remain."
-                    )
-                )
-    for call in contents.calls:
-        if call.outcome != "ok":
-            paragraphs.append(
-                ReportParagraph(
-                    f"Failed call {call.sequence}: {call.command} · {call.outcome}", True
-                )
+    )
+    claims: list[tuple[str, ...]] = []
+    for claim in contents.check.claims.checks:
+        claims.append(
+            (
+                claim.finding_id,
+                str(claim.call),
+                claim.status,
+                claim.field or "—",
+                json.dumps(claim.expected, ensure_ascii=True),
+                json.dumps(claim.recorded, ensure_ascii=True),
+                claim.message,
             )
-        answer = contents.responses.get(call.sequence)
-        if isinstance(answer, KnowledgeEvidenceSet):
-            for need in answer.coverage.needs:
-                if need.outcome != NeedOutcome.FOUND:
-                    paragraphs.append(
-                        ReportParagraph(
-                            f"call {call.sequence} · Need {need.kind}: "
-                            f"{need.subject or '(no subject)'}"
-                            f" · {need.outcome}"
-                        )
-                    )
-            for applicability in answer.product_applicability:
-                paragraphs.append(
-                    ReportParagraph(
-                        f"call {call.sequence} · {applicability.product}: applicability unknown. "
-                        f"{applicability.basis}"
-                    )
-                )
-        elif isinstance(answer, ProductQueryResponse) and answer.next_cursor is not None:
-            paragraphs.append(
-                ReportParagraph(
-                    f"call {call.sequence} · This inventory page has a continuation; "
-                    "the page alone does not establish inventory completeness."
-                )
-            )
-    sections: tuple[ReportSection, ...] = ()
-    if triage_scope is not None:
-        sections = (
-            ReportSection(
-                "Inventory versus deep-dive scope",
-                (
-                    ReportParagraph(
-                        "Recorded workflow scope only; inventory membership does not "
-                        "mean a CVE received a deep dive. This summary is not checked."
-                    ),
+        )
+    sections.append(
+        ReportSection(
+            "Per-claim check results",
+            tables=(
+                ReportTable(
+                    ("Finding", "Call", "Status", "Field", "Expected", "Recorded", "Meaning"),
+                    tuple(claims),
                 ),
-                verbatim=triage_scope,
             ),
+            folded=True,
         )
-    return ReportSection("What is not established", tuple(paragraphs), sections=sections)
-
-
-def build_call_log(contents: CheckedSession) -> ReportSection:
-    rows: list[tuple[str, ...]] = []
-    for call in contents.calls:
-        request = json.dumps(call.request, ensure_ascii=True, sort_keys=True)
-        rows.append(
-            (str(call.sequence), f"{call.interface}: {call.command}", call.outcome, request)
-        )
-    return ReportSection(
-        "Call log",
-        tables=(ReportTable(("Sequence", "Tool", "Outcome", "Request summary"), tuple(rows)),),
     )
+    sections.append(
+        ReportSection(
+            "Full check JSON", verbatim=contents.check.model_dump_json(indent=2), folded=True
+        )
+    )
+    if triage_scope is not None:
+        sections.append(
+            ReportSection(
+                "Recorded workflow scope (not checked)", verbatim=triage_scope, folded=True
+            )
+        )
+    return ReportSection("Technical appendix", sections=tuple(sections))
+
+
+def parse_triage_scope(scope: str | None) -> TriageSummary | None:
+    if scope is None:
+        return None
+    try:
+        return TriageSummary.model_validate_json(scope)
+    except ValueError:
+        return None
 
 
 def build_session_report(
     contents: CheckedSession, triage_scope: str | None = None
 ) -> SessionReport:
-    """Raise ValueError for unreadable metadata; retain and display every checker failure."""
-    header = build_header(contents)
+    """Compose only recorded values; optional scope metadata never changes checker verdicts."""
     session = contents.session
-    assert session is not None
+    if session is None:
+        raise ValueError("session metadata is unreadable or invalid")
+    triage = parse_triage_scope(triage_scope)
+    pages: list[tuple[int, ProductQueryResponse]] = []
+    inventory: list[tuple[int, ProductVulnerability]] = []
+    lookups: list[tuple[int, Candidate, dict[str, EvidenceAnchor]]] = []
+    limits = [
+        "Affectedness is unknown for every CVE: a version “hit” only "
+        "matches an NVD CPE condition; configuration and environment "
+        "were not evaluated.",
+        DERIVED_ASSOCIATION_NOTE,
+    ]
+    for call in contents.calls:
+        answer = contents.responses.get(call.sequence)
+        if call.outcome != "ok":
+            limits.append(f"Failed call {call.sequence}: {call.command} · {call.outcome}")
+        if isinstance(answer, ProductQueryResponse):
+            pages.append((call.sequence, answer))
+            for vulnerability in answer.items:
+                inventory.append((call.sequence, vulnerability))
+        elif isinstance(answer, SearchResponse) and call.command in {"lookup", "lookup_cve"}:
+            for candidate in answer.candidates:
+                lookups.append((call.sequence, candidate, collect_anchors(answer)))
+        elif isinstance(answer, KnowledgeEvidenceSet):
+            for need in answer.coverage.needs:
+                if need.outcome != NeedOutcome.FOUND:
+                    limits.append(
+                        f"call {call.sequence} · Need {need.kind}: "
+                        f"{need.subject or '(no subject)'} "
+                        f"· {need.outcome}"
+                    )
+    if contents.findings is not None:
+        for question in contents.findings.open_questions:
+            limits.append(f"Open question: {question}")
+    title = session.goal or session.name
+    if triage_scope is not None:
+        query = pages[0][1] if pages else None
+        # A deadline can stop before the first page; its request may still be in the call log.
+        if query is not None:
+            title = (
+                f"{query.product or query.vendor} {query.version or ''}".strip()
+                + " — product vulnerability triage"
+            )
+    badges: list[ReportBadge] = []
+    stats: list[ReportStat] = []
+    if triage is not None:
+        complete = bool(pages) and pages[-1][1].next_cursor is None
+        total = str(pages[-1][1].total_available) if pages else "unknown"
+        unread = str(max(0, pages[-1][1].total_available - len(inventory))) if pages else "unknown"
+        if complete:
+            badges.append(ReportBadge("Inventory complete", "ok"))
+        else:
+            reason = {"max_pages": "page cap", "time_limit": "time limit"}.get(
+                triage.stop_reason, "failure"
+            )
+            badges.append(
+                ReportBadge(
+                    f"Stopped at the {reason} · {unread} of {total} not read",
+                    "warn" if reason != "failure" else "bad",
+                )
+            )
+            limits.insert(0, f"Inventory incomplete: {unread} matches were not read ({reason}).")
+        if triage.stop_reason not in {"complete", "no_match", "max_pages", "time_limit"}:
+            badges.append(ReportBadge(f"Triage failed: {triage.stop_reason}", "bad"))
+        elif triage.stop_reason == "time_limit" and complete:
+            badges.append(
+                ReportBadge("Stopped at the time limit · planned lookups unfinished", "warn")
+            )
+        mode = (
+            "selected by the user"
+            if triage.deep_dive.selection_mode == "user-chosen IDs"
+            else "first N by the stated order"
+        )
+        limits.append(
+            "Selection is user-selected."
+            if mode == "selected by the user"
+            else "Selection is an order, not a risk ranking."
+        )
+        for step in triage.remaining_steps:
+            limits.append(f"Remaining step: {step}")
+        stats.extend(
+            (
+                ReportStat("Total matches", total, "reported by the product query"),
+                ReportStat("Read", str(len(inventory)), f"{len(pages)} pages"),
+                ReportStat("CVE details", str(len(lookups)), mode),
+                ReportStat("Applicability", "unknown", "not established for any CVE"),
+            )
+        )
+    elif triage_scope is not None:
+        limits.append(
+            "triage.json is unreadable or invalid; inventory and CVE detail scope unavailable."
+        )
+    if triage is None and pages and pages[-1][1].next_cursor is not None:
+        limits.insert(0, "Inventory incomplete: the last recorded product page has a continuation.")
+    check = contents.check
+    if check.record.consistent and check.citations.resolved and check.claims.verified:
+        badges.append(
+            ReportBadge(
+                f"Record, citations and {len(check.claims.checks)} claims "
+                f"consistent with the record",
+                "ok",
+            )
+        )
+    else:
+        for name, passed in (
+            ("Record consistency", check.record.consistent),
+            ("Citation resolution", check.citations.resolved),
+            ("Structured claims", check.claims.verified),
+        ):
+            if not passed:
+                badges.append(ReportBadge(f"{name} failed", "bad"))
+    overview = ReportSection(
+        "Overview",
+        (
+            ReportParagraph(
+                f"Dataset {session.dataset.store_name or 'packaged demo data'} "
+                f"· session “{session.name}” · recorded "
+                f"{session.created_at.astimezone(UTC):%Y-%m-%d %H:%M UTC}"
+            ),
+        ),
+        badges=tuple(badges),
+        stats=tuple(stats),
+    )
+    basis_counts: dict[str, int] = {}
+    outcomes: dict[str, int] = {}
+    vulnerabilities: dict[str, ProductVulnerability] = {}
+    for _, vulnerability in inventory:
+        vulnerabilities[vulnerability.record.cve_id] = vulnerability
+        basis_counts[vulnerability.basis.kind] = basis_counts.get(vulnerability.basis.kind, 0) + 1
+        if vulnerability.nvd_version_note is not None:
+            outcome = vulnerability.nvd_version_note.outcome
+            outcomes[outcome] = outcomes.get(outcome, 0) + 1
+    facts = [
+        f"{basis_counts.get('product_field', 0)} of {len(inventory)} "
+        f"read entries match the NVD product field; "
+        f"{basis_counts.get('description_mention', 0)} "
+        f"only mention the product in their description."
+    ]
+    if pages and pages[0][1].version is not None:
+        facts.append(
+            f"Version {pages[0][1].version} against NVD conditions: {outcomes.get('hit', 0)} "
+            f"hit, {outcomes.get('unknown', 0)} unknown, {outcomes.get('no_hit', 0)} "
+            f"no hit."
+        )
+    returned = reaching = omitted = 0
+    techniques: set[str] = set()
+    for _, candidate, _ in lookups:
+        associations = candidate.weakness_associations
+        if associations is not None:
+            count, distinct = path_counts(associations)
+            returned += len(associations.paths)
+            reaching += count
+            techniques.update(distinct)
+            omitted += associations.omitted_count
+    facts.append(
+        f"The {len(lookups)} CVE details returned {returned} catalogue "
+        f"paths; {reaching} paths reaching ATT&CK; {len(techniques)} "
+        f"distinct techniques; {omitted} paths omitted by the cap."
+    )
+    ranks: dict[str, int] = {}
+    for rank, vulnerability in enumerate(
+        sorted(vulnerabilities.values(), key=triage_selection_key), 1
+    ):
+        ranks[vulnerability.record.cve_id] = rank
+    cards: list[ReportSection] = []
+    card_links: list[ReportLink] = []
+    for sequence, candidate, anchors in lookups:
+        cve_id = candidate.record.cve_id
+        cards.append(
+            build_card(
+                candidate, sequence, anchors, vulnerabilities.get(cve_id), ranks.get(cve_id), triage
+            )
+        )
+        card_links.append(ReportLink(cve_id, f"#{cve_id}"))
+    rows: list[tuple[str, ...]] = []
+    for index, (sequence, vulnerability) in enumerate(inventory, 1):
+        record = vulnerability.record
+        note = vulnerability.nvd_version_note
+        rows.append(
+            (
+                str(index),
+                record.cve_id,
+                published_date(record),
+                format_severity(record),
+                basis_label(vulnerability),
+                note.outcome if note else "not recorded",
+                str(sequence),
+            )
+        )
+    selection_paragraphs: tuple[ReportParagraph, ...] = ()
+    if triage is not None:
+        selection_text = f"Selection rule: {triage.deep_dive.selection_rule}"
+        if triage.deep_dive.selection_mode == "user-chosen IDs":
+            selection_text = "Selection: selected by the user."
+        selection_paragraphs = (ReportParagraph(selection_text),)
+    inventory_title = f"Read inventory · {len(inventory)} entries"
+    if triage is not None:
+        total = str(pages[-1][1].total_available) if pages else "unknown"
+        inventory_title = f"Read inventory · {len(inventory)} of {total}"
     return SessionReport(
-        title=f"Session report: {session.name}",
-        synthetic=session.dataset.served.kind == ServedDatasetKind.SYNTHETIC_FIXTURE,
-        check=contents.check,
-        sections=(
-            header,
-            build_checks(contents),
-            build_findings(contents),
-            build_cves(contents),
-            build_weakness_paths(contents),
-            build_unknowns(contents, triage_scope),
-            build_call_log(contents),
+        title,
+        session.dataset.served.kind == ServedDatasetKind.SYNTHETIC_FIXTURE,
+        check,
+        (
+            overview,
+            ReportSection(
+                "Key facts and limits",
+                sections=(
+                    ReportSection("What the records show", bullets=tuple(facts), layout="panel"),
+                    ReportSection(
+                        "What is not established", bullets=tuple(limits), layout="limits"
+                    ),
+                ),
+                layout="two",
+            ),
+            ReportSection(
+                f"CVE details · {len(cards)} CVEs",
+                paragraphs=selection_paragraphs,
+                sections=tuple(cards),
+            ),
+            ReportSection(
+                inventory_title,
+                tables=(
+                    ReportTable(
+                        (
+                            "#",
+                            "CVE",
+                            "Published",
+                            "Severity",
+                            "Match basis",
+                            "Version note",
+                            "Call",
+                        ),
+                        tuple(rows),
+                        tuple(card_links),
+                    ),
+                ),
+            ),
+            build_execution(contents, triage),
+            build_appendix(contents, triage_scope),
         ),
     )

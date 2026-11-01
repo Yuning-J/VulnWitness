@@ -86,8 +86,13 @@ the workflow artifact is not evidence or an additional source-authenticity guara
 Inventory scope and deep-dive scope appear separately in both JSON and text. Reaching the
 page cap leaves inventory incomplete, but selected lookups can still finish within the time
 budget. `lookups` bounds the intended deep dive and does not by itself make a run incomplete.
-An empty complete inventory exits 1; complete runs with passing checks exit 0. Page caps,
-deadline stops, failures, invalid selections and failed checks exit 2. Completed calls remain
+Product pages default to the maximum of 20 entries. An empty complete inventory exits 1;
+planned scopes with passing checks exit 0, including reaching the requested lookup count.
+Page caps with unfinished inventory and deadlines before planned lookups finish exit 3
+when artifacts are saved and checks pass. Failures, invalid selections and failed checks
+exit 2 and take precedence over 3. Exit 3 is non-zero for shells; automation may explicitly
+accept 0 and 3 for partial-result workflows and must inspect remaining steps in triage.json.
+Completed calls remain
 on service failure; the typed failure itself is also recorded by the existing recorder.
 Findings cover only completed successful calls, and remaining planned steps are listed.
 Recording or filesystem failures can prevent artifact publication and are reported as

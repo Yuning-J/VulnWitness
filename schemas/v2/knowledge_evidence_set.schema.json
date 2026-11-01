@@ -2309,7 +2309,7 @@
           "title": "Cursor"
         },
         "limit": {
-          "default": 10,
+          "default": 20,
           "maximum": 20,
           "minimum": 1,
           "title": "Limit",

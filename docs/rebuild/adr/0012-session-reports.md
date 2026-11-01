@@ -14,20 +14,27 @@ The checker exposes the same parsed metadata, calls, responses and findings that
 the report does not reread those files, retrieve evidence, load a store or call a service.
 Invalid files remain checker violations and are not rendered as valid findings or responses.
 An unreadable session.json refuses rendering. Other layer failures remain visible in a
-rendered report and cause exit 1; there is no aggregate passed badge.
+rendered report and cause exit 1. Status pills and check-layer marks come from the actual
+checker verdicts; an aggregate consistency pill appears only when all checked layers pass.
 
 A typed format-independent document in the domain holds the report sections. The application
 builds those sections; separate interface renderers escape their text for HTML and Markdown.
 The HTML template is package data with inline CSS, dark-mode and print styles, and no
 JavaScript or external resources. Recorded URIs are displayed as text. Session timestamps
-and stable record order make repeated rendering byte-identical. The metadata contract has
-goal and scope but no separate question field, so the header says that question is not
-separately recorded rather than inferring one from later calls.
+and stable record order make repeated rendering byte-identical. The title uses the triage
+product and version, or the manual session goal/name.
 
-CVE tables use only responses cited by findings. Weakness paths use recorded lookups and
-retain the derived-catalogue association limitation. Optional triage.json is displayed only
-as unchecked workflow scope metadata, separating inventory and deep-dive scope without
-making the report depend on a workflow summary or using it as evidence.
+The report orders overview, key facts and limits, CVE details, read inventory, execution
+and checks, and a folded technical appendix. CVE cards use recorded lookups; the inventory
+uses all recorded product pages. Full descriptions, original association hops, inheritance,
+terminal reasons, source identities and the full check JSON remain available. The same CVSS
+selection policy supplies severity in both cards and inventory, including the recorded scorer.
+Version-condition outcomes use neutral styling and never establish affectedness.
+
+Optional triage.json supplies workflow scope and selection context only. Counts come from
+recorded responses, and the workflow artifact cannot change checker verdicts. Missing or
+invalid workflow metadata does not prevent manual session reporting. Dark-mode styles and
+print styles share variables; print explicitly selects the light palette and expands details.
 
 ## Trust and output
 

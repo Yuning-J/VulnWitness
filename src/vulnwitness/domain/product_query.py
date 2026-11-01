@@ -45,7 +45,7 @@ class ProductQueryRequest(ContractModel):
         description="Exact CPE product name, case-folded; punctuation and whitespace retained.",
     )
     version: FilterName | None = None
-    limit: JsonInteger = Field(default=10, ge=1, le=MAX_RESULTS_PER_CALL)
+    limit: JsonInteger = Field(default=20, ge=1, le=MAX_RESULTS_PER_CALL)
     cursor: str | None = Field(
         default=None,
         max_length=8192,

@@ -1,9 +1,11 @@
 """Typed, format-independent report content built solely from checked session files."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import BaseModel
 
+from vulnwitness.domain.cve import Severity
 from vulnwitness.domain.session_record import (
     SessionCall,
     SessionCheckReport,
@@ -28,9 +30,38 @@ class ReportParagraph:
 
 
 @dataclass(frozen=True)
+class ReportBadge:
+    text: str
+    tone: Literal["ok", "warn", "bad", "neutral"] = "neutral"
+    severity: Severity | None = None
+
+
+@dataclass(frozen=True)
+class ReportStat:
+    label: str
+    value: str
+    note: str
+
+
+@dataclass(frozen=True)
+class ReportLink:
+    text: str
+    target: str
+
+
+@dataclass(frozen=True)
 class ReportTable:
     headings: tuple[str, ...]
     rows: tuple[tuple[str, ...], ...]
+    links: tuple[ReportLink, ...] = ()
+
+
+@dataclass(frozen=True)
+class ReportFact:
+    label: str
+    value: str = ""
+    badge: ReportBadge | None = None
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -41,6 +72,17 @@ class ReportSection:
     sections: tuple["ReportSection", ...] = ()
     verbatim: str | None = None
     bullets: tuple[str, ...] = ()
+    layout: Literal[
+        "", "two", "panel", "limits", "card", "facts", "timeline", "step", "desc", "paths", "inline"
+    ] = ""
+    folded: bool = False
+    anchor: str = ""
+    badges: tuple[ReportBadge, ...] = ()
+    chips: tuple[str, ...] = ()
+    links: tuple[ReportLink, ...] = ()
+    stats: tuple[ReportStat, ...] = ()
+    facts: tuple[ReportFact, ...] = ()
+    heading_note: str = ""
 
 
 @dataclass(frozen=True)

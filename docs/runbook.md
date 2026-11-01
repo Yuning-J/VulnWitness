@@ -224,7 +224,7 @@ the existing services. It writes `findings.yaml` with deterministic, unconfirmed
 claims for every inventoried CVE, plus version notes and returned lookup associations or
 record facts. It then runs the ordinary session checker. It writes no narrative findings.
 
-Defaults are 20 pages, 5 lookups (maximum 10), 120 seconds and 10 CVEs per page (`--limit`,
+Defaults are 20 pages, 5 lookups (maximum 10), 120 seconds and 20 CVEs per page (`--limit`,
 maximum 20). Before recording any call, the workflow reserves the worst-case call count:
 `1 + max-pages + lookups`, or the number of `--select` IDs instead of `lookups`. It refuses
 with exit 2 if that count exceeds `--session-call-limit` (default 100), even if the actual
@@ -246,14 +246,17 @@ also reports the layered session check; rerun `vulnwitness session check DIR` fo
 Finished traversal describes only the served inventory, without establishing corpus
 completeness, source support or deployed applicability.
 
-The page cap leaves the inventory unfinished, permits the selected lookups within the
-remaining time, and exits 2. A service failure or time limit preserves completed calls,
-writes findings from those calls and lists unexecuted steps; both exit 2. A failed session
-check also exits 2. If a lookup returns no catalogue paths or claimable record fields, the
-workflow reports `lookup_claim_unavailable` and exits 2 without inventing a claim.
-Complete runs with passing checks exit 0; an empty matching inventory
-exits 1. Every invocation requires a new or empty session directory; there is no resume or
-append. A non-empty directory is refused with exit 2 without modifying its contents.
+Triage exit codes are `0` when the planned scope is complete and checks pass (reaching
+`--lookups` is complete), `1` for a complete query with no matches, `2` for argument,
+call, recording or check failures, and `3` for a page cap with unfinished inventory or
+a time limit before planned lookups finish, with results saved and checks passing.
+Failures take precedence over `3`. Exit `3` is non-zero for shells; automation that
+accepts partial results should handle `0` and `3` explicitly and inspect `triage.json`
+for the stop reason and remaining steps. `--lookups 0` completes after the inventory.
+A service failure preserves completed calls and lists unexecuted steps. If a lookup
+returns no catalogue paths or claimable record fields, `lookup_claim_unavailable`
+exits 2. Every invocation requires a new or empty session directory; a non-empty
+directory is refused with exit 2 without modifying its contents.
 
 ## Record and check a session
 

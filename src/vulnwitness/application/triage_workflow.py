@@ -198,8 +198,6 @@ class TriageWorkflow:
                                 "returned no claimable fields"
                             )
                             break
-            if stop_reason in {"complete", "max_pages"} and self._clock() >= deadline:
-                stop_reason = "time_limit"
         except SessionRecordingError as error:
             failure_code = error.code
             stop_reason = "recording_failed"
@@ -237,7 +235,7 @@ class TriageWorkflow:
         )
         check = self._artifacts.check()
         checks_pass = check.record.consistent and check.citations.resolved and check.claims.verified
-        if not checks_pass and stop_reason in {"complete", "no_match"}:
+        if not checks_pass:
             stop_reason = "check_failed"
             remaining_steps.append("session check: resolve reported violations")
         inventory_cve_ids: list[str] = []
@@ -271,6 +269,8 @@ class TriageWorkflow:
             return summary, check, 2
         if stop_reason == "no_match":
             return summary, check, 1
+        if stop_reason in {"max_pages", "time_limit"}:
+            return summary, check, 3
         return summary, check, 0 if stop_reason == "complete" else 2
 
     def _record(

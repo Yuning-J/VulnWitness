@@ -10,6 +10,15 @@ from vulnwitness.domain.triage import TriageLimits, TriageSummary
 
 
 def add_triage_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.epilog = (
+        "Exit codes: 0 planned scope complete and checks pass (requested "
+        "lookup count is complete); "
+        "1 complete query with no matches; 2 arguments, call, recording or check failed; "
+        "3 saved and checked results stopped early at the page cap or time limit. "
+        "Failure takes precedence over 3. Exit 3 is non-zero for shells; automation may "
+        "accept 0 and 3 when partial results are useful, inspecting "
+        "triage.json for remaining steps."
+    )
     parser.add_argument("--vendor")
     parser.add_argument("--product")
     parser.add_argument("--version")
@@ -20,7 +29,9 @@ def add_triage_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-pages", type=int, default=20)
     parser.add_argument("--lookups", type=int, default=5)
     parser.add_argument("--time-limit", type=float, default=120)
-    parser.add_argument("--limit", type=int, default=10, help="product page size (1..20)")
+    parser.add_argument(
+        "--limit", type=int, default=20, help="product page size (1..20; default 20)"
+    )
     parser.add_argument("--select", action="append", default=[], metavar="CVE-ID")
     parser.add_argument("--format", choices=("text", "json"), default="text")
 
