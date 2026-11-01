@@ -127,6 +127,27 @@ def test_record_hook_collects_supported_tool_shapes(tmp_path: Path, tool_respons
     assert conversation == {"investigations": [INVESTIGATION_ID], "checked": {}}
 
 
+def test_record_hook_records_the_session_id_argument_when_the_answer_omits_it(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    environment = hook_environment(tmp_path)
+    event = {
+        "session_id": "conversation-1",
+        "tool_name": TOOL_PREFIX + "check_investigation",
+        "tool_input": {"session_id": INVESTIGATION_ID},
+        "tool_response": json.dumps({"record": {"consistent": False}, "citations": {}}),
+    }
+
+    # Act
+    recording = run_hook("record-investigation", event, environment)
+
+    # Assert
+    assert recording.returncode == 0
+    conversation = json.loads(conversation_file(environment).read_text())
+    assert conversation["investigations"] == [INVESTIGATION_ID]
+
+
 def test_record_hook_appends_unique_ids_and_preserves_checks(tmp_path: Path) -> None:
     # Arrange
     environment = hook_environment(tmp_path)

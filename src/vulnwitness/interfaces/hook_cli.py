@@ -83,7 +83,12 @@ def record_investigation(event: dict[str, JsonValue], state: PluginHookState) ->
         return
     if tool_name in LISTING_TOOLS:
         return
-    investigations = extract_investigations(event.get("tool_response"))
+    # The call's own session_id argument names the investigation it worked on; some
+    # answers (check reports) do not repeat it.
+    investigations = extract_investigations(event.get("tool_input"))
+    for investigation_id in extract_investigations(event.get("tool_response")):
+        if investigation_id not in investigations:
+            investigations.append(investigation_id)
     if not investigations:
         return
     path = conversation_path(event, state)
