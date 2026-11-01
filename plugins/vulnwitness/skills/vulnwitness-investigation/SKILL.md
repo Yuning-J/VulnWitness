@@ -11,7 +11,7 @@ Establish the product/vendor, component, version and scope from the request; ask
 only for missing details that matter. Mark unspecified details as unknown and
 agree useful page/lookup limits. Do not infer a deployed version or package URL.
 In Claude Code, load `claude --plugin-dir plugins/vulnwitness` from the repository
-(acceptance in Claude Code pending). Plugin tool names are
+(tested with Claude Code 2.1.316). Plugin tool names are
 `mcp__plugin_vulnwitness_vulnwitness__<tool>`. Other clients use the same canonical
 Skill here and have no plugin hooks. Connect with a [workspace client snippet](mcp-config/README.md):
 `vulnwitness mcp --workspace ~/.vulnwitness/workspace`.

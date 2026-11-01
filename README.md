@@ -18,8 +18,9 @@ timing condensed.*
   `report` turns any recorded session into a shareable HTML or Markdown report. Individual
   commands (`lookup`, `search`, `product`, `investigate`) return JSON or readable text.
 - **Claude Code plugin and MCP agents.** Local test: `claude --plugin-dir plugins/vulnwitness`
-  (acceptance in Claude Code pending). Install the package with its `mcp` extra first;
-  see the [plugin runbook](docs/runbook.md#claude-code-plugin). Other clients have no hook.
+  (tested with Claude Code 2.1.316). It needs a checkout set up with `uv sync --locked`
+  and `VULNWITNESS_BIN` pointing at its `vulnwitness`; see the
+  [plugin runbook](docs/runbook.md#claude-code-plugin). Other clients have no hook.
   For direct MCP, `vulnwitness mcp --workspace ~/.vulnwitness/workspace` lets
   an agent triage a product, inspect recorded evidence, add findings and deliver a checked
   report without a shell. The [investigation Skill](plugins/vulnwitness/skills/vulnwitness-investigation/SKILL.md)

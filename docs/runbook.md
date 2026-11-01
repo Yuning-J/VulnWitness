@@ -479,7 +479,8 @@ root, test locally with:
 claude --plugin-dir plugins/vulnwitness
 ```
 
-Status: **acceptance in Claude Code pending**. This session-local command needs no
+Status: tested with Claude Code 2.1.316 through `--plugin-dir`, including both hooks,
+real-data loading with `wait_for_data`, and interactive prompts and resources. This session-local command needs no
 global settings changes. The self-contained plugin can also be installed through
 Claude Code's plugin manager once distributed through a plugin marketplace.
 The canonical Skill is `plugins/vulnwitness/skills/vulnwitness-investigation/`;

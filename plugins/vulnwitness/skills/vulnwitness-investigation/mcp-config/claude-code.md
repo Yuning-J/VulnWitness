@@ -2,7 +2,7 @@
 # Claude Code
 
 For the plugin, run `claude --plugin-dir plugins/vulnwitness` from the repository
-root after installing `vulnwitness[mcp]` (acceptance in Claude Code pending).
+root after installing `vulnwitness[mcp]` (the plugin is tested with Claude Code 2.1.316).
 The plugin supplies the canonical Skill, analyst, MCP server and optional hooks.
 The direct configurations below have no plugin hooks.
 

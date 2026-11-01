@@ -3,7 +3,7 @@
 The canonical Skill lives in `plugins/vulnwitness/skills/vulnwitness-investigation/`.
 Claude Code can load its containing plugin with
 `claude --plugin-dir plugins/vulnwitness` from the repository root
-(acceptance in Claude Code pending). The snippets below connect directly without
+(tested with Claude Code 2.1.316). The snippets below connect directly without
 plugin hooks; Codex and Cursor use the Skill from this same location.
 
 Install the package with its `mcp` extra in the environment that supplies
