@@ -240,9 +240,9 @@ does not snapshot descriptor schemas, so this surface adds no committed schema c
 ### Claude Code plugin
 
 `plugins/vulnwitness/` is self-contained: a manifest, MCP wrapper, canonical
-investigation Skill, restricted analyst and standard-library Python hooks. Other
-clients reference the same Skill source. The wrapper discovers `VULNWITNESS_BIN`
-or `vulnwitness` on PATH and serves a private workspace at
+investigation Skill, restricted analyst and POSIX shell hook entry point. Other
+clients reference the same Skill source. Both wrappers discover `VULNWITNESS_BIN`
+or `vulnwitness` on PATH. The MCP server serves a private workspace at
 `~/.vulnwitness/workspace`, overridden with `VULNWITNESS_WORKSPACE`. Demo mode
 unsets operator data, snapshot identities and planner settings and disables
 inherited semantic enablement. `VULNWITNESS_PLUGIN_REAL_DATA=1` preserves them.
@@ -254,15 +254,19 @@ MCP text content and structuredContent. Both hooks share atomic, locked state at
 `${CLAUDE_PLUGIN_DATA}/conversations/<Claude-session-id>.json`. They never parse
 transcripts or scan modification times. Stop hashes session metadata, findings,
 calls and responses as checker inputs, independently of report freshness. Only a
-changed input set runs the CLI's existing layered checker. This subprocess boundary
-keeps hooks standard-library-only and respects the operator's executable choice;
-`session check` loads no deployment corpus. Successful executions save the digest,
-including failed check layers, before returning a block decision. Unchanged inputs
+changed input set runs the CLI's existing layered checker. `bin/vulnwitness-hook`
+shares executable discovery and demo isolation with `bin/vulnwitness-mcp` and runs
+`vulnwitness hook record-investigation` or `vulnwitness hook check-on-stop`.
+Hook logic uses the installed package's Python environment; the Stop command runs
+`session check` in a bounded subprocess through the chosen CLI without loading a
+deployment corpus. Successful executions save the digest, including failed check
+layers, before returning a block decision. Unchanged inputs
 and `stop_hook_active` do not block. A concurrent input change is retried on the
 next Stop. Per-command and total budgets fit within the explicit hook timeout.
 
-Hook errors fail open and log only their exception type under plugin data. Lock
-contention can skip an event; investigations not returned by tools are outside
+A missing CLI exits 0 with one stderr line. Other hook errors fail open and log
+only their exception type under plugin data. Lock contention can skip an event;
+investigations not returned by tools are outside
 coverage. Checks cover record consistency, citation resolution and structured
 claims, never narrative, source support, source authenticity, real-world truth or
 deployed applicability. Local plugin validation and subprocess tests do not prove

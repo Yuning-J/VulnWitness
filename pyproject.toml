@@ -95,8 +95,7 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.mypy]
-files = ["src/vulnwitness", "plugins/vulnwitness/hooks"]
-mypy_path = ["plugins/vulnwitness/hooks"]
+files = ["src/vulnwitness"]
 strict = true
 plugins = ["pydantic.mypy"]
 

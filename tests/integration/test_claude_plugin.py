@@ -56,11 +56,11 @@ def hook_environment(directory: Path) -> dict[str, str]:
 
 
 def run_hook(
-    script: str, event: object, environment: dict[str, str], *, raw: bool = False
+    command: str, event: object, environment: dict[str, str], *, raw: bool = False
 ) -> subprocess.CompletedProcess[str]:
     stdin = str(event) if raw else json.dumps(event)
     return subprocess.run(
-        [sys.executable, str(HOOKS / script)],
+        [str(PLUGIN / "bin/vulnwitness-hook"), command],
         input=stdin,
         text=True,
         capture_output=True,
@@ -76,7 +76,7 @@ def conversation_file(environment: dict[str, str], session_id: str = "conversati
 
 def record_ids(environment: dict[str, str], investigation_id: str) -> None:
     recording = run_hook(
-        "record_investigation.py",
+        "record-investigation",
         {
             "session_id": "conversation-1",
             "tool_name": TOOL_PREFIX + "triage_product",
@@ -100,13 +100,12 @@ def create_demo_investigation(environment: dict[str, str]) -> Path:
     "tool_response",
     [
         {"session_id": INVESTIGATION_ID},
-        json.dumps({"nested": {"session_id": INVESTIGATION_ID}}),
+        json.dumps({"session_id": INVESTIGATION_ID, "session": {"name": INVESTIGATION_ID}}),
         [{"type": "text", "text": json.dumps({"session_id": INVESTIGATION_ID})}],
         {"content": [{"type": "text", "text": json.dumps({"session_id": INVESTIGATION_ID})}]},
         {"structuredContent": {"session_id": INVESTIGATION_ID}},
-        {"outer": {"snapshot": {"session_id": INVESTIGATION_ID}}},
     ],
-    ids=["object", "json-string", "content-list", "content-envelope", "structured", "nested"],
+    ids=["object", "json-string-observed", "content-list", "content-envelope", "structured"],
 )
 def test_record_hook_collects_supported_tool_shapes(tmp_path: Path, tool_response: object) -> None:
     # Arrange
@@ -118,7 +117,7 @@ def test_record_hook_collects_supported_tool_shapes(tmp_path: Path, tool_respons
     }
 
     # Act
-    recording = run_hook("record_investigation.py", event, environment)
+    recording = run_hook("record-investigation", event, environment)
 
     # Assert
     assert recording.returncode == 0
@@ -160,6 +159,19 @@ def test_record_hook_appends_unique_ids_and_preserves_checks(tmp_path: Path) -> 
         {"tool_name": TOOL_PREFIX + "lookup_cve", "tool_response": {"session_id": "inv_A"}},
         {"tool_name": TOOL_PREFIX + "lookup_cve", "tool_response": "not JSON"},
         {"tool_name": TOOL_PREFIX + "lookup_cve", "tool_response": INVESTIGATION_ID},
+        {
+            "tool_name": TOOL_PREFIX + "get_investigation",
+            "tool_response": json.dumps({"nested": {"session_id": INVESTIGATION_ID}}),
+        },
+        {
+            "tool_name": TOOL_PREFIX + "list_investigations",
+            "tool_response": json.dumps(
+                {
+                    "investigations": [{"session_id": INVESTIGATION_ID}],
+                    "session_id": INVESTIGATION_ID,
+                }
+            ),
+        },
         [],
     ],
 )
@@ -170,20 +182,20 @@ def test_record_hook_ignores_unrelated_or_invalid_content(tmp_path: Path, event:
         event = {"session_id": "conversation-1", **event}
 
     # Act
-    recording = run_hook("record_investigation.py", event, environment)
+    recording = run_hook("record-investigation", event, environment)
 
     # Assert
     assert recording.returncode == 0
     assert not conversation_file(environment).exists()
 
 
-@pytest.mark.parametrize("script", ["record_investigation.py", "check_on_stop.py"])
-def test_hook_malformed_input_exits_zero_and_logs(tmp_path: Path, script: str) -> None:
+@pytest.mark.parametrize("command", ["record-investigation", "check-on-stop"])
+def test_hook_malformed_input_exits_zero_and_logs(tmp_path: Path, command: str) -> None:
     # Arrange
     environment = hook_environment(tmp_path)
 
     # Act
-    invocation = run_hook(script, "{invalid", environment, raw=True)
+    invocation = run_hook(command, "{invalid", environment, raw=True)
 
     # Assert
     assert invocation.returncode == 0
@@ -197,7 +209,7 @@ def test_record_hook_rejects_conversation_path_traversal(tmp_path: Path) -> None
 
     # Act
     recording = run_hook(
-        "record_investigation.py",
+        "record-investigation",
         {
             "session_id": "../../escape",
             "tool_name": TOOL_PREFIX + "triage_product",
@@ -219,7 +231,7 @@ def test_stop_without_investigations_does_not_block(tmp_path: Path, active: bool
 
     # Act
     stopping = run_hook(
-        "check_on_stop.py",
+        "check-on-stop",
         {"session_id": "conversation-1", "stop_hook_active": active},
         environment,
     )
@@ -239,7 +251,7 @@ def test_stop_valid_demo_investigation_does_not_block(tmp_path: Path) -> None:
         environment[name] = "invalid-inherited-setting"
 
     # Act
-    stopping = run_hook("check_on_stop.py", {"session_id": "conversation-1"}, environment)
+    stopping = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
 
     # Assert
     assert stopping.returncode == 0
@@ -253,7 +265,7 @@ def test_stop_failed_layers_block_once_until_inputs_change(tmp_path: Path, tampe
     # Arrange
     environment = hook_environment(tmp_path)
     directory = create_demo_investigation(environment)
-    initial_stop = run_hook("check_on_stop.py", {"session_id": "conversation-1"}, environment)
+    initial_stop = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
     assert initial_stop.stdout == ""
     if tamper == "findings":
         with (directory / "findings.yaml").open("a") as stream:
@@ -272,8 +284,8 @@ def test_stop_failed_layers_block_once_until_inputs_change(tmp_path: Path, tampe
         expected_layer = "claims"
 
     # Act
-    stopping = run_hook("check_on_stop.py", {"session_id": "conversation-1"}, environment)
-    unchanged_stop = run_hook("check_on_stop.py", {"session_id": "conversation-1"}, environment)
+    stopping = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
+    unchanged_stop = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
 
     # Assert
     assert stopping.returncode == 0
@@ -294,7 +306,7 @@ def test_active_stop_does_not_check_or_block_invalid_record(tmp_path: Path) -> N
 
     # Act
     stopping = run_hook(
-        "check_on_stop.py",
+        "check-on-stop",
         {"session_id": "conversation-1", "stop_hook_active": True},
         environment,
     )
@@ -305,19 +317,30 @@ def test_active_stop_does_not_check_or_block_invalid_record(tmp_path: Path) -> N
     assert json.loads(conversation_file(environment).read_text())["checked"] == {}
 
 
-def test_stop_missing_cli_logs_without_blocking_or_marking_checked(tmp_path: Path) -> None:
+@pytest.mark.parametrize("command", ["record-investigation", "check-on-stop"])
+@pytest.mark.parametrize("override", [False, True])
+def test_hook_missing_cli_exits_zero_with_one_stderr_line(
+    tmp_path: Path, command: str, override: bool
+) -> None:
     # Arrange
     environment = hook_environment(tmp_path)
     create_demo_investigation(environment)
-    environment["VULNWITNESS_BIN"] = str(tmp_path / "missing-cli")
+    environment["PATH"] = str(tmp_path)
+    if override:
+        environment["VULNWITNESS_BIN"] = str(tmp_path / "missing-cli")
+    else:
+        del environment["VULNWITNESS_BIN"]
 
     # Act
-    stopping = run_hook("check_on_stop.py", {"session_id": "conversation-1"}, environment)
+    stopping = run_hook(command, {"session_id": "conversation-1"}, environment)
 
     # Assert
     assert stopping.stdout == ""
     assert stopping.returncode == 0
-    assert "FileNotFoundError" in (tmp_path / "plugin-data/hooks.log").read_text()
+    assert len(stopping.stderr.splitlines()) == 1
+    assert "CLI not found" in stopping.stderr
+    assert "VULNWITNESS_BIN" in stopping.stderr
+    assert not (tmp_path / "plugin-data/hooks.log").exists()
     assert json.loads(conversation_file(environment).read_text())["checked"] == {}
 
 
@@ -332,9 +355,13 @@ def fake_cli(directory: Path) -> Path:
     return executable
 
 
-def run_wrapper(environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def run_wrapper(
+    environment: dict[str, str], wrapper: str = "vulnwitness-mcp"
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [str(PLUGIN / "bin/vulnwitness-mcp")],
+        [str(PLUGIN / "bin" / wrapper), "check-on-stop"]
+        if wrapper == "vulnwitness-hook"
+        else [str(PLUGIN / "bin" / wrapper)],
         text=True,
         capture_output=True,
         env=environment,
@@ -344,8 +371,9 @@ def run_wrapper(environment: dict[str, str]) -> subprocess.CompletedProcess[str]
 
 
 @pytest.mark.parametrize("opt_in", [False, True])
+@pytest.mark.parametrize("wrapper", ["vulnwitness-mcp", "vulnwitness-hook"])
 def test_wrapper_isolates_demo_environment_unless_real_data_is_enabled(
-    tmp_path: Path, opt_in: bool
+    tmp_path: Path, opt_in: bool, wrapper: str
 ) -> None:
     # Arrange
     fake_cli(tmp_path)
@@ -357,12 +385,17 @@ def test_wrapper_isolates_demo_environment_unless_real_data_is_enabled(
         environment[name] = "operator-value"
 
     # Act
-    invocation = run_wrapper(environment)
+    invocation = run_wrapper(environment, wrapper)
 
     # Assert
     assert invocation.returncode == 0
     execution = json.loads(invocation.stdout)
-    assert execution["arguments"] == ["mcp", "--workspace", str(tmp_path / "workspace")]
+    expected_arguments = (
+        ["hook", "check-on-stop"]
+        if wrapper == "vulnwitness-hook"
+        else ["mcp", "--workspace", str(tmp_path / "workspace")]
+    )
+    assert execution["arguments"] == expected_arguments
     for name in ISOLATED_VARIABLES:
         assert (name in execution["environment"]) is opt_in
 
@@ -433,12 +466,17 @@ def test_plugin_structure_matches_manifest_server_and_tool_namespace() -> None:
     assert "hooks:" not in analyst
     assert re.fullmatch(hooks["PostToolUse"][0]["matcher"], TOOL_PREFIX + "triage_product")
     assert hooks["Stop"][0]["hooks"][0]["timeout"] == 60
+    assert hooks["PostToolUse"][0]["hooks"][0]["timeout"] == 10
+    for event, command in (("PostToolUse", "record-investigation"), ("Stop", "check-on-stop")):
+        assert hooks[event][0]["hooks"][0]["command"] == (
+            f'"${{CLAUDE_PLUGIN_ROOT}}/bin/vulnwitness-hook" {command}'
+        )
+    assert not list(HOOKS.glob("*.py"))
     assert (PLUGIN / "skills/vulnwitness-investigation/SKILL.md").is_file()
     assert not (REPOSITORY_ROOT / "skills/vulnwitness-investigation").exists()
     for executable in (
         PLUGIN / "bin/vulnwitness-mcp",
-        HOOKS / "record_investigation.py",
-        HOOKS / "check_on_stop.py",
+        PLUGIN / "bin/vulnwitness-hook",
     ):
         assert os.access(executable, os.X_OK)
 
@@ -466,7 +504,7 @@ def test_stop_reports_citation_layer_with_at_most_five_violations(tmp_path: Path
     assert not written.check.citations.resolved
 
     # Act
-    stopping = run_hook("check_on_stop.py", {"session_id": "conversation-1"}, environment)
+    stopping = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
 
     # Assert
     assert stopping.returncode == 0
@@ -487,7 +525,7 @@ def test_parallel_tool_hooks_preserve_all_returned_ids(tmp_path: Path) -> None:
     # Act
     for investigation_id in investigations:
         process = subprocess.Popen(
-            [sys.executable, str(HOOKS / "record_investigation.py")],
+            [str(PLUGIN / "bin/vulnwitness-hook"), "record-investigation"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -527,7 +565,7 @@ def test_stop_uses_the_wrapper_default_workspace(tmp_path: Path) -> None:
     del environment["VULNWITNESS_WORKSPACE"]
 
     # Act
-    stopping = run_hook("check_on_stop.py", {"session_id": "conversation-1"}, environment)
+    stopping = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
 
     # Assert
     assert stopping.returncode == 0
@@ -544,9 +582,57 @@ def test_stop_discovers_cli_on_path(tmp_path: Path) -> None:
     environment["PATH"] = str(Path(sys.executable).parent)
 
     # Act
-    stopping = run_hook("check_on_stop.py", {"session_id": "conversation-1"}, environment)
+    stopping = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
 
     # Assert
     assert stopping.returncode == 0
     assert stopping.stdout == ""
     assert directory.name in json.loads(conversation_file(environment).read_text())["checked"]
+
+
+@pytest.mark.parametrize("tamper", [False, True])
+def test_hooks_use_installed_cli_with_only_system_path(tmp_path: Path, tamper: bool) -> None:
+    # Arrange
+    environment = hook_environment(tmp_path)
+    environment["PATH"] = "/usr/bin:/bin"
+    directory = create_demo_investigation(environment)
+    if tamper:
+        (directory / "findings.yaml").write_text("invalid: [")
+
+    # Act
+    stopping = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
+    unchanged_stop = run_hook("check-on-stop", {"session_id": "conversation-1"}, environment)
+
+    # Assert
+    assert stopping.returncode == unchanged_stop.returncode == 0
+    assert stopping.stderr == unchanged_stop.stderr == ""
+    if tamper:
+        decision = json.loads(stopping.stdout)
+        assert decision["decision"] == "block"
+        assert decision["reason"].endswith(LIMIT_SENTENCE)
+    else:
+        assert stopping.stdout == ""
+    assert unchanged_stop.stdout == ""
+    assert directory.name in json.loads(conversation_file(environment).read_text())["checked"]
+    assert not (tmp_path / "plugin-data/hooks.log").exists()
+
+
+@pytest.mark.parametrize("command", ["record-investigation", "check-on-stop"])
+def test_hooks_unwritable_plugin_data_exits_zero(tmp_path: Path, command: str) -> None:
+    # Arrange
+    environment = hook_environment(tmp_path)
+    plugin_data = tmp_path / "plugin-data"
+    plugin_data.write_text("not a directory")
+    event = {
+        "session_id": "conversation-1",
+        "tool_name": TOOL_PREFIX + "triage_product",
+        "tool_response": {"session_id": INVESTIGATION_ID},
+    }
+
+    # Act
+    invocation = run_hook(command, event, environment)
+
+    # Assert
+    assert invocation.returncode == 0
+    assert invocation.stdout == invocation.stderr == ""
+    assert plugin_data.read_text() == "not a directory"

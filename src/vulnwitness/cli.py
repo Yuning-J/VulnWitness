@@ -196,6 +196,7 @@ from vulnwitness.evaluation.planner_runner import (
     run_planner_evaluation,
 )
 from vulnwitness.evaluation.result_directory import ResultDirectory
+from vulnwitness.hook_composition import run_plugin_hook
 from vulnwitness.interfaces.cli_session import (
     SESSION_CLI_COMMANDS,
     SessionCli,
@@ -354,6 +355,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vulnwitness", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     add_report_parser(commands)
+    hook_parser = commands.add_parser("hook", help="run an advisory Claude Code hook from stdin")
+    hook_commands = hook_parser.add_subparsers(dest="hook_command", required=True)
+    hook_commands.add_parser("record-investigation", help="record returned investigation IDs")
+    hook_commands.add_parser("check-on-stop", help="check changed conversation investigations")
 
     mitre_parser = commands.add_parser("mitre", help="build an offline catalogue mapping")
     mitre_commands = mitre_parser.add_subparsers(dest="mitre_command", required=True)
@@ -1770,9 +1775,17 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     ``store``, ``resolve`` and ``affectedness`` load no served corpus, and ``demo`` and
     ``eval planner`` always use the packaged fixture. With ``--session``, data commands
     load the complete data plane to bind all calls to the same corpus and snapshots.
-    ``session check`` reads only the session directory."""
+    ``session check`` reads only the session directory. ``hook`` handles advisory
+    plugin events before deployment settings are parsed."""
     parser = build_parser()
     arguments = parser.parse_args(argv)
+    if arguments.command == "hook":
+        return run_plugin_hook(
+            arguments.hook_command,
+            sys.stdin,
+            sys.stdout,
+            os.environ if environment is None else environment,
+        )
     if arguments.command == "report":
         return run_report(arguments, parser)
     try:

@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+. "${0%/*}/vulnwitness-common.sh" || exit 0
+exec "$binary" hook "$@"

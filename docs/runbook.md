@@ -465,8 +465,8 @@ The plugin registers server `plugin:vulnwitness:vulnwitness` and tools prefixed
 
 The executable is `VULNWITNESS_BIN`, or `vulnwitness` on PATH. The workspace defaults
 to `$HOME/.vulnwitness/workspace`; set `VULNWITNESS_WORKSPACE` to an absolute private
-path outside any store root to override it. The wrapper unsets store and snapshot
-paths, snapshot identities, planner variables and semantic enablement, serving
+path outside any store root to override it. Both shell wrappers unset store and
+snapshot paths, snapshot identities, planner variables and semantic enablement, serving
 packaged synthetic demo data reproducibly. To use operator-configured real data,
 set `VULNWITNESS_PLUGIN_REAL_DATA=1` before starting Claude Code; this preserves
 those environment settings. The check command reads saved records without loading
@@ -478,18 +478,22 @@ objects/strings, MCP text content and structuredContent defensively; live respon
 shape and hook firing still require C5 acceptance. Neither hook parses transcripts
 or scans modification times. Stop checks only recorded IDs whose input digest
 changed, binding session metadata, findings, calls and response bytes. Digests are
-private hook freshness markers, separate from report freshness digests. It runs
-`vulnwitness session check <workspace>/<id> --format json` using the same binary
-discovery as the wrapper, reusing the package's checker without importing it into
-the standard-library-only hooks. Each command has a 15-second limit, with a
-45-second total check budget and a 60-second Claude hook timeout.
+private hook freshness markers, separate from report freshness digests. The POSIX
+shell entry point `bin/vulnwitness-hook` uses the same executable discovery and demo
+isolation as `bin/vulnwitness-mcp`, then runs `vulnwitness hook record-investigation`
+or `vulnwitness hook check-on-stop` with JSON from stdin. Hook logic runs in the
+installed package's Python environment. Stop runs
+`vulnwitness session check <workspace>/<id> --format json` through that CLI.
+Each checker command has a 15-second limit, with a 45-second total check budget
+and a 60-second Claude hook timeout.
 
 Failed layers block once per changed record, naming the investigation, layers
 and up to five violations. The digest is saved before blocking; an unchanged Stop
 cannot block again. `stop_hook_active` also prevents continuation loops. Missing
-executables, malformed inputs, concurrent state locks and other hook errors fail
-open and log their exception type to `${CLAUDE_PLUGIN_DATA}/hooks.log`; failed
-executions do not advance the checked digest. State locks wait at most one second; a longer contention can skip an event.
+executables fail open with one stderr line and exit 0. Malformed inputs, concurrent
+state locks and other hook errors fail open and log their exception type to
+`${CLAUDE_PLUGIN_DATA}/hooks.log`; failed executions do not advance the checked
+digest. State locks wait at most one second; a longer contention can skip an event.
 The checker subprocess does not hold the conversation lock.
 These checks cover the record, citations and structured claims; they do not verify narrative.
 Passing checks do not establish source support, source authenticity, real-world
