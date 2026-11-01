@@ -1,0 +1,137 @@
+<doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>
+      VulnWitness · Workspace
+    </title>
+    <link rel="stylesheet" href="/ui.css">
+    <script src="/ui.js" defer>
+    </script>
+  </head>
+  <body>
+    <header class="masthead">
+      <a href="/" class="brand">
+        VulnWitness
+        <span>
+          local workspace
+        </span>
+      </a>
+      <button id="theme" type="button">
+        Toggle theme
+      </button>
+    </header>
+    <main>
+      <p class="eyebrow">
+        Evidence before conclusions
+      </p>
+      <h1>
+        Start an investigation
+      </h1>
+      <p class="lede">
+        Explore a product, a CVE or a telecom question. Keep the evidence, limits and recorded calls together.
+      </p>
+      <p id="readiness" role="status">
+        Data loading…
+      </p>
+      <p id="message" role="alert"></p>
+      <section class="panel">
+        <form id="entry">
+          <fieldset id="entry-fields" disabled>
+            <label>
+              Input type
+              <select id="kind" name="kind">
+                <option value="product">
+                  Product
+                </option>
+                <option value="cve">
+                  CVE
+                </option>
+                <option value="topic">
+                  Topic
+                </option>
+              </select>
+            </label>
+            <div id="product-fields" class="fields">
+              <label>
+                Product
+                <span>
+                  required
+                </span>
+                <input name="product" required maxlength="512" placeholder="e.g. demo_gateway">
+              </label>
+              <label>
+                Vendor
+                <span>
+                  optional
+                </span>
+                <input name="vendor" maxlength="512">
+              </label>
+              <label>
+                Version
+                <span>
+                  optional
+                </span>
+                <input name="version" maxlength="512">
+              </label>
+            </div>
+            <div id="cve-fields" hidden>
+              <label>
+                CVE ID
+                <input name="cve_id" placeholder="CVE-2024-0001" pattern="CVE-[0-9]{4}-[0-9]{4,}" disabled>
+              </label>
+            </div>
+            <div id="topic-fields" hidden>
+              <label>
+                Question
+                <textarea name="query" maxlength="4096" disabled>
+                </textarea>
+              </label>
+              <label>
+                Scope
+                <select name="scope" disabled>
+                  <option value="implementation">
+                    Implementation
+                  </option>
+                  <option value="protocol">
+                    Protocol
+                  </option>
+                  <option value="mixed">
+                    Mixed
+                  </option>
+                </select>
+              </label>
+            </div>
+            <div class="actions">
+              <button type="submit" id="submit">
+                Investigate
+              </button>
+              <button type="button" id="new-submission" class="secondary">
+                New submission
+              </button>
+            </div>
+            <p class="muted">
+              Retries reuse this submission. Choose “New submission” to deliberately start another investigation with the same values.
+            </p>
+          </fieldset>
+        </form>
+      </section>
+      <section>
+        <div class="section-head">
+          <h2>
+            Investigations
+          </h2>
+          <button id="refresh" class="secondary" type="button">
+            Refresh list
+          </button>
+        </div>
+        <div id="investigations">
+        </div>
+      </section>
+    </main>
+    <footer>
+      Local evidence workspace · Applicability remains unknown until evaluated in your environment.
+    </footer>
+  </body>
+</html>

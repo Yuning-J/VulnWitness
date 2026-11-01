@@ -378,6 +378,15 @@ class WorkspaceInvestigations:
                 check=self._files.check(session_id).check,
             )
 
+    def report_model(self, request: InvestigationRequest) -> SessionReport:
+        """Read the renderer's content model without writing an exported report."""
+        with self._files.investigation_lock(request.session_id):
+            contents = self._files.check(request.session_id)
+            triage = None
+            if self._files.exists(request.session_id, "triage.json"):
+                triage = self._files.read(request.session_id, "triage.json").decode()
+            return build_session_report(contents, triage)
+
     def render(self, request: RenderReportRequest) -> RenderReportResponse:
         session_id = request.session_id
         with self._files.investigation_lock(session_id):

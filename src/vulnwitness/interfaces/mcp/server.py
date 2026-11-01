@@ -28,8 +28,6 @@ from pydantic import BaseModel, ValidationError
 from vulnwitness.application.workspace_investigations import WorkspaceInvestigations
 from vulnwitness.distribution import read_installed_version
 from vulnwitness.domain.data_readiness import (
-    WaitForDataLoading,
-    WaitForDataReady,
     WaitForDataRequest,
     WaitForDataResponse,
 )
@@ -38,6 +36,7 @@ from vulnwitness.domain.session_record import SessionRecordingError
 from vulnwitness.domain.tool_contracts import ToolFailure, ToolFailureCode
 from vulnwitness.domain.workspace import InvestigationRequest, ReadCallResponse
 from vulnwitness.domain.workspace_knowledge import WORKSPACE_KNOWLEDGE_MODELS
+from vulnwitness.interfaces.data_readiness import DataReadiness
 from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
 from vulnwitness.interfaces.knowledge_tools import (
     KNOWLEDGE_TOOL_SPECS,
@@ -87,9 +86,9 @@ class KnowledgeToolHandlers:
         self._toolbox = toolbox
         self._tools = tools
         self._recording_enabled = recording_enabled or recorder is not None
-        self._data_ready = anyio.Event()
+        self._data_ready = DataReadiness()
         if toolbox is not None:
-            self._data_ready.set()
+            self._data_ready.publish()
         self.resources = (
             WorkspaceResourceHandlers(workspace, load_packaged_resources())
             if workspace_enabled or workspace is not None
@@ -103,7 +102,7 @@ class KnowledgeToolHandlers:
         self._workspace = deployment.workspace
         if self.resources is not None:
             self.resources.publish_workspace(deployment.workspace)
-        self._data_ready.set()
+        self._data_ready.publish()
 
     async def list_tools(
         self,
@@ -192,15 +191,7 @@ class KnowledgeToolHandlers:
             request = WaitForDataRequest.model_validate(arguments or {})
         except ValidationError:
             return encode_workspace_answer(build_tool_failure(ToolFailureCode.INVALID_ARGUMENTS))
-        if self._data_ready.is_set():
-            return encode_workspace_answer(WaitForDataReady())
-        with anyio.move_on_after(request.timeout_seconds) as wait_scope:
-            await self._data_ready.wait()
-        if wait_scope.cancel_called:
-            return encode_workspace_answer(
-                WaitForDataLoading(waited_seconds=request.timeout_seconds)
-            )
-        return encode_workspace_answer(WaitForDataReady())
+        return encode_workspace_answer(await self._data_ready.wait(request))
 
     async def call_workspace(self, params: CallToolRequestParams) -> CallToolResult:
         assert self._workspace is not None

@@ -47,6 +47,7 @@ migration = [
 semantic = "vulnwitness.adapters.semantic.chroma_retriever:build_semantic_retriever"
 mcp_server = "vulnwitness.interfaces.mcp.stdio_runner:serve_stdio"
 mcp_http_server = "vulnwitness.interfaces.mcp.http_runner:serve_http"
+ui_server = "vulnwitness.interfaces.ui.runner:serve_ui"
 api_server = "vulnwitness.interfaces.rest.api_runner:serve_api"
 migration_parsers = "vulnwitness.adapters.migration.nvd_feed_reader:build_migration_parsers"
 model_planner = "vulnwitness.adapters.planner.openai_compatible:build_model_port"

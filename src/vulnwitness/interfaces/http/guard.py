@@ -56,8 +56,9 @@ JSON_CONTENT_TYPE = (b"content-type", b"application/json")
 @dataclass(frozen=True)
 class GuardedRoute:
     """One route: the methods it accepts, the ASGI app answering it, the most body bytes a
-    request to it may carry, whether it is served without the token (``/health`` alone
-    is), and whether its path ends in ``/`` followed by one path segment the app reads
+    request to it may carry, whether its initial guard check omits the bearer token
+    (health and UI assets; report navigation checks its bounded form token), and
+    whether its path ends in ``/`` followed by one path segment the app reads
     (``takes_path_segment``)."""
 
     methods: frozenset[str]

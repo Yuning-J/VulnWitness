@@ -175,6 +175,14 @@ class McpHttpServerRunner(Protocol):
     ) -> bool: ...
 
 
+class UiServerRunner(Protocol):
+    """Serve static pages during loading, then the dataset-bound workspace."""
+
+    def __call__(
+        self, load_deployment: Callable[[], McpDeployment], *, port: int, token: SecretStr
+    ) -> int: ...
+
+
 class ApiServerRunner(Protocol):
     """Serves the REST API over a toolbox and an evidence-set check on ``host`` and
     ``port``, every route but ``/health`` behind ``token``, until the process is
@@ -269,6 +277,16 @@ def discover_api_server_runner(
     if isinstance(runner, InterfaceUnavailable):
         return runner
     return cast(ApiServerRunner, runner)
+
+
+def discover_ui_server_runner(
+    list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
+) -> UiServerRunner | InterfaceUnavailable:
+    """The local UI uses the api extra's ASGI stack without the MCP SDK."""
+    runner = load_interface("ui_server", API_EXTRA, list_adapters)
+    if isinstance(runner, InterfaceUnavailable):
+        return runner
+    return cast(UiServerRunner, runner)
 
 
 def discover_migration_parsers(

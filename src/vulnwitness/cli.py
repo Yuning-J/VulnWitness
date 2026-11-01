@@ -38,6 +38,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import sys
 import time
@@ -60,6 +61,7 @@ from vulnwitness.adapter_discovery import (
     discover_mcp_server_runner,
     discover_migration_parsers,
     discover_planner_setup,
+    discover_ui_server_runner,
 )
 from vulnwitness.adapters.fight.operator_snapshot import FightSnapshotUnavailable
 from vulnwitness.adapters.migration.inputs_manifest import InputsManifestError, load_inputs_manifest
@@ -508,6 +510,10 @@ def build_parser() -> argparse.ArgumentParser:
             "deterministic planner; runs until interrupted; needs the 'api' extra"
         ),
     )
+
+    ui_parser = commands.add_parser("ui", help="local browser workspace; needs the 'api' extra")
+    ui_parser.add_argument("--workspace", type=Path, default=Path.home() / ".vulnwitness/workspace")
+    ui_parser.add_argument("--port", type=int, default=8767)
 
     eval_parser = commands.add_parser(
         "eval", help="local evaluation tools for reviewers and operators, served by no API"
@@ -1817,6 +1823,25 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             0
             if report.record.consistent and report.citations.resolved and report.claims.verified
             else 1
+        )
+    if arguments.command == "ui":
+        if not 1 <= arguments.port <= 65535:
+            parser.error("--port must be between 1 and 65535")
+        try:
+            check_workspace_root(arguments.workspace, settings.store_root)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        ui_runner = discover_ui_server_runner()
+        if isinstance(ui_runner, InterfaceUnavailable):
+            print(f"vulnwitness ui cannot start: {ui_runner.detail}", file=sys.stderr)
+            return 1
+        start_service_logging(settings, "ui")
+        arguments.workspace_limit = 200
+        arguments.session_call_limit = 100
+        return ui_runner(
+            partial(load_mcp_deployment, settings, arguments),
+            port=arguments.port,
+            token=SecretStr(secrets.token_urlsafe(32)),
         )
     if arguments.command == "triage":
         try:

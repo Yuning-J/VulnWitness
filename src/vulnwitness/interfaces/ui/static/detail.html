@@ -1,0 +1,139 @@
+<doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>
+      VulnWitness · Investigation
+    </title>
+    <link rel="stylesheet" href="/ui.css">
+    <script src="/ui.js" defer>
+    </script>
+  </head>
+  <body>
+    <header class="masthead">
+      <a href="/" class="brand">
+        VulnWitness
+        <span>
+          local workspace
+        </span>
+      </a>
+      <button id="theme" type="button">
+        Toggle theme
+      </button>
+    </header>
+    <main>
+      <a href="/">
+        ← All investigations
+      </a>
+      <p class="eyebrow">
+        Recorded investigation
+      </p>
+      <h1 id="title">
+        Investigation
+      </h1>
+      <p id="readiness" role="status">
+        Data loading…
+      </p>
+      <p id="message" role="alert"></p>
+      <p id="statuses">
+      </p>
+      <nav aria-label="Investigation panels">
+        <a href="#overview">
+          Overview
+        </a>
+        <a href="#records">
+          Records
+        </a>
+        <a href="#trajectory">
+          Trajectory
+        </a>
+        <a href="#follow-up">
+          Follow-up
+        </a>
+        <a href="#check">
+          Check
+        </a>
+        <a href="#report">
+          Report
+        </a>
+      </nav>
+      <section id="overview">
+        <h2>
+          Overview
+        </h2>
+        <div id="overview-content">
+        </div>
+      </section>
+      <section id="records">
+        <h2>
+          Records
+        </h2>
+        <div id="records-content">
+        </div>
+      </section>
+      <section id="trajectory">
+        <h2>
+          Trajectory
+        </h2>
+        <div id="calls">
+        </div>
+        <pre id="call-json" tabindex="0" hidden>
+        </pre>
+      </section>
+      <section id="follow-up" class="panel">
+        <h2>
+          Follow-up
+        </h2>
+        <form id="lookup">
+          <fieldset id="lookup-fields" disabled>
+            <label>
+              CVE ID
+              <input name="cve_id" required pattern="CVE-[0-9]{4}-[0-9]{4,}" placeholder="CVE-2024-0001">
+            </label>
+            <button type="submit">
+              Look up this CVE
+            </button>
+          </fieldset>
+        </form>
+      </section>
+      <section id="check">
+        <div class="section-head">
+          <h2>
+            Check
+          </h2>
+          <button id="check-button" type="button" disabled>
+            Check investigation
+          </button>
+        </div>
+        <div id="check-content">
+        </div>
+        <pre id="check-json" hidden>
+        </pre>
+      </section>
+      <section id="report" class="panel">
+        <h2>
+          Report
+        </h2>
+        <p id="report-status">
+          No report rendered.
+        </p>
+        <button id="render" type="button" disabled>
+          Render HTML report
+        </button>
+        <form id="open-report" method="post" target="_blank" rel="noopener" hidden>
+          <input id="report-token" type="hidden" name="token">
+          <button type="submit" class="secondary">
+            Open HTML report / export
+          </button>
+        </form>
+        <p class="muted">
+          Use your browser’s Save Page As to export the self-contained HTML report.
+        </p>
+      </section>
+    </main>
+    <footer>
+      Source text is untrusted. Checks describe consistency with the record; they do not establish real-world truth or applicability.
+    </footer>
+  </body>
+</html>

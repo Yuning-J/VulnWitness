@@ -540,3 +540,45 @@ coverage. Other clients have no hook and must explicitly check before delivery.
 To disable both hooks, set `plugins/vulnwitness/hooks/hooks.json` to
 `{"hooks": {}}` in a local plugin copy and restart Claude Code with that copy.
 Loading the direct MCP snippet instead of the plugin also omits them.
+
+## Local browser UI
+
+Install with `pip install 'vulnwitness[api]'`, then run:
+
+```sh
+vulnwitness ui --workspace ~/.vulnwitness/workspace --port 8767
+```
+
+Both flags are optional with the defaults above. Open the printed URL, including its
+fragment token. The UI binds to 127.0.0.1 only. Each launch generates a different token;
+keep the printed URL private. The page removes the fragment after saving it in tab
+session storage and sends Authorization headers for all data requests and mutations.
+Host and Origin allowlists refuse other origins; no cookie or CORS access is enabled.
+Do not put this server behind a public proxy.
+
+The page and list answer immediately while data loads. Controls enable after the
+readiness wait completes. Loading uses the same settings and data plane as
+`vulnwitness mcp --workspace`: packaged synthetic demo data unless store variables
+are configured. No model or semantic channel is served. Loading failure stops the
+process with exit 1; retry after correcting the deployment settings.
+
+Choose Product (required product, optional vendor/version), CVE, or Topic with an
+explicit implementation/protocol/mixed scope. Product submissions run recorded,
+bounded triage. Refreshes and retries reuse a saved submission key; choose **New
+submission** for another investigation with identical values. CVE/topic submissions
+start a manual investigation and record its initial lookup/investigate call. Saved
+investigations appear with workflow/report status and dataset identity. The browser
+shows escaped source text and the report's existing evidence and uncertainty wording.
+
+Open an investigation to inspect records, saved call JSON, inventory/deep-dive scope,
+follow-up CVE lookups and check layers. Busy or interrupted investigations return the
+backend's typed message. **Render HTML report** renders and opens the saved report
+at an ID-addressed URL. **Open HTML report / export** opens it again if needed. Use the browser's **Save Page As** to export its
+self-contained HTML. Report navigation uses a read-only form POST with the launch
+token in its bounded body, because browser navigation cannot set Authorization;
+it still passes the Host/Origin guard and requires the token before reading a file.
+The server reads only that investigation's fixed report file. A later recorded call
+makes the HTML report stale; re-render to refresh it. Rendering Markdown in another client does
+not refresh this HTML report. Checks cover record consistency, citation resolution
+and structured field agreement. Free narrative is never checked; passing checks do
+not establish source support, source authenticity, real-world truth or applicability.

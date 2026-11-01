@@ -27,8 +27,11 @@ timing condensed.*
   guides the flow; [client snippets](plugins/vulnwitness/skills/vulnwitness-investigation/mcp-config/README.md)
   for Claude Code, Codex and Cursor follow their documented formats and have not yet been
   tested inside those clients.
-- **Reports.** Every report runs the session check and shows its layers separately: record
-  consistency, citation resolution, structured claims, and narrative that is not checked.
+- **Local browser UI.** `vulnwitness ui --workspace ~/.vulnwitness/workspace` opens a local
+  evidence workspace for product triage, CVE lookup and telecom topics. Install the `api`
+  extra, open the printed URL, continue investigations, check them and export HTML reports.
+  Reports show record consistency, citation resolution, structured claims and unchecked
+  narrative separately. See the [UI runbook](docs/runbook.md#local-browser-ui).
 
 ## Two-minute quick start
 

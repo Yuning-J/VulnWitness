@@ -108,3 +108,11 @@ can reach a loopback port.
   That is deliberate: every route is one toolbox call or verification.
 - A model planner or the semantic channel over HTTP needs a new decision: the toolbox's
   concurrency accounting and the no-writes-on-read rule would both have to change.
+
+
+## Local UI scope
+
+[ADR 0014](0014-local-ui.md#http-surface-amendments-to-adr-0007) specifies the
+local UI's public static shells, per-launch fragment token, port option and early
+HTTP startup during loading, with the browser-specific reasons for these exceptions.
+The API and MCP HTTP decisions above retain their existing behavior.

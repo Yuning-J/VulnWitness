@@ -1,13 +1,16 @@
 """Scripts that import every core module of ``vulnwitness`` in a fresh interpreter."""
 
 # Modules that import an optional extra, loaded only through an entry point: the semantic
-# adapter, every module of the MCP server, HTTP and REST packages (not the packages
-# themselves, which stay empty), and the importer's JSON parsers.
+# adapter, every module of the MCP server, HTTP, REST and UI packages (not the
+# packages themselves, which stay empty), the shared anyio readiness signal, and
+# the importer's JSON parsers.
 OPTIONAL_MODULE_PREFIXES = (
     "vulnwitness.adapters.semantic.chroma_retriever",
     "vulnwitness.interfaces.mcp.",
     "vulnwitness.interfaces.http.",
     "vulnwitness.interfaces.rest.",
+    "vulnwitness.interfaces.ui.",
+    "vulnwitness.interfaces.data_readiness",
     "vulnwitness.adapters.migration.ijson_events",
     "vulnwitness.adapters.migration.json_fingerprint",
     "vulnwitness.adapters.migration.nvd_feed_reader",
