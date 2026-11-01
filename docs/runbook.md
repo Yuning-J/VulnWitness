@@ -103,7 +103,7 @@ export CVE_KGRAG_STORE_ROOT=/srv/cve-kgrag/stores
 
 Fetch downloads NVD 2.0 year feeds from 2002 through the current year, `modified` and
 CISA KEV, paces/retries requests and verifies decompressed NVD feeds against `.meta`.
-Allow about 270 MB; retry interrupted fetches into a fresh directory.
+The feed download is about 270 MB; retry interrupted fetches into a fresh directory.
 Only a complete fetch publishes `provenance.tsv` and `inputs.yaml`. Import uses a
 fresh store name; failures stop before activation. Activation verifies the store
 and preserves the previous store. Restart API/MCP after activation: there is no hot reload.
@@ -146,7 +146,7 @@ Resolve, affectedness, migrate, store and schema do not load a served store; dem
 fixture-format evaluation use fixtures. All other data commands load the whole store.
 For a full NVD corpus, expect minutes per startup/one-shot query, several GB of disk for
 stores, feeds and rollback, and see the README for the recommended memory.
-Keep servers running for repeated queries. These are sizing guides, not guarantees.
+Keep servers running for repeated queries.
 HTTP loads before binding: probes see connection refused meanwhile. MCP stdio answers
 initialize/tools-list during loading; calls immediately fail `data_loading`, without
 queuing/retry. Wait for readiness on stderr; load failures exit nonzero. Ctrl+C/closed

@@ -308,7 +308,7 @@ KEV enrichment runs after §5, on the final NVD records only.
   before it can be measured; the assembler also counts each entry's keys and values,
   never more than their encoded bytes, so an entry within the cap is always accepted,
   and refuses a repeated key and nesting past 64 levels. An entry's memory is a bounded
-  multiple of its encoded bytes, largest (about 25 times) for an entry of many empty
+  multiple of its encoded bytes, largest for an entry of many empty
   containers. An entry over a cap fails the file.
 - Candidates are staged on disk in a `sqlite3` database without a journal: CVE ID,
   modification time, format, state, semantic hash, provenance for the tie-break, the
@@ -329,7 +329,8 @@ KEV enrichment runs after §5, on the final NVD records only.
   can pass the cap by what that interval stages. A dry run stages the anchors too, so it
   meets the cap where a real run would. A zip's end record must declare one member and a
   central directory no larger than one member needs before `zipfile` reads it. The
-  per-file cap is a constant; operator measurements are recorded in `PLAN.md`.
+  per-file cap is a constant; detailed operator measurements stay in the external run
+  directory under `~/data/cve-kgrag/runs/`.
 - An operator lane (not CI) builds 250,000 synthetic records and records the migration's
   peak RSS, temporary disk and run time.
 
@@ -455,8 +456,8 @@ kind, scope and instruction, and no input text.
   content digest in place of the fixture's (ADR 0009 §2), so a sealed set verifies
   against any store holding byte-identical records and anchors and is refused by any
   other.
-- Load-time and serving memory, measured on synthetic feeds, and one data plane shared
-  by the `api` process's two deployments (ADR 0009 §12); budgets wait for real feeds.
+- One data plane shared by the `api` process's two deployments (ADR 0009 §12);
+  serving budgets wait for real feeds.
 - The alias policy for a full FiGHT snapshot.
 - The `KEV-` chunk IDs a legacy Chroma store may hold.
 - The corpus content digest in the planner evaluation's identity, for M7b.

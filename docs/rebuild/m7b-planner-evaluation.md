@@ -69,12 +69,11 @@ naming it; missing settings or a store or snapshot that cannot be served are usa
 
 ## Loading once
 
-The data plane is read-only, so all runs share it: the 396,211-record store uses time and memory
-to load (PLAN.md), and loading it per case or per run is not an option.
-`CaseRunner` therefore receives its data planes instead of building them from a fixture
-bundle per case: for M7a one over the packaged excerpt and one with FiGHT unavailable,
-built once each from the fixture, chosen by each case's `sources.mitre_fight`; for M7b
-the one plane above.
+The data plane is read-only, so all runs share it and avoid loading the 396,211-record
+store per case or per run. `CaseRunner` receives its data planes instead of building
+them from a fixture bundle per case: for M7a one over the packaged excerpt and one with
+FiGHT unavailable, built once each from the fixture, chosen by each case's
+`sources.mitre_fight`; for M7b the one plane above.
 
 Everything else stays as in M7a. A case builds its deterministic service once, and its
 model service once for all its model runs; the one `ThreadedCallRunner` serves the whole

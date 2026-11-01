@@ -410,9 +410,8 @@ def test_id_followed_by_another_number_still_names_the_id() -> None:
 def test_tokens_beside_a_long_run_of_invisible_characters_are_found_in_linear_time(
     text: str,
 ) -> None:
-    # Widening a token reads each invisible character or mark once for this
-    # 5,000-character run. Read again at every step, the run is slower, so the bound
-    # leaves a hundredfold margin for a slow machine and still fails a quadratic reading.
+    # Widening a token must read each invisible character or mark once. The bound
+    # allows scheduling slack while rejecting a quadratic reading of this long run.
     started = time.perf_counter()
     mentions_cve_id_token(text)
     elapsed_seconds = time.perf_counter() - started

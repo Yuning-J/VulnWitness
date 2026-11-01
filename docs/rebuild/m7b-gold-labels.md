@@ -115,8 +115,8 @@ are listed for the owner, never scored.
   JSON with sorted keys.
 
 `cve-kgrag eval gold-sets --gold eval/gold/m7b_cases.yaml` derives the sets from the
-store `ACTIVE` names under `CVE_KGRAG_STORE_ROOT`, read record by record (the stored records
-for the 396,211-record store), and from the operator FiGHT snapshot
+store `ACTIVE` names under `CVE_KGRAG_STORE_ROOT` (396,211 records), read record by
+record, and from the operator FiGHT snapshot
 (`CVE_KGRAG_FIGHT_SNAPSHOT_PATH` and `_SHA256`), and prints them. With
 `--check eval/gold/m7b_sets.json` it compares them with the recorded file instead and
 names the cases that differ. Either way it refuses (exit 1) a store or snapshot other than

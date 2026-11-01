@@ -119,8 +119,7 @@ sourced, budgeted refined search. It does not judge whether evidence is sufficie
   free-text cases whose required coverage is below 1 (0.33, 0.67, 0.95).
 - Coverage@20 and irrelevant items are unchanged in every case, and so are the
   gold-judged stop figures.
-- Cost: one assessor call, with additional time per free-text run compared with the
-  deterministic run.
+- Cost: one assessor call per free-text run.
 
 The loop is wired and safe, and it shows labels. On this data the model labels
 candidates but does not find the gaps, so no gain is measured. Eliciting gaps is the
@@ -133,8 +132,7 @@ prompt is unchanged. Same baseline, two model runs:
 
 - Searches proposed: 3 of 16, up from 1: `gtp-mobile-core` twice and `ueransim` once.
   One was rejected by the gate, and the others ran.
-- Coverage@20 and irrelevant items are unchanged in every case. Run timing was recorded
-  separately.
+- Coverage@20 and irrelevant items are unchanged in every case.
 - **Reach.** The deterministic run misses 12 required CVEs in `gtp-mobile-core`,
   `oai-cn5g` and `kamailio-version-affected`.
   - Only 2 of them share a vendor or product term with the sourced vocabulary.

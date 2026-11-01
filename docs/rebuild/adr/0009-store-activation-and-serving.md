@@ -31,12 +31,6 @@ startup is not a rebuild on disk. Owner decision 16: a configured store that is 
 or invalid refuses to start, with no fallback to the fixture. Owner decision 17: the
 operator FiGHT snapshot ships in M6. §17 says how the M6 exit audit records these.
 
-The measurements below were taken on synthetic feeds
-(`scripts/operator/build_synthetic_feeds.py`: one CPE and a short description per
-record) . The load, verification and memory
-figures are lower bounds for real NVD records; the `graph_expand` figures (§12) are a
-worst case, never NVD performance.
-
 ## Decisions
 
 ### 1. The served-dataset seam
@@ -206,7 +200,6 @@ ADR 0004 §1 lists these variables with the others.
 
 - `store validate NAME` and `store activate NAME` check the name (§4) and run
   `verify_corpus_store`: every checksum, size, evidence ID and record-to-anchor rule.
-  At 250,000 synthetic records verification uses time and memory.
 - Activation records the store active before it as the previous store, whatever state
   that store is in now; a rollback verifies it again before using it.
 - Rollback is one level: the previous store becomes active and the record keeps no
@@ -247,8 +240,7 @@ ADR 0004 §1 lists these variables with the others.
 - Only an `ok` store also shows its import identity, its corpus content digest and
   `cve_search` version, and the contract version it was created under. `status`
   verifies each store whose manifest matches before it shows that store's digest, so
-  the version shown is the one startup would serve; at 250,000 synthetic records that
-  is up to two verifications. `activate` and `rollback` reuse the
+  the version shown is the one startup would serve. `activate` and `rollback` reuse the
   verification they have just run, and print the status after their change.
 - `status` exits 0 when the record is readable and the active store is `ok`, and 1
   after printing otherwise; a previous store that is not `ok` does not fail it. No
@@ -488,24 +480,18 @@ matched count for `search`. §15 lists the schemas this section changes.
   the investigation runner is full; concurrent searches and replays give the results a
   serial run gives; and both paths report the same `cve_search` and `mitre_fight`
   capability versions.
-- Measured at 250,000 synthetic records: `load_corpus_store` loads the store;
-  one deployment builds its indexes; `mcp`
-  loads one deployment; `api` loads two separate deployments.
-  Sharing the data plane removes the second deployment's index build; how much startup
-  time and peak RSS that saves is measured again by the operator lane (§17), and the
-  runbook states the measured figure. A full garbage collection can stall at that
-  size; `gc.freeze()` is added only if the lane shows stalls.
-- The runbook states the load and memory figures as lower bounds and names no host
-  size until real feeds are measured. Health probes see connection refused while an
-  HTTP server loads. MCP stdio completes initialization before loading, returns a
+- Sharing the data plane removes the second deployment's index build. The operator
+  lane (§17) measures startup time and peak RSS; detailed measurements stay in the
+  operator's external run directory under `~/data/cve-kgrag/runs/`.
+  `gc.freeze()` is added only if the lane shows stalls.
+- Health probes see connection refused while an HTTP server loads. MCP stdio
+  completes initialization before loading, returns a
   `data_loading` tool error during loading, and announces ready only with a complete
   toolbox. HTTP servers announce data loaded separately from ready, which follows
   successful socket startup; a bind failure prints no ready notice.
-- `graph_expand` over 250,000 synthetic records reaches the 10 s tool limit: expanding
-  one seed visits every CVE that shares any relation with it, using extra memory
-  at peak, and a search with limit 10 times out. These feeds are the graph's worst
-  case (every record shares one CWE and one vendor), so the figures are a worst case,
-  never NVD performance.
+- The synthetic graph feeds share one CWE and one vendor across all 250,000 records,
+  so expanding one seed visits every CVE and a search with limit 10 times out.
+  The real-store release check below records the decision for corpus stores.
 - WP10 changes no graph semantics and pins the present behaviour with tests:
   `graph_expand` defaults to `false`; a timed-out search tool call returns the typed
   `timed_out` failure and no candidates; an abandoned call keeps its place in the
@@ -679,7 +665,8 @@ its `corpus_content_sha256` (§14), which also settles `KEV-` chunks; the `searc
 filtered seam; the Trustify adapter; the planner round-2 fix (`PLAN.md`, "Follow-up:
 model planner adapter"); hot reload; removing old stores; the corpus content digest in
 the evaluation identity (M7b); serving memory on real feeds (the importer's 1 GiB
-per-file cap checks and pending import measurements are recorded in `PLAN.md`);
+per-file cap checks are recorded in `PLAN.md`, and detailed measurements stay in the
+operator's external run directory);
 revisiting the 20-technique topic-context cap, whose cuts are reported (§11a); a matched
 count for `search` responses; `gc.freeze()` if stalls are measured.
 
@@ -692,6 +679,8 @@ The bounded check passed on 2026-10-31 on the 396,211-record NVD store whose
 ordinary query must finish inside the 10 s tool limit with a usable graph outcome;
 high-degree queries must finish inside it or give an existing honest bounded outcome,
 not hang or fail; and peak RSS must stay within 1 GiB of the recorded serving baseline.
+The operator supplies that external baseline with `--serving-baseline-bytes`; the
+script records it in the run report.
 It loads the store once, builds the existing shared serving data plane and both API
 deployments, and measures synchronous search calls without a model or network. An
 operator watchdog interrupts any call still running after 60 s and fails the check;
@@ -706,22 +695,19 @@ returned, not the graph traversal.
 | CPE | 374,206 | 1 | 90 | 14,191 |
 | purl | 0 | — | — | — |
 
-Degrees count CVEs per relation value; p99 uses nearest rank. Ten typical seeds, two
-lexical matches each for Open5GS, free5GC, Kamailio, OpenSIPS and OpenAirInterface named
-in the permitted gold cases (M7b baseline only, or relevance), completed.
-Ten high-degree seeds chosen from the four leading CWEs, three vendors and three
-products (degrees 8,366–48,754) completed. All twenty finished within 10 s,
-with an `ok` graph outcome, 10 returned candidates at limit 10, and the existing
-`result_limit_reached` warning. There were no errors or watchdog interruptions.
+Degrees count CVEs per relation value; p99 uses nearest rank. The check covers ten
+typical seeds, two lexical matches each for Open5GS, free5GC, Kamailio, OpenSIPS and
+OpenAirInterface named in the permitted gold cases (M7b baseline only, or relevance),
+and ten high-degree seeds chosen from the four leading CWEs, three vendors and three
+products (degrees 8,366–48,754). All twenty returned an `ok` graph outcome, 10 candidates
+at limit 10, and the existing `result_limit_reached` warning. There were no errors or
+watchdog interruptions.
 
-Python `resource` reported a process peak RSS, equal
-to the same process's serving startup peak. That is below the recorded API serving
-baseline, so the fixed 1 GiB allowance passes as well.
 All criteria pass; `graph_expand` remains available on corpus stores, with no tuning
 or contract change. The operator's `measurement.json` and `summary.md` under
 `~/data/cve-kgrag/runs/graph-expand/` retain the per-seed figures and CVE IDs without
 record text. The check is bounded to these twenty single-CVE queries and does not
-establish a bound for arbitrary multi-seed searches. See also the measured paragraph
+establish a bound for arbitrary multi-seed searches. See also the release-check paragraph
 in [`PLAN.md`](../PLAN.md).
 
 ## Deviations from the M6 plan
@@ -745,5 +731,3 @@ in [`PLAN.md`](../PLAN.md).
   change requires a re-import, and the two format guards make one a deliberate
   decision.
 - A set sealed under one contract version still does not verify under another.
-- A real store makes servers consume startup time and memory at
-  hundreds of thousands of records.

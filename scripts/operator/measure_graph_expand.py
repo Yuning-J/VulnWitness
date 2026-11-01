@@ -1,11 +1,14 @@
 """One offline release check of graph expansion over one real-store load.
 
 Usage: .venv/bin/python scripts/operator/measure_graph_expand.py OUTPUT_DIR
+       --serving-baseline-bytes BYTES
+The baseline comes from the operator's external serving measurement.
 Measures the synchronous search service (as the CLI does), including late completions;
 compares wall time with ToolLimits, and interrupts a stuck call after 60 seconds.
 Outputs contain aggregates and CVE IDs only. Never enables semantic retrieval or a model.
 """
 
+import argparse
 import json
 import math
 import os
@@ -37,8 +40,6 @@ from cve_kgrag.interfaces.knowledge_tools import ToolLimits
 from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.settings import load_settings
 
-# Fixed before measurement: ADR 0009's real-store API serving baseline, in bytes.
-SERVING_BASELINE_BYTES = int(os.environ["CVE_KGRAG_SERVING_BASELINE_BYTES"])
 RSS_ALLOWANCE_BYTES = 1_073_741_824
 WATCHDOG_SECONDS = 60
 OUTPUT_ROOT = Path.home() / "data/cve-kgrag/runs/graph-expand"
@@ -220,7 +221,8 @@ def write_report(report: dict[str, Any], output_dir: Path) -> None:
         [
             "",
             f"Peak RSS: {report['peak_rss_bytes']:,} bytes; "
-            f"serving baseline: {SERVING_BASELINE_BYTES:,}; allowance: {RSS_ALLOWANCE_BYTES:,}.",
+            f"serving baseline: {report['serving_baseline_bytes']:,}; "
+            f"allowance: {RSS_ALLOWANCE_BYTES:,}.",
             f"Memory criterion: {report['memory_passed']}.",
             f"Same-process serving peak before measurement: "
             f"{report['same_process_serving_peak_rss_bytes']:,} bytes.",
@@ -229,7 +231,9 @@ def write_report(report: dict[str, Any], output_dir: Path) -> None:
     (output_dir / "summary.md").write_text("\n".join(lines) + "\n")
 
 
-def main(output_dir: Path) -> None:
+def main(output_dir: Path, serving_baseline_bytes: int) -> None:
+    if serving_baseline_bytes <= 0:
+        raise SystemExit("serving baseline must be a positive byte count")
     if not output_dir.resolve().is_relative_to(OUTPUT_ROOT.resolve()):
         raise SystemExit("output must be under ~/data/cve-kgrag/runs/graph-expand")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -254,7 +258,7 @@ def main(output_dir: Path) -> None:
         "pass_criteria": PASS_CRITERIA,
         "time_limit_seconds": toolbox.limits.time_limit_seconds,
         "watchdog_seconds": WATCHDOG_SECONDS,
-        "serving_baseline_bytes": SERVING_BASELINE_BYTES,
+        "serving_baseline_bytes": serving_baseline_bytes,
         "rss_allowance_bytes": RSS_ALLOWANCE_BYTES,
         "same_process_serving_peak_rss_bytes": peak_rss_bytes(),
         "serving_build_seconds": time.monotonic() - started_at,
@@ -277,7 +281,7 @@ def main(output_dir: Path) -> None:
         print(f"high_degree {cve_id}: {measurement['wall_seconds']:.3f}s", flush=True)
     report["peak_rss_bytes"] = peak_rss_bytes()
     report["memory_passed"] = report["peak_rss_bytes"] <= (
-        SERVING_BASELINE_BYTES + RSS_ALLOWANCE_BYTES
+        serving_baseline_bytes + RSS_ALLOWANCE_BYTES
     )
     report["passed"] = report["memory_passed"] and all(
         measurement["passed"] for measurement in report["seeds"]
@@ -289,4 +293,8 @@ def main(output_dir: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("output_dir", type=Path)
+    parser.add_argument("--serving-baseline-bytes", type=int, required=True)
+    arguments = parser.parse_args()
+    main(arguments.output_dir, arguments.serving_baseline_bytes)

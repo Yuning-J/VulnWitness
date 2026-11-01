@@ -644,9 +644,8 @@ Decisions: ADR 0008.
   rollback (`rollback_kind` `delete_unactivated_target`, `rollback_scope`
   `before_activation_only` and the instruction); WP9 never deletes anything itself.
 - **Scale.** `scripts/operator/migration_scale.sh` (an operator lane, not CI) imports
-  synthetic gzipped 2.0 feeds. The lane imported 250,000 records,
-  using resident memory, temporary disk and a
-  store (one run; the disk figures are sampled once a second).
+  synthetic gzipped 2.0 feeds with 250,000 records. Detailed measurements stay in the
+  operator's external run directory under `~/data/cve-kgrag/runs/`.
 - **Packaging.** The `migration` extra declares `ijson` only (`ijson` 3.6.0 in
   `uv.lock`, no transitive dependency); the dev group installs it, so the default lane
   runs the importer's tests. `ijson_events`, `json_fingerprint` and `nvd_feed_reader`
@@ -655,13 +654,12 @@ Decisions: ADR 0008.
 
 ### Known limits
 
-- The per-file decompressed cap is 1 GiB. Input sizes, boundary checks and pending
-  real-feed and synthetic import measurements are recorded in `PLAN.md` under the
-  M6 follow-ups.
+- The per-file decompressed cap is 1 GiB. Input sizes and boundary checks are recorded
+  in `PLAN.md` under the M6 follow-ups.
 - An integer of magnitude 2^63 or more, which `json.loads` would read, is refused
   as `invalid_json`: the `yajl2_c` backend reads no wider integer.
-- An entry's memory is a bounded multiple of its encoded bytes
-  for an entry of many empty containers.
+- An entry's memory is a bounded multiple of its encoded bytes, with the largest
+  overhead for entries of many empty containers.
 - The rename into place is atomic only on one file system, which the sibling partial
   directory guarantees. A target another process creates between the last check and
   the rename is replaced if it is an empty directory and otherwise fails the run as
@@ -729,14 +727,12 @@ Decisions: ADR 0009, which amends ADR 0003, 0004, 0006 and 0008. Operator steps:
   `28e5b4d`, is committed with every file's SHA-256 pinned outside it
   (`tests/contract/data/corpus_store_format1_28e5b4d/`); a pinned digest of the
   manifest, record and anchor schemas raises the alarm on any change to them.
-- **Scale** (`scripts/operator/serving_scale.sh`, an operator lane). On 250,000
-  synthetic records: loading the store; `api` startup with the
-  shared data plane, compared with two separate
-  data planes (one run; the peak is reached while the store loads).
+- **Scale.** `scripts/operator/serving_scale.sh` is an operator lane using 250,000
+  synthetic records; detailed measurements stay in the operator's external run
+  directory under `~/data/cve-kgrag/runs/`.
 
 ### Known limits
 
-- Every figure is from synthetic records; real NVD records need more time and memory.
 - `graph_expand` over a large store can reach the tool time limit; the follow-up in
   `PLAN.md` settles it before the public release.
 - A server serves the store active when it started; activation takes effect on restart.

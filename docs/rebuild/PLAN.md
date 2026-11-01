@@ -136,29 +136,23 @@ Recorded when M6 closed; none blocks M7b unless it says so.
 - The `search_cves` filtered seam; hot reload of an activated store; removing old
   stores; a matched count for `search` responses; revisiting the 20-technique cap on
   topic context, whose cuts are now reported.
-- The importer accepts at most 1 GiB decompressed per file. Measured on 2026-10-31 with
-  `/usr/bin/time -l`, the peak of the target, staging and partial
-  directories sampled every 2 s:
+- The importer accepts at most 1 GiB decompressed per file. Import checks cover:
 
-  | Input | Decompressed | Records imported | Wall time | Peak RSS | Peak disk |
-  |---|---|---|---|---|---|
-  | The 2026-10-27 NVD and KEV feeds (largest file 493,417,964 bytes) | 3,073,040,466 bytes | 396,211 | — | — | — |
-  | One plain synthetic NVD 2.0 file | 736,352,257 bytes | 935,000 | — | — | — |
+  | Input | Decompressed | Records imported |
+  |---|---|---|
+  | The 2026-10-27 NVD and KEV feeds (largest file 493,417,964 bytes) | 3,073,040,466 bytes | 396,211 |
+  | One plain synthetic NVD 2.0 file | 736,352,257 bytes | 935,000 |
 
   A 1,073,741,825-byte file is refused as `decompressed_file_too_large` before it is
-  parsed. Memory grows with the largest file and stays far below serving's; the peak disk
-  is bounded by the 16 GiB staging cap. The other caps are unchanged.
-- Serving cost on real data. The 2026-10-27 store (396,211 records)
-  takes time and memory to load (`load_served_corpus`), and uses
-  memory for the API's two deployments over one data plane, measured with
-  `scripts/operator/measure_serving.py` ; loading differs from the
-  250,000-record synthetic store, as does the API. M7b loads once per evaluation and does not wait on
-  it. Lexical search is an inverted index that builds a match object only for the
-  results it returns. Over that store it builds, and 1,056 searches (the M7b
-  run's queries and 300 sampled ones, at three limits and filters each) completed
-  without collection stalls, so the stalls in
-  [`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md#causes) do not recur and
-  `gc.freeze()` is not needed.
+  parsed. The staging cap is 16 GiB. Detailed import measurements made with
+  `/usr/bin/time -l` stay in the operator's external run directory under
+  `~/data/cve-kgrag/runs/`.
+- M7b loads the store once per evaluation. Lexical search is an inverted index that
+  builds a match object only for the results it returns; `gc.freeze()` is not needed.
+  The lexical check covers 1,056 searches (the M7b run's queries and 300 sampled ones,
+  at three limits and filters each).
+  Detailed serving measurements from `scripts/operator/measure_serving.py` stay in the
+  operator's external run directory under `~/data/cve-kgrag/runs/`.
 - 18 NVD records are excluded at import because a vulnerable CPE names no concrete
   vendor or product (`cpe:2.3:h:qualcomm:-:-:…`, `cpe:2.3:o:-:-:-:…`). An alternative
   is keeping the record and dropping only that CPE match; decide it if a gold case turns
@@ -178,16 +172,13 @@ Recorded when M6 closed; none blocks M7b unless it says so.
   | CPE | 374,206 | 1 | 90 | 14,191 |
   | purl | 0 | — | — | — |
 
-  Ten typical seeds (two lexical matches each for Open5GS, free5GC, Kamailio, OpenSIPS
-  and OpenAirInterface, named by the M7b baseline or relevance gold cases) ran
-  synchronous searches. Ten high-degree seeds (four leading CWEs,
-  three vendors and three products, with degrees 8,366–48,754) completed.
-  Every search finished inside the 10 s tool limit, with an `ok` graph outcome and
-  10 returned candidates at limit 10, each warning `result_limit_reached`; the warning
-  does not count visited or omitted nodes. The process peak RSS, read with Python's
-  `resource`, was recorded, unchanged from its serving startup
-  peak and below the recorded API serving baseline plus the fixed
-  1 GiB allowance. All fixed criteria passed. Graph expansion remains available,
+  The check covers ten typical seeds (two lexical matches each for Open5GS, free5GC,
+  Kamailio, OpenSIPS and OpenAirInterface, named by the M7b baseline or relevance gold
+  cases) and ten high-degree seeds (four leading CWEs, three vendors and three products,
+  with degrees 8,366–48,754). Every search returned an `ok` graph outcome and
+  10 candidates at limit 10, each warning `result_limit_reached`; the warning
+  does not count visited or omitted nodes. All fixed criteria passed, including the
+  1 GiB allowance over the recorded serving baseline. Graph expansion remains available,
   with no tuning or contract change. The operator output contains the degree figures,
   per-seed timings and peak RSS in `measurement.json` and `summary.md` under
   `~/data/cve-kgrag/runs/graph-expand/`. This check covers these twenty single-CVE
