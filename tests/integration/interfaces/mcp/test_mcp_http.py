@@ -100,12 +100,14 @@ async def test_client_over_http_lists_the_tools_and_answers_capabilities(
             KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES.value,
             TOOL_ARGUMENTS[KnowledgeToolName.GET_KNOWLEDGE_CAPABILITIES],
         )
+        readiness_answer = await client.call_tool("wait_for_data", {})
 
     tool_names: list[str] = []
     for tool in tool_listing.tools:
         tool_names.append(tool.name)
-    assert tool_names == list(KnowledgeToolName)
+    assert tool_names == [*KnowledgeToolName, "wait_for_data"]
     assert capabilities_answer.is_error is False
+    assert readiness_answer.structured_content == {"status": "ready"}
     assert list_affectedness_capabilities(capabilities_answer.structured_content) == [
         BLOCKED_AFFECTEDNESS_CAPABILITY
     ]
@@ -459,7 +461,7 @@ async def test_vulnwitness_mcp_http_serves_the_tools_announces_ready_and_stops_o
     served_mcp_http.process.send_signal(signal.SIGINT)
     stdout, stderr = served_mcp_http.process.communicate(timeout=SERVER_START_SECONDS)
 
-    assert len(tool_listing.tools) == len(KnowledgeToolName)
+    assert len(tool_listing.tools) == len(KnowledgeToolName) + 1
     assert unauthenticated_answer.status_code == 401
     assert "server" not in unauthenticated_answer.headers
     assert oversized_answer.status_code == 413

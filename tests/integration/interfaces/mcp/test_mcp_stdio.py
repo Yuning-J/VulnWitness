@@ -84,7 +84,7 @@ async def test_vulnwitness_mcp_over_stdio_lists_tools_and_answers_capabilities()
     tool_names: list[str] = []
     for tool in tool_listing.tools:
         tool_names.append(tool.name)
-    assert tool_names == list(KnowledgeToolName)
+    assert tool_names == [*KnowledgeToolName, "wait_for_data"]
     assert capabilities_answer.is_error is False
     assert list_affectedness_capabilities(capabilities_answer.structured_content) == [
         BLOCKED_AFFECTEDNESS_CAPABILITY
@@ -337,7 +337,7 @@ async def test_initialize_and_static_tools_are_available_while_loading_is_blocke
                 tool_listing = await client.list_tools()
             await read_until_notice(stderr, b"test: loader blocked")
 
-    expected_count = len(KnowledgeToolName)
+    expected_count = len(KnowledgeToolName) + 1
     if server_mode == "workspace":
         expected_count += len(WORKSPACE_TOOL_SPECS)
     assert len(tool_listing.tools) == expected_count
@@ -358,7 +358,8 @@ async def test_tool_call_during_loading_returns_an_explicit_error_immediately(
     assert tool_answer.is_error is True
     failure = ToolFailure.model_validate_json(tool_answer.content[0].text)
     assert failure.code is ToolFailureCode.DATA_LOADING
-    assert failure.message == "The data is still loading; retry later."
+    assert "wait_for_data" in failure.message
+    assert "same request_key" in failure.message
 
 
 @pytest.mark.parametrize("mode", ["legacy", "auto", LATEST_PROTOCOL_VERSION])
@@ -495,12 +496,13 @@ async def test_workspace_loading_preserves_request_key_until_the_dataset_is_read
                 )
             workspace_was_empty = not root.exists() or not tuple(root.iterdir())
             release_loading(loading_release)
-            await read_until_notice(stderr, b" ready after ")
+            ready = await client.call_tool("wait_for_data", {})
             triage = await client.call_tool("triage_product", arguments)
             retry = await client.call_tool("triage_product", arguments)
 
     # Assert
     assert workspace_was_empty
+    assert ready.structured_content == {"status": "ready"}
     for loading in loading_answers:
         assert loading.is_error
         assert loading.structured_content["code"] == "data_loading"

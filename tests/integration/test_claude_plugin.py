@@ -193,6 +193,11 @@ def test_record_hook_appends_unique_ids_and_preserves_checks(tmp_path: Path) -> 
                 }
             ),
         },
+        {
+            "tool_name": TOOL_PREFIX + "wait_for_data",
+            "tool_input": {"session_id": INVESTIGATION_ID},
+            "tool_response": {"session_id": INVESTIGATION_ID},
+        },
         [],
     ],
 )

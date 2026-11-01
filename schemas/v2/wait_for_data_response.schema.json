@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "WaitForDataLoading": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "loading",
+          "default": "loading",
+          "title": "Status",
+          "type": "string"
+        },
+        "waited_seconds": {
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Waited Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "status",
+        "waited_seconds"
+      ],
+      "title": "WaitForDataLoading",
+      "type": "object"
+    },
+    "WaitForDataReady": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "ready",
+          "default": "ready",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "WaitForDataReady",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "discriminator": {
+    "mapping": {
+      "loading": "#/$defs/WaitForDataLoading",
+      "ready": "#/$defs/WaitForDataReady"
+    },
+    "propertyName": "status"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/WaitForDataReady"
+    },
+    {
+      "$ref": "#/$defs/WaitForDataLoading"
+    }
+  ],
+  "title": "WaitForDataResponse",
+  "type": "object"
+}

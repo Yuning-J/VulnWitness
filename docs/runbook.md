@@ -161,8 +161,9 @@ stores, feeds and rollback, and see the README for the recommended memory.
 Keep servers running for repeated queries.
 HTTP loads before binding: probes see connection refused meanwhile, preserving its
 ready-notice and authenticated readiness semantics. In all modes, MCP stdio answers
-initialize/tools-list during loading; calls immediately fail `data_loading`, without
-queuing or automatic retry. Wait for readiness on stderr; load failures exit nonzero. Ctrl+C/closed
+initialize/tools-list during loading; calls other than `wait_for_data` immediately fail
+`data_loading`, without queuing or automatic retry. Use `wait_for_data` for readiness;
+load failures exit nonzero. Ctrl+C/closed
 stdin stops stdio even during loading. Stdout remains JSON/protocol. Tool deadlines
 stop waiting but cannot kill Python workers; CPU, memory and in-flight slots remain
 occupied until they return. Large graph expansions can exhaust a tool deadline;
@@ -312,9 +313,9 @@ transport. Every dispatched tool call, failures included, is recorded. There is 
 that edits findings. REST recording is unavailable.
 
 Stdio recording answers initialization and tool discovery before loading the store.
-Calls during loading return the typed, retryable `data_loading` failure immediately;
+Knowledge calls during loading return the typed, retryable `data_loading` failure immediately;
 they are never recorded or queued. The recorder binds to the complete dataset identity
-only when loading succeeds. Retry calls after the stderr `ready after` notice. Loading
+only when loading succeeds. Use `wait_for_data`, then retry calls once ready. Loading
 failures report the reason and exit nonzero. HTTP recording loads before binding, so
 its ready notice continues to mean the data plane is available.
 
@@ -397,6 +398,12 @@ retryable `data_loading` failure until the stderr `ready after` notice. Nothing 
 no investigation or call is saved, and request keys are not consumed; retry the same key
 once ready. Dataset identity binds when loading succeeds. HTTP workspace mode loads
 before binding to preserve its readiness semantics.
+
+After `data_loading`, call `wait_for_data(timeout_seconds?)` (default 20, range 1–60),
+then retry the original request with its original `request_key` once ready; while loading,
+do not spin on request retries or create an investigation with a new key. Expiry returns
+`loading`, not failure, and waiting does not shorten loading; a client's own tool-call
+timeout may be shorter than 60 seconds.
 
 Use `triage_product` for bounded product triage or `start_investigation` for manual work.
 Keep the returned opaque `session_id`. Pass a client-chosen `request_key` on creation when
@@ -481,10 +488,16 @@ The plugin registers server `plugin:vulnwitness:vulnwitness` and tools prefixed
 `mcp__plugin_vulnwitness_vulnwitness__`. Its analyst has access only to those tools.
 
 A real-data first start takes minutes. The stdio server answers initialization and
-discovery immediately; tools answer `data_loading` until the store is ready. Wait for
-the stderr `ready after` notice and retry. Loading refusals create no investigation or
+discovery immediately; knowledge and investigation tools answer `data_loading` until the
+store is ready. Loading refusals create no investigation or
 call and do not consume a request key. Topic cards, schemas and prompt templates remain
 available during loading; investigation resources return `data_loading`.
+
+After `data_loading`, call `wait_for_data` (default 20 seconds, range 1–60), then retry
+the original request with its original `request_key` once ready; while loading, do not
+spin on request retries or create an investigation with a new key. Expiry returns
+`loading`, not failure, and waiting does not shorten loading; a client's own tool-call
+timeout may be shorter than 60 seconds.
 
 The executable is `VULNWITNESS_BIN`, or `vulnwitness` on PATH. The workspace defaults
 to `$HOME/.vulnwitness/workspace`; set `VULNWITNESS_WORKSPACE` to an absolute private

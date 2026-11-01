@@ -152,7 +152,10 @@ TOOL_FAILURE_MESSAGES: dict[ToolFailureCode, str] = {
     ToolFailureCode.ARGUMENTS_TOO_LARGE: "The arguments exceed the size limit.",
     ToolFailureCode.UNKNOWN_EVIDENCE_ID: "No evidence anchor has that evidence ID.",
     ToolFailureCode.SERVER_BUSY: "Too many calls are in flight; retry later.",
-    ToolFailureCode.DATA_LOADING: "The data is still loading; retry later.",
+    ToolFailureCode.DATA_LOADING: (
+        "The data is still loading; call wait_for_data, then when ready retry the same "
+        "request with the same request_key."
+    ),
     ToolFailureCode.TIMED_OUT: "The call did not finish within the tool's time limit.",
     ToolFailureCode.RESPONSE_TOO_LARGE: (
         "The response exceeds the size limit; lower the limit argument."

@@ -24,9 +24,8 @@ def read_event(text: str) -> dict[str, JsonValue]:
     return event
 
 
-# Tools whose answers list other investigations; recording them would pull unrelated
-# investigations of a shared workspace into this conversation's stop checks.
-LISTING_TOOLS = frozenset({TOOL_PREFIX + "list_investigations"})
+# Listing can name unrelated investigations; readiness waits have no investigation.
+IGNORED_TOOLS = frozenset({TOOL_PREFIX + "list_investigations", TOOL_PREFIX + "wait_for_data"})
 
 
 def unwrap_tool_answers(tool_response: JsonValue) -> list[dict[str, JsonValue]]:
@@ -81,7 +80,7 @@ def record_investigation(event: dict[str, JsonValue], state: PluginHookState) ->
     tool_name = event.get("tool_name")
     if not isinstance(tool_name, str) or not tool_name.startswith(TOOL_PREFIX):
         return
-    if tool_name in LISTING_TOOLS:
+    if tool_name in IGNORED_TOOLS:
         return
     # The call's own session_id argument names the investigation it worked on; some
     # answers (check reports) do not repeat it.

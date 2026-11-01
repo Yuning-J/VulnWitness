@@ -10,6 +10,7 @@ from pydantic_core import CoreSchema, core_schema
 from vulnwitness.domain.affectedness import AffectednessCheck, AffectednessRequest
 from vulnwitness.domain.corpus_store_manifest import CorpusStoreManifest
 from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.data_readiness import WaitForDataRequest, WaitForDataResponse
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.evidence_set_verification_report import VerificationReport
 from vulnwitness.domain.hashing import sha256_hex
@@ -51,6 +52,7 @@ MANIFEST_FILE = "manifest.json"
 # The evidence-set schema relies on ``prefixItems``, which earlier drafts read differently.
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
+    "wait_for_data_request": WaitForDataRequest,
     "session_findings": SessionFindings,
     "product_query_request": ProductQueryRequest,
     "search_request": SearchRequest,
@@ -70,6 +72,7 @@ REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
     "affectedness_request": AffectednessRequest,
 }
 RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
+    "wait_for_data_response": WaitForDataResponse,
     "triage": TriageSummary,
     "session_record": SessionRecord,
     "session_call": SessionCall,

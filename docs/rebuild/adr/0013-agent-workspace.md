@@ -305,6 +305,18 @@ The evidence covers discovery, triage, report delivery, tool-authored wrong cita
 claims, disk tampering, caps and failure handling. The stage passes only after that manual
 pass. Other clients are claimed only after testing.
 
+### Data readiness
+
+`wait_for_data(timeout_seconds?)` is read-only and idempotent in every MCP mode and
+transport, with no session ID, recording or call-budget use. It awaits the deployment
+publication event before the `data_loading` guard, defaulting to 20 seconds (1–60);
+timeout returns `loading` with `waited_seconds`, while readiness returns `ready`.
+Cancellation ends only the wait; the shared load continues. Waiting does not shorten
+loading, and a client's own tool-call timeout may be shorter than 60 seconds.
+After `data_loading`, clients wait, then retry the original request with the same
+`request_key` once ready, without spinning or creating an investigation with a new key.
+The plugin hook explicitly ignores readiness waits.
+
 ## Out of scope
 
 C1 implements workspace storage, service, tools, recording inputs, supersession, schemas

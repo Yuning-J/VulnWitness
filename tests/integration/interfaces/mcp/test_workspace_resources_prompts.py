@@ -380,6 +380,10 @@ async def test_prompt_arguments_render_without_executing_tools(
     for value in arguments.values():
         assert value in message.content.text
     for phrase in (
+        "After data_loading, call wait_for_data",
+        "original request_key",
+        "do not spin on request retries",
+        "a new investigation with a new key",
         "session_id",
         "add_findings",
         "check_investigation",

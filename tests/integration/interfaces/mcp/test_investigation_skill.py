@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from tests.support.paths import REPOSITORY_ROOT
 from tests.support.workspaces import build_test_workspace
 from vulnwitness.domain.affectedness import AffectednessFailure, ApplicabilityStatus
+from vulnwitness.domain.data_readiness import WaitForDataRequest
 from vulnwitness.domain.investigation import NeedOutcome, StopReason
 from vulnwitness.domain.nvd_version_note import NvdVersionHit, NvdVersionNoHit, NvdVersionUnknown
 from vulnwitness.domain.product_query import DescriptionMentionBasis, ProductFieldBasis
@@ -102,7 +103,7 @@ def test_skill_tool_names_and_status_values_match_the_served_contract() -> None:
 
 
 def workspace_request_models() -> dict[str, type[BaseModel]]:
-    requests: dict[str, type[BaseModel]] = {}
+    requests: dict[str, type[BaseModel]] = {"wait_for_data": WaitForDataRequest}
     for specification in KNOWLEDGE_TOOL_SPECS:
         requests[specification.name.value] = WORKSPACE_KNOWLEDGE_MODELS[specification.request_model]
     for workspace_specification in WORKSPACE_TOOL_SPECS:

@@ -136,7 +136,7 @@ async def test_tools_list_names_every_available_tool(mcp_client: Client) -> None
     tool_names: list[str] = []
     for tool in tool_listing.tools:
         tool_names.append(tool.name)
-    assert tool_names == list(KnowledgeToolName)
+    assert tool_names == [*KnowledgeToolName, "wait_for_data"]
     assert tool_listing.next_cursor is None
 
 
@@ -214,7 +214,7 @@ async def test_every_tool_is_annotated_read_only_non_destructive_idempotent_clos
             or annotations.open_world_hint is not False
         ):
             unannotated_tools.append(tool.name)
-    assert len(tool_listing.tools) == len(KNOWLEDGE_TOOL_SPECS)
+    assert len(tool_listing.tools) == len(KNOWLEDGE_TOOL_SPECS) + 1
     assert unannotated_tools == []
 
 

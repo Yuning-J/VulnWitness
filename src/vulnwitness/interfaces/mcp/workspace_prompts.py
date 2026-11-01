@@ -20,6 +20,9 @@ from mcp.types import (
 from vulnwitness.domain.workspace import InvestigationRequest
 
 PROMPT_FINISH = (
+    " After data_loading, call wait_for_data; once ready, retry the original request with "
+    "the original request_key. While loading, do not spin on request retries or create "
+    "a new investigation with a new key."
     " Pass session_id on every follow-up knowledge call so evidence is recorded. "
     "Record findings with add_findings using client IDs, citations to saved calls, and "
     "explicit uncertainty. Run check_investigation, then call render_report and present "

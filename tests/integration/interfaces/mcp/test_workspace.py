@@ -409,9 +409,15 @@ async def test_workspace_annotations_match_static_side_effect_contract(
     listing = await workspace_client.list_tools()
 
     # Assert
-    read_only = {"get_investigation", "read_call", "check_investigation", "list_investigations"}
+    read_only = {
+        "get_investigation",
+        "read_call",
+        "check_investigation",
+        "list_investigations",
+        "wait_for_data",
+    }
     idempotent = read_only | {"render_report"}
-    assert len(listing.tools) == 17
+    assert len(listing.tools) == 18
     for tool in listing.tools:
         assert tool.annotations.read_only_hint == (tool.name in read_only)
         assert tool.annotations.idempotent_hint == (tool.name in idempotent)
@@ -488,8 +494,8 @@ async def test_read_only_and_recording_schemas_and_annotations_stay_unchanged(
         )
 
     # Assert
-    assert len(listing.tools) == 9
-    for tool, spec in zip(listing.tools, KNOWLEDGE_TOOL_SPECS, strict=True):
+    assert len(listing.tools) == 10
+    for tool, spec in zip(listing.tools[:-1], KNOWLEDGE_TOOL_SPECS, strict=True):
         assert tool.input_schema == json.loads(render_schema(spec.request_model, "validation"))
         assert tool.output_schema == json.loads(render_schema(spec.response_model, "serialization"))
         assert tool.annotations.read_only_hint and tool.annotations.idempotent_hint

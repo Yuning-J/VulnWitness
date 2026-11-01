@@ -9,7 +9,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
-import anyio.to_thread
+import anyio
 from mcp.server import Server, ServerRequestContext
 from mcp.server.context import CallNext, HandlerResult
 from mcp.shared.exceptions import MCPError
@@ -27,6 +27,12 @@ from pydantic import BaseModel, ValidationError
 
 from vulnwitness.application.workspace_investigations import WorkspaceInvestigations
 from vulnwitness.distribution import read_installed_version
+from vulnwitness.domain.data_readiness import (
+    WaitForDataLoading,
+    WaitForDataReady,
+    WaitForDataRequest,
+    WaitForDataResponse,
+)
 from vulnwitness.domain.served_dataset import ServedDatasetKind
 from vulnwitness.domain.session_record import SessionRecordingError
 from vulnwitness.domain.tool_contracts import ToolFailure, ToolFailureCode
@@ -81,6 +87,9 @@ class KnowledgeToolHandlers:
         self._toolbox = toolbox
         self._tools = tools
         self._recording_enabled = recording_enabled or recorder is not None
+        self._data_ready = anyio.Event()
+        if toolbox is not None:
+            self._data_ready.set()
         self.resources = (
             WorkspaceResourceHandlers(workspace, load_packaged_resources())
             if workspace_enabled or workspace is not None
@@ -94,6 +103,7 @@ class KnowledgeToolHandlers:
         self._workspace = deployment.workspace
         if self.resources is not None:
             self.resources.publish_workspace(deployment.workspace)
+        self._data_ready.set()
 
     async def list_tools(
         self,
@@ -107,9 +117,11 @@ class KnowledgeToolHandlers:
         self, ctx: ServerRequestContext[LifespanState], params: CallToolRequestParams
     ) -> CallToolResult:
         """The toolbox's answer as structured content and its JSON text, or its failure as
-        an error result. While loading, every call is a ``data_loading`` failure. Once
+        an error result. While loading, calls other than ``wait_for_data`` fail fast. Once
         loaded, a name that is not one of the available tools is a JSON-RPC invalid
         params error with a fixed message, which never repeats the name."""
+        if params.name == "wait_for_data":
+            return await self.wait_for_data(params.arguments)
         if self._toolbox is None:
             failure = build_tool_failure(ToolFailureCode.DATA_LOADING)
             return CallToolResult(
@@ -173,6 +185,22 @@ class KnowledgeToolHandlers:
             structured_content=tool_outcome.structured_content,
             is_error=False,
         )
+
+    async def wait_for_data(self, arguments: dict[str, Any] | None) -> CallToolResult:
+        """Wait on publication only; cancellation never reaches the shared loader."""
+        try:
+            request = WaitForDataRequest.model_validate(arguments or {})
+        except ValidationError:
+            return encode_workspace_answer(build_tool_failure(ToolFailureCode.INVALID_ARGUMENTS))
+        if self._data_ready.is_set():
+            return encode_workspace_answer(WaitForDataReady())
+        with anyio.move_on_after(request.timeout_seconds) as wait_scope:
+            await self._data_ready.wait()
+        if wait_scope.cancel_called:
+            return encode_workspace_answer(
+                WaitForDataLoading(waited_seconds=request.timeout_seconds)
+            )
+        return encode_workspace_answer(WaitForDataReady())
 
     async def call_workspace(self, params: CallToolRequestParams) -> CallToolResult:
         assert self._workspace is not None
@@ -296,6 +324,21 @@ def build_mcp_tools(tool_specs: Sequence[ToolSpec], workspace: bool = False) -> 
                 annotations=annotations,
             )
         )
+    tools.append(
+        Tool(
+            name="wait_for_data",
+            description=(
+                "Wait asynchronously for data readiness, without recording or using a call "
+                "budget. timeout_seconds defaults to 20 and allows 1-60. Returns ready "
+                "immediately once loaded, or loading with waited_seconds on expiry; expiry "
+                "is not failure. Waiting does not shorten the load. A client's own tool-call "
+                "timeout may be shorter than 60 seconds."
+            ),
+            input_schema=json.loads(render_schema(WaitForDataRequest, "validation")),
+            output_schema=json.loads(render_schema(WaitForDataResponse, "serialization")),
+            annotations=READ_ONLY_ANNOTATIONS,
+        )
+    )
     if workspace:
         for spec in WORKSPACE_TOOL_SPECS:
             tools.append(

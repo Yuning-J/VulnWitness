@@ -9,8 +9,10 @@ the SDK's own check is off rather than a second, differently worded refusal, and
 the SDK answers is restated in the server's words (``SdkAnswersRestated``).
 """
 
+from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
+from mcp.server import Server
 from mcp.server.streamable_http_manager import (
     StreamableHTTPASGIApp,
     StreamableHTTPSessionManager,
@@ -30,7 +32,7 @@ from vulnwitness.interfaces.http.status_routes import (
 )
 from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
 from vulnwitness.interfaces.mcp.sdk_answers import SdkAnswersRestated
-from vulnwitness.interfaces.mcp.server import build_knowledge_mcp_server
+from vulnwitness.interfaces.mcp.server import LifespanState, build_knowledge_mcp_server
 from vulnwitness.ports.session_recording import SessionRecording
 
 MCP_PATH = "/mcp"
@@ -58,8 +60,28 @@ def build_mcp_http_app(
     """The guarded app serving ``toolbox``'s tools at ``/mcp`` for a server on ``host``
     and ``port``. ``/ready`` answers 204 while the toolbox has a free worker. The request
     deadline is ``find_request_deadline_seconds``."""
+    return build_mcp_http_transport(
+        build_knowledge_mcp_server(toolbox, recorder, workspace),
+        has_free_worker=toolbox.has_free_worker,
+        request_deadline_seconds=find_request_deadline_seconds(toolbox.limits),
+        host=host,
+        port=port,
+        token=token,
+    )
+
+
+def build_mcp_http_transport(
+    server: Server[LifespanState],
+    *,
+    has_free_worker: Callable[[], bool],
+    request_deadline_seconds: float,
+    host: str,
+    port: int,
+    token: SecretStr,
+) -> HttpGuard:
+    """Guard a protocol server independently of its deployment's load lifecycle."""
     session_manager = StreamableHTTPSessionManager(
-        app=build_knowledge_mcp_server(toolbox, recorder, workspace),
+        app=server,
         json_response=True,
         stateless=True,
         security_settings=TransportSecuritySettings(enable_dns_rebinding_protection=False),
@@ -71,9 +93,7 @@ def build_mcp_http_app(
             app=SdkAnswersRestated(StreamableHTTPASGIApp(session_manager)),
         ),
         HEALTH_PATH: GuardedRoute(methods=frozenset({"GET"}), app=answer_health, is_open=True),
-        READY_PATH: GuardedRoute(
-            methods=frozenset({"GET"}), app=ReadinessRoute(toolbox.has_free_worker)
-        ),
+        READY_PATH: GuardedRoute(methods=frozenset({"GET"}), app=ReadinessRoute(has_free_worker)),
     }
     return HttpGuard(
         routes=routes,
@@ -81,7 +101,7 @@ def build_mcp_http_app(
         host=host,
         port=port,
         token=token,
-        request_deadline_seconds=find_request_deadline_seconds(toolbox.limits),
+        request_deadline_seconds=request_deadline_seconds,
     )
 
 
