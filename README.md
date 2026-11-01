@@ -2,66 +2,71 @@
 
 An evidence-backed vulnerability investigation workbench for analysts and AI agents.
 
-The general evidence core covers CVE/KEV records, product queries, CWE → CAPEC → ATT&CK
-catalogue associations, and sessions over synthetic fixtures or operator-imported data.
-A built-in telecom extension adds topic cards and MITRE FiGHT threat context.
-Catalogue associations are not attack paths or evidence of exploitation. Product
-matches and NVD version notes leave affectedness `unknown`.
+VulnWitness answers vulnerability questions with cited, recorded evidence and says plainly
+what it cannot establish. Its general core covers CVE/KEV records, product queries,
+CWE → CAPEC → ATT&CK catalogue associations, recorded sessions, checks and reports. A
+built-in telecom extension adds topic cards and MITRE FiGHT threat context.
 
-![Architecture walkthrough: the flow from client through interfaces and services to the store and knowledge files on the left; the current question, its steps and its output on the right](docs/architecture.webp)
+![Open5GS walkthrough: triage reads 211 product matches over 11 pages, looks up 5 CVEs, records the session, checks 495 claims against the record and renders a report; affectedness stays unknown](docs/media/open5gs-walkthrough.webp)
 
-See [Architecture](docs/architecture.md) for behaviour and trust boundaries.
+*A real triage of Open5GS 2.7.6 on the NVD snapshot of 2026-10-27: selected recorded events,
+timing condensed.*
 
-| Question | Service | What comes back |
-|---|---|---|
-| "What does this CVE mean?" | lookup / search | Source-backed records; lookup adds weakness paths |
-| "Which CVEs mention Open5GS?" | product | Paged matches, product fields kept apart from description mentions |
-| "What vulnerabilities and threats relate to GTP?" | investigate | Implementation CVEs, separate FiGHT context, unmet needs and the steps taken |
-| "Does this affect my deployed version?" | product with a version | NVD version notes; verified affectedness stays `unknown` |
+## Three ways to use it
 
-## Install
+- **Command line.** `triage` runs a bounded product investigation and records every call;
+  `report` turns any recorded session into a shareable HTML or Markdown report. Individual
+  commands (`lookup`, `search`, `product`, `investigate`) return JSON or readable text.
+- **AI agents over MCP.** `vulnwitness mcp` serves nine read-only tools. The
+  [investigation Skill](skills/vulnwitness-investigation/SKILL.md) teaches an agent to chain
+  them, cite evidence and check its findings. The
+  [client snippets](skills/vulnwitness-investigation/mcp-config/README.md) for Claude Code,
+  Codex and Cursor follow each client's documented format and have not yet been tested
+  inside those clients.
+- **Reports.** Every report runs the session check and shows its layers separately: record
+  consistency, citation resolution, structured claims, and narrative that is not checked.
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
-From a checkout (`uv` can install Python if needed):
+## Two-minute quick start
+
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/). With `VULNWITNESS_STORE_ROOT`
+unset, everything runs on packaged synthetic demo data:
 
 ```sh
 uv sync --locked
 source .venv/bin/activate
+vulnwitness triage --vendor democorp --product demo_gateway --version 2.0 --session ./demo
+vulnwitness report ./demo --format html --output ./demo-report.html
 ```
 
-## Quick start
+[![Report for the demo session: overview cards, key facts and limits, and the first CVE card with its match basis, NVD version condition and unknown affectedness](docs/media/report-demo.png)](docs/media/report-demo.png)
 
-With `VULNWITNESS_STORE_ROOT` unset, these use the packaged synthetic fixture:
+*Synthetic demo data. The report opens with what was read, what was looked up and what is
+not established, followed by one card per CVE.*
 
-```sh
-vulnwitness demo
-vulnwitness lookup CVE-9999-0001
-vulnwitness investigate 5G-AKA --scope mixed --format text
-```
+`triage` exits `0` when the planned scope completes and the checks pass, `1` when nothing
+matches, `2` on failure, and `3` when a page or time cap stopped it early with results
+saved and checks passing. Use a new directory for each run.
 
-`investigate` exits 1 when needs remain unmet, including this pending-card example.
+## Topic investigations
 
-## One-command product triage
+Topic cards connect a domain question such as "GTP" or "5G-AKA" to concrete retrieval: aliases,
+search templates, relevance rules and exclusions. `investigate` resolves the card, searches
+implementation CVEs and FiGHT protocol threats within a fixed budget, keeps the two kinds of
+evidence apart, and reports which evidence needs remain open.
 
-```sh
-vulnwitness triage --vendor democorp --version 2.0 --session /data/vulnwitness/triage
-```
+![GTP investigation: the topic card guides CVE templates and FiGHT searches over two rounds within an 8-call budget; 20 CVEs and 20 FiGHT techniques return with the run marked partial and needs unmet](docs/media/gtp-investigation.webp)
 
-Records capabilities, product pages and selected CVE lookups, writes unconfirmed structured
-claims to `findings.yaml`, and runs the session check. `triage.json` records inventory and
-deep-dive scopes separately; `--format json` prints that artifact. Selection takes the first
-N by the stated order. Use a new or empty directory for each run. See the
-[triage runbook](docs/runbook.md#one-command-product-triage) for caps and selection details.
+*A real `vulnwitness investigate GTP --scope mixed` on the NVD snapshot of 2026-10-27: selected
+trajectory events, timing condensed.* The bundled GTP and 5G-AKA cards are pending review, so
+they return candidates but never establish `found` or `sufficient`. GTP is matched as a
+family: a GTP-U question can return GTP-C records.
 
-Product pages default to the maximum size of 20 (`--limit`).
-
-Triage exit codes are `0` when the planned scope is complete and checks pass (reaching
-`--lookups` is complete), `1` for a complete query with no matches, `2` for argument,
-call, recording or check failures, and `3` for a page cap with unfinished inventory or
-a time limit before planned lookups finish, with results saved and checks passing.
-Failures take precedence over `3`. Exit `3` is non-zero for shells; automation that
-accepts partial results should handle `0` and `3` explicitly and inspect `triage.json`
-for the stop reason and remaining steps. `--lookups 0` completes after the inventory.
+| Question | Command | What comes back |
+|---|---|---|
+| "What does this CVE mean?" | `lookup` / `search` | Source-backed records; lookup adds weakness paths |
+| "Which CVEs are recorded for Open5GS?" | `triage` → `report` | The match inventory read within its caps, a deeper look at selected CVEs, and a report |
+| "What vulnerabilities and threats relate to GTP?" | `investigate` | Implementation CVEs, separate FiGHT context, open needs and the steps taken |
+| "Does this affect my deployed version?" | `product --version` | NVD version notes; verified affectedness stays `unknown` |
 
 ## Real data
 
@@ -71,65 +76,41 @@ Create a store root outside the repository, then fetch, import and activate:
 mkdir -p ~/data/vulnwitness/stores
 export VULNWITNESS_STORE_ROOT="$HOME/data/vulnwitness/stores"
 .venv/bin/python scripts/operator/refresh_store.py --feeds-dir ~/data/vulnwitness/feeds/2026-10-31 --store nvd-2026-10-31 --activate
-export VULNWITNESS_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-vulnwitness api
 ```
 
-The bundled demo requires no corpus download. For the full NVD corpus, we recommend a
-machine with 16 GB RAM or more; the minimum has not been established. Initial setup
-involves a substantial download and several GB of disk space.
-Keep the server running for repeated queries. Restart after activation or rollback.
-The [runbook](docs/runbook.md) covers local-feed reuse, sizing and recovery.
+For the full NVD corpus, we recommend a machine with 16 GB RAM or more; the minimum has not
+been established. Initial setup involves a substantial download and several GB of disk space.
+The [runbook](docs/runbook.md) covers fetching, local-feed reuse, FiGHT and MITRE snapshots,
+servers, sizing and recovery.
 
-## Entry points
+## Reference
 
-- CLI lookup: `vulnwitness lookup CVE-9999-0001 --format text` — exact record and weakness
-  paths; JSON is the default.
-- CLI search: `vulnwitness search "authentication bypass" --format text` — ranked word
-  matches; JSON is the default.
-- CLI product: `vulnwitness product --vendor democorp --version 2.0 --format text` — counted
-  inventory pages. With JSON output, `--all` prints every page;
-  `--output FILE --export jsonl|csv` exports every page without requiring `--all`.
-- CLI investigate: `vulnwitness investigate 5G-AKA --scope mixed --format text` — bounded evidence set.
-- CLI capabilities: `vulnwitness capabilities` — sources, coverage and available tools.
-- REST: `curl -H "Authorization: Bearer $VULNWITNESS_HTTP_TOKEN" http://127.0.0.1:8766/api/v2/capabilities`.
+- `vulnwitness lookup CVE-9999-0001 --format text`: exact record and weakness paths.
+- `vulnwitness search "authentication bypass" --format text`: ranked word matches.
+- `vulnwitness product --vendor democorp --version 2.0 --format text`: counted inventory pages;
+  `--all` prints every page, and `--output FILE --export jsonl|csv` exports them.
+- `vulnwitness investigate 5G-AKA --scope mixed --format text`: a bounded evidence set.
+- `vulnwitness triage … --session DIR` and `vulnwitness report DIR`: see the
+  [triage runbook](docs/runbook.md#one-command-product-triage).
+- `--session DIR` records individual data calls (JSON output only), and
+  `vulnwitness session check DIR` checks a session: see
+  [recording and checking sessions](docs/runbook.md#record-and-check-a-session).
+- REST: `vulnwitness api` with `VULNWITNESS_HTTP_TOKEN`, then
+  `curl -H "Authorization: Bearer $VULNWITNESS_HTTP_TOKEN" http://127.0.0.1:8766/api/v2/capabilities`.
 - MCP: `vulnwitness mcp` (stdio), or `vulnwitness mcp --http` (authenticated `/mcp` on port 8765).
-
-Record individual data calls with `--session DIR` and JSON output; `--format text` is refused.
-The `triage` workflow records JSON calls internally and defaults to a text summary.
-Product traversals and exports record each page as a separate call, subject to the
-session call limit. Export files are outside the session record. See
-[recording and checking sessions](docs/runbook.md#record-and-check-a-session).
-
-## Share a report
-
-Run `vulnwitness report DIR --format html --output DIR/report.html` to share a
-self-contained session report, or use `--format md` for Markdown (the default).
-Reports always run the session check and use only recorded content. They show the
-separate check layers and flag contradicted or unverifiable claims; narrative support
-is not checked. Omit `--output` to print to stdout; `--force` permits replacement.
-
-## Use with an AI agent
-
-Give your agent the [investigation Skill](skills/vulnwitness-investigation/SKILL.md)
-for product triage, CVE lookup, and telecom questions with cited findings.
-Use the [MCP configuration snippets](skills/vulnwitness-investigation/mcp-config/README.md)
-for Claude Code, Codex, or Cursor; the plain stdio variants serve packaged demo data.
-Launch `vulnwitness mcp --session DIR` to record tool calls and exact responses,
-including failures. The agent authors `DIR/findings.yaml` separately, then runs
-`vulnwitness session check DIR`. A passing check validates record consistency and
-citation resolution; it does not establish that statements are supported by evidence.
 
 ## Limits
 
-- Word matches and pending-review topic cards cannot establish sufficiency; normal
-  runs with such matches end `needs_unmet`. Read matched terms and warnings.
-- The GTP card covers the family; a GTP-U query can include GTP-C records.
-- NVD may lack product/version data. A missing match or `no_hit` never establishes safety.
-- No verified affectedness source is available. Weakness paths are derived catalogue associations.
-- REST/MCP investigations are deterministic. Model planning is opt-in through the CLI;
+- Word matches and pending-review topic cards cannot establish sufficiency; an otherwise
+  completed run with such matches ends `needs_unmet`, while budget or source failures can
+  set another stop reason. Read matched terms and warnings.
+- NVD may lack product or version data. A missing match or `no_hit` never establishes safety.
+- No verified affectedness source is available. Weakness paths are derived catalogue
+  associations, not attack paths, and "no ATT&CK mapping" describes the loaded snapshot only.
+- Triage selection is an order, not a risk ranking.
+- REST and MCP investigations are deterministic. Model planning is opt-in through the CLI;
   imported stores have no bound semantic collection.
-- Results and context are bounded; an answer makes no completeness guarantee.
+- Results and context are bounded; no answer guarantees completeness.
 
 [Runbook](docs/runbook.md) · [Architecture](docs/architecture.md) ·
 [Evaluation](docs/evaluation.md) · [Third-party data](THIRD_PARTY_DATA.md)
