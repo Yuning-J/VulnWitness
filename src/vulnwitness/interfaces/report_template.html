@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<title>$title</title>
+<style>
+  :root { color-scheme: light dark; --paper: #fff; --ink: #202b36; --muted: #e5e9ee;
+    --accent: #194d71; --notice: #fff2ce; --notice-ink: #5d3700; }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); margin: 0 auto; max-width: 90rem;
+    padding: 2rem; font: 1rem/1.65 system-ui, sans-serif; overflow-wrap: anywhere; }
+  h1, h2, h3, h4, h5 { line-height: 1.3; }
+  h1 { font-size: 2rem; }
+  h2 { color: var(--accent); border-bottom: 1px solid var(--muted); padding-bottom: .5rem; }
+  section { margin: 1.8rem 0; }
+  section section { margin: 1.25rem 0; }
+  p { max-width: 90ch; }
+  .banner, .warning { background: var(--notice); color: var(--notice-ink);
+    border-left: .3rem solid currentColor; padding: .7rem 1rem; font-weight: 650; }
+  .table-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; text-align: left; }
+  th, td { border: 1px solid var(--muted); padding: .65rem; vertical-align: top;
+    min-width: 5rem; overflow-wrap: anywhere; }
+  th { background: var(--muted); }
+  pre { padding: 1rem; border: 1px solid var(--muted); white-space: pre-wrap;
+    overflow-wrap: anywhere; font: .85rem/1.5 ui-monospace, monospace; }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #161d26; --ink: #e7edf4; --muted: #354252;
+      --accent: #a8d8ff; --notice: #42361b; --notice-ink: #ffe0a1; }
+  }
+  @media print {
+    :root { --paper: #fff; --ink: #000; --muted: #ccc; --accent: #000;
+      --notice: #fff; --notice-ink: #000; }
+    body { padding: 0; max-width: none; font-size: 10pt; }
+    .table-scroll { overflow: visible; }
+    table { table-layout: fixed; font-size: 8pt; }
+    th, td { min-width: 0; padding: .3rem; }
+    h1, h2, h3, h4, h5 { break-after: avoid; }
+    tr, pre { break-inside: avoid; }
+    @page { margin: 15mm; }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>$title</h1>
+$banner
+$body
+</main>
+</body>
+</html>

@@ -25,6 +25,7 @@ from vulnwitness.domain.session_record import (
     SessionRecordCheck,
     SessionViolation,
 )
+from vulnwitness.domain.session_report import CheckedSession
 from vulnwitness.domain.session_response import SESSION_RESPONSE_MODELS
 from vulnwitness.domain.tool_contracts import ToolFailure
 
@@ -62,6 +63,20 @@ class SessionChecker:
         self._claim_checks: list[SessionClaimCheck] = []
         self._not_checked: list[str] = []
         self._responses: dict[int, BaseModel] = {}
+        self._session: SessionRecord | None = None
+        self._findings: SessionFindings | None = None
+        self._recorded_responses: dict[int, BaseModel] = {}
+
+    def check_with_contents(self) -> CheckedSession:
+        """Return the check and the same parsed files it checked, without rereading them."""
+        report = self.check()
+        return CheckedSession(
+            check=report,
+            session=self._session,
+            calls=tuple(self._calls.values()),
+            responses=dict(self._recorded_responses),
+            findings=self._findings,
+        )
 
     def check(self) -> SessionCheckReport:
         self._violations.clear()
@@ -72,6 +87,9 @@ class SessionChecker:
         self._claim_checks.clear()
         self._not_checked.clear()
         self._responses.clear()
+        self._session = None
+        self._findings = None
+        self._recorded_responses.clear()
         try:
             check_session_path(self._directory)
             session = parse_session_document(
@@ -80,6 +98,7 @@ class SessionChecker:
         except (OSError, ValueError, RecursionError):
             self._add("session.json", "session metadata is unreadable or invalid")
             return self._report()
+        self._session = session
         self._check_calls(session)
         self._check_findings(session)
         return self._report()
@@ -200,6 +219,7 @@ class SessionChecker:
         if call.request is None and call.outcome == "ok":
             self._add(f"calls/{call.sequence:04d}.json.request", "successful call needs a request")
         self._anchors[call.sequence] = collect_response_anchors(document)
+        self._recorded_responses[call.sequence] = answer
         return answer
 
     def _check_findings(self, session: SessionRecord) -> None:
@@ -212,6 +232,7 @@ class SessionChecker:
         except (OSError, ValueError, YAMLError, RecursionError):
             self._add("findings.yaml", "findings are unreadable or invalid")
             return
+        self._findings = findings
         for finding_index, finding in enumerate(findings.findings):
             if finding.claim is None:
                 self._not_checked.append(finding.id)

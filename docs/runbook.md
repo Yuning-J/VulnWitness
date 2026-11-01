@@ -213,6 +213,18 @@ Non-regular, unreadable, oversized (over 32 MiB), invalid or mismatched files fa
 
 ## Record and check a session
 
+To share any CLI, MCP or triage session, run `vulnwitness report DIR --format html
+--output DIR/report.html`, or choose `--format md` (the default). Rendering always checks
+the session, reads only recorded content, adds no calls, and uses session timestamps for
+deterministic output. The report separates consistency, citations, structured claims and
+unchecked narrative; it does not establish narrative support or deployment affectedness.
+An optional `triage.json` supplies scope context only. Output files are private (0600)
+and written atomically; existing files require `--force`. Inside a session only an explicit
+`DIR/report.*` destination is allowed. Without `--output`, the report goes to stdout.
+Exit 0 means all three checked layers hold, 1 means a report rendered with a layer failure,
+and 2 means unreadable session metadata, invalid arguments or an output failure. See
+[ADR 0012](rebuild/adr/0012-session-reports.md) for the rendering boundary.
+
 Add `--session DIR` to `lookup`, `search`, `product`, `investigate`, `topic`, `evidence`,
 `affectedness`, `capabilities`, `resolve` or `verify`. Use JSON output; `--session` with
 `--format text` is refused with exit 2 on lookup, search, product and investigate. The first call

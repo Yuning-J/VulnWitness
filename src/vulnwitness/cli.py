@@ -217,6 +217,7 @@ from vulnwitness.interfaces.product_query_output import (
 from vulnwitness.interfaces.search_summary import render_search_summary
 from vulnwitness.ports.served_corpus import ServedCorpus
 from vulnwitness.ports.sources import FightSource
+from vulnwitness.report_cli import add_report_parser, run_report
 from vulnwitness.schema_snapshots import find_schema_drift, write_contract_schemas
 from vulnwitness.settings import (
     HTTP_VARIABLES,
@@ -348,6 +349,7 @@ def parse_store_name(text: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vulnwitness", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    add_report_parser(commands)
 
     mitre_parser = commands.add_parser("mitre", help="build an offline catalogue mapping")
     mitre_commands = mitre_parser.add_subparsers(dest="mitre_command", required=True)
@@ -1739,6 +1741,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     ``session check`` reads only the session directory."""
     parser = build_parser()
     arguments = parser.parse_args(argv)
+    if arguments.command == "report":
+        return run_report(arguments, parser)
     try:
         settings = load_settings(os.environ if environment is None else environment)
     except SettingsError as error:

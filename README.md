@@ -78,6 +78,14 @@ Product traversals and exports record each page as a separate call, subject to t
 session call limit. Export files are outside the session record. See
 [recording and checking sessions](docs/runbook.md#record-and-check-a-session).
 
+## Share a report
+
+Run `vulnwitness report DIR --format html --output DIR/report.html` to share a
+self-contained session report, or use `--format md` for Markdown (the default).
+Reports always run the session check and use only recorded content. They show the
+separate check layers and flag contradicted or unverifiable claims; narrative support
+is not checked. Omit `--output` to print to stdout; `--force` permits replacement.
+
 ## Use with an AI agent
 
 Give your agent the [investigation Skill](skills/vulnwitness-investigation/SKILL.md)
