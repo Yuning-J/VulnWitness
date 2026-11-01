@@ -73,8 +73,11 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/vulnwitness"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"schemas/v2" = "vulnwitness/knowledge/schemas/v2"
+
 [tool.hatch.build.targets.sdist]
-include = ["/src/vulnwitness", "/README.md", "/LICENSE", "/pyproject.toml"]
+include = ["/schemas/v2", "/src/vulnwitness", "/README.md", "/LICENSE", "/pyproject.toml"]
 
 [tool.pytest.ini_options]
 # The repository root is on the path so tests import `tests.support`.

@@ -14,18 +14,27 @@ from dataclasses import dataclass
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from vulnwitness.domain.http_rejection import HttpRejectionCode
+from vulnwitness.domain.tool_contracts import ToolFailureCode
 from vulnwitness.interfaces.http.guard import (
     JSON_CONTENT_TYPE,
     RecordedResponse,
     send_recorded_response,
     send_rejection,
 )
+from vulnwitness.interfaces.knowledge_tools import build_tool_failure
 from vulnwitness.interfaces.mcp.server import INVALID_PARAMETERS_MESSAGE, UNKNOWN_TOOL_MESSAGE
 
 # Messages a JSON-RPC error keeps as they are: this server's own, and the SDK's fixed
 # sentences.
 FIXED_ERROR_MESSAGES = frozenset(
-    {UNKNOWN_TOOL_MESSAGE, "Method not found", INVALID_PARAMETERS_MESSAGE}
+    {
+        UNKNOWN_TOOL_MESSAGE,
+        "Method not found",
+        INVALID_PARAMETERS_MESSAGE,
+        "unknown prompt",
+        "Invalid prompt arguments",
+        "Resource not found",
+    }
 )
 # The message any other error of a JSON-RPC code is restated with.
 ERROR_CODE_MESSAGES: dict[int, str] = {
@@ -56,10 +65,29 @@ class RestatedError:
         return json.dumps(restated_answer, separators=(",", ":"), ensure_ascii=False).encode()
 
 
+def is_fixed_error_message(message: object) -> bool:
+    """Only exact server-authored failures survive HTTP error sanitization."""
+    if not isinstance(message, str):
+        return False
+    if message in FIXED_ERROR_MESSAGES:
+        return True
+    for code in (
+        ToolFailureCode.INVALID_ARGUMENTS,
+        ToolFailureCode.UNKNOWN_INVESTIGATION,
+        ToolFailureCode.INVESTIGATION_BUSY,
+        ToolFailureCode.SESSION_RECORDING_FAILED,
+        ToolFailureCode.INTERNAL_ERROR,
+    ):
+        if message == build_tool_failure(code).model_dump_json():
+            return True
+    return False
+
+
 def restate_json_rpc_error(body: bytes) -> RestatedError | None:
     """``body`` restated when it is a JSON-RPC error response: its message kept only when
-    it is one of ``FIXED_ERROR_MESSAGES``, else its code's sentence, and an ``id`` other
-    than a string or an integer read as none; ``None`` when ``body`` is no such response."""
+    it is a fixed server-authored message or typed failure, else its code's sentence.
+    An ``id`` other than a string or integer reads as none; ``None`` when ``body`` is
+    no such response."""
     try:
         answer = json.loads(body)
     except ValueError:
@@ -73,11 +101,12 @@ def restate_json_rpc_error(body: bytes) -> RestatedError | None:
     if isinstance(code, bool) or not isinstance(code, int):
         return None
     message = error.get("message")
-    if message not in FIXED_ERROR_MESSAGES:
+    if not is_fixed_error_message(message):
         message = ERROR_CODE_MESSAGES.get(code, OTHER_ERROR_MESSAGE)
     request_id = answer.get("id")
     if isinstance(request_id, bool) or not isinstance(request_id, str | int):
         request_id = None
+    assert isinstance(message, str)
     return RestatedError(request_id=request_id, code=code, message=message)
 
 

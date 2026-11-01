@@ -275,6 +275,39 @@ class WorkspaceInvestigations:
         with self._files.investigation_lock(request.session_id):
             return self._files.check(request.session_id).check
 
+    def resource_dataset(self) -> str:
+        """The full served identity for static resource descriptions."""
+        return self._dataset.model_dump_json()
+
+    def resource_artifacts(self, request: InvestigationRequest) -> tuple[str, ...]:
+        """Existing public artifact names, resolved under the same workspace path rules."""
+        names = ["findings"]
+        for name in ("report.html", "report.md"):
+            if self._files.exists(request.session_id, name):
+                names.append(name)
+        return tuple(names)
+
+    def resource_report_status(
+        self, request: InvestigationRequest, name: str
+    ) -> Literal["current", "stale"]:
+        if self._files.exists(request.session_id, "report.json"):
+            record = ReportRecord.model_validate_json(
+                self._files.read(request.session_id, "report.json")
+            )
+            has_bound_format = name.removeprefix("report.") in record.formats
+            if has_bound_format and record.input_digest == self._files.input_digest(
+                request.session_id
+            ):
+                return "current"
+        return "stale"
+
+    def read_resource_artifact(
+        self, request: InvestigationRequest, name: Literal["findings", "report.html", "report.md"]
+    ) -> str:
+        """Read a fixed public artifact; callers cannot supply a filesystem path."""
+        filename = "findings.yaml" if name == "findings" else name
+        return self._files.read(request.session_id, filename).decode("utf-8")
+
     def read_call(self, request: ReadCallRequest) -> ReadCallResponse:
         with self._files.investigation_lock(request.session_id):
             call = SessionCall.model_validate_json(
@@ -357,10 +390,19 @@ class WorkspaceInvestigations:
             content = self._renderer(report, request.format).encode()
             name = "report." + request.format
             self._files.write(session_id, name, content)
+            formats = [request.format]
+            if self._files.exists(session_id, "report.json"):
+                previous = ReportRecord.model_validate_json(
+                    self._files.read(session_id, "report.json")
+                )
+                if previous.input_digest == digest:
+                    for format in previous.formats:
+                        if format not in formats:
+                            formats.append(format)
             self._files.write(
                 session_id,
                 "report.json",
-                ReportRecord(input_digest=digest, formats=(request.format,))
+                ReportRecord(input_digest=digest, formats=tuple(sorted(formats)))
                 .model_dump_json()
                 .encode(),
             )

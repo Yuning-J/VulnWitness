@@ -405,7 +405,42 @@ superseded.
 
 Run `check_investigation`, then `render_report` with `format: html` or `md`. The report tool
 returns a local path, resource URI, byte size, digest and check layers; Markdown below
-200 KiB is inline. Resource handlers are not part of this server surface. Reports perform
-no retrieval. Later calls or findings make the report `stale`; render again for a `current`
-report. Checks distinguish record consistency, citation resolution and structured field
+200 KiB is inline. Reports perform no retrieval. Later calls or findings make the report
+`stale`; render again for a `current` report. Checks distinguish record consistency, citation resolution and structured field
 agreement. Free narrative, real-world truth and deployment applicability are not checked.
+
+Workspace mode also advertises resources and three prompt templates; read-only and recording
+modes advertise tools only. List resources to discover topic cards, contract schemas and
+this workspace's investigation summaries, findings and rendered reports:
+
+| URI | MIME type |
+|---|---|
+| `vulnwitness://topics/{topic_id}` | `text/yaml` |
+| `vulnwitness://schemas/{name}.schema.json` | `application/json` |
+| `vulnwitness://investigations/{id}/summary` | `application/json` |
+| `vulnwitness://investigations/{id}/findings` | `text/yaml` |
+| `vulnwitness://investigations/{id}/report.html` | `text/html` |
+| `vulnwitness://investigations/{id}/report.md` | `text/markdown` |
+
+Topic cards preserve the packaged YAML bytes, and their descriptions state review status.
+All descriptions state dataset identity and label source text untrusted. Investigation
+resources use the same opaque ID and workspace path rules as tools; paths are never accepted.
+Reports appear only after rendering. A stale report stays readable, with its description
+marked stale; rendering one format does not refresh an older report in the other format.
+
+Saved calls are available through the resource template
+`vulnwitness://investigations/{id}/calls/{n}`, where `n` is 1 through 100. They are not listed
+individually. The JSON content matches `read_call`, including metadata and exact saved
+response text; above 1 MiB it contains metadata and `response_too_large`, without response
+text. An unknown investigation returns a resource-not-found JSON-RPC error whose message
+is typed `ToolFailure` JSON with `code: unknown_investigation`. Invalid IDs return invalid
+params with `code: invalid_arguments`.
+
+Choose `triage_product(product, version?)`, `investigate_topic(topic, scope)` or
+`deliver_report(session_id)` from the client's MCP prompts. These render instructions;
+the agent must execute the named tools. Required arguments cannot be omitted. Each prompt
+calls for recorded follow-up knowledge calls, findings, layered checks, rendering and report
+delivery, with explicit limits on what is established. A passing check is never a verified
+answer. In Claude Code the interactive forms are `/server:prompt` and `@server:uri`;
+use the actual server name shown by that client. Headless prompt and resource presentation
+requires separate client acceptance testing.

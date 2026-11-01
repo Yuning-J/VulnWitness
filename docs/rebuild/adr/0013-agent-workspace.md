@@ -18,7 +18,7 @@ The server has three modes:
 |---|---|
 | `vulnwitness mcp` | Nine knowledge tools, unrecorded |
 | `vulnwitness mcp --session DIR` | Nine knowledge tools, all dispatched calls recorded |
-| `vulnwitness mcp --workspace ROOT` | Nine knowledge tools plus eight investigation tools |
+| `vulnwitness mcp --workspace ROOT` | Nine knowledge tools, eight investigation tools, resources and prompt templates |
 
 All modes support stdio and `--http`. `--session` and `--workspace` are mutually exclusive.
 The workspace root is fixed at startup, private (0700), and created if absent. A symlink
@@ -112,8 +112,10 @@ an operator who can rewrite the entire record.
 
 `render_report` writes `report.html` or `report.md` inside the investigation. It returns a
 local path, resource URI, byte size, input digest and check layers. Markdown below 200 KiB
-is also inline. A resource URI describes the delivery address; resource handlers are a
-separate work package. The report retains record consistency, citation resolution and
+is also inline. A resource URI is readable through the workspace resource handler. Each
+report format has its own freshness description: rendering a new Markdown report does not
+refresh an older HTML report. Both formats remain current when rendered from the same inputs.
+The report retains record consistency, citation resolution and
 structured field agreement as separate layers. Free narrative is never checked, and a
 passing check establishes neither source support, real-world truth nor applicability.
 
@@ -176,11 +178,43 @@ The agent workflow is triage, inspect, optional knowledge calls with `session_id
 findings, check, render and present the report. Manual investigations start with
 `start_investigation`. Shell users retain `vulnwitness triage`, `session check` and `report`.
 
-Resources and prompts are composed separately: topic and schema resources; report,
-summary and findings resources scoped to this workspace; and a saved-call resource
-template `vulnwitness://investigations/{id}/calls/{n}`. Source text in resources is
-untrusted. Prompt templates describe product triage, topic investigation and report delivery;
-they do not execute workflows themselves.
+Workspace mode registers the SDK's low-level resource and prompt handlers. The other
+modes register only tool handlers and advertise neither resources nor prompts.
+
+`resources/list` lists packaged topic cards, committed contract schemas and each local
+investigation's summary, findings and existing rendered reports. The investigation count
+is bounded by the workspace quota, so listing these artifacts makes them discoverable
+without requiring an agent to invent IDs. Topic cards are exact UTF-8 YAML file bytes,
+with review state in the description. Schemas are the committed JSON files, included in
+wheel and source distributions. Schema resource names include `.schema.json`.
+
+Saved calls use only the template `vulnwitness://investigations/{id}/calls/{n}`; individual
+calls are not listed because each investigation can contain up to 100. Content is the same
+JSON envelope as `read_call`, including call metadata and exact response text. Above 1 MiB,
+the envelope retains metadata and the typed `response_too_large` failure, without response
+text. Summaries match `get_investigation`; findings return the exact `findings.yaml` text.
+Report resources exist only once rendered, and stale reports remain readable with a stale
+description. MIME types are `text/yaml`, `application/json`, `text/html` and `text/markdown`.
+
+Every resource description labels source text untrusted and states dataset identity.
+Investigation descriptions use the saved record's identity, while packaged resources and
+the call template state the served identity. Literal URI matching permits only fixed
+artifacts and validated investigation IDs; no path, URI normalization or percent decoding
+can grant filesystem authority. Investigation reads reuse the tools' workspace storage
+checks and call limit. Resource failures use JSON-RPC invalid params or resource-not-found,
+with the fixed typed `ToolFailure` JSON in the message for invalid IDs and unknown
+investigations; no request data or exception text is included.
+
+The three prompts are templates only: `triage_product(product, version?)`,
+`investigate_topic(topic, scope)` and `deliver_report(session_id)`. Required arguments are
+validated before rendering; fetching a prompt never executes tools. Each template directs
+follow-up knowledge calls to pass `session_id`, records findings through `add_findings`,
+runs `check_investigation`, renders through `render_report` and presents its path or resource.
+They distinguish check layers, state what is not established and never call a passing
+check a verified answer. In Claude Code, prompts appear as `/server:prompt` and resource
+references use `@server:uri`. These are client presentation conventions, not workflow
+execution inside the server. MCP descriptors use the SDK's protocol models; this project
+does not snapshot descriptor schemas, so this surface adds no committed schema change.
 
 The Claude Code plugin default is `~/.vulnwitness/workspace`, overridable by the operator.
 Its demo configuration explicitly unsets operator data settings. Skill documentation,
@@ -199,7 +233,8 @@ pass. Other clients are claimed only after testing.
 ## Out of scope
 
 C1 implements workspace storage, service, tools, recording inputs, supersession, schemas
-and documentation. Resource and prompt handlers, Skill and README integration, plugin and
-Stop-hook packaging, and client acceptance belong to C2–C5. A router, built-in agent loop,
+and documentation. C2 implements resource and prompt handlers and their transport tests.
+Skill and README integration, plugin and Stop-hook packaging, and client acceptance belong
+to C3–C5. A router, built-in agent loop,
 local UI, triage resume, arbitrary-path access, REST investigation writes, narrative
 verification and source-authenticity guarantees are outside this decision's implementation.
