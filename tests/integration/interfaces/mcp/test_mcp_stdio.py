@@ -12,7 +12,8 @@ from pathlib import Path
 import anyio
 import pytest
 from mcp import StdioServerParameters
-from mcp.types import LATEST_PROTOCOL_VERSION
+from mcp.shared.exceptions import MCPError
+from mcp.types import LATEST_PROTOCOL_VERSION, TextResourceContents
 
 from tests.support.corpus_stores import import_store
 from tests.support.stdio_client import observe_stdio_client, read_process_line, read_until_notice
@@ -25,6 +26,7 @@ from vulnwitness.cli import main
 from vulnwitness.domain.investigation import SourceCapabilityState
 from vulnwitness.domain.tool_contracts import KnowledgeCapabilities, ToolFailure, ToolFailureCode
 from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName
+from vulnwitness.interfaces.mcp.workspace_tools import WORKSPACE_TOOL_SPECS
 
 pytestmark = pytest.mark.anyio
 
@@ -304,11 +306,15 @@ def loading_release(tmp_path: Path) -> Iterator[Path]:
 
 
 def controlled_server_parameters(
-    release_path: Path, failure: str = "none"
+    release_path: Path, failure: str = "none", server_mode: str = "plain"
 ) -> StdioServerParameters:
+    arguments = ["-m", "tests.support.stdio_startup", str(release_path), failure]
+    if server_mode != "plain":
+        option = "--workspace" if server_mode == "workspace" else "--session"
+        arguments.extend([option, str(release_path.parent / server_mode)])
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "tests.support.stdio_startup", str(release_path), failure],
+        args=arguments,
         env=build_server_environment(),
     )
 
@@ -318,11 +324,12 @@ def release_loading(release_path: Path) -> None:
         release.write(b"1")
 
 
+@pytest.mark.parametrize("server_mode", ["plain", "workspace", "recording"])
 @pytest.mark.parametrize("mode", ["legacy", "auto", LATEST_PROTOCOL_VERSION])
 async def test_initialize_and_static_tools_are_available_while_loading_is_blocked(
-    loading_release: Path, mode: str
+    loading_release: Path, mode: str, server_mode: str
 ) -> None:
-    parameters = controlled_server_parameters(loading_release)
+    parameters = controlled_server_parameters(loading_release, server_mode=server_mode)
 
     with anyio.fail_after(10):
         async with observe_stdio_client(parameters, mode=mode) as (client, stderr):
@@ -330,7 +337,10 @@ async def test_initialize_and_static_tools_are_available_while_loading_is_blocke
                 tool_listing = await client.list_tools()
             await read_until_notice(stderr, b"test: loader blocked")
 
-    assert len(tool_listing.tools) == len(KnowledgeToolName)
+    expected_count = len(KnowledgeToolName)
+    if server_mode == "workspace":
+        expected_count += len(WORKSPACE_TOOL_SPECS)
+    assert len(tool_listing.tools) == expected_count
 
 
 @pytest.mark.parametrize("tool_name", list(KnowledgeToolName))
@@ -381,10 +391,16 @@ async def test_same_tool_call_succeeds_after_loading_is_released(
         ("unexpected", 1, b"data loading failed"),
     ],
 )
+@pytest.mark.parametrize("server_mode", ["plain", "workspace", "recording"])
 def test_load_failure_reports_its_reason_and_exits_without_waiting_for_stdin(
-    loading_release: Path, failure: str, expected_exit_code: int, expected_error: bytes
+    loading_release: Path,
+    failure: str,
+    expected_exit_code: int,
+    expected_error: bytes,
+    server_mode: str,
 ) -> None:
-    parameters = controlled_server_parameters(loading_release, failure)
+    # Arrange
+    parameters = controlled_server_parameters(loading_release, failure, server_mode)
     server_process = subprocess.Popen(
         [parameters.command, *parameters.args],
         stdin=subprocess.PIPE,
@@ -449,3 +465,153 @@ def test_disconnect_or_interrupt_during_loading_exits_promptly(
 
     assert exit_code == 0
     assert b"ready" not in stderr
+
+
+@pytest.mark.parametrize("mode", ["legacy", "auto", LATEST_PROTOCOL_VERSION])
+async def test_workspace_loading_preserves_request_key_until_the_dataset_is_ready(
+    loading_release: Path, mode: str
+) -> None:
+    # Arrange
+    root = loading_release.parent / "workspace"
+    parameters = controlled_server_parameters(loading_release, server_mode="workspace")
+    arguments = {"vendor": "democorp", "lookups": 1, "request_key": "startup.1"}
+    loading_answers = []
+
+    # Act
+    with anyio.fail_after(15):
+        async with observe_stdio_client(parameters, mode=mode) as (client, stderr):
+            await client.list_tools()
+            await read_until_notice(stderr, b"test: loader blocked")
+            with anyio.fail_after(2):
+                for spec in WORKSPACE_TOOL_SPECS:
+                    loading_answers.append(await client.call_tool(spec.name, arguments))
+                for tool in KnowledgeToolName:
+                    loading_answers.append(await client.call_tool(tool, TOOL_ARGUMENTS[tool]))
+                loading_answers.append(
+                    await client.call_tool(
+                        "lookup_cve",
+                        {"cve_id": "CVE-9999-0001", "session_id": "inv_aaaaaaaaaaaaaaaaaaaa"},
+                    )
+                )
+            workspace_was_empty = not root.exists() or not tuple(root.iterdir())
+            release_loading(loading_release)
+            await read_until_notice(stderr, b" ready after ")
+            triage = await client.call_tool("triage_product", arguments)
+            retry = await client.call_tool("triage_product", arguments)
+
+    # Assert
+    assert workspace_was_empty
+    for loading in loading_answers:
+        assert loading.is_error
+        assert loading.structured_content["code"] == "data_loading"
+    assert not triage.is_error
+    session_id = triage.structured_content["session_id"]
+    assert retry.structured_content["session_id"] == session_id
+    assert (root / "requests/startup.1.json").is_file()
+    assert json.loads((root / session_id / "session.json").read_bytes())["dataset"]
+
+
+@pytest.mark.parametrize("mode", ["legacy", "auto", LATEST_PROTOCOL_VERSION])
+async def test_workspace_loading_serves_packaged_resources_and_refuses_investigation_reads(
+    loading_release: Path, mode: str
+) -> None:
+    # Arrange
+    parameters = controlled_server_parameters(loading_release, server_mode="workspace")
+    investigation_uri = "vulnwitness://investigations/inv_aaaaaaaaaaaaaaaaaaaa/"
+    documents = []
+    failures = []
+
+    # Act
+    with anyio.fail_after(10):
+        async with observe_stdio_client(parameters, mode=mode) as (client, stderr):
+            await client.list_tools()
+            await read_until_notice(stderr, b"test: loader blocked")
+            with anyio.fail_after(2):
+                listing = await client.list_resources()
+                templates = await client.list_resource_templates()
+                prompts = await client.list_prompts()
+                topic = next(
+                    document
+                    for document in listing.resources
+                    if document.uri == "vulnwitness://topics/3gpp:gtp"
+                )
+                schema = next(
+                    document
+                    for document in listing.resources
+                    if document.uri.startswith("vulnwitness://schemas/")
+                )
+                for descriptor in (topic, schema):
+                    documents.append(await client.read_resource(descriptor.uri))
+                for artifact in ("summary", "findings", "report.html", "report.md", "calls/1"):
+                    with pytest.raises(MCPError) as refused:
+                        await client.read_resource(investigation_uri + artifact)
+                    failures.append(refused.value.error)
+            release_loading(loading_release)
+            await read_until_notice(stderr, b" ready after ")
+            ready_listing = await client.list_resources()
+            ready_templates = await client.list_resource_templates()
+            ready_topic = next(
+                document for document in ready_listing.resources if document.uri == topic.uri
+            )
+            created = await client.call_tool("start_investigation", {"goal": "Review startup"})
+            snapshot = await client.read_resource(
+                "vulnwitness://investigations/"
+                + created.structured_content["session_id"]
+                + "/summary"
+            )
+
+    # Assert
+    for document in documents:
+        assert isinstance(document.contents[0], TextResourceContents)
+        assert document.contents[0].text
+    assert len(prompts.prompts) == 3
+    assert templates.resource_templates
+    assert "identity pending" in topic.description
+    assert "identity pending" in templates.resource_templates[0].description
+    for failure in failures:
+        assert ToolFailure.model_validate_json(failure.message).code is ToolFailureCode.DATA_LOADING
+        assert failure.data is None
+    assert "identity pending" not in ready_topic.description
+    assert "identity pending" not in ready_templates.resource_templates[0].description
+    assert snapshot.contents
+
+
+@pytest.mark.parametrize("mode", ["legacy", "auto", LATEST_PROTOCOL_VERSION])
+async def test_recording_loading_records_only_the_call_retried_after_readiness(
+    loading_release: Path, mode: str
+) -> None:
+    # Arrange
+    root = loading_release.parent / "recording"
+    parameters = controlled_server_parameters(loading_release, server_mode="recording")
+    loading_answers = []
+
+    # Act
+    with anyio.fail_after(15):
+        async with observe_stdio_client(parameters, mode=mode) as (client, stderr):
+            await client.list_tools()
+            await read_until_notice(stderr, b"test: loader blocked")
+            with anyio.fail_after(2):
+                for tool in KnowledgeToolName:
+                    loading_answers.append(await client.call_tool(tool, TOOL_ARGUMENTS[tool]))
+                loading_answers.append(
+                    await client.call_tool(
+                        "triage_product", {"vendor": "democorp", "request_key": "startup.1"}
+                    )
+                )
+            session_was_absent = not root.exists()
+            release_loading(loading_release)
+            await read_until_notice(stderr, b" ready after ")
+            capabilities = await client.call_tool("get_knowledge_capabilities", {})
+
+    # Assert
+    assert session_was_absent
+    for loading in loading_answers:
+        assert loading.is_error
+        assert loading.structured_content["code"] == "data_loading"
+    assert not capabilities.is_error
+    calls = tuple((root / "calls").glob("*.json"))
+    assert len(calls) == 1
+    call = json.loads(calls[0].read_bytes())
+    session = json.loads((root / "session.json").read_bytes())
+    assert call["sequence"] == 1
+    assert call["dataset"] == session["dataset"]

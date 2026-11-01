@@ -15,8 +15,8 @@ from tests.support.toolbox import build_test_toolbox
 from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
 from vulnwitness.domain.served_dataset import ServedDatasetKind
 from vulnwitness.domain.tool_contracts import ToolFailureCode
-from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
 from vulnwitness.interfaces.mcp.stdio_runner import StdioServer
+from vulnwitness.interfaces.mcp_deployment import McpDeployment
 
 pytestmark = pytest.mark.anyio
 
@@ -32,7 +32,7 @@ INITIALIZE_FRAME = {
 }
 
 
-def fail_loading() -> KnowledgeToolbox:
+def fail_loading() -> McpDeployment:
     raise SystemExit(2)
 
 

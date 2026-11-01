@@ -25,6 +25,7 @@ from vulnwitness.domain.search import SemanticUnavailableDetail
 from vulnwitness.domain.served_dataset import ServedDatasetKind
 from vulnwitness.domain.taxonomy import BackendStatus
 from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.mcp_deployment import McpDeployment
 from vulnwitness.ports.planning import ModelPort
 from vulnwitness.ports.retrieval import SemanticRetriever
 from vulnwitness.ports.session_recording import SessionRecording
@@ -145,15 +146,15 @@ def discover_semantic_retriever(
 
 
 class McpServerRunner(Protocol):
-    """Loads a toolbox after the MCP handshake and serves until the client disconnects."""
+    """Load dataset-bound dependencies after the handshake; serve until disconnect."""
 
     def __call__(
         self,
-        load_toolbox: Callable[[], KnowledgeToolbox],
+        load_deployment: Callable[[], McpDeployment],
         *,
         dataset_kind: ServedDatasetKind,
-        recorder: SessionRecording | None = None,
-        workspace: WorkspaceInvestigations | None = None,
+        recording_enabled: bool = False,
+        workspace_enabled: bool = False,
     ) -> int: ...
 
 

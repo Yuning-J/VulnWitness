@@ -117,6 +117,7 @@ from vulnwitness.evaluation.planner_report import PlannerEvaluationReport
 from vulnwitness.evaluation.planner_runner import REPORT_FILE_NAME
 from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
 from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName
+from vulnwitness.interfaces.mcp_deployment import McpDeployment
 from vulnwitness.settings import ServiceSettings, load_settings
 
 FORGED_SHA256 = "f" * 64
@@ -153,9 +154,14 @@ class RecordingMcpServerRunner:
         self.served_toolboxes: list[KnowledgeToolbox] = []
 
     def __call__(
-        self, load_toolbox: Callable[[], KnowledgeToolbox], *, dataset_kind: ServedDatasetKind
+        self,
+        load_deployment: Callable[[], McpDeployment],
+        *,
+        dataset_kind: ServedDatasetKind,
+        recording_enabled: bool = False,
+        workspace_enabled: bool = False,
     ) -> int:
-        self.served_toolboxes.append(load_toolbox())
+        self.served_toolboxes.append(load_deployment().toolbox)
         return 0
 
 

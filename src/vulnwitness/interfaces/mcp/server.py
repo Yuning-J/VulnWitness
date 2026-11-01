@@ -38,7 +38,6 @@ from vulnwitness.interfaces.knowledge_tools import (
     SERVER_INSTRUCTIONS,
     KnowledgeToolName,
     ToolAnswer,
-    ToolLimits,
     ToolSpec,
     build_tool_failure,
 )
@@ -46,6 +45,7 @@ from vulnwitness.interfaces.mcp.session_calls import record_tool_call
 from vulnwitness.interfaces.mcp.workspace_prompts import WorkspacePromptHandlers
 from vulnwitness.interfaces.mcp.workspace_resources import WorkspaceResourceHandlers
 from vulnwitness.interfaces.mcp.workspace_tools import WORKSPACE_TOOL_SPECS, call_workspace_tool
+from vulnwitness.interfaces.mcp_deployment import McpDeployment
 from vulnwitness.packaged_resources import load_packaged_resources
 from vulnwitness.ports.session_recording import SessionRecording
 from vulnwitness.schema_snapshots import render_schema
@@ -72,19 +72,28 @@ class KnowledgeToolHandlers:
         tools: tuple[Tool, ...],
         recorder: SessionRecording | None = None,
         workspace: WorkspaceInvestigations | None = None,
+        *,
+        recording_enabled: bool = False,
+        workspace_enabled: bool = False,
     ) -> None:
         self._workspace = workspace
         self._recorder = recorder
         self._toolbox = toolbox
         self._tools = tools
+        self._recording_enabled = recording_enabled or recorder is not None
+        self.resources = (
+            WorkspaceResourceHandlers(workspace, load_packaged_resources())
+            if workspace_enabled or workspace is not None
+            else None
+        )
 
-    @property
-    def workspace(self) -> WorkspaceInvestigations | None:
-        return self._workspace
-
-    def publish_toolbox(self, toolbox: KnowledgeToolbox) -> None:
-        """Make a fully built toolbox available to subsequent calls."""
-        self._toolbox = toolbox
+    def publish_deployment(self, deployment: McpDeployment) -> None:
+        """Publish all identity-bound dependencies on the protocol loop without yielding."""
+        self._toolbox = deployment.toolbox
+        self._recorder = deployment.recorder
+        self._workspace = deployment.workspace
+        if self.resources is not None:
+            self.resources.publish_workspace(deployment.workspace)
 
     async def list_tools(
         self,
@@ -101,6 +110,17 @@ class KnowledgeToolHandlers:
         an error result. While loading, every call is a ``data_loading`` failure. Once
         loaded, a name that is not one of the available tools is a JSON-RPC invalid
         params error with a fixed message, which never repeats the name."""
+        if self._toolbox is None:
+            failure = build_tool_failure(ToolFailureCode.DATA_LOADING)
+            return CallToolResult(
+                content=[TextContent(type="text", text=failure.model_dump_json())],
+                is_error=True,
+                structured_content=(
+                    failure.model_dump(mode="json")
+                    if self._recording_enabled or self.resources is not None
+                    else None
+                ),
+            )
         if self._workspace is not None:
             return await self.call_workspace(params)
         requires_workspace = (
@@ -126,8 +146,6 @@ class KnowledgeToolHandlers:
             tool_outcome = await anyio.to_thread.run_sync(
                 record_tool_call, self._recorder, self._toolbox, params.name, params.arguments
             )
-        elif self._toolbox is None:
-            tool_outcome = build_tool_failure(ToolFailureCode.DATA_LOADING)
         else:
             try:
                 tool_name = KnowledgeToolName(params.name)
@@ -158,12 +176,12 @@ class KnowledgeToolHandlers:
 
     async def call_workspace(self, params: CallToolRequestParams) -> CallToolResult:
         assert self._workspace is not None
+        assert self._toolbox is not None
         try:
             argument_bytes = json.dumps(
                 params.arguments or {}, ensure_ascii=False, allow_nan=False
             ).encode("utf-8")
-            limits = self._toolbox.limits if self._toolbox is not None else ToolLimits()
-            if len(argument_bytes) > limits.max_argument_bytes:
+            if len(argument_bytes) > self._toolbox.limits.max_argument_bytes:
                 return encode_workspace_answer(
                     build_tool_failure(ToolFailureCode.ARGUMENTS_TOO_LARGE)
                 )
@@ -188,8 +206,6 @@ class KnowledgeToolHandlers:
                     )
                 assert isinstance(recorded, ToolFailure)
                 return encode_workspace_answer(recorded)
-            if self._toolbox is None:
-                return encode_workspace_answer(build_tool_failure(ToolFailureCode.DATA_LOADING))
             try:
                 name = KnowledgeToolName(params.name)
             except ValueError:
@@ -316,11 +332,10 @@ def build_mcp_server(
     handlers: KnowledgeToolHandlers, dataset_kind: ServedDatasetKind
 ) -> Server[LifespanState]:
     """Build the static protocol surface independently of toolbox availability."""
-    resources = None
+    resources = handlers.resources
     prompts = None
     instructions = SERVER_INSTRUCTIONS[dataset_kind]
-    if handlers.workspace is not None:
-        resources = WorkspaceResourceHandlers(handlers.workspace, load_packaged_resources())
+    if resources is not None:
         prompts = WorkspacePromptHandlers()
         instructions += (
             " Workspace resources expose topic cards, contract schemas and this workspace's "

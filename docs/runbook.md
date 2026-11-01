@@ -159,9 +159,10 @@ fixture-format evaluation use fixtures. All other data commands load the whole s
 For a full NVD corpus, expect minutes per startup/one-shot query, several GB of disk for
 stores, feeds and rollback, and see the README for the recommended memory.
 Keep servers running for repeated queries.
-HTTP loads before binding: probes see connection refused meanwhile. MCP stdio answers
+HTTP loads before binding: probes see connection refused meanwhile, preserving its
+ready-notice and authenticated readiness semantics. In all modes, MCP stdio answers
 initialize/tools-list during loading; calls immediately fail `data_loading`, without
-queuing/retry. Wait for readiness on stderr; load failures exit nonzero. Ctrl+C/closed
+queuing or automatic retry. Wait for readiness on stderr; load failures exit nonzero. Ctrl+C/closed
 stdin stops stdio even during loading. Stdout remains JSON/protocol. Tool deadlines
 stop waiting but cannot kill Python workers; CPU, memory and in-flight slots remain
 occupied until they return. Large graph expansions can exhaust a tool deadline;
@@ -310,6 +311,13 @@ For agents, start `vulnwitness mcp --session DIR`, or add `--http` for the authe
 transport. Every dispatched tool call, failures included, is recorded. There is no tool
 that edits findings. REST recording is unavailable.
 
+Stdio recording answers initialization and tool discovery before loading the store.
+Calls during loading return the typed, retryable `data_loading` failure immediately;
+they are never recorded or queued. The recorder binds to the complete dataset identity
+only when loading succeeds. Retry calls after the stderr `ready after` notice. Loading
+failures report the reason and exit nonzero. HTTP recording loads before binding, so
+its ready notice continues to mean the data plane is available.
+
 Author `DIR/findings.yaml` separately from recording. The recorder never edits it. Start with:
 
 ```yaml
@@ -376,10 +384,19 @@ and source text as untrusted input.
 ## Workspace mode for agents
 
 Start `vulnwitness mcp --workspace ROOT` for stdio, or add `--http` and the usual HTTP token
-configuration. The server creates ROOT privately (0700), refuses symlink roots and roots
+configuration. Once the dataset is ready, the server creates ROOT privately (0700).
+Before loading, it refuses symlink roots and roots
 inside the configured store, and cannot combine `--workspace` with `--session`.
 `--workspace-limit` defaults to 200 investigations; `--session-call-limit` lowers the
 per-investigation default of 100 calls. Prune old investigations when the workspace is full.
+
+Stdio initializes and lists tools, resources, resource templates and prompts while the
+store loads. Topic-card and schema resources are readable then. Every knowledge and
+investigation tool, and every investigation-resource read, immediately returns the typed,
+retryable `data_loading` failure until the stderr `ready after` notice. Nothing is queued,
+no investigation or call is saved, and request keys are not consumed; retry the same key
+once ready. Dataset identity binds when loading succeeds. HTTP workspace mode loads
+before binding to preserve its readiness semantics.
 
 Use `triage_product` for bounded product triage or `start_investigation` for manual work.
 Keep the returned opaque `session_id`. Pass a client-chosen `request_key` on creation when
@@ -462,6 +479,12 @@ The canonical Skill is `plugins/vulnwitness/skills/vulnwitness-investigation/`;
 direct MCP clients use that same source and their adjacent `mcp-config/` snippets.
 The plugin registers server `plugin:vulnwitness:vulnwitness` and tools prefixed
 `mcp__plugin_vulnwitness_vulnwitness__`. Its analyst has access only to those tools.
+
+A real-data first start takes minutes. The stdio server answers initialization and
+discovery immediately; tools answer `data_loading` until the store is ready. Wait for
+the stderr `ready after` notice and retry. Loading refusals create no investigation or
+call and do not consume a request key. Topic cards, schemas and prompt templates remain
+available during loading; investigation resources return `data_loading`.
 
 The executable is `VULNWITNESS_BIN`, or `vulnwitness` on PATH. The workspace defaults
 to `$HOME/.vulnwitness/workspace`; set `VULNWITNESS_WORKSPACE` to an absolute private

@@ -83,7 +83,7 @@ from vulnwitness.adapters.regular_files import NotARegularFileError, open_regula
 from vulnwitness.adapters.session.check import SessionChecker, render_session_check
 from vulnwitness.adapters.session.files import check_session_path
 from vulnwitness.adapters.session.recorder import SessionRecorder
-from vulnwitness.adapters.session.workspace_files import LocalWorkspaceFiles
+from vulnwitness.adapters.session.workspace_files import check_workspace_root
 from vulnwitness.adapters.store.store_activation import StoreActivation, describe_identity
 from vulnwitness.adapters.store.store_root import lies_in_store_root
 from vulnwitness.application.affectedness import check_affectedness
@@ -206,11 +206,11 @@ from vulnwitness.interfaces.cli_triage import add_triage_arguments
 from vulnwitness.interfaces.investigation_summary import render_investigation_summary
 from vulnwitness.interfaces.knowledge_toolbox import (
     UNSUPPORTED_FILTER_ERROR,
-    KnowledgeToolbox,
     describe_knowledge_capabilities,
 )
 from vulnwitness.interfaces.knowledge_tools import ToolLimits, build_tool_failure
 from vulnwitness.interfaces.lookup_summary import render_lookup_summary
+from vulnwitness.interfaces.mcp_deployment import McpDeployment
 from vulnwitness.interfaces.product_query_output import (
     ProductOutputOptions,
     collect_product_pages,
@@ -1124,12 +1124,32 @@ def run_mcp_server(
         if settings.store_root is None
         else ServedDatasetKind.CORPUS_STORE
     )
-    return runner(partial(load_mcp_toolbox, settings), dataset_kind=dataset_kind)
+    return runner(partial(load_mcp_deployment, settings), dataset_kind=dataset_kind)
 
 
-def load_mcp_toolbox(settings: ServiceSettings) -> KnowledgeToolbox:
-    """Build the complete stdio toolbox on the runner's background thread."""
-    return build_knowledge_toolbox(load_data_plane_or_exit("mcp", settings))
+def load_mcp_deployment(
+    settings: ServiceSettings,
+    arguments: argparse.Namespace | None = None,
+    load_data_plane: Callable[[str, ServiceSettings], ServingDataPlane] = load_data_plane_or_exit,
+) -> McpDeployment:
+    """Build dataset-bound MCP dependencies on the stdio loader thread, or before HTTP binds."""
+    data_plane = load_data_plane("mcp", settings)
+    toolbox = build_knowledge_toolbox(data_plane)
+    workspace = None
+    recorder = None
+    if arguments is not None:
+        if arguments.workspace is not None:
+            workspace = build_workspace_investigations(
+                arguments.workspace,
+                data_plane,
+                toolbox,
+                store_root=settings.store_root,
+                workspace_limit=arguments.workspace_limit,
+                call_limit=arguments.session_call_limit or 100,
+            )
+        else:
+            recorder = create_session_recorder(arguments, settings, data_plane)
+    return McpDeployment(toolbox, recorder, workspace)
 
 
 def require_http_token(
@@ -1657,46 +1677,35 @@ def create_session_recorder(
     )
 
 
-def return_loaded_toolbox(toolbox: KnowledgeToolbox) -> KnowledgeToolbox:
-    return toolbox
-
-
 def run_recorded_mcp(
     parser: argparse.ArgumentParser,
     arguments: argparse.Namespace,
     settings: ServiceSettings,
+    load_data_plane: Callable[[str, ServiceSettings], ServingDataPlane] = load_data_plane_or_exit,
 ) -> int:
+    if arguments.workspace is not None:
+        try:
+            check_workspace_root(arguments.workspace, settings.store_root)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
     token = require_http_token(parser, settings.http, "mcp --http") if arguments.http else None
     start_service_logging(settings, "mcp")
-    data_plane = load_data_plane_or_exit("mcp", settings)
-    workspace = None
-    recorder = None
-    toolbox = build_knowledge_toolbox(data_plane)
-    if arguments.workspace is not None:
-        workspace = build_workspace_investigations(
-            arguments.workspace,
-            data_plane,
-            toolbox,
-            store_root=settings.store_root,
-            workspace_limit=arguments.workspace_limit,
-            call_limit=arguments.session_call_limit or 100,
-        )
-    else:
-        recorder = create_session_recorder(arguments, settings, data_plane)
+    load_deployment = partial(load_mcp_deployment, settings, arguments, load_data_plane)
     if token is not None:
         http_runner = discover_mcp_http_server_runner()
         if isinstance(http_runner, InterfaceUnavailable):
             print(f"vulnwitness mcp cannot start: {http_runner.detail}", file=sys.stderr)
             return 1
+        deployment = load_deployment()
         return (
             0
             if http_runner(
-                toolbox,
+                deployment.toolbox,
                 host=settings.http.host,
                 port=settings.http.mcp_port,
                 token=token,
-                recorder=recorder,
-                workspace=workspace,
+                recorder=deployment.recorder,
+                workspace=deployment.workspace,
             )
             else 1
         )
@@ -1704,11 +1713,16 @@ def run_recorded_mcp(
     if isinstance(runner, InterfaceUnavailable):
         print(f"vulnwitness mcp cannot start: {runner.detail}", file=sys.stderr)
         return 1
+    dataset_kind = (
+        ServedDatasetKind.SYNTHETIC_FIXTURE
+        if settings.store_root is None
+        else ServedDatasetKind.CORPUS_STORE
+    )
     return runner(
-        partial(return_loaded_toolbox, toolbox),
-        dataset_kind=data_plane.served_dataset.kind,
-        recorder=recorder,
-        workspace=workspace,
+        load_deployment,
+        dataset_kind=dataset_kind,
+        recording_enabled=arguments.session is not None,
+        workspace_enabled=arguments.workspace is not None,
     )
 
 
@@ -1825,10 +1839,6 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             parser.error("--workspace-limit must be positive")
         if arguments.session_goal is not None or arguments.session_scope is not None:
             parser.error("workspace goals and scopes are supplied through investigation tools")
-        try:
-            LocalWorkspaceFiles(arguments.workspace, settings.store_root)
-        except (OSError, ValueError) as error:
-            parser.error(str(error))
         return run_recorded_mcp(parser, arguments, settings)
     session_directory = getattr(arguments, "session", None)
     if session_directory is not None:

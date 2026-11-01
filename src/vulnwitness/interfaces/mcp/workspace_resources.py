@@ -49,16 +49,28 @@ def resource_failure(code: ToolFailureCode) -> MCPError:
 
 class WorkspaceResourceHandlers:
     def __init__(
-        self, workspace: WorkspaceInvestigations, packaged: tuple[PackagedResource, ...]
+        self, workspace: WorkspaceInvestigations | None, packaged: tuple[PackagedResource, ...]
     ) -> None:
         self._workspace = workspace
         self._packaged = packaged
+
+    def publish_workspace(self, workspace: WorkspaceInvestigations | None) -> None:
+        assert workspace is not None
+        self._workspace = workspace
+
+    def describe_dataset(self) -> str:
+        if self._workspace is None:
+            return "Data loading; served dataset identity pending."
+        return self._workspace.resource_dataset()
 
     async def list_resources(
         self, ctx: ServerRequestContext[dict[str, Any]], params: PaginatedRequestParams | None
     ) -> ListResourcesResult:
         try:
-            resources = await anyio.to_thread.run_sync(self.describe_resources)
+            if self._workspace is None:
+                resources = self.describe_resources()
+            else:
+                resources = await anyio.to_thread.run_sync(self.describe_resources)
         except SessionRecordingError as error:
             raise resource_failure(error.code) from None
         except (OSError, ValueError):
@@ -72,12 +84,12 @@ class WorkspaceResourceHandlers:
                 Resource(
                     uri=document.uri,
                     name=document.name,
-                    description=document.description
-                    + SOURCE_NOTICE
-                    + self._workspace.resource_dataset(),
+                    description=document.description + SOURCE_NOTICE + self.describe_dataset(),
                     mime_type=document.mime_type,
                 )
             )
+        if self._workspace is None:
+            return resources
         for investigation in self._workspace.list().investigations:
             request = InvestigationRequest(session_id=investigation.session_id)
             snapshot = self._workspace.get(request)
@@ -110,9 +122,7 @@ class WorkspaceResourceHandlers:
                     description="Same metadata and exact saved response text as read_call; "
                     "responses above 1 MiB return metadata and response_too_large only. "
                     "IDs belong to this workspace; n is 1 through 100. Saved dataset "
-                    "identity is in the call record."
-                    + SOURCE_NOTICE
-                    + self._workspace.resource_dataset(),
+                    "identity is in the call record." + SOURCE_NOTICE + self.describe_dataset(),
                     mime_type="application/json",
                 )
             ]
@@ -122,7 +132,10 @@ class WorkspaceResourceHandlers:
         self, ctx: ServerRequestContext[dict[str, Any]], params: ReadResourceRequestParams
     ) -> ReadResourceResult:
         try:
-            text, mime_type = await anyio.to_thread.run_sync(self.read_text, params.uri)
+            if self._workspace is None:
+                text, mime_type = self.read_text(params.uri)
+            else:
+                text, mime_type = await anyio.to_thread.run_sync(self.read_text, params.uri)
         except SessionRecordingError as error:
             raise resource_failure(error.code) from None
         except (ValueError, TypeError):
@@ -144,6 +157,8 @@ class WorkspaceResourceHandlers:
         match = re.fullmatch(r"vulnwitness://investigations/([^/]+)/(.+)", uri)
         if match is None:
             raise resource_failure(ToolFailureCode.INVALID_ARGUMENTS)
+        if self._workspace is None:
+            raise resource_failure(ToolFailureCode.DATA_LOADING)
         session_id, artifact = match.groups()
         request = InvestigationRequest(session_id=session_id)
         call_match = re.fullmatch(r"calls/([1-9][0-9]*)", artifact)

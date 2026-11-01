@@ -47,6 +47,15 @@ def check_private_directory(directory: Path) -> None:
         raise ValueError("workspace directories must not be group or other writable")
 
 
+def check_workspace_root(root: Path, store_root: Path | None = None) -> None:
+    """Validate a workspace path without creating directories before dataset binding."""
+    check_session_path(root, store_root)
+    if store_root is not None and root.resolve().is_relative_to(store_root.resolve()):
+        raise ValueError("workspace directory must be outside the store root")
+    if root.exists():
+        check_private_directory(root)
+
+
 class LocalWorkspaceFiles:
     """All investigation paths are validated before reads, writes or lock acquisition."""
 
@@ -59,12 +68,8 @@ class LocalWorkspaceFiles:
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        check_session_path(root, store_root)
-        if store_root is not None and root.resolve().is_relative_to(store_root.resolve()):
-            raise ValueError("workspace directory must be outside the store root")
-        if root.exists():
-            check_private_directory(root)
-        else:
+        check_workspace_root(root, store_root)
+        if not root.exists():
             make_private_directory(root)
         check_private_directory(root)
         self.root = root.resolve()

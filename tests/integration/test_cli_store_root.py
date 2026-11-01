@@ -37,6 +37,7 @@ from vulnwitness.domain.store_status import ActiveRecordState, StoreCondition, S
 from vulnwitness.domain.taxonomy import BackendFailureDetail
 from vulnwitness.domain.tool_contracts import KnowledgeCapabilities
 from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.mcp_deployment import McpDeployment
 from vulnwitness.settings import ServiceSettings, load_settings
 
 STORE_MARKER = "storemarker"
@@ -50,9 +51,14 @@ class RecordingMcpServerRunner:
         self.served_toolboxes: list[KnowledgeToolbox] = []
 
     def __call__(
-        self, load_toolbox: Callable[[], KnowledgeToolbox], *, dataset_kind: ServedDatasetKind
+        self,
+        load_deployment: Callable[[], McpDeployment],
+        *,
+        dataset_kind: ServedDatasetKind,
+        recording_enabled: bool = False,
+        workspace_enabled: bool = False,
     ) -> int:
-        self.served_toolboxes.append(load_toolbox())
+        self.served_toolboxes.append(load_deployment().toolbox)
         return 0
 
 

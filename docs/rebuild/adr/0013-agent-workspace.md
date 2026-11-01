@@ -21,12 +21,38 @@ The server has three modes:
 | `vulnwitness mcp --workspace ROOT` | Nine knowledge tools, eight investigation tools, resources and prompt templates |
 
 All modes support stdio and `--http`. `--session` and `--workspace` are mutually exclusive.
-The workspace root is fixed at startup, private (0700), and created if absent. A symlink
-root or a root inside the configured store root is refused before loading deployment data.
+The workspace root is fixed at startup, private (0700), and created if absent once the
+dataset is ready. A symlink root or a root inside the configured store root is refused
+before loading deployment data.
 Files are private (0600), published with the existing atomic, synced writer. Workspace
 mode uses the ordinary per-investigation call limit (100 by default, lowered by
 `--session-call-limit`) and a workspace limit of 200, configurable with `--workspace-limit`.
 Operators prune investigations when the workspace is full.
+
+### Startup
+
+All stdio modes start the MCP protocol before loading the data plane in a background
+thread. Initialization and static discovery answer during loading. Workspace mode also
+answers resources, resource-template and prompt discovery and serves packaged topic-card
+and schema bytes. Packaged-resource and template descriptions state that the served
+dataset identity is pending until loading completes; resource discovery includes saved
+investigations once the workspace is bound.
+
+Every knowledge or investigation tool call, including calls with `session_id`, immediately
+returns the typed, retryable `data_loading` failure while loading. Investigation-resource
+reads return the same typed failure in the JSON-RPC error message. Requests never queue:
+no investigation is created, call recorded, quota consumed or request key reserved.
+Clients may retry the same arguments and request key after readiness. The toolbox,
+recorder and workspace service are built against the complete dataset identity and
+published together on the protocol loop without yielding. Loading failures report their
+reason and terminate with a nonzero exit; stdin closure or interruption stops stdio
+without waiting for loading. Stdout carries only protocol messages.
+
+HTTP deliberately loads before binding in all modes. Connection refusal during loading,
+the ready notice after binding and authenticated readiness retain their existing meaning:
+the data plane is available when the HTTP service starts accepting requests. The stdio
+startup sequence lets clients with short MCP connection timeouts connect even when a
+real-data first start takes minutes.
 
 REST requests and core knowledge request models do not acquire a `session_id`. The
 workspace MCP schemas add it at the transport boundary, and strip it before knowledge
@@ -217,7 +243,8 @@ text. Summaries match `get_investigation`; findings return the exact `findings.y
 Report resources exist only once rendered, and stale reports remain readable with a stale
 description. MIME types are `text/yaml`, `application/json`, `text/html` and `text/markdown`.
 
-Every resource description labels source text untrusted and states dataset identity.
+Every resource description labels source text untrusted and states dataset identity
+or explicitly marks it pending during startup loading.
 Investigation descriptions use the saved record's identity, while packaged resources and
 the call template state the served identity. Literal URI matching permits only fixed
 artifacts and validated investigation IDs; no path, URI normalization or percent decoding

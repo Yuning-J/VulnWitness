@@ -7,6 +7,7 @@ from io import StringIO
 import anyio
 
 from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.mcp_deployment import McpDeployment
 
 
 class ImmediateStdioInput(anyio.AsyncFile[str]):
@@ -58,8 +59,8 @@ class BlockedToolboxLoader:
         self.started = anyio.Event()
         self.returned = threading.Event()
 
-    def __call__(self) -> KnowledgeToolbox:
+    def __call__(self) -> McpDeployment:
         self._loop.call_soon_threadsafe(self.started.set)
         self._release.wait()
         self.returned.set()
-        return self._toolbox
+        return McpDeployment(self._toolbox)
