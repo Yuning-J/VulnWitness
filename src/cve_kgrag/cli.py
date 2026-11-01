@@ -38,6 +38,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -196,7 +197,14 @@ from cve_kgrag.interfaces.knowledge_toolbox import (
     describe_knowledge_capabilities,
 )
 from cve_kgrag.interfaces.knowledge_tools import ToolLimits, build_tool_failure
-from cve_kgrag.interfaces.product_query_summary import render_product_query_summary
+from cve_kgrag.interfaces.lookup_summary import render_lookup_summary
+from cve_kgrag.interfaces.product_query_output import (
+    ProductOutputOptions,
+    collect_product_pages,
+    print_product_pages,
+    validate_product_output,
+)
+from cve_kgrag.interfaces.search_summary import render_search_summary
 from cve_kgrag.ports.served_corpus import ServedCorpus
 from cve_kgrag.ports.sources import FightSource
 from cve_kgrag.schema_snapshots import find_schema_drift, write_contract_schemas
@@ -345,8 +353,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     commands.add_parser("demo", help="run sample queries against the bundled synthetic fixture")
 
-    search_parser = commands.add_parser("search", help="search the served CVE records; prints JSON")
+    search_parser = commands.add_parser(
+        "search", help="search the served CVE records; JSON or text"
+    )
     search_parser.add_argument("query")
+    search_parser.add_argument("--format", choices=("json", "text"), default="json")
     search_parser.add_argument("--semantic", action="store_true", help=SEMANTIC_HELP)
     add_result_limit_option(search_parser, "--limit")
     add_filter_options(search_parser, (*PRODUCT_OPTIONS, *RECORD_FILTER_OPTIONS))
@@ -393,8 +404,9 @@ def build_parser() -> argparse.ArgumentParser:
             help="investigation budget; defaults to the cap the contract allows",
         )
 
-    lookup_parser = commands.add_parser("lookup", help="exact CVE-ID lookup; prints JSON")
+    lookup_parser = commands.add_parser("lookup", help="exact CVE-ID lookup; JSON or text")
     lookup_parser.add_argument("cve_id", type=parse_cve_id)
+    lookup_parser.add_argument("--format", choices=("json", "text"), default="json")
 
     product_parser = commands.add_parser(
         "product", help="CVEs for explicit vendor/product names, with optional version notes"
@@ -404,6 +416,13 @@ def build_parser() -> argparse.ArgumentParser:
     product_parser.add_argument("--version")
     product_parser.add_argument("--cursor", help="continuation from the preceding product page")
     product_parser.add_argument("--format", choices=("json", "text"), default="json")
+    product_parser.add_argument("--all", action="store_true", help="follow every product page")
+    product_parser.add_argument(
+        "--max-pages", type=int, default=100, help="traversal page cap (100)"
+    )
+    product_parser.add_argument("--output", type=Path, help="write CVE rows to a file atomically")
+    product_parser.add_argument("--export", choices=("jsonl", "csv"), help="--output row format")
+    product_parser.add_argument("--force", action="store_true", help="allow overwriting --output")
     add_result_limit_option(product_parser, "--limit")
 
     capabilities_parser = commands.add_parser(
@@ -718,6 +737,16 @@ def print_response(response: SearchResponse | TopicContextResponse | KnowledgeEv
     return 0 if response.status is ResultStatus.OK else 1
 
 
+def print_search_view(search: SearchResponse, output_format: str, *, lookup: bool = False) -> int:
+    if output_format == "json":
+        return print_response(search)
+    if lookup:
+        print(render_lookup_summary(search, width=shutil.get_terminal_size((100, 24)).columns))
+    else:
+        print(render_search_summary(search))
+    return 0 if search.status is ResultStatus.OK else 1
+
+
 def print_investigation(evidence_set: KnowledgeEvidenceSet, output_format: str) -> int:
     if output_format == "text":
         print(render_investigation_summary(evidence_set))
@@ -856,9 +885,14 @@ def run_evidence_lookup(evidence_id: str, deployment: InvestigationDeployment) -
 
 
 def run_product_query(
-    request: ProductQueryRequest, store_root: Path | None, output_format: str
+    request: ProductQueryRequest, store_root: Path | None, options: ProductOutputOptions
 ) -> int:
-    """Read the configured corpus through the product service and print its page."""
+    """Read one fixed corpus and print or export its requested product pages."""
+    try:
+        validate_product_output(request, options)
+    except ValueError as error:
+        print(f"cve-kgrag product: {error}", file=sys.stderr)
+        return 2
     started_at = time.monotonic()
     served_corpus = load_served_corpus_or_exit("product", store_root)
     service = build_product_query_service(served_corpus)
@@ -869,18 +903,17 @@ def run_product_query(
         time.monotonic() - started_at,
     )
     try:
-        vulnerabilities = service.query(request)
+        pages = collect_product_pages(service, request, options)
+        return print_product_pages(pages, options)
     except InvalidProductCursor:
         print(
             build_tool_failure(ToolFailureCode.INVALID_CURSOR).model_dump_json(),
             file=sys.stderr,
         )
         return 2
-    if output_format == "text":
-        print(render_product_query_summary(vulnerabilities))
-    else:
-        print(vulnerabilities.model_dump_json(indent=2))
-    return 0 if vulnerabilities.items else 1
+    except (OSError, ValueError) as error:
+        print(f"cve-kgrag product: {error}", file=sys.stderr)
+        return 2
 
 
 def announce_store_loading(command: str, store_name: str) -> None:
@@ -1610,10 +1643,12 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
 
     if arguments.command == "lookup":
         lookup_request = build_contract(parser, CveLookupRequest, cve_id=arguments.cve_id)
-        return print_response(
+        return print_search_view(
             load_search_service_or_exit(
                 "lookup", settings.store_root, mitre_snapshot=settings.mitre_snapshot
-            ).lookup(lookup_request.cve_id)
+            ).lookup(lookup_request.cve_id),
+            arguments.format,
+            lookup=True,
         )
     if arguments.command == "product":
         product_request = build_contract(
@@ -1625,7 +1660,18 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             limit=arguments.limit,
             cursor=arguments.cursor,
         )
-        return run_product_query(product_request, settings.store_root, arguments.format)
+        return run_product_query(
+            product_request,
+            settings.store_root,
+            ProductOutputOptions(
+                output_format=arguments.format,
+                all_pages=arguments.all,
+                max_pages=arguments.max_pages,
+                output=arguments.output,
+                export=arguments.export,
+                force=arguments.force,
+            ),
+        )
     if arguments.command == "search":
         search_request = build_search_request(parser, arguments)
         service = load_search_service_or_exit(
@@ -1635,7 +1681,7 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             mitre_snapshot=settings.mitre_snapshot,
         )
         try:
-            return print_response(service.search(search_request))
+            return print_search_view(service.search(search_request), arguments.format)
         except UnsupportedFilter as error:
             refuse_unsupported_filter(parser, error)
     if arguments.command == "verify":

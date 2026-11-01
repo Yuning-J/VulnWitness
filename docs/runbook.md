@@ -32,9 +32,10 @@ cve-kgrag investigate 5G-AKA --scope mixed > /data/cve-kgrag/evidence-set.json
 cve-kgrag verify /data/cve-kgrag/evidence-set.json
 ```
 
-Create output directories first. Commands print JSON; investigation/product also support
-`--format text`. Investigation exits 0 only for `ok`, otherwise 1 with evidence; affectedness
-exits 1 with `unknown` / `blocked_unverified`. Product exits 0 for records, 1 for empty.
+Create output directories first. Commands print JSON; lookup/search/investigation/product
+also support `--format text`. Investigation exits 0 only for `ok`, otherwise 1 with
+evidence; affectedness exits 1 with `unknown` / `blocked_unverified`. Product exits 0 for
+records, 1 for empty.
 Verify sets with matching sources/settings; keep them/model text out of version control.
 Use `<command> --help` for scope/budgets. Repeatable search filters: vendor, product, purl,
 CWE, severity, year and origin, plus `--kev-only`.
@@ -43,6 +44,16 @@ fail as `filter_unsupported` (CLI 2, REST 422, MCP failure).
 For product pagination repeat vendor, product, version and limit with `--cursor
 <next_cursor>` until null; keep the corpus fixed. Pages default to 10, maximum 20.
 Invalid/mismatched cursors fail (CLI 2, REST 422, MCP failure).
+
+Lookup text shows catalogue paths and limits; search text shows word-match ranks, channel
+outcomes and warnings. `product --vendor democorp --all --limit 20` traverses one fixed corpus,
+printing a JSON array of unchanged `ProductQueryResponse` pages, each with its cursors
+and evidence. `--max-pages` defaults to 100; an unfinished traversal exits 2 without
+output. `--output FILE --export csv|jsonl` exports every matching CVE even without `--all`;
+CSV excludes descriptions, JSONL keeps them. Multi-valued CSV cells contain JSON arrays;
+version-note outcomes appear with `--version`. Exports publish atomically as 0600 files;
+overwriting requires `--force`. Full traversal rejects `--cursor`; `--format text` cannot
+accompany `--all` or `--output`.
 
 ## Configuration
 

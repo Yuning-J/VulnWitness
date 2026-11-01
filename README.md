@@ -58,9 +58,12 @@ The [runbook](docs/runbook.md) covers local-feed reuse, sizing and recovery.
 
 ## Entry points
 
-- CLI lookup: `cve-kgrag lookup CVE-9999-0001` — exact record and weakness paths.
-- CLI search: `cve-kgrag search "authentication bypass"` — ranked word matches.
-- CLI product: `cve-kgrag product --vendor democorp --version 2.0 --format text` — counted inventory pages.
+- CLI lookup: `cve-kgrag lookup CVE-9999-0001 --format text` — exact record and weakness
+  paths; JSON is the default.
+- CLI search: `cve-kgrag search "authentication bypass" --format text` — ranked word
+  matches; JSON is the default.
+- CLI product: `cve-kgrag product --vendor democorp --version 2.0 --format text` — counted
+  inventory pages; `--all` traverses every page, with optional `--output FILE --export jsonl|csv`.
 - CLI investigate: `cve-kgrag investigate 5G-AKA --scope mixed --format text` — bounded evidence set.
 - CLI capabilities: `cve-kgrag capabilities` — sources, coverage and available tools.
 - REST: `curl -H "Authorization: Bearer $CVE_KGRAG_HTTP_TOKEN" http://127.0.0.1:8766/api/v2/capabilities`.
