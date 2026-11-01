@@ -75,6 +75,17 @@ Product traversals and exports record each page as a separate call, subject to t
 session call limit. Export files are outside the session record. See
 [recording and checking sessions](docs/runbook.md#record-and-check-a-session).
 
+## Use with an AI agent
+
+Give your agent the [investigation Skill](skills/cve-kgrag-investigation/SKILL.md)
+for product triage, CVE lookup, and telecom questions with cited findings.
+Use the [MCP configuration snippets](skills/cve-kgrag-investigation/mcp-config/README.md)
+for Claude Code, Codex, or Cursor; the plain stdio variants serve packaged demo data.
+Launch `cve-kgrag mcp --session DIR` to record tool calls and exact responses,
+including failures. The agent authors `DIR/findings.yaml` separately, then runs
+`cve-kgrag session check DIR`. A passing check validates record consistency and
+citation resolution; it does not establish that statements are supported by evidence.
+
 ## Limits
 
 - Word matches and pending-review topic cards cannot establish sufficiency; normal
