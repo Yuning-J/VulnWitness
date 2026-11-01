@@ -5,6 +5,20 @@ bounded investigations over synthetic fixtures or operator-imported NVD/KEV data
 Catalogue associations are not attack paths or evidence of exploitation. Product
 matches and NVD version notes leave affectedness `unknown`.
 
+![Architecture walkthrough: the flow from client through interfaces and services to the store and knowledge files on the left; the current question, its steps and its output on the right](docs/architecture.webp)
+
+*Illustrative walkthrough with synthetic IDs ([still image](docs/architecture.png)). Source
+text and model replies are untrusted data. Panel style after
+[@thedelost](https://x.com/thedelost/status/2105398038026195279).*
+See [Architecture](docs/architecture.md) for behaviour and trust boundaries.
+
+| Question | Service | What comes back |
+|---|---|---|
+| "What does this CVE mean?" | lookup / search | Source-backed records; lookup adds weakness paths |
+| "Which CVEs mention Open5GS?" | product | Paged matches, product fields kept apart from description mentions |
+| "What vulnerabilities and threats relate to GTP?" | investigate | Implementation CVEs, separate FiGHT context, unmet needs and the steps taken |
+| "Does this affect my deployed version?" | product with a version | NVD version notes; verified affectedness stays `unknown` |
+
 ## Install
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
