@@ -23,6 +23,14 @@ from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName, build_tool
 # Each failure's status over REST (ADR 0007, decision 8). MCP answers a failure with the
 # tool's error result instead.
 TOOL_FAILURE_STATUSES: dict[ToolFailureCode, int] = {
+    ToolFailureCode.FINDING_ID_CONFLICT: 409,
+    ToolFailureCode.INVESTIGATION_INTERRUPTED: 409,
+    ToolFailureCode.WORKSPACE_FULL: 429,
+    ToolFailureCode.REQUEST_KEY_CONFLICT: 409,
+    ToolFailureCode.WORKSPACE_BUSY: 503,
+    ToolFailureCode.INVESTIGATION_BUSY: 409,
+    ToolFailureCode.UNKNOWN_INVESTIGATION: 404,
+    ToolFailureCode.INVESTIGATIONS_NOT_ENABLED: 409,
     ToolFailureCode.SESSION_CALL_LIMIT: 429,
     ToolFailureCode.SESSION_DATASET_MISMATCH: 409,
     ToolFailureCode.SESSION_RECORDING_FAILED: 500,

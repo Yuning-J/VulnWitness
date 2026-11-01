@@ -91,3 +91,4 @@ class SessionReport:
     synthetic: bool
     check: SessionCheckReport
     sections: tuple[ReportSection, ...]
+    input_digest: str | None = None

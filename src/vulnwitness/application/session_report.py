@@ -119,7 +119,7 @@ def build_findings(contents: CheckedSession) -> ReportSection:
     anchors_by_call: dict[int, dict[str, EvidenceAnchor]] = {}
     for sequence, answer in contents.responses.items():
         anchors_by_call[sequence] = collect_anchors(answer)
-    for finding in contents.findings.findings:
+    for finding in contents.findings.effective_findings():
         group = narrative if finding.claim is None else groups
         group.setdefault(finding.kind, []).append(finding)
     sections: list[ReportSection] = []
@@ -135,7 +135,9 @@ def build_findings(contents: CheckedSession) -> ReportSection:
             entries.append(build_finding(contents, finding, anchors_by_call))
         narrative_sections.append(ReportSection(kind, sections=tuple(entries)))
     sections.append(ReportSection("Not checked: narrative", sections=tuple(narrative_sections)))
-    paragraphs = () if contents.findings.findings else (ReportParagraph("None recorded."),)
+    paragraphs = (
+        () if contents.findings.effective_findings() else (ReportParagraph("None recorded."),)
+    )
     return ReportSection("Findings", paragraphs, sections=tuple(sections))
 
 
@@ -434,7 +436,9 @@ def build_checks(contents: CheckedSession) -> ReportSection:
         )
     )
     return ReportSection(
-        "Check layers", tables=(ReportTable(("Status", "Layer", "Count", "Meaning"), tuple(rows)),)
+        "Check layers",
+        paragraphs=(ReportParagraph(f"Superseded findings: {check.superseded_count}."),),
+        tables=(ReportTable(("Status", "Layer", "Count", "Meaning"), tuple(rows)),),
     )
 
 
@@ -479,7 +483,7 @@ def build_appendix(contents: CheckedSession, triage_scope: str | None) -> Report
     sections = [ReportSection("Dataset identity", header.paragraphs, header.tables, folded=True)]
     counts: dict[tuple[str, str], int] = {}
     if contents.findings is not None:
-        for finding in contents.findings.findings:
+        for finding in contents.findings.effective_findings():
             key = (finding.kind, finding.author)
             counts[key] = counts.get(key, 0) + 1
     rows: list[tuple[str, ...]] = []

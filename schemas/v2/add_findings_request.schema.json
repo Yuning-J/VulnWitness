@@ -1,0 +1,972 @@
+{
+  "$defs": {
+    "AgentFinding": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "product_field_match"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "claim": {
+                "properties": {
+                  "kind": {
+                    "const": "product_field_match"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "claim"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "description_mention"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "claim": {
+                "properties": {
+                  "kind": {
+                    "const": "description_mention"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "claim"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "catalogue_association"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "claim": {
+                "properties": {
+                  "kind": {
+                    "const": "catalogue_association"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "claim"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "version_note"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "claim": {
+                "properties": {
+                  "kind": {
+                    "const": "version_note"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "claim"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "need_status"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "claim": {
+                "properties": {
+                  "kind": {
+                    "const": "need_status"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "claim"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "record_fact"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "claim": {
+                "properties": {
+                  "kind": {
+                    "const": "record_fact"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "claim"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "model_judgement",
+                  "analyst_note"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "author": {
+                "enum": [
+                  "user",
+                  "agent"
+                ]
+              },
+              "claim": {
+                "type": "null"
+              },
+              "statement": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "statement"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "author": {
+                "const": "workflow"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "unconfirmed"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "author": {
+          "const": "agent",
+          "default": "agent",
+          "title": "Author",
+          "type": "string"
+        },
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/SessionCitation"
+          },
+          "title": "Citations",
+          "type": "array"
+        },
+        "claim": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "catalogue_association": "#/$defs/CatalogueAssociationClaim",
+                  "description_mention": "#/$defs/DescriptionMentionClaim",
+                  "need_status": "#/$defs/NeedStatusClaim",
+                  "product_field_match": "#/$defs/ProductFieldClaim",
+                  "record_fact": "#/$defs/RecordFactClaim",
+                  "version_note": "#/$defs/VersionNoteClaim"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ProductFieldClaim"
+                },
+                {
+                  "$ref": "#/$defs/DescriptionMentionClaim"
+                },
+                {
+                  "$ref": "#/$defs/VersionNoteClaim"
+                },
+                {
+                  "$ref": "#/$defs/CatalogueAssociationClaim"
+                },
+                {
+                  "$ref": "#/$defs/NeedStatusClaim"
+                },
+                {
+                  "$ref": "#/$defs/RecordFactClaim"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Claim"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "product_field_match",
+            "description_mention",
+            "catalogue_association",
+            "version_note",
+            "need_status",
+            "record_fact",
+            "model_judgement",
+            "analyst_note"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "statement": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Statement"
+        },
+        "status": {
+          "enum": [
+            "confirmed",
+            "unconfirmed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "status",
+        "citations"
+      ],
+      "title": "AgentFinding",
+      "type": "object"
+    },
+    "AssociationHop": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "from_id": {
+          "title": "From Id",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "nvd_cwe",
+            "cwe_child_of",
+            "cwe_related_attack_pattern",
+            "capec_child_of",
+            "capec_attack_taxonomy_mapping"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "NVD record",
+            "CWE catalogue",
+            "CAPEC catalogue"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Sha256"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        },
+        "to_id": {
+          "title": "To Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_id",
+        "to_id",
+        "relation",
+        "source"
+      ],
+      "title": "AssociationHop",
+      "type": "object"
+    },
+    "CatalogueAssociationClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "capec_id": {
+          "pattern": "^CAPEC-[0-9]+$(?!\\n)",
+          "title": "Capec Id",
+          "type": "string"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "cwe_id": {
+          "maxLength": 16,
+          "pattern": "^CWE-[0-9]+$(?!\\n)",
+          "title": "Cwe Id",
+          "type": "string"
+        },
+        "hops": {
+          "items": {
+            "$ref": "#/$defs/AssociationHop"
+          },
+          "minItems": 1,
+          "title": "Hops",
+          "type": "array"
+        },
+        "inherited_from": {
+          "anyOf": [
+            {
+              "pattern": "^CAPEC-[0-9]+$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inherited From"
+        },
+        "inherited_from_cwe": {
+          "anyOf": [
+            {
+              "maxLength": 16,
+              "pattern": "^CWE-[0-9]+$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inherited From Cwe"
+        },
+        "kind": {
+          "const": "catalogue_association",
+          "title": "Kind",
+          "type": "string"
+        },
+        "technique_id": {
+          "anyOf": [
+            {
+              "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Technique Id"
+        },
+        "terminal_reason": {
+          "anyOf": [
+            {
+              "const": "no_attack_mapping",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Terminal Reason"
+        }
+      },
+      "required": [
+        "kind",
+        "call",
+        "cve_id",
+        "cwe_id",
+        "capec_id",
+        "terminal_reason",
+        "hops"
+      ],
+      "title": "CatalogueAssociationClaim",
+      "type": "object"
+    },
+    "CvssSeverityFact": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "const": "cvss.base_severity",
+          "title": "Field",
+          "type": "string"
+        },
+        "scorer": {
+          "minLength": 1,
+          "title": "Scorer",
+          "type": "string"
+        },
+        "scorer_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "primary",
+                "secondary"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scorer Type"
+        },
+        "value": {
+          "enum": [
+            "NONE",
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+          ],
+          "title": "Value",
+          "type": "string"
+        },
+        "version": {
+          "enum": [
+            "2.0",
+            "3.0",
+            "3.1",
+            "4.0"
+          ],
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "version",
+        "scorer",
+        "scorer_type",
+        "value"
+      ],
+      "title": "CvssSeverityFact",
+      "type": "object"
+    },
+    "CweIdsFact": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "const": "cwe_ids",
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "items": {
+            "maxLength": 16,
+            "pattern": "^CWE-[0-9]+$(?!\\n)",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Value",
+          "type": "array"
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "title": "CweIdsFact",
+      "type": "object"
+    },
+    "DescriptionMentionClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "description_mention",
+          "title": "Kind",
+          "type": "string"
+        },
+        "phrase": {
+          "minLength": 1,
+          "title": "Phrase",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "call",
+        "cve_id",
+        "phrase"
+      ],
+      "title": "DescriptionMentionClaim",
+      "type": "object"
+    },
+    "EvidenceNeedKind": {
+      "enum": [
+        "named_cve",
+        "implementation_cves",
+        "protocol_context",
+        "affectedness"
+      ],
+      "title": "EvidenceNeedKind",
+      "type": "string"
+    },
+    "KevEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "date_added": {
+          "format": "date",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+          "title": "Date Added",
+          "type": "string"
+        },
+        "due_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Due Date"
+        },
+        "known_ransomware_campaign_use": {
+          "anyOf": [
+            {
+              "enum": [
+                "known",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA's own Known/Unknown assessment; null when the consulted source does not carry it.",
+          "title": "Known Ransomware Campaign Use"
+        }
+      },
+      "required": [
+        "date_added"
+      ],
+      "title": "KevEntry",
+      "type": "object"
+    },
+    "KevFact": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "const": "kev",
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/KevEntry"
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "title": "KevFact",
+      "type": "object"
+    },
+    "NeedOutcome": {
+      "description": "Whether a need was met. ``found``: the evidence was reached through an exact\ncorrespondence or a reviewed mapping, an exact lookup that returned the named CVE or the\nreviewed topic call that returned evidence for the resolved topic; it does not prove the\nanswer sufficient. ``matches_unassessed``: a pending-review topic or a search on the\nquestion's own words returned matches whose relevance the run did not assess; it says\nnothing about whether relevant evidence exists. ``unsupported``: no tool can serve it\nfor this interpretation.\n``not_evaluated``: no admitted step of a tool that serves it has a result, so whether it\nis met cannot yet be judged. ``not_evaluated``, ``not_found`` and\n``matches_unassessed`` are open; ``source_unavailable`` and ``unsupported`` are final.",
+      "enum": [
+        "found",
+        "matches_unassessed",
+        "not_found",
+        "source_unavailable",
+        "unsupported",
+        "not_evaluated"
+      ],
+      "title": "NeedOutcome",
+      "type": "string"
+    },
+    "NeedStatusClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "need_status",
+          "title": "Kind",
+          "type": "string"
+        },
+        "need_kind": {
+          "$ref": "#/$defs/EvidenceNeedKind"
+        },
+        "outcome": {
+          "$ref": "#/$defs/NeedOutcome"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject"
+        }
+      },
+      "required": [
+        "kind",
+        "call",
+        "need_kind",
+        "subject",
+        "outcome"
+      ],
+      "title": "NeedStatusClaim",
+      "type": "object"
+    },
+    "ProductFieldClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "product_field_match",
+          "title": "Kind",
+          "type": "string"
+        },
+        "product": {
+          "minLength": 1,
+          "title": "Product",
+          "type": "string"
+        },
+        "vendor": {
+          "minLength": 1,
+          "title": "Vendor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "call",
+        "cve_id",
+        "vendor",
+        "product"
+      ],
+      "title": "ProductFieldClaim",
+      "type": "object"
+    },
+    "PublishedFact": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "const": "published",
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "title": "PublishedFact",
+      "type": "object"
+    },
+    "RecordFactClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "fact": {
+          "discriminator": {
+            "mapping": {
+              "cvss.base_severity": "#/$defs/CvssSeverityFact",
+              "cwe_ids": "#/$defs/CweIdsFact",
+              "kev": "#/$defs/KevFact",
+              "published": "#/$defs/PublishedFact"
+            },
+            "propertyName": "field"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PublishedFact"
+            },
+            {
+              "$ref": "#/$defs/CweIdsFact"
+            },
+            {
+              "$ref": "#/$defs/KevFact"
+            },
+            {
+              "$ref": "#/$defs/CvssSeverityFact"
+            }
+          ],
+          "title": "Fact"
+        },
+        "kind": {
+          "const": "record_fact",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "call",
+        "cve_id",
+        "fact"
+      ],
+      "title": "RecordFactClaim",
+      "type": "object"
+    },
+    "SessionCitation": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "evidence_id": {
+          "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+          "title": "Evidence Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call",
+        "evidence_id"
+      ],
+      "title": "SessionCitation",
+      "type": "object"
+    },
+    "VersionNoteClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "applicability": {
+          "const": "unknown",
+          "default": "unknown",
+          "title": "Applicability",
+          "type": "string"
+        },
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "version_note",
+          "title": "Kind",
+          "type": "string"
+        },
+        "mention": {
+          "minLength": 1,
+          "title": "Mention",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "hit",
+            "unknown",
+            "no_hit"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "call",
+        "cve_id",
+        "version",
+        "mention",
+        "outcome"
+      ],
+      "title": "VersionNoteClaim",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/AgentFinding"
+      },
+      "maxItems": 1000,
+      "minItems": 1,
+      "title": "Findings",
+      "type": "array"
+    },
+    "session_id": {
+      "pattern": "^inv_[a-z2-7]{20}$(?!\\n)",
+      "title": "Session Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id",
+    "findings"
+  ],
+  "title": "AddFindingsRequest",
+  "type": "object"
+}

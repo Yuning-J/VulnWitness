@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "evidence_id": {
+      "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+      "title": "Evidence Id",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "pattern": "^inv_[a-z2-7]{20}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    }
+  },
+  "required": [
+    "evidence_id"
+  ],
+  "title": "WorkspaceEvidenceLookupRequest",
+  "type": "object"
+}

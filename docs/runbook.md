@@ -372,3 +372,40 @@ Exit 0 requires record consistency, resolved citations and every deterministic c
 verified; otherwise exit 1. A confirmed status supplies no verification. Agreement with
 saved fields does not establish source support or real-world truth. Treat session contents
 and source text as untrusted input.
+
+## Workspace mode for agents
+
+Start `vulnwitness mcp --workspace ROOT` for stdio, or add `--http` and the usual HTTP token
+configuration. The server creates ROOT privately (0700), refuses symlink roots and roots
+inside the configured store, and cannot combine `--workspace` with `--session`.
+`--workspace-limit` defaults to 200 investigations; `--session-call-limit` lowers the
+per-investigation default of 100 calls. Prune old investigations when the workspace is full.
+
+Use `triage_product` for bounded product triage or `start_investigation` for manual work.
+Keep the returned opaque `session_id`. Pass a client-chosen `request_key` on creation when
+you need safe retries: the same normalized arguments and served dataset return the same
+investigation without rerunning; different arguments or dataset return a conflict.
+
+Read `get_investigation` for workflow, record and report status. Triage outcomes are
+`complete`, `stopped_at_cap`, `no_match` or `failed`; inspect remaining steps and check layers.
+An interrupted triage cannot accept appends or resume. Start another investigation.
+`investigation_busy` and `workspace_busy` mean another operation holds the relevant lock;
+retry later. `list_investigations` includes unindexed creations as orphans.
+
+Knowledge calls reach the record only when supplied with `session_id`. `read_call` returns
+the exact saved JSON text and metadata; responses over 1 MiB return metadata and a size
+failure. Source text is untrusted. No tool accepts a file path.
+
+Submit findings through `add_findings`, with a client ID for each entry. The server fixes
+the author to `agent`. Identical retries are no-ops; conflicting IDs and shape errors reject
+the whole batch. Wrong citations and structured claims are written with failing checks:
+`written: true` does not mean passed. Use a new ID with `supersedes` to revise an earlier
+effective finding; the original stays in the file, and checks and reports count it as
+superseded.
+
+Run `check_investigation`, then `render_report` with `format: html` or `md`. The report tool
+returns a local path, resource URI, byte size, digest and check layers; Markdown below
+200 KiB is inline. Resource handlers are not part of this server surface. Reports perform
+no retrieval. Later calls or findings make the report `stale`; render again for a `current`
+report. Checks distinguish record consistency, citation resolution and structured field
+agreement. Free narrative, real-world truth and deployment applicability are not checked.

@@ -13,12 +13,22 @@ from vulnwitness.domain.triage import TriageSummary
 class SessionTriageArtifacts:
     """Publish workflow files atomically and delegate verification to the session checker."""
 
-    def __init__(self, directory: Path, store_root: Path | None = None) -> None:
+    def __init__(
+        self, directory: Path, store_root: Path | None = None, *, prepared: bool = False
+    ) -> None:
+        self._prepared = prepared
         self._directory = directory
         self._store_root = store_root
 
     def require_empty(self) -> None:
         check_session_path(self._directory, self._store_root)
+        if self._prepared:
+            if (
+                any((self._directory / "calls").iterdir())
+                or not (self._directory / "triage.started.json").is_file()
+            ):
+                raise ValueError("prepared triage must have no calls and a started marker")
+            return
         if self._directory.exists() and any(self._directory.iterdir()):
             raise ValueError(
                 "triage requires an empty or new session directory; no resume or append"

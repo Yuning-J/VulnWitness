@@ -83,6 +83,7 @@ from vulnwitness.adapters.regular_files import NotARegularFileError, open_regula
 from vulnwitness.adapters.session.check import SessionChecker, render_session_check
 from vulnwitness.adapters.session.files import check_session_path
 from vulnwitness.adapters.session.recorder import SessionRecorder
+from vulnwitness.adapters.session.workspace_files import LocalWorkspaceFiles
 from vulnwitness.adapters.store.store_activation import StoreActivation, describe_identity
 from vulnwitness.adapters.store.store_root import lies_in_store_root
 from vulnwitness.application.affectedness import check_affectedness
@@ -235,6 +236,7 @@ from vulnwitness.settings import (
     load_settings,
 )
 from vulnwitness.triage_composition import preflight_triage, run_triage
+from vulnwitness.workspace_composition import build_workspace_investigations
 
 DEMO_QUERIES = (
     "CVE-9999-0003",
@@ -658,7 +660,13 @@ def build_parser() -> argparse.ArgumentParser:
     session_check_parser.add_argument("--format", choices=("json", "text"), default="json")
     for command_name in (*SESSION_CLI_COMMANDS, "mcp"):
         command_parser = commands.choices[command_name]
-        command_parser.add_argument("--session", type=Path, metavar="DIR")
+        if command_name == "mcp":
+            recording_mode = command_parser.add_mutually_exclusive_group()
+            recording_mode.add_argument("--session", type=Path, metavar="DIR")
+            recording_mode.add_argument("--workspace", type=Path, metavar="ROOT")
+            command_parser.add_argument("--workspace-limit", type=int, default=200)
+        else:
+            command_parser.add_argument("--session", type=Path, metavar="DIR")
         command_parser.add_argument(
             "--session-call-limit",
             type=int,
@@ -1644,6 +1652,10 @@ def create_session_recorder(
     )
 
 
+def return_loaded_toolbox(toolbox: KnowledgeToolbox) -> KnowledgeToolbox:
+    return toolbox
+
+
 def run_recorded_mcp(
     parser: argparse.ArgumentParser,
     arguments: argparse.Namespace,
@@ -1652,7 +1664,20 @@ def run_recorded_mcp(
     token = require_http_token(parser, settings.http, "mcp --http") if arguments.http else None
     start_service_logging(settings, "mcp")
     data_plane = load_data_plane_or_exit("mcp", settings)
-    recorder = create_session_recorder(arguments, settings, data_plane)
+    workspace = None
+    recorder = None
+    toolbox = build_knowledge_toolbox(data_plane)
+    if arguments.workspace is not None:
+        workspace = build_workspace_investigations(
+            arguments.workspace,
+            data_plane,
+            toolbox,
+            store_root=settings.store_root,
+            workspace_limit=arguments.workspace_limit,
+            call_limit=arguments.session_call_limit or 100,
+        )
+    else:
+        recorder = create_session_recorder(arguments, settings, data_plane)
     if token is not None:
         http_runner = discover_mcp_http_server_runner()
         if isinstance(http_runner, InterfaceUnavailable):
@@ -1661,11 +1686,12 @@ def run_recorded_mcp(
         return (
             0
             if http_runner(
-                build_knowledge_toolbox(data_plane),
+                toolbox,
                 host=settings.http.host,
                 port=settings.http.mcp_port,
                 token=token,
                 recorder=recorder,
+                workspace=workspace,
             )
             else 1
         )
@@ -1674,9 +1700,10 @@ def run_recorded_mcp(
         print(f"vulnwitness mcp cannot start: {runner.detail}", file=sys.stderr)
         return 1
     return runner(
-        partial(build_knowledge_toolbox, data_plane),
+        partial(return_loaded_toolbox, toolbox),
         dataset_kind=data_plane.served_dataset.kind,
         recorder=recorder,
+        workspace=workspace,
     )
 
 
@@ -1780,6 +1807,16 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
                 deployment, discover_planner_setup(settings.model_planner)
             ),
         )
+    if arguments.command == "mcp" and arguments.workspace is not None:
+        if arguments.workspace_limit < 1:
+            parser.error("--workspace-limit must be positive")
+        if arguments.session_goal is not None or arguments.session_scope is not None:
+            parser.error("workspace goals and scopes are supplied through investigation tools")
+        try:
+            LocalWorkspaceFiles(arguments.workspace, settings.store_root)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        return run_recorded_mcp(parser, arguments, settings)
     session_directory = getattr(arguments, "session", None)
     if session_directory is not None:
         try:

@@ -632,8 +632,8 @@
       "type": "boolean"
     },
     "schema_version": {
-      "const": "2.0.0-dev.50",
-      "default": "2.0.0-dev.50",
+      "const": "2.0.0-dev.51",
+      "default": "2.0.0-dev.51",
       "title": "Schema Version",
       "type": "string"
     },

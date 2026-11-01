@@ -2,6 +2,14 @@
   "$defs": {
     "ToolFailureCode": {
       "enum": [
+        "finding_id_conflict",
+        "investigation_interrupted",
+        "workspace_full",
+        "request_key_conflict",
+        "workspace_busy",
+        "investigation_busy",
+        "unknown_investigation",
+        "investigations_not_enabled",
         "session_call_limit",
         "session_dataset_mismatch",
         "session_recording_failed",
@@ -224,8 +232,8 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "2.0.0-dev.50",
-      "default": "2.0.0-dev.50",
+      "const": "2.0.0-dev.51",
+      "default": "2.0.0-dev.51",
       "title": "Schema Version",
       "type": "string"
     },

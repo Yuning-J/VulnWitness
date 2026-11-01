@@ -102,6 +102,14 @@ class EvidenceLookup(ContractModel):
 
 
 class ToolFailureCode(StrEnum):
+    FINDING_ID_CONFLICT = "finding_id_conflict"
+    INVESTIGATION_INTERRUPTED = "investigation_interrupted"
+    WORKSPACE_FULL = "workspace_full"
+    REQUEST_KEY_CONFLICT = "request_key_conflict"
+    WORKSPACE_BUSY = "workspace_busy"
+    INVESTIGATION_BUSY = "investigation_busy"
+    UNKNOWN_INVESTIGATION = "unknown_investigation"
+    INVESTIGATIONS_NOT_ENABLED = "investigations_not_enabled"
     SESSION_CALL_LIMIT = "session_call_limit"
     SESSION_DATASET_MISMATCH = "session_dataset_mismatch"
     SESSION_RECORDING_FAILED = "session_recording_failed"
@@ -120,6 +128,18 @@ class ToolFailureCode(StrEnum):
 
 # The one sentence a failure of each code carries; it never quotes the caller's input.
 TOOL_FAILURE_MESSAGES: dict[ToolFailureCode, str] = {
+    ToolFailureCode.FINDING_ID_CONFLICT: "A finding ID already has different content.",
+    ToolFailureCode.INVESTIGATION_INTERRUPTED: (
+        "The interrupted investigation cannot accept appends."
+    ),
+    ToolFailureCode.WORKSPACE_FULL: "The workspace investigation limit has been reached.",
+    ToolFailureCode.REQUEST_KEY_CONFLICT: (
+        "The request key belongs to different arguments or dataset."
+    ),
+    ToolFailureCode.WORKSPACE_BUSY: "The workspace is busy; retry later.",
+    ToolFailureCode.INVESTIGATION_BUSY: "The investigation is busy; retry later.",
+    ToolFailureCode.UNKNOWN_INVESTIGATION: "No investigation has that ID.",
+    ToolFailureCode.INVESTIGATIONS_NOT_ENABLED: "Workspace investigations are not enabled.",
     ToolFailureCode.SESSION_CALL_LIMIT: "The session call limit has been reached.",
     ToolFailureCode.SESSION_DATASET_MISMATCH: (
         "The served dataset differs from the session dataset."

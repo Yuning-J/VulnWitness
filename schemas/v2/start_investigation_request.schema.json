@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "goal": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "title": "Goal",
+      "type": "string"
+    },
+    "request_key": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9._-]{1,64}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Key"
+    },
+    "scope": {
+      "anyOf": [
+        {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scope"
+    }
+  },
+  "required": [
+    "goal"
+  ],
+  "title": "StartInvestigationRequest",
+  "type": "object"
+}

@@ -26,6 +26,14 @@
     },
     "ToolFailureCode": {
       "enum": [
+        "finding_id_conflict",
+        "investigation_interrupted",
+        "workspace_full",
+        "request_key_conflict",
+        "workspace_busy",
+        "investigation_busy",
+        "unknown_investigation",
+        "investigations_not_enabled",
         "session_call_limit",
         "session_dataset_mismatch",
         "session_recording_failed",
@@ -48,6 +56,134 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "finding_id_conflict"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "A finding ID already has different content."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "investigation_interrupted"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The interrupted investigation cannot accept appends."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "workspace_full"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The workspace investigation limit has been reached."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "request_key_conflict"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The request key belongs to different arguments or dataset."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "workspace_busy"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The workspace is busy; retry later."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "investigation_busy"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The investigation is busy; retry later."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "unknown_investigation"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "No investigation has that ID."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "investigations_not_enabled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "Workspace investigations are not enabled."
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {
@@ -293,8 +429,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.50",
-      "default": "2.0.0-dev.50",
+      "const": "2.0.0-dev.51",
+      "default": "2.0.0-dev.51",
       "title": "Schema Version",
       "type": "string"
     },

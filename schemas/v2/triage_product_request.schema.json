@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "goal": {
+      "anyOf": [
+        {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Goal"
+    },
+    "lookups": {
+      "default": 5,
+      "maximum": 10,
+      "minimum": 0,
+      "title": "Lookups",
+      "type": "integer"
+    },
+    "max_pages": {
+      "default": 20,
+      "maximum": 99,
+      "minimum": 1,
+      "title": "Max Pages",
+      "type": "integer"
+    },
+    "product": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Product"
+    },
+    "request_key": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9._-]{1,64}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Key"
+    },
+    "select": {
+      "default": [],
+      "items": {
+        "maxLength": 32,
+        "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+        "type": "string"
+      },
+      "title": "Select",
+      "type": "array"
+    },
+    "vendor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Vendor"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    }
+  },
+  "title": "TriageProductRequest",
+  "type": "object"
+}

@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "InvestigationListItem": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Created At",
+          "type": "string"
+        },
+        "goal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Goal"
+        },
+        "orphan": {
+          "title": "Orphan",
+          "type": "boolean"
+        },
+        "record": {
+          "$ref": "#/$defs/SessionRecordCheck"
+        },
+        "report": {
+          "enum": [
+            "none",
+            "current",
+            "stale"
+          ],
+          "title": "Report",
+          "type": "string"
+        },
+        "session_id": {
+          "pattern": "^inv_[a-z2-7]{20}$(?!\\n)",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "workflow": {
+          "enum": [
+            "none",
+            "running",
+            "interrupted",
+            "complete",
+            "stopped_at_cap",
+            "no_match",
+            "failed"
+          ],
+          "title": "Workflow",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "goal",
+        "created_at",
+        "workflow",
+        "record",
+        "report",
+        "orphan"
+      ],
+      "title": "InvestigationListItem",
+      "type": "object"
+    },
+    "SessionRecordCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "calls_checked": {
+          "minimum": 0,
+          "title": "Calls Checked",
+          "type": "integer"
+        },
+        "consistent": {
+          "title": "Consistent",
+          "type": "boolean"
+        },
+        "violations": {
+          "items": {
+            "$ref": "#/$defs/SessionViolation"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "consistent",
+        "calls_checked",
+        "violations"
+      ],
+      "title": "SessionRecordCheck",
+      "type": "object"
+    },
+    "SessionViolation": {
+      "additionalProperties": false,
+      "properties": {
+        "location": {
+          "title": "Location",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "location",
+        "message"
+      ],
+      "title": "SessionViolation",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "investigations": {
+      "items": {
+        "$ref": "#/$defs/InvestigationListItem"
+      },
+      "title": "Investigations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "investigations"
+  ],
+  "title": "ListInvestigationsResponse",
+  "type": "object"
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "formats": {
+      "items": {
+        "enum": [
+          "html",
+          "md"
+        ],
+        "type": "string"
+      },
+      "title": "Formats",
+      "type": "array"
+    },
+    "input_digest": {
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Input Digest",
+      "type": "string"
+    }
+  },
+  "required": [
+    "input_digest",
+    "formats"
+  ],
+  "title": "ReportRecord",
+  "type": "object"
+}

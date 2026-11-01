@@ -1,0 +1,228 @@
+{
+  "$defs": {
+    "InvestigationBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_context_bytes": {
+          "default": 200000,
+          "description": "Canonical JSON bytes of tool responses admitted into the answer; callers may lower this cap, never raise it.",
+          "maximum": 200000,
+          "minimum": 1,
+          "title": "Max Context Bytes",
+          "type": "integer"
+        },
+        "max_results_per_call": {
+          "default": 20,
+          "description": "Results each tool call returns and the answer keeps per section; callers may lower this cap, never raise it.",
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Max Results Per Call",
+          "type": "integer"
+        },
+        "max_rounds": {
+          "default": 2,
+          "description": "Planning-and-retrieval rounds; callers may lower this cap, never raise it.",
+          "maximum": 2,
+          "minimum": 1,
+          "title": "Max Rounds",
+          "type": "integer"
+        },
+        "max_sources": {
+          "default": 4,
+          "description": "Distinct knowledge sources consulted; callers may lower, never raise.",
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Sources",
+          "type": "integer"
+        },
+        "max_tool_calls": {
+          "default": 8,
+          "description": "Backend queries, counting each search a topic_context call fans out to; callers may lower this cap, never raise it.",
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Max Tool Calls",
+          "type": "integer"
+        },
+        "max_wall_time_seconds": {
+          "default": 30,
+          "description": "Elapsed time after which no planner or tool call starts and no late result is admitted; callers may lower this cap, never raise it.",
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Max Wall Time Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "InvestigationBudget",
+      "type": "object"
+    },
+    "QueryScope": {
+      "enum": [
+        "protocol_context_only",
+        "implementation_only",
+        "mixed"
+      ],
+      "title": "QueryScope",
+      "type": "string"
+    },
+    "SearchFilters": {
+      "additionalProperties": false,
+      "description": "Structured constraints. Values within one field are ORed; fields are ANDed.\n\nFilters only constrain. A record that satisfies them still needs an exact-ID,\nlexical or semantic match, or a graph relation to one, to become a candidate.\nValues are kept exactly as sent. CWE IDs and severities are accepted only in\ncanonical upper case; vendors, products and purls match case-insensitively.",
+      "properties": {
+        "cwe_ids": {
+          "default": [],
+          "items": {
+            "maxLength": 16,
+            "pattern": "^CWE-[0-9]+$(?!\\n)",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Cwe Ids",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "kev_only": {
+          "default": false,
+          "title": "Kev Only",
+          "type": "boolean"
+        },
+        "origins": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VulnerabilityOrigin"
+          },
+          "maxItems": 20,
+          "title": "Origins",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "products": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*[^\\s\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069][^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Products",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "published_years": {
+          "default": [],
+          "items": {
+            "maximum": 9999,
+            "minimum": 1999,
+            "type": "integer"
+          },
+          "maxItems": 20,
+          "title": "Published Years",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "purls": {
+          "default": [],
+          "description": "Package URLs without version, qualifiers or subpath; match any version.",
+          "items": {
+            "maxLength": 512,
+            "pattern": "^pkg:[A-Za-z][A-Za-z0-9.+-]*(?:/[A-Za-z0-9._~%-]*[A-Za-z0-9_~%-][A-Za-z0-9._~%-]*)+$(?!\\n)",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Purls",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "severities": {
+          "default": [],
+          "items": {
+            "enum": [
+              "NONE",
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL"
+            ],
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Severities",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "vendors": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*[^\\s\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069][^\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Vendors",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "title": "SearchFilters",
+      "type": "object"
+    },
+    "VulnerabilityOrigin": {
+      "description": "Where a CVE's defect lives. A CVE never describes a protocol-design flaw here.",
+      "enum": [
+        "implementation",
+        "configuration",
+        "dependency",
+        "unknown"
+      ],
+      "title": "VulnerabilityOrigin",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "budget": {
+      "$ref": "#/$defs/InvestigationBudget"
+    },
+    "filters": {
+      "$ref": "#/$defs/SearchFilters",
+      "description": "Constrain every CVE tool call; vendors, products and purls are the product context."
+    },
+    "query": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+      "title": "Query",
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/QueryScope"
+    },
+    "semantic": {
+      "default": false,
+      "description": "Also run the optional semantic channel for CVE searches.",
+      "title": "Semantic",
+      "type": "boolean"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "pattern": "^inv_[a-z2-7]{20}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    }
+  },
+  "required": [
+    "query",
+    "scope"
+  ],
+  "title": "WorkspaceInvestigationRequest",
+  "type": "object"
+}

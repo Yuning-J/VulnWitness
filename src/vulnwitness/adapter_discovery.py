@@ -10,6 +10,7 @@ from pydantic import SecretStr
 
 from vulnwitness.adapters.migration.parser_types import MigrationParsers
 from vulnwitness.application.planner_setup import DeterministicPlanning, ModelPlanning, PlannerSetup
+from vulnwitness.application.workspace_investigations import WorkspaceInvestigations
 from vulnwitness.domain.evidence_set_verification_report import VerificationReport
 from vulnwitness.domain.planning import (
     ModelPlannerIdentity,
@@ -152,6 +153,7 @@ class McpServerRunner(Protocol):
         *,
         dataset_kind: ServedDatasetKind,
         recorder: SessionRecording | None = None,
+        workspace: WorkspaceInvestigations | None = None,
     ) -> int: ...
 
 
@@ -168,6 +170,7 @@ class McpHttpServerRunner(Protocol):
         port: int,
         token: SecretStr,
         recorder: SessionRecording | None = None,
+        workspace: WorkspaceInvestigations | None = None,
     ) -> bool: ...
 
 

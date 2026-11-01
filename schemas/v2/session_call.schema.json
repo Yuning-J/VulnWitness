@@ -121,6 +121,14 @@
     },
     "ToolFailureCode": {
       "enum": [
+        "finding_id_conflict",
+        "investigation_interrupted",
+        "workspace_full",
+        "request_key_conflict",
+        "workspace_busy",
+        "investigation_busy",
+        "unknown_investigation",
+        "investigations_not_enabled",
         "session_call_limit",
         "session_dataset_mismatch",
         "session_recording_failed",
@@ -202,6 +210,19 @@
       "title": "Response Schema",
       "type": "string"
     },
+    "response_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Response Sha256"
+    },
     "sequence": {
       "maximum": 100,
       "minimum": 1,
@@ -224,6 +245,7 @@
     "outcome",
     "response_file",
     "response_schema",
+    "response_sha256",
     "started_at",
     "finished_at"
   ],

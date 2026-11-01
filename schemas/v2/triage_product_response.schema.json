@@ -1,0 +1,945 @@
+{
+  "$defs": {
+    "JsonValue": {},
+    "ServedDataset": {
+      "additionalProperties": false,
+      "description": "What the deployment's CVE records and evidence are. ``cve_search_version`` is the\n``cve_search`` capability's version: equal versions name byte-for-byte equal records\nand evidence, so a set sealed under one verifies under the other.",
+      "properties": {
+        "cve_search_version": {
+          "minLength": 1,
+          "title": "Cve Search Version",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ServedDatasetKind"
+        }
+      },
+      "required": [
+        "kind",
+        "cve_search_version"
+      ],
+      "title": "ServedDataset",
+      "type": "object"
+    },
+    "ServedDatasetKind": {
+      "enum": [
+        "synthetic_fixture",
+        "corpus_store"
+      ],
+      "title": "ServedDatasetKind",
+      "type": "string"
+    },
+    "SessionCall": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "dataset": {
+          "$ref": "#/$defs/SessionDatasetIdentity"
+        },
+        "finished_at": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Finished At",
+          "type": "string"
+        },
+        "interface": {
+          "enum": [
+            "cli",
+            "mcp"
+          ],
+          "title": "Interface",
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "const": "ok",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/ToolFailureCode"
+            }
+          ],
+          "title": "Outcome"
+        },
+        "request": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Validated request with defaults; null if argument validation failed.",
+          "title": "Request"
+        },
+        "response_file": {
+          "pattern": "^responses/[0-9]{4}\\.json$(?!\\n)",
+          "title": "Response File",
+          "type": "string"
+        },
+        "response_schema": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Response Schema",
+          "type": "string"
+        },
+        "response_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Sha256"
+        },
+        "sequence": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "started_at": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Started At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sequence",
+        "interface",
+        "command",
+        "request",
+        "dataset",
+        "outcome",
+        "response_file",
+        "response_schema",
+        "response_sha256",
+        "started_at",
+        "finished_at"
+      ],
+      "title": "SessionCall",
+      "type": "object"
+    },
+    "SessionCheckReport": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "$ref": "#/$defs/SessionCitationCheck"
+        },
+        "claims": {
+          "$ref": "#/$defs/SessionClaimsCheck"
+        },
+        "not_checked": {
+          "$ref": "#/$defs/SessionNotChecked"
+        },
+        "record": {
+          "$ref": "#/$defs/SessionRecordCheck"
+        },
+        "schema_version": {
+          "const": "2.0.0-dev.51",
+          "default": "2.0.0-dev.51",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "superseded_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Superseded Count",
+          "type": "integer"
+        },
+        "support_limitation": {
+          "const": "Free narrative is not checked. This check does not establish that a statement is supported by cited evidence or prove real-world truth.",
+          "default": "Free narrative is not checked. This check does not establish that a statement is supported by cited evidence or prove real-world truth.",
+          "title": "Support Limitation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "record",
+        "citations",
+        "claims",
+        "not_checked",
+        "superseded_count",
+        "support_limitation"
+      ],
+      "title": "SessionCheckReport",
+      "type": "object"
+    },
+    "SessionCitationCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "citations_checked": {
+          "minimum": 0,
+          "title": "Citations Checked",
+          "type": "integer"
+        },
+        "resolved": {
+          "title": "Resolved",
+          "type": "boolean"
+        },
+        "violations": {
+          "items": {
+            "$ref": "#/$defs/SessionViolation"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "resolved",
+        "citations_checked",
+        "violations"
+      ],
+      "title": "SessionCitationCheck",
+      "type": "object"
+    },
+    "SessionClaimCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "expected": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "finding_id": {
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "recorded": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "contradicted",
+            "unverifiable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "call",
+        "status",
+        "field",
+        "expected",
+        "recorded",
+        "message"
+      ],
+      "title": "SessionClaimCheck",
+      "type": "object"
+    },
+    "SessionClaimsCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/SessionClaimCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "verified": {
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "verified",
+        "checks"
+      ],
+      "title": "SessionClaimsCheck",
+      "type": "object"
+    },
+    "SessionDatasetIdentity": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "store_name": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "served": {
+            "properties": {
+              "kind": {
+                "const": "corpus_store"
+              }
+            }
+          }
+        }
+      },
+      "properties": {
+        "corpus_content_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Corpus Content Sha256",
+          "type": "string"
+        },
+        "fight_snapshot_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Fight Snapshot Sha256"
+        },
+        "mitre_snapshot_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mitre Snapshot Sha256"
+        },
+        "served": {
+          "$ref": "#/$defs/ServedDataset"
+        },
+        "store_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Store Manifest Sha256",
+          "type": "string"
+        },
+        "store_name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Store Name"
+        }
+      },
+      "required": [
+        "served",
+        "store_name",
+        "store_manifest_sha256",
+        "corpus_content_sha256",
+        "fight_snapshot_sha256",
+        "mitre_snapshot_sha256"
+      ],
+      "then": {
+        "properties": {
+          "store_name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "title": "SessionDatasetIdentity",
+      "type": "object"
+    },
+    "SessionNotChecked": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "finding_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Finding Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "count",
+        "finding_ids"
+      ],
+      "title": "SessionNotChecked",
+      "type": "object"
+    },
+    "SessionRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "call_limit": {
+          "default": 100,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call Limit",
+          "type": "integer"
+        },
+        "contract_version": {
+          "const": "2.0.0-dev.51",
+          "default": "2.0.0-dev.51",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Created At",
+          "type": "string"
+        },
+        "dataset": {
+          "$ref": "#/$defs/SessionDatasetIdentity"
+        },
+        "format_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Format Version",
+          "type": "integer"
+        },
+        "goal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Goal"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "origin": {
+          "default": "manual",
+          "enum": [
+            "triage",
+            "manual"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "request_key": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._-]{1,64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Key"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "triage_request": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Triage Request"
+        }
+      },
+      "required": [
+        "format_version",
+        "name",
+        "created_at",
+        "goal",
+        "scope",
+        "dataset",
+        "contract_version",
+        "call_limit",
+        "request_key",
+        "origin",
+        "triage_request"
+      ],
+      "title": "SessionRecord",
+      "type": "object"
+    },
+    "SessionRecordCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "calls_checked": {
+          "minimum": 0,
+          "title": "Calls Checked",
+          "type": "integer"
+        },
+        "consistent": {
+          "title": "Consistent",
+          "type": "boolean"
+        },
+        "violations": {
+          "items": {
+            "$ref": "#/$defs/SessionViolation"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "consistent",
+        "calls_checked",
+        "violations"
+      ],
+      "title": "SessionRecordCheck",
+      "type": "object"
+    },
+    "SessionViolation": {
+      "additionalProperties": false,
+      "properties": {
+        "location": {
+          "title": "Location",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "location",
+        "message"
+      ],
+      "title": "SessionViolation",
+      "type": "object"
+    },
+    "ToolFailureCode": {
+      "enum": [
+        "finding_id_conflict",
+        "investigation_interrupted",
+        "workspace_full",
+        "request_key_conflict",
+        "workspace_busy",
+        "investigation_busy",
+        "unknown_investigation",
+        "investigations_not_enabled",
+        "session_call_limit",
+        "session_dataset_mismatch",
+        "session_recording_failed",
+        "invalid_arguments",
+        "invalid_cursor",
+        "arguments_too_large",
+        "unknown_evidence_id",
+        "server_busy",
+        "data_loading",
+        "timed_out",
+        "response_too_large",
+        "integrity_check_failed",
+        "internal_error",
+        "filter_unsupported"
+      ],
+      "title": "ToolFailureCode",
+      "type": "string"
+    },
+    "TriageDeepDive": {
+      "additionalProperties": false,
+      "properties": {
+        "looked_up_ids": {
+          "items": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Looked Up Ids",
+          "type": "array"
+        },
+        "lookup_calls": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Lookup Calls",
+          "type": "array"
+        },
+        "lookups_completed": {
+          "minimum": 0,
+          "title": "Lookups Completed",
+          "type": "integer"
+        },
+        "selected_ids": {
+          "items": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Selected Ids",
+          "type": "array"
+        },
+        "selection_mode": {
+          "enum": [
+            "first N by the stated order",
+            "user-chosen IDs"
+          ],
+          "title": "Selection Mode",
+          "type": "string"
+        },
+        "selection_rule": {
+          "const": "product_field before description_mention; with version, hit before unknown before no_hit; newest published first (missing dates last); CVE ID ascending",
+          "default": "product_field before description_mention; with version, hit before unknown before no_hit; newest published first (missing dates last); CVE ID ascending",
+          "title": "Selection Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selection_rule",
+        "selection_mode",
+        "selected_ids",
+        "looked_up_ids",
+        "lookups_completed",
+        "lookup_calls"
+      ],
+      "title": "TriageDeepDive",
+      "type": "object"
+    },
+    "TriageInventory": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "cve_ids": {
+          "items": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Cve Ids",
+          "type": "array"
+        },
+        "items_seen": {
+          "minimum": 0,
+          "title": "Items Seen",
+          "type": "integer"
+        },
+        "page_calls": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Page Calls",
+          "type": "array"
+        },
+        "pages_read": {
+          "minimum": 0,
+          "title": "Pages Read",
+          "type": "integer"
+        },
+        "total_available": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Total Available"
+        }
+      },
+      "required": [
+        "pages_read",
+        "items_seen",
+        "total_available",
+        "complete",
+        "page_calls",
+        "cve_ids"
+      ],
+      "title": "TriageInventory",
+      "type": "object"
+    },
+    "TriageLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "call_limit": {
+          "default": 100,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call Limit",
+          "type": "integer"
+        },
+        "lookups": {
+          "default": 5,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Lookups",
+          "type": "integer"
+        },
+        "max_pages": {
+          "default": 20,
+          "minimum": 1,
+          "title": "Max Pages",
+          "type": "integer"
+        },
+        "time_limit": {
+          "default": 120,
+          "exclusiveMinimum": 0,
+          "title": "Time Limit",
+          "type": "number"
+        }
+      },
+      "required": [
+        "max_pages",
+        "lookups",
+        "time_limit",
+        "call_limit"
+      ],
+      "title": "TriageLimits",
+      "type": "object"
+    },
+    "TriageSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "caps_hit": {
+          "items": {
+            "enum": [
+              "max_pages",
+              "lookups",
+              "time_limit"
+            ],
+            "type": "string"
+          },
+          "title": "Caps Hit",
+          "type": "array"
+        },
+        "deep_dive": {
+          "$ref": "#/$defs/TriageDeepDive"
+        },
+        "failure_code": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolFailureCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "inventory": {
+          "$ref": "#/$defs/TriageInventory"
+        },
+        "limits": {
+          "$ref": "#/$defs/TriageLimits"
+        },
+        "planned_call_count": {
+          "minimum": 1,
+          "title": "Planned Call Count",
+          "type": "integer"
+        },
+        "remaining_steps": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Remaining Steps",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "2.0.0-dev.51",
+          "default": "2.0.0-dev.51",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "stop_reason": {
+          "enum": [
+            "complete",
+            "no_match",
+            "max_pages",
+            "time_limit",
+            "call_failed",
+            "recording_failed",
+            "invalid_selection",
+            "lookup_claim_unavailable",
+            "check_failed"
+          ],
+          "title": "Stop Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "planned_call_count",
+        "limits",
+        "inventory",
+        "deep_dive",
+        "stop_reason",
+        "caps_hit",
+        "failure_code",
+        "remaining_steps"
+      ],
+      "title": "TriageSummary",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "calls": {
+      "items": {
+        "$ref": "#/$defs/SessionCall"
+      },
+      "title": "Calls",
+      "type": "array"
+    },
+    "check": {
+      "$ref": "#/$defs/SessionCheckReport"
+    },
+    "effective_findings": {
+      "minimum": 0,
+      "title": "Effective Findings",
+      "type": "integer"
+    },
+    "orphan": {
+      "title": "Orphan",
+      "type": "boolean"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "enum": [
+            "complete",
+            "stopped_at_cap",
+            "no_match",
+            "failed"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Outcome"
+    },
+    "record": {
+      "$ref": "#/$defs/SessionRecordCheck"
+    },
+    "remaining_steps": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Remaining Steps",
+      "type": "array"
+    },
+    "report": {
+      "enum": [
+        "none",
+        "current",
+        "stale"
+      ],
+      "title": "Report",
+      "type": "string"
+    },
+    "session": {
+      "$ref": "#/$defs/SessionRecord"
+    },
+    "session_id": {
+      "pattern": "^inv_[a-z2-7]{20}$(?!\\n)",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "superseded_findings": {
+      "minimum": 0,
+      "title": "Superseded Findings",
+      "type": "integer"
+    },
+    "triage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TriageSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "workflow": {
+      "enum": [
+        "none",
+        "running",
+        "interrupted",
+        "complete",
+        "stopped_at_cap",
+        "no_match",
+        "failed"
+      ],
+      "title": "Workflow",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id",
+    "session",
+    "workflow",
+    "record",
+    "check",
+    "report",
+    "triage",
+    "calls",
+    "effective_findings",
+    "superseded_findings",
+    "orphan",
+    "remaining_steps",
+    "outcome"
+  ],
+  "title": "TriageProductResponse",
+  "type": "object"
+}

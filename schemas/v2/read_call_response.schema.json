@@ -1,0 +1,712 @@
+{
+  "$defs": {
+    "InvalidField": {
+      "additionalProperties": false,
+      "description": "One argument that failed to parse, or a filter the dataset cannot execute: where it\nis and the error type (the parser's, or ``filter_unsupported``), never the value\nsent.",
+      "properties": {
+        "error_type": {
+          "maxLength": 64,
+          "pattern": "^[a-z_]+$(?!\\n)",
+          "title": "Error Type",
+          "type": "string"
+        },
+        "location": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Location",
+          "type": "string"
+        }
+      },
+      "required": [
+        "location",
+        "error_type"
+      ],
+      "title": "InvalidField",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "ServedDataset": {
+      "additionalProperties": false,
+      "description": "What the deployment's CVE records and evidence are. ``cve_search_version`` is the\n``cve_search`` capability's version: equal versions name byte-for-byte equal records\nand evidence, so a set sealed under one verifies under the other.",
+      "properties": {
+        "cve_search_version": {
+          "minLength": 1,
+          "title": "Cve Search Version",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ServedDatasetKind"
+        }
+      },
+      "required": [
+        "kind",
+        "cve_search_version"
+      ],
+      "title": "ServedDataset",
+      "type": "object"
+    },
+    "ServedDatasetKind": {
+      "enum": [
+        "synthetic_fixture",
+        "corpus_store"
+      ],
+      "title": "ServedDatasetKind",
+      "type": "string"
+    },
+    "SessionCall": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "dataset": {
+          "$ref": "#/$defs/SessionDatasetIdentity"
+        },
+        "finished_at": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Finished At",
+          "type": "string"
+        },
+        "interface": {
+          "enum": [
+            "cli",
+            "mcp"
+          ],
+          "title": "Interface",
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "const": "ok",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/ToolFailureCode"
+            }
+          ],
+          "title": "Outcome"
+        },
+        "request": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Validated request with defaults; null if argument validation failed.",
+          "title": "Request"
+        },
+        "response_file": {
+          "pattern": "^responses/[0-9]{4}\\.json$(?!\\n)",
+          "title": "Response File",
+          "type": "string"
+        },
+        "response_schema": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Response Schema",
+          "type": "string"
+        },
+        "response_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Sha256"
+        },
+        "sequence": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "started_at": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Started At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sequence",
+        "interface",
+        "command",
+        "request",
+        "dataset",
+        "outcome",
+        "response_file",
+        "response_schema",
+        "response_sha256",
+        "started_at",
+        "finished_at"
+      ],
+      "title": "SessionCall",
+      "type": "object"
+    },
+    "SessionDatasetIdentity": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "store_name": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "served": {
+            "properties": {
+              "kind": {
+                "const": "corpus_store"
+              }
+            }
+          }
+        }
+      },
+      "properties": {
+        "corpus_content_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Corpus Content Sha256",
+          "type": "string"
+        },
+        "fight_snapshot_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Fight Snapshot Sha256"
+        },
+        "mitre_snapshot_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mitre Snapshot Sha256"
+        },
+        "served": {
+          "$ref": "#/$defs/ServedDataset"
+        },
+        "store_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Store Manifest Sha256",
+          "type": "string"
+        },
+        "store_name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Store Name"
+        }
+      },
+      "required": [
+        "served",
+        "store_name",
+        "store_manifest_sha256",
+        "corpus_content_sha256",
+        "fight_snapshot_sha256",
+        "mitre_snapshot_sha256"
+      ],
+      "then": {
+        "properties": {
+          "store_name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "title": "SessionDatasetIdentity",
+      "type": "object"
+    },
+    "ToolFailure": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "finding_id_conflict"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A finding ID already has different content."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "investigation_interrupted"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The interrupted investigation cannot accept appends."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "workspace_full"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The workspace investigation limit has been reached."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "request_key_conflict"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The request key belongs to different arguments or dataset."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "workspace_busy"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The workspace is busy; retry later."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "investigation_busy"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The investigation is busy; retry later."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "unknown_investigation"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "No investigation has that ID."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "investigations_not_enabled"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "Workspace investigations are not enabled."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "session_call_limit"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The session call limit has been reached."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "session_dataset_mismatch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The served dataset differs from the session dataset."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "session_recording_failed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The requested session could not be recorded."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "invalid_arguments"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The arguments do not match the tool's input schema."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "invalid_cursor"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The cursor is invalid for this product query."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "arguments_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The arguments exceed the size limit."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "unknown_evidence_id"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "No evidence anchor has that evidence ID."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "server_busy"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "Too many calls are in flight; retry later."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "data_loading"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The data is still loading; retry later."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "timed_out"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The call did not finish within the tool's time limit."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "response_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The response exceeds the size limit; lower the limit argument."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "integrity_check_failed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The service rejected its own result as invalid."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "internal_error"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The call failed with an internal error."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "filter_unsupported"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A filter cannot be executed on this dataset, which holds no value it could match; invalid_fields names it."
+              }
+            }
+          }
+        }
+      ],
+      "description": "Why a tool call gave no answer. Keys the request contract does not declare are\ncounted, never named.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ToolFailureCode"
+        },
+        "invalid_fields": {
+          "items": {
+            "$ref": "#/$defs/InvalidField"
+          },
+          "maxItems": 20,
+          "title": "Invalid Fields",
+          "type": "array"
+        },
+        "message": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "2.0.0-dev.51",
+          "default": "2.0.0-dev.51",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "unexpected_field_count": {
+          "minimum": 0,
+          "title": "Unexpected Field Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "message",
+        "invalid_fields",
+        "unexpected_field_count"
+      ],
+      "title": "ToolFailure",
+      "type": "object"
+    },
+    "ToolFailureCode": {
+      "enum": [
+        "finding_id_conflict",
+        "investigation_interrupted",
+        "workspace_full",
+        "request_key_conflict",
+        "workspace_busy",
+        "investigation_busy",
+        "unknown_investigation",
+        "investigations_not_enabled",
+        "session_call_limit",
+        "session_dataset_mismatch",
+        "session_recording_failed",
+        "invalid_arguments",
+        "invalid_cursor",
+        "arguments_too_large",
+        "unknown_evidence_id",
+        "server_busy",
+        "data_loading",
+        "timed_out",
+        "response_too_large",
+        "integrity_check_failed",
+        "internal_error",
+        "filter_unsupported"
+      ],
+      "title": "ToolFailureCode",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "call": {
+      "$ref": "#/$defs/SessionCall"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ToolFailure"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "response_json": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Response Json"
+    }
+  },
+  "required": [
+    "call",
+    "response_json",
+    "failure"
+  ],
+  "title": "ReadCallResponse",
+  "type": "object"
+}

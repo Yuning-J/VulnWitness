@@ -1,0 +1,44 @@
+{
+  "$defs": {
+    "JsonValue": {}
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "arguments": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Arguments",
+      "type": "object"
+    },
+    "dataset": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Dataset",
+      "type": "object"
+    },
+    "session_id": {
+      "pattern": "^inv_[a-z2-7]{20}$(?!\\n)",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "tool": {
+      "enum": [
+        "start_investigation",
+        "triage_product"
+      ],
+      "title": "Tool",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tool",
+    "arguments",
+    "dataset",
+    "session_id"
+  ],
+  "title": "RequestRecord",
+  "type": "object"
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "default": "html",
+      "enum": [
+        "html",
+        "md"
+      ],
+      "title": "Format",
+      "type": "string"
+    },
+    "session_id": {
+      "pattern": "^inv_[a-z2-7]{20}$(?!\\n)",
+      "title": "Session Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id"
+  ],
+  "title": "RenderReportRequest",
+  "type": "object"
+}

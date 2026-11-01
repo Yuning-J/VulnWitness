@@ -197,10 +197,16 @@
       "$ref": "#/$defs/SessionRecordCheck"
     },
     "schema_version": {
-      "const": "2.0.0-dev.50",
-      "default": "2.0.0-dev.50",
+      "const": "2.0.0-dev.51",
+      "default": "2.0.0-dev.51",
       "title": "Schema Version",
       "type": "string"
+    },
+    "superseded_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Superseded Count",
+      "type": "integer"
     },
     "support_limitation": {
       "const": "Free narrative is not checked. This check does not establish that a statement is supported by cited evidence or prove real-world truth.",
@@ -215,6 +221,7 @@
     "citations",
     "claims",
     "not_checked",
+    "superseded_count",
     "support_limitation"
   ],
   "title": "SessionCheckReport",

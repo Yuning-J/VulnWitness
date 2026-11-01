@@ -130,5 +130,7 @@ def render_html_report(report: SessionReport) -> str:
     fragments: list[str] = []
     for section in report.sections:
         fragments.append(render_html_section(section, 2))
+    if report.input_digest is not None:
+        fragments.append("<p>Report input digest: " + escape(report.input_digest) + "</p>")
     banner = '<p class="banner">Synthetic demonstration data</p>' if report.synthetic else ""
     return template.substitute(title=escape(report.title), banner=banner, body="\n".join(fragments))

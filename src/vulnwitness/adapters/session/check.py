@@ -11,6 +11,7 @@ from vulnwitness.adapters.session.files import check_session_path, read_session_
 from vulnwitness.adapters.session.validation import parse_session_document
 from vulnwitness.adapters.strict_yaml import load_declaration_yaml
 from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.hashing import sha256_hex
 from vulnwitness.domain.session_claim_check import check_session_claim
 from vulnwitness.domain.session_contracts import CLI_SESSION_CONTRACTS, MCP_SESSION_CONTRACTS
 from vulnwitness.domain.session_record import (
@@ -53,7 +54,8 @@ def collect_response_anchors(document: Any) -> set[str]:
 class SessionChecker:
     """Read a bounded session tree. Never execute instructions or follow file links."""
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, findings: SessionFindings | None = None) -> None:
+        self._findings_override = findings
         self._directory = directory
         self._violations: list[SessionViolation] = []
         self._calls: dict[int, SessionCall] = {}
@@ -108,6 +110,11 @@ class SessionChecker:
 
     def _report(self) -> SessionCheckReport:
         return SessionCheckReport(
+            superseded_count=(
+                len(self._findings.findings) - len(self._findings.effective_findings())
+                if self._findings is not None
+                else 0
+            ),
             record=SessionRecordCheck(
                 consistent=not self._violations,
                 calls_checked=len(self._calls),
@@ -206,6 +213,8 @@ class SessionChecker:
             return None
         try:
             content = read_session_file(self._directory / location)
+            if call.response_sha256 is not None and call.response_sha256 != sha256_hex(content):
+                self._add(location, "response bytes differ from the recorded input digest")
             answer = parse_session_document(content, response_model)
             document = json.loads(content)
         except (OSError, ValueError, RecursionError):
@@ -224,7 +233,7 @@ class SessionChecker:
 
     def _check_findings(self, session: SessionRecord) -> None:
         try:
-            findings = SessionFindings.model_validate(
+            findings = self._findings_override or SessionFindings.model_validate(
                 load_declaration_yaml(
                     read_session_file(self._directory / "findings.yaml").decode("utf-8")
                 )
@@ -233,7 +242,12 @@ class SessionChecker:
             self._add("findings.yaml", "findings are unreadable or invalid")
             return
         self._findings = findings
+        effective_ids: set[str] = set()
+        for finding in findings.effective_findings():
+            effective_ids.add(finding.id)
         for finding_index, finding in enumerate(findings.findings):
+            if finding.id not in effective_ids:
+                continue
             if finding.claim is None:
                 self._not_checked.append(finding.id)
             else:

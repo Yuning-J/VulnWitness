@@ -14,6 +14,7 @@ from mcp.server.context import CallNext, HandlerResult
 from mcp.server.stdio import stdio_server
 from mcp.types.version import MODERN_PROTOCOL_VERSIONS
 
+from vulnwitness.application.workspace_investigations import WorkspaceInvestigations
 from vulnwitness.domain.served_dataset import ServedDatasetKind
 from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
 from vulnwitness.interfaces.knowledge_tools import KNOWLEDGE_TOOL_SPECS
@@ -37,10 +38,11 @@ class StdioServer:
         load_toolbox: Callable[[], KnowledgeToolbox],
         dataset_kind: ServedDatasetKind,
         recorder: SessionRecording | None = None,
+        workspace: WorkspaceInvestigations | None = None,
     ) -> None:
         self._load_toolbox = load_toolbox
         self._handlers = KnowledgeToolHandlers(
-            None, build_mcp_tools(KNOWLEDGE_TOOL_SPECS), recorder
+            None, build_mcp_tools(KNOWLEDGE_TOOL_SPECS, workspace is not None), recorder, workspace
         )
         self._server = build_mcp_server(self._handlers, dataset_kind)
         self._initialized = anyio.Event()
@@ -141,8 +143,9 @@ async def run_stdio_server(
     load_toolbox: Callable[[], KnowledgeToolbox],
     dataset_kind: ServedDatasetKind,
     recorder: SessionRecording | None = None,
+    workspace: WorkspaceInvestigations | None = None,
 ) -> int:
-    return await StdioServer(load_toolbox, dataset_kind, recorder).run()
+    return await StdioServer(load_toolbox, dataset_kind, recorder, workspace).run()
 
 
 def serve_stdio(
@@ -150,9 +153,10 @@ def serve_stdio(
     *,
     dataset_kind: ServedDatasetKind,
     recorder: SessionRecording | None = None,
+    workspace: WorkspaceInvestigations | None = None,
 ) -> int:
     """Serve static MCP metadata immediately and tools once ``load_toolbox`` completes."""
     try:
-        return anyio.run(run_stdio_server, load_toolbox, dataset_kind, recorder)
+        return anyio.run(run_stdio_server, load_toolbox, dataset_kind, recorder, workspace)
     except KeyboardInterrupt:
         return 0

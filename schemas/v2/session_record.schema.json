@@ -1,5 +1,6 @@
 {
   "$defs": {
+    "JsonValue": {},
     "ServedDataset": {
       "additionalProperties": false,
       "description": "What the deployment's CVE records and evidence are. ``cve_search_version`` is the\n``cve_search`` capability's version: equal versions name byte-for-byte equal records\nand evidence, so a set sealed under one verifies under the other.",
@@ -130,8 +131,8 @@
       "type": "integer"
     },
     "contract_version": {
-      "const": "2.0.0-dev.50",
-      "default": "2.0.0-dev.50",
+      "const": "2.0.0-dev.51",
+      "default": "2.0.0-dev.51",
       "title": "Contract Version",
       "type": "string"
     },
@@ -168,6 +169,28 @@
       "title": "Name",
       "type": "string"
     },
+    "origin": {
+      "default": "manual",
+      "enum": [
+        "triage",
+        "manual"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "request_key": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9._-]{1,64}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Key"
+    },
     "scope": {
       "anyOf": [
         {
@@ -179,6 +202,21 @@
       ],
       "default": null,
       "title": "Scope"
+    },
+    "triage_request": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Triage Request"
     }
   },
   "required": [
@@ -189,7 +227,10 @@
     "scope",
     "dataset",
     "contract_version",
-    "call_limit"
+    "call_limit",
+    "request_key",
+    "origin",
+    "triage_request"
   ],
   "title": "SessionRecord",
   "type": "object"

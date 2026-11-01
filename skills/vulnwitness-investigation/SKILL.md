@@ -115,7 +115,7 @@ Use these exact values when interpreting responses. Do not assign new verdicts.
 | Topic review | `reviewed`, `pending_review` |
 | Result status | `ok`, `no_match`, `partial`, `incomplete_index`, `source_unavailable`, `backend_error`, `policy_blocked` |
 | Stop reason | `sufficient`, `no_evidence`, `budget_exhausted`, `source_unavailable`, `policy_blocked`, `invalid_evidence`, `needs_unmet` |
-| Tool failure | `invalid_arguments`, `invalid_cursor`, `arguments_too_large`, `unknown_evidence_id`, `server_busy`, `data_loading`, `timed_out`, `response_too_large`, `integrity_check_failed`, `internal_error`, `filter_unsupported`, `session_call_limit`, `session_dataset_mismatch`, `session_recording_failed` |
+| Tool failure | `invalid_arguments`, `invalid_cursor`, `arguments_too_large`, `unknown_evidence_id`, `server_busy`, `data_loading`, `timed_out`, `response_too_large`, `integrity_check_failed`, `internal_error`, `filter_unsupported`, `session_call_limit`, `session_dataset_mismatch`, `session_recording_failed`, `investigations_not_enabled`, `unknown_investigation`, `investigation_busy`, `workspace_busy`, `request_key_conflict`, `workspace_full`, `investigation_interrupted`, `finding_id_conflict` |
 | Affectedness blocker | `blocked_unverified` |
 | Catalogue terminal | `no_attack_mapping` |
 
@@ -172,6 +172,9 @@ Write `DIR/findings.yaml` as the agent-authored conclusion document:
   affectedness or real-world truth of synthetic data. Workflow authors may write only
   deterministic kinds as unconfirmed. A user or agent takes authorship to confirm one.
   Status never supplies verification.
+- `supersedes`: optional earlier finding ID for a revision. Keep the original entry;
+  checks and reports use only effective findings and report the superseded count.
+  Each target can be superseded once; use a new finding ID for each revision.
 - `claim`: required for the six deterministic kinds and forbidden on narrative findings.
   Include the same kind and actual call. Copy exact returned values: CVE/vendor/product
   for a product match; CVE and phrase for a description mention; CVE, version, mention,

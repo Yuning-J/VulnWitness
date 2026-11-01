@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "query": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]*$(?!\\n)",
+      "title": "Query",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "pattern": "^inv_[a-z2-7]{20}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "title": "WorkspaceConceptResolutionRequest",
+  "type": "object"
+}

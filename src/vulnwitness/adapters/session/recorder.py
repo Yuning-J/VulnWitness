@@ -1,7 +1,9 @@
 """Record a call before releasing its answer; serialize writers with a file lock."""
 
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Literal, TypeVar
 
@@ -15,6 +17,7 @@ from vulnwitness.adapters.session.files import (
     read_session_file,
 )
 from vulnwitness.adapters.session.validation import parse_session_document
+from vulnwitness.domain.hashing import sha256_hex
 from vulnwitness.domain.session_record import (
     SessionCall,
     SessionDatasetIdentity,
@@ -44,7 +47,13 @@ class SessionRecorder:
         call_limit: int | None = None,
         goal: str | None = None,
         scope: str | None = None,
+        lock: Callable[[], AbstractContextManager[None]] | None = None,
+        allow_incomplete_triage: bool = False,
+        record_response_digest: bool = False,
     ) -> None:
+        self._lock = lock or partial(hold_session_lock, directory)
+        self._allow_incomplete_triage = allow_incomplete_triage
+        self._record_response_digest = record_response_digest
         self.directory = directory
         self._dataset = dataset
         self._clock = clock
@@ -64,7 +73,7 @@ class SessionRecorder:
         try:
             check_session_path(self.directory, self._store_root)
             make_private_directory(self.directory)
-            with hold_session_lock(self.directory):
+            with self._lock():
                 session = self._open_session()
                 sequence = self._next_sequence(session)
                 started_at = self._clock()
@@ -79,6 +88,9 @@ class SessionRecorder:
                     outcome=outcome,
                     response_file=f"responses/{sequence:04d}.json",
                     response_schema=response_schema,
+                    response_sha256=(
+                        sha256_hex(response_bytes) if self._record_response_digest else None
+                    ),
                     started_at=started_at,
                     finished_at=self._clock(),
                 )
@@ -97,6 +109,12 @@ class SessionRecorder:
         session_file = self.directory / "session.json"
         if session_file.exists() or session_file.is_symlink():
             session = parse_session_document(read_session_file(session_file), SessionRecord)
+            if (
+                session.origin == "triage"
+                and not (self.directory / "triage.json").is_file()
+                and not self._allow_incomplete_triage
+            ):
+                raise SessionRecordingError(ToolFailureCode.INVESTIGATION_INTERRUPTED)
             if session.dataset != self._dataset:
                 raise SessionRecordingError(ToolFailureCode.SESSION_DATASET_MISMATCH)
             if self._call_limit is not None and self._call_limit != session.call_limit:

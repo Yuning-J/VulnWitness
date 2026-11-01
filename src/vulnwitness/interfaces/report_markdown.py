@@ -102,4 +102,6 @@ def render_markdown_report(report: SessionReport) -> str:
         lines.extend(("> **Synthetic demonstration data**", ""))
     for section in report.sections:
         lines.append(render_markdown_section(section, 2))
+    if report.input_digest is not None:
+        lines.append("\nReport input digest: " + report.input_digest)
     return "\n".join(lines).rstrip() + "\n"

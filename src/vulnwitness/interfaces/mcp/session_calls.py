@@ -51,6 +51,7 @@ def record_tool_call(
     toolbox: KnowledgeToolbox | None,
     name: str,
     arguments: dict[str, object] | None,
+    refusal: ToolFailureCode | None = None,
 ) -> ToolAnswer | ToolFailure:
     request: dict[str, JsonValue] | None = None
     response_schema = "SessionResponse"
@@ -68,6 +69,8 @@ def record_tool_call(
     operation: Callable[[], ToolAnswer | ToolFailure] = partial(
         invoke_tool, toolbox, name, arguments
     )
+    if refusal is not None:
+        operation = partial(build_tool_failure, refusal)
     encoder: Callable[
         [ToolAnswer | ToolFailure], tuple[bytes, Literal["ok"] | ToolFailureCode, str]
     ] = partial(encode_named_tool_answer, response_schema)

@@ -43,6 +43,9 @@ from vulnwitness.domain.tool_contracts import (
 from vulnwitness.domain.topic import ProtocolTopic
 from vulnwitness.domain.topic_context import TopicContextRequest, TopicContextResponse
 from vulnwitness.domain.triage import TriageSummary
+from vulnwitness.domain.workspace import ReportRecord, RequestRecord, TriageStarted
+from vulnwitness.domain.workspace_knowledge import WORKSPACE_KNOWLEDGE_MODELS
+from vulnwitness.interfaces.mcp.workspace_tools import WORKSPACE_TOOL_SPECS
 
 MANIFEST_FILE = "manifest.json"
 # The evidence-set schema relies on ``prefixItems``, which earlier drafts read differently.
@@ -93,6 +96,17 @@ RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
     "migration_report": MigrationReport,
     "store_status": StoreStatus,
 }
+
+
+for workspace_spec in WORKSPACE_TOOL_SPECS:
+    REQUEST_CONTRACTS[workspace_spec.name + "_request"] = workspace_spec.request_model
+    RESPONSE_CONTRACTS[workspace_spec.name + "_response"] = workspace_spec.response_model
+for contract_name, request_model in tuple(REQUEST_CONTRACTS.items()):
+    if request_model in WORKSPACE_KNOWLEDGE_MODELS:
+        REQUEST_CONTRACTS["workspace_" + contract_name] = WORKSPACE_KNOWLEDGE_MODELS[request_model]
+RESPONSE_CONTRACTS["workspace_request_record"] = RequestRecord
+RESPONSE_CONTRACTS["triage_started"] = TriageStarted
+RESPONSE_CONTRACTS["report_record"] = ReportRecord
 
 
 class PublishedJsonSchema(GenerateJsonSchema):

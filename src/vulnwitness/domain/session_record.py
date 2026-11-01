@@ -59,6 +59,9 @@ class SessionRecord(ContractModel):
     dataset: SessionDatasetIdentity
     contract_version: SchemaVersion = SCHEMA_VERSION
     call_limit: JsonInteger = Field(default=100, ge=1, le=100)
+    request_key: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
+    origin: Literal["triage", "manual"] = "manual"
+    triage_request: dict[str, JsonValue] | None = None
 
 
 class SessionCall(ContractModel):
@@ -72,6 +75,7 @@ class SessionCall(ContractModel):
     outcome: Literal["ok"] | ToolFailureCode
     response_file: str = Field(pattern=r"^responses/[0-9]{4}\.json$")
     response_schema: str = Field(min_length=1, max_length=128)
+    response_sha256: Digest | None = None
     started_at: Timestamp
     finished_at: Timestamp
 
@@ -149,6 +153,7 @@ class SessionFinding(ContractModel):
     ]
     status: Literal["confirmed", "unconfirmed"]
     citations: tuple[SessionCitation, ...]
+    supersedes: str | None = Field(default=None, min_length=1, max_length=128)
 
     @model_validator(mode="after")
     def check_authorship_and_statement(self) -> Self:
@@ -193,11 +198,29 @@ class SessionFindings(ContractModel):
     @model_validator(mode="after")
     def check_unique_ids(self) -> Self:
         finding_ids: set[str] = set()
+        superseded_ids: set[str] = set()
         for finding in self.findings:
             if finding.id in finding_ids:
                 raise ValueError("finding IDs must be unique")
+            if finding.supersedes is not None:
+                if finding.supersedes not in finding_ids:
+                    raise ValueError("supersedes must name an earlier finding")
+                if finding.supersedes in superseded_ids:
+                    raise ValueError("a finding may be superseded only once")
+                superseded_ids.add(finding.supersedes)
             finding_ids.add(finding.id)
         return self
+
+    def effective_findings(self) -> tuple[SessionFinding, ...]:
+        superseded_ids: set[str] = set()
+        for finding in self.findings:
+            if finding.supersedes is not None:
+                superseded_ids.add(finding.supersedes)
+        effective: list[SessionFinding] = []
+        for finding in self.findings:
+            if finding.id not in superseded_ids:
+                effective.append(finding)
+        return tuple(effective)
 
 
 class SessionViolation(ContractModel):
@@ -243,6 +266,7 @@ class SessionCheckReport(ContractModel):
     citations: SessionCitationCheck
     claims: SessionClaimsCheck
     not_checked: SessionNotChecked
+    superseded_count: JsonInteger = Field(default=0, ge=0)
     support_limitation: Literal[
         "Free narrative is not checked. This check does not establish that a statement is "
         "supported by cited evidence or prove real-world truth."
