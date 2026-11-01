@@ -39,7 +39,12 @@ export CVE_KGRAG_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_ur
 cve-kgrag api
 ```
 
-Fetching takes about two hours; loading a full store needs substantial time and memory.
+The synthetic fixture needs no corpus download. For the full NVD corpus, a machine with
+16 GB of RAM or more is recommended; the minimum has not been determined. One full load
+took time and used resident memory (memory
+footprint); a container ran out of memory while loading.
+A store and its import use disk, and feeds and rollback
+copies need space too. The first full fetch completed.
 Keep the server running for repeated queries. Restart after activation or rollback.
 The [runbook](docs/runbook.md) covers local-feed reuse, sizing and recovery.
 
