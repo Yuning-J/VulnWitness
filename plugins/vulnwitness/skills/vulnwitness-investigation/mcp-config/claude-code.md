@@ -1,6 +1,11 @@
 <!-- Format checked 2026-11-01: https://code.claude.com/docs/en/mcp -->
 # Claude Code
 
+For the plugin, run `claude --plugin-dir plugins/vulnwitness` from the repository
+root after installing `vulnwitness[mcp]` (acceptance in Claude Code pending).
+The plugin supplies the canonical Skill, analyst, MCP server and optional hooks.
+The direct configurations below have no plugin hooks.
+
 Merge into project-root `.mcp.json`. The public documentation defines
 `mcpServers` entries with stdio `command`, `args`, and `env`.
 The client format is verified from documentation; application loading is unverified.

@@ -425,7 +425,10 @@ def test_shipped_example_has_verified_claims_and_resolved_citations(
 ) -> None:
     # Arrange
     directory = tmp_path / "example"
-    template = REPOSITORY_ROOT / "skills/vulnwitness-investigation/examples/findings.example.yaml"
+    template = (
+        REPOSITORY_ROOT
+        / "plugins/vulnwitness/skills/vulnwitness-investigation/examples/findings.example.yaml"
+    )
 
     # Act
     triage_exit = main(

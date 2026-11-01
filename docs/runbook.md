@@ -444,3 +444,58 @@ delivery, with explicit limits on what is established. A passing check is never 
 answer. In Claude Code the interactive forms are `/server:prompt` and `@server:uri`;
 use the actual server name shown by that client. Headless prompt and resource presentation
 requires separate client acceptance testing.
+
+## Claude Code plugin
+
+Install VulnWitness from a checkout (`uv sync --locked`) and either put `vulnwitness` on
+`PATH` or set `VULNWITNESS_BIN=<checkout>/.venv/bin/vulnwitness`. From the repository
+root, test locally with:
+
+```sh
+claude --plugin-dir plugins/vulnwitness
+```
+
+Status: **acceptance in Claude Code pending**. This session-local command needs no
+global settings changes. The self-contained plugin can also be installed through
+Claude Code's plugin manager once distributed through a plugin marketplace.
+The canonical Skill is `plugins/vulnwitness/skills/vulnwitness-investigation/`;
+direct MCP clients use that same source and their adjacent `mcp-config/` snippets.
+The plugin registers server `plugin:vulnwitness:vulnwitness` and tools prefixed
+`mcp__plugin_vulnwitness_vulnwitness__`. Its analyst has access only to those tools.
+
+The executable is `VULNWITNESS_BIN`, or `vulnwitness` on PATH. The workspace defaults
+to `$HOME/.vulnwitness/workspace`; set `VULNWITNESS_WORKSPACE` to an absolute private
+path outside any store root to override it. The wrapper unsets store and snapshot
+paths, snapshot identities, planner variables and semantic enablement, serving
+packaged synthetic demo data reproducibly. To use operator-configured real data,
+set `VULNWITNESS_PLUGIN_REAL_DATA=1` before starting Claude Code; this preserves
+those environment settings. The check command reads saved records without loading
+the store, even in real-data mode.
+
+PostToolUse extracts returned investigation IDs from this plugin's tool responses
+into `${CLAUDE_PLUGIN_DATA}/conversations/<Claude-session-id>.json`. It accepts JSON
+objects/strings, MCP text content and structuredContent defensively; live response
+shape and hook firing still require C5 acceptance. Neither hook parses transcripts
+or scans modification times. Stop checks only recorded IDs whose input digest
+changed, binding session metadata, findings, calls and response bytes. Digests are
+private hook freshness markers, separate from report freshness digests. It runs
+`vulnwitness session check <workspace>/<id> --format json` using the same binary
+discovery as the wrapper, reusing the package's checker without importing it into
+the standard-library-only hooks. Each command has a 15-second limit, with a
+45-second total check budget and a 60-second Claude hook timeout.
+
+Failed layers block once per changed record, naming the investigation, layers
+and up to five violations. The digest is saved before blocking; an unchanged Stop
+cannot block again. `stop_hook_active` also prevents continuation loops. Missing
+executables, malformed inputs, concurrent state locks and other hook errors fail
+open and log their exception type to `${CLAUDE_PLUGIN_DATA}/hooks.log`; failed
+executions do not advance the checked digest. State locks wait at most one second; a longer contention can skip an event.
+The checker subprocess does not hold the conversation lock.
+These checks cover the record, citations and structured claims; they do not verify narrative.
+Passing checks do not establish source support, source authenticity, real-world
+truth or deployed applicability. Unreturned investigation IDs are outside hook
+coverage. Other clients have no hook and must explicitly check before delivery.
+
+To disable both hooks, set `plugins/vulnwitness/hooks/hooks.json` to
+`{"hooks": {}}` in a local plugin copy and restart Claude Code with that copy.
+Loading the direct MCP snippet instead of the plugin also omits them.

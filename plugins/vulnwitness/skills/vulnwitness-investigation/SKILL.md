@@ -10,7 +10,10 @@ description: Run recorded product triage and telecom investigations through the 
 Establish the product/vendor, component, version and scope from the request; ask
 only for missing details that matter. Mark unspecified details as unknown and
 agree useful page/lookup limits. Do not infer a deployed version or package URL.
-Connect with a [workspace client snippet](mcp-config/README.md):
+In Claude Code, load `claude --plugin-dir plugins/vulnwitness` from the repository
+(acceptance in Claude Code pending). Plugin tool names are
+`mcp__plugin_vulnwitness_vulnwitness__<tool>`. Other clients use the same canonical
+Skill here and have no plugin hooks. Connect with a [workspace client snippet](mcp-config/README.md):
 `vulnwitness mcp --workspace ~/.vulnwitness/workspace`.
 The private workspace is outside the store; tools take opaque IDs, never paths.
 Do not combine workspace and recording modes. Client snippets are not yet tested
@@ -173,7 +176,7 @@ status; use `list_investigations` to discover records if necessary.
 
 ## Findings and the exact meaning of checks
 
-The [request schema](../../schemas/v2/add_findings_request.schema.json) defines
+The `vulnwitness://schemas/add_findings_request.schema.json` resource defines
 `findings`: each entry has a client `id`, `kind`, `status`, `citations`, and a
 structured `claim` or narrative `statement`. The server fixes `author` to `agent`.
 For deterministic kinds, copy actual call numbers and returned claim fields; omit

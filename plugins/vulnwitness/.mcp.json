@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "vulnwitness": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/vulnwitness-mcp"
+    }
+  }
+}

@@ -1,5 +1,11 @@
 # Client configuration snippets
 
+The canonical Skill lives in `plugins/vulnwitness/skills/vulnwitness-investigation/`.
+Claude Code can load its containing plugin with
+`claude --plugin-dir plugins/vulnwitness` from the repository root
+(acceptance in Claude Code pending). The snippets below connect directly without
+plugin hooks; Codex and Cursor use the Skill from this same location.
+
 Install the package with its `mcp` extra in the environment that supplies
 `vulnwitness`. Use an absolute executable path if the client cannot find it on PATH.
 Choose [Claude Code](claude-code.md), [Codex](codex.md), or [Cursor](cursor.md).

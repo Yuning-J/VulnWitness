@@ -23,7 +23,7 @@ PATH_EXCEPTIONS = {
     "docs/rebuild/m7b-results-*.md": "Holdout results; never read by the name guard.",
     "tests/contract/data/**": "Recorded compatibility and third-party data have pinned bytes.",
     "src/vulnwitness/fixtures/**": "Packaged data and notices are pinned by fixture manifests.",
-    "skills/vulnwitness-investigation/examples/findings.example.yaml": (
+    "plugins/vulnwitness/skills/vulnwitness-investigation/examples/findings.example.yaml": (
         "Recorded findings retain evidence IDs and their original reproduction commands."
     ),
     "docs/rebuild/m6-exit-audit.md": "Dated M6 exit audit records the commands verified then.",

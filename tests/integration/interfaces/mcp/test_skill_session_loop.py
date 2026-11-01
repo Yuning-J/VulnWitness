@@ -33,7 +33,10 @@ async def test_mcp_product_and_lookup_findings_pass_and_a_broken_citation_fails(
         args=["mcp", "--session", str(directory)],
         env=environment,
     )
-    template = REPOSITORY_ROOT / "skills/vulnwitness-investigation/templates/findings.yaml"
+    template = (
+        REPOSITORY_ROOT
+        / "plugins/vulnwitness/skills/vulnwitness-investigation/templates/findings.yaml"
+    )
 
     # Act
     async with observe_stdio_client(server) as (client, stderr):

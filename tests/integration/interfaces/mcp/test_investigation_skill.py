@@ -33,7 +33,7 @@ from vulnwitness.interfaces.mcp.server import build_knowledge_mcp_server
 from vulnwitness.interfaces.mcp.workspace_tools import WORKSPACE_TOOL_SPECS
 from vulnwitness.schema_snapshots import REQUEST_CONTRACTS
 
-SKILL_DIRECTORY = REPOSITORY_ROOT / "skills" / "vulnwitness-investigation"
+SKILL_DIRECTORY = REPOSITORY_ROOT / "plugins/vulnwitness/skills/vulnwitness-investigation"
 
 
 def enum_values(enum_type: type[StrEnum]) -> set[str]:

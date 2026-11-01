@@ -237,14 +237,37 @@ references use `@server:uri`. These are client presentation conventions, not wor
 execution inside the server. MCP descriptors use the SDK's protocol models; this project
 does not snapshot descriptor schemas, so this surface adds no committed schema change.
 
-The Claude Code plugin default is `~/.vulnwitness/workspace`, overridable by the operator.
-Its demo configuration explicitly unsets operator data settings. Skill documentation,
-plugin packaging, prompts, resources and hooks are separate packages. Plugin formats are
-checked against official client documentation when implemented. The Stop hook collects
-returned investigation IDs from the conversation transcript, checks only records whose
-input digest changed since its last check, and stores per-conversation state under the
-workspace. It never scans modification times. It blocks once with loop protection and
-speaks only of record, citation and structured-claim checks.
+### Claude Code plugin
+
+`plugins/vulnwitness/` is self-contained: a manifest, MCP wrapper, canonical
+investigation Skill, restricted analyst and standard-library Python hooks. Other
+clients reference the same Skill source. The wrapper discovers `VULNWITNESS_BIN`
+or `vulnwitness` on PATH and serves a private workspace at
+`~/.vulnwitness/workspace`, overridden with `VULNWITNESS_WORKSPACE`. Demo mode
+unsets operator data, snapshot identities and planner settings and disables
+inherited semantic enablement. `VULNWITNESS_PLUGIN_REAL_DATA=1` preserves them.
+The MCP server name yields `mcp__plugin_vulnwitness_vulnwitness__*` tools; the
+analyst is restricted to that pattern and uses no agent-local server or hooks.
+
+PostToolUse collects validated returned investigation IDs from JSON envelopes,
+MCP text content and structuredContent. Both hooks share atomic, locked state at
+`${CLAUDE_PLUGIN_DATA}/conversations/<Claude-session-id>.json`. They never parse
+transcripts or scan modification times. Stop hashes session metadata, findings,
+calls and responses as checker inputs, independently of report freshness. Only a
+changed input set runs the CLI's existing layered checker. This subprocess boundary
+keeps hooks standard-library-only and respects the operator's executable choice;
+`session check` loads no deployment corpus. Successful executions save the digest,
+including failed check layers, before returning a block decision. Unchanged inputs
+and `stop_hook_active` do not block. A concurrent input change is retried on the
+next Stop. Per-command and total budgets fit within the explicit hook timeout.
+
+Hook errors fail open and log only their exception type under plugin data. Lock
+contention can skip an event; investigations not returned by tools are outside
+coverage. Checks cover record consistency, citation resolution and structured
+claims, never narrative, source support, source authenticity, real-world truth or
+deployed applicability. Local plugin validation and subprocess tests do not prove
+client acceptance: response shape, hook firing and prompt/resource availability
+remain for C5. The runbook documents loading, opt-in real data and disabling hooks.
 
 Acceptance uses an isolated Claude Code run on demo data, followed by a manual owner pass.
 The evidence covers discovery, triage, report delivery, tool-authored wrong citations and
