@@ -80,6 +80,9 @@ from cve_kgrag.adapters.mitre.mapping_file import (
     write_mapping_file,
 )
 from cve_kgrag.adapters.regular_files import NotARegularFileError, open_regular_file
+from cve_kgrag.adapters.session.check import SessionChecker, render_session_check
+from cve_kgrag.adapters.session.files import check_session_path
+from cve_kgrag.adapters.session.recorder import SessionRecorder
 from cve_kgrag.adapters.store.store_activation import StoreActivation, describe_identity
 from cve_kgrag.adapters.store.store_root import lies_in_store_root
 from cve_kgrag.application.affectedness import check_affectedness
@@ -136,6 +139,7 @@ from cve_kgrag.domain.search import (
     UnsupportedFilter,
 )
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
+from cve_kgrag.domain.session_response import SessionVerificationRequest
 from cve_kgrag.domain.store_status import (
     STORE_OPERATION_FAILURE_MESSAGES,
     ActiveStoreCondition,
@@ -147,6 +151,7 @@ from cve_kgrag.domain.store_status import (
 from cve_kgrag.domain.taxonomy import ResultStatus
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.tool_contracts import (
+    CapabilitiesRequest,
     ConceptResolution,
     ConceptResolutionRequest,
     CveLookupRequest,
@@ -190,6 +195,11 @@ from cve_kgrag.evaluation.planner_runner import (
     run_planner_evaluation,
 )
 from cve_kgrag.evaluation.result_directory import ResultDirectory
+from cve_kgrag.interfaces.cli_session import (
+    SESSION_CLI_COMMANDS,
+    SessionCli,
+    build_simple_session_request,
+)
 from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
 from cve_kgrag.interfaces.knowledge_toolbox import (
     UNSUPPORTED_FILTER_ERROR,
@@ -632,6 +642,24 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    session_parser = commands.add_parser("session", help="check an investigation session")
+    session_commands = session_parser.add_subparsers(dest="session_command", required=True)
+    session_check_parser = session_commands.add_parser("check", help="check files and citations")
+    session_check_parser.add_argument("directory", type=Path)
+    session_check_parser.add_argument("--format", choices=("json", "text"), default="json")
+    for command_name in (*SESSION_CLI_COMMANDS, "mcp"):
+        command_parser = commands.choices[command_name]
+        command_parser.add_argument("--session", type=Path, metavar="DIR")
+        command_parser.add_argument(
+            "--session-call-limit",
+            type=int,
+            choices=range(1, 101),
+            metavar="1..100",
+            help="new session's call limit (default 100); existing limits cannot change",
+        )
+        command_parser.add_argument("--session-goal", help="optional goal for a new session")
+        command_parser.add_argument("--session-scope", help="optional scope for a new session")
+
     schema_parser = commands.add_parser("schema", help="export or check v2 JSON Schema snapshots")
     schema_parser.add_argument("action", choices=("export", "check"))
     schema_parser.add_argument("--dir", type=Path, default=DEFAULT_SCHEMA_DIR)
@@ -884,6 +912,17 @@ def run_evidence_lookup(evidence_id: str, deployment: InvestigationDeployment) -
     return 0
 
 
+def build_product_output_options(arguments: argparse.Namespace) -> ProductOutputOptions:
+    return ProductOutputOptions(
+        output_format=arguments.format,
+        all_pages=arguments.all,
+        max_pages=arguments.max_pages,
+        output=arguments.output,
+        export=arguments.export,
+        force=arguments.force,
+    )
+
+
 def run_product_query(
     request: ProductQueryRequest, store_root: Path | None, options: ProductOutputOptions
 ) -> int:
@@ -903,7 +942,7 @@ def run_product_query(
         time.monotonic() - started_at,
     )
     try:
-        pages = collect_product_pages(service, request, options)
+        pages = collect_product_pages(service.query, request, options)
         return print_product_pages(pages, options)
     except InvalidProductCursor:
         print(
@@ -1576,6 +1615,112 @@ def run_schema_command(action: str, schema_dir: Path) -> int:
     return 1 if drift else 0
 
 
+def create_session_recorder(
+    arguments: argparse.Namespace,
+    settings: ServiceSettings,
+    data_plane: ServingDataPlane,
+) -> SessionRecorder:
+    return SessionRecorder(
+        arguments.session,
+        data_plane.session_dataset,
+        utc_now,
+        store_root=settings.store_root,
+        call_limit=arguments.session_call_limit,
+        goal=arguments.session_goal,
+        scope=arguments.session_scope,
+    )
+
+
+def run_recorded_mcp(
+    parser: argparse.ArgumentParser,
+    arguments: argparse.Namespace,
+    settings: ServiceSettings,
+) -> int:
+    token = require_http_token(parser, settings.http, "mcp --http") if arguments.http else None
+    start_service_logging(settings, "mcp")
+    data_plane = load_data_plane_or_exit("mcp", settings)
+    recorder = create_session_recorder(arguments, settings, data_plane)
+    if token is not None:
+        http_runner = discover_mcp_http_server_runner()
+        if isinstance(http_runner, InterfaceUnavailable):
+            print(f"cve-kgrag mcp cannot start: {http_runner.detail}", file=sys.stderr)
+            return 1
+        return (
+            0
+            if http_runner(
+                build_knowledge_toolbox(data_plane),
+                host=settings.http.host,
+                port=settings.http.mcp_port,
+                token=token,
+                recorder=recorder,
+            )
+            else 1
+        )
+    runner = discover_mcp_server_runner()
+    if isinstance(runner, InterfaceUnavailable):
+        print(f"cve-kgrag mcp cannot start: {runner.detail}", file=sys.stderr)
+        return 1
+    return runner(
+        partial(build_knowledge_toolbox, data_plane),
+        dataset_kind=data_plane.served_dataset.kind,
+        recorder=recorder,
+    )
+
+
+def run_recorded_cli(
+    parser: argparse.ArgumentParser,
+    arguments: argparse.Namespace,
+    settings: ServiceSettings,
+) -> int:
+    if getattr(arguments, "format", "json") != "json":
+        parser.error("--session requires --format json; --format text cannot be recorded")
+    command = arguments.command
+    request: ContractModel
+    if command == "search":
+        request = build_search_request(parser, arguments)
+    elif command == "investigate":
+        request = build_investigation_request(parser, arguments)
+    elif command == "capabilities":
+        request = CapabilitiesRequest()
+    elif command == "verify":
+        request = SessionVerificationRequest(file=str(arguments.evidence_set_path))
+    else:
+        try:
+            request = build_simple_session_request(arguments)
+        except ValidationError as error:
+            parser.error("; ".join(list_validation_problems(error)))
+        except ValueError as error:
+            parser.error(str(error))
+    product_options = None
+    if isinstance(request, ProductQueryRequest):
+        product_options = build_product_output_options(arguments)
+        try:
+            validate_product_output(request, product_options)
+        except ValueError as error:
+            print(f"cve-kgrag product: {error}", file=sys.stderr)
+            return 2
+    data_plane = load_data_plane_or_exit(
+        command,
+        settings,
+        choose_semantic_settings(settings, arguments) if hasattr(arguments, "semantic") else None,
+    )
+    session_cli = SessionCli(
+        create_session_recorder(arguments, settings, data_plane),
+        build_investigation_deployment(data_plane),
+        build_investigation_service(
+            data_plane, planner_setup=discover_planner_setup(settings.model_planner)
+        ),
+    )
+    if command == "verify":
+        evidence_bytes = read_evidence_set_file(parser, arguments.evidence_set_path)
+        check_set = build_evidence_set_check(data_plane, settings.model_planner)
+        return session_cli.run(command, request, partial(check_set, evidence_bytes))
+    if isinstance(request, ProductQueryRequest):
+        assert product_options is not None
+        return session_cli.run_product(request, product_options)
+    return session_cli.run(command, request)
+
+
 def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | None = None) -> int:
     """Run the command ``argv`` names, with the settings ``environment`` holds (the process
     environment by default; ``cve_kgrag.settings``). Invalid settings are a usage error.
@@ -1583,13 +1728,35 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     A command loads only what its row of ADR 0009 §10 names, so a configured store that
     is missing or broken fails only the commands that serve it: ``schema``, ``migrate``,
     ``store``, ``resolve`` and ``affectedness`` load no served corpus, and ``demo`` and
-    ``eval planner`` always use the packaged fixture."""
+    ``eval planner`` always use the packaged fixture. With ``--session``, data commands
+    load the complete data plane to bind all calls to the same corpus and snapshots.
+    ``session check`` reads only the session directory."""
     parser = build_parser()
     arguments = parser.parse_args(argv)
     try:
         settings = load_settings(os.environ if environment is None else environment)
     except SettingsError as error:
         parser.error(str(error))
+    if arguments.command == "session":
+        report = SessionChecker(arguments.directory).check()
+        print(
+            render_session_check(report)
+            if arguments.format == "text"
+            else report.model_dump_json(indent=2)
+        )
+        return 0 if report.passed else 1
+    session_directory = getattr(arguments, "session", None)
+    if session_directory is not None:
+        try:
+            check_session_path(session_directory, settings.store_root)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        if arguments.command == "mcp":
+            return run_recorded_mcp(parser, arguments, settings)
+        return run_recorded_cli(parser, arguments, settings)
+    for session_option in ("session_call_limit", "session_goal", "session_scope"):
+        if getattr(arguments, session_option, None) is not None:
+            parser.error("session metadata options require --session")
     if arguments.command == "mitre":
         return run_mitre_build_command(arguments)
     if arguments.command == "schema":
@@ -1663,14 +1830,7 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         return run_product_query(
             product_request,
             settings.store_root,
-            ProductOutputOptions(
-                output_format=arguments.format,
-                all_pages=arguments.all,
-                max_pages=arguments.max_pages,
-                output=arguments.output,
-                export=arguments.export,
-                force=arguments.force,
-            ),
+            build_product_output_options(arguments),
         )
     if arguments.command == "search":
         search_request = build_search_request(parser, arguments)

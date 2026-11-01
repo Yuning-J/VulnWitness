@@ -23,6 +23,9 @@ from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, build_tool_f
 # Each failure's status over REST (ADR 0007, decision 8). MCP answers a failure with the
 # tool's error result instead.
 TOOL_FAILURE_STATUSES: dict[ToolFailureCode, int] = {
+    ToolFailureCode.SESSION_CALL_LIMIT: 429,
+    ToolFailureCode.SESSION_DATASET_MISMATCH: 409,
+    ToolFailureCode.SESSION_RECORDING_FAILED: 500,
     ToolFailureCode.INVALID_ARGUMENTS: 422,
     ToolFailureCode.INVALID_CURSOR: 422,
     ToolFailureCode.ARGUMENTS_TOO_LARGE: 413,

@@ -102,6 +102,9 @@ class EvidenceLookup(ContractModel):
 
 
 class ToolFailureCode(StrEnum):
+    SESSION_CALL_LIMIT = "session_call_limit"
+    SESSION_DATASET_MISMATCH = "session_dataset_mismatch"
+    SESSION_RECORDING_FAILED = "session_recording_failed"
     INVALID_ARGUMENTS = "invalid_arguments"
     INVALID_CURSOR = "invalid_cursor"
     ARGUMENTS_TOO_LARGE = "arguments_too_large"
@@ -117,6 +120,11 @@ class ToolFailureCode(StrEnum):
 
 # The one sentence a failure of each code carries; it never quotes the caller's input.
 TOOL_FAILURE_MESSAGES: dict[ToolFailureCode, str] = {
+    ToolFailureCode.SESSION_CALL_LIMIT: "The session call limit has been reached.",
+    ToolFailureCode.SESSION_DATASET_MISMATCH: (
+        "The served dataset differs from the session dataset."
+    ),
+    ToolFailureCode.SESSION_RECORDING_FAILED: "The requested session could not be recorded.",
     ToolFailureCode.INVALID_ARGUMENTS: "The arguments do not match the tool's input schema.",
     ToolFailureCode.INVALID_CURSOR: "The cursor is invalid for this product query.",
     ToolFailureCode.ARGUMENTS_TOO_LARGE: "The arguments exceed the size limit.",

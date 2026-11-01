@@ -26,6 +26,9 @@
     },
     "ToolFailureCode": {
       "enum": [
+        "session_call_limit",
+        "session_dataset_mismatch",
+        "session_recording_failed",
         "invalid_arguments",
         "invalid_cursor",
         "arguments_too_large",
@@ -45,6 +48,54 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "session_call_limit"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The session call limit has been reached."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "session_dataset_mismatch"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The served dataset differs from the session dataset."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "session_recording_failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "message": {
+            "const": "The requested session could not be recorded."
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {
@@ -242,8 +293,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.46",
-      "default": "2.0.0-dev.46",
+      "const": "2.0.0-dev.47",
+      "default": "2.0.0-dev.47",
       "title": "Schema Version",
       "type": "string"
     },

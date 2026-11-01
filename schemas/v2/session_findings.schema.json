@@ -1,0 +1,205 @@
+{
+  "$defs": {
+    "ProductPaginationProgress": {
+      "additionalProperties": false,
+      "description": "Calls in one product-query chain, with the last page's continuation.",
+      "properties": {
+        "calls": {
+          "items": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "title": "Calls",
+          "type": "array"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Cursor"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Product"
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "calls",
+        "next_cursor",
+        "complete"
+      ],
+      "title": "ProductPaginationProgress",
+      "type": "object"
+    },
+    "SessionCitation": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "evidence_id": {
+          "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+          "title": "Evidence Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call",
+        "evidence_id"
+      ],
+      "title": "SessionCitation",
+      "type": "object"
+    },
+    "SessionFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/SessionCitation"
+          },
+          "title": "Citations",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "product_field_match",
+            "description_mention",
+            "catalogue_association",
+            "version_note",
+            "need_status",
+            "model_judgement",
+            "analyst_note"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "confirmed",
+            "unconfirmed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "kind",
+        "status",
+        "citations"
+      ],
+      "title": "SessionFinding",
+      "type": "object"
+    },
+    "SessionSelections": {
+      "additionalProperties": false,
+      "properties": {
+        "cve_ids": {
+          "default": [],
+          "items": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Cve Ids",
+          "type": "array"
+        },
+        "product_queries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProductPaginationProgress"
+          },
+          "title": "Product Queries",
+          "type": "array"
+        }
+      },
+      "title": "SessionSelections",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/SessionFinding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "open_questions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Open Questions",
+      "type": "array"
+    },
+    "selections": {
+      "$ref": "#/$defs/SessionSelections"
+    }
+  },
+  "required": [
+    "findings",
+    "selections",
+    "open_questions"
+  ],
+  "title": "SessionFindings",
+  "type": "object"
+}

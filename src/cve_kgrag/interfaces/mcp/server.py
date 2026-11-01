@@ -41,14 +41,16 @@ from cve_kgrag.interfaces.knowledge_tools import (
     ToolSpec,
     build_tool_failure,
 )
+from cve_kgrag.interfaces.mcp.session_calls import record_tool_call
+from cve_kgrag.ports.session_recording import SessionRecording
 from cve_kgrag.schema_snapshots import render_schema
 
 SERVER_NAME = "cve-kgrag"
 UNKNOWN_TOOL_MESSAGE = "unknown tool"
 # The SDK's sentence for parameters that fail its request model.
 INVALID_PARAMETERS_MESSAGE = "Invalid request parameters"
-# Every tool only reads the deployment's packaged sources: it changes nothing, answers an
-# equal request equally, and reaches no system outside the deployment.
+# Tools only read deployment knowledge. An operator-selected session records transport
+# facts privately; no tool exposes a write to the knowledge data or to authored findings.
 READ_ONLY_ANNOTATIONS = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False
 )
@@ -59,7 +61,13 @@ LifespanState = dict[str, Any]
 class KnowledgeToolHandlers:
     """The ``tools/list`` and ``tools/call`` handlers over one toolbox and its listing."""
 
-    def __init__(self, toolbox: KnowledgeToolbox | None, tools: tuple[Tool, ...]) -> None:
+    def __init__(
+        self,
+        toolbox: KnowledgeToolbox | None,
+        tools: tuple[Tool, ...],
+        recorder: SessionRecording | None = None,
+    ) -> None:
+        self._recorder = recorder
         self._toolbox = toolbox
         self._tools = tools
 
@@ -83,7 +91,11 @@ class KnowledgeToolHandlers:
         loaded, a name that is not one of the available tools is a JSON-RPC invalid
         params error with a fixed message, which never repeats the name."""
         tool_outcome: ToolAnswer | ToolFailure
-        if self._toolbox is None:
+        if self._recorder is not None:
+            tool_outcome = await anyio.to_thread.run_sync(
+                record_tool_call, self._recorder, self._toolbox, params.name, params.arguments
+            )
+        elif self._toolbox is None:
             tool_outcome = build_tool_failure(ToolFailureCode.DATA_LOADING)
         else:
             try:
@@ -103,6 +115,9 @@ class KnowledgeToolHandlers:
             return CallToolResult(
                 content=[TextContent(type="text", text=tool_outcome.model_dump_json())],
                 is_error=True,
+                structured_content=(
+                    tool_outcome.model_dump(mode="json") if self._recorder is not None else None
+                ),
             )
         return CallToolResult(
             content=[TextContent(type="text", text=tool_outcome.json_text)],
@@ -145,10 +160,12 @@ def build_mcp_tools(tool_specs: Sequence[ToolSpec]) -> tuple[Tool, ...]:
     return tuple(tools)
 
 
-def build_knowledge_mcp_server(toolbox: KnowledgeToolbox) -> Server[LifespanState]:
+def build_knowledge_mcp_server(
+    toolbox: KnowledgeToolbox, recorder: SessionRecording | None = None
+) -> Server[LifespanState]:
     """A server answering ``tools/list`` and ``tools/call`` over ``toolbox``; the listing is
     built once, here."""
-    handlers = KnowledgeToolHandlers(toolbox, build_mcp_tools(KNOWLEDGE_TOOL_SPECS))
+    handlers = KnowledgeToolHandlers(toolbox, build_mcp_tools(KNOWLEDGE_TOOL_SPECS), recorder)
     return build_mcp_server(handlers, toolbox.describe_served_dataset().kind)
 
 

@@ -38,6 +38,7 @@ from cve_kgrag.domain.cve import CveRecord
 from cve_kgrag.domain.evidence import EvidenceAnchor
 from cve_kgrag.domain.hashing import canonical_json_bytes, sha256_hex
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
+from cve_kgrag.domain.session_record import SessionCorpusIdentity
 from cve_kgrag.domain.taxonomy import KnowledgeScope
 from cve_kgrag.domain.validation import find_anchor_violations
 
@@ -90,6 +91,16 @@ class CorpusStore:
     corpus_content_sha256: str
     records: tuple[CveRecord, ...]
     evidence: tuple[EvidenceAnchor, ...]
+
+    store_name: str
+
+    def describe_session_corpus(self) -> SessionCorpusIdentity:
+        return SessionCorpusIdentity(
+            served=self.describe_served_dataset(),
+            store_name=self.store_name,
+            store_manifest_sha256=self.store_manifest_sha256,
+            corpus_content_sha256=self.corpus_content_sha256,
+        )
 
     def describe_served_dataset(self) -> ServedDataset:
         return ServedDataset(
@@ -364,6 +375,7 @@ def load_corpus_store(store_dir: Path) -> CorpusStore:
     records: list[CveRecord] = []
     verified_store = verify_store_files(store_dir, anchors.append, records.append)
     return CorpusStore(
+        store_name=store_dir.name,
         manifest=verified_store.manifest,
         store_manifest_sha256=verified_store.store_manifest_sha256,
         corpus_content_sha256=verified_store.corpus_content_sha256,

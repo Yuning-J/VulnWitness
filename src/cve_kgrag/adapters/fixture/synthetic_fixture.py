@@ -25,6 +25,7 @@ from cve_kgrag.domain.evidence import (
 )
 from cve_kgrag.domain.hashing import canonical_sha256, sha256_hex
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
+from cve_kgrag.domain.session_record import SessionCorpusIdentity
 from cve_kgrag.domain.taxonomy import (
     AssertionKind,
     KnowledgeScope,
@@ -60,6 +61,17 @@ class FixtureBundle:
     manifest: FixtureManifest
     records: tuple[CveRecord, ...]
     evidence: tuple[EvidenceAnchor, ...]
+
+    def describe_session_corpus(self) -> SessionCorpusIdentity:
+        records_digest = next(
+            file.sha256 for file in self.manifest.files if file.path == RECORDS_FILE
+        )
+        return SessionCorpusIdentity(
+            served=self.describe_served_dataset(),
+            store_name=None,
+            store_manifest_sha256=canonical_sha256(self.manifest.model_dump(mode="json")),
+            corpus_content_sha256=records_digest,
+        )
 
     def describe_served_dataset(self) -> ServedDataset:
         """The fixture, named by its ID, its version and the hash of its manifest, which

@@ -1,0 +1,232 @@
+{
+  "$defs": {
+    "JsonValue": {},
+    "ServedDataset": {
+      "additionalProperties": false,
+      "description": "What the deployment's CVE records and evidence are. ``cve_search_version`` is the\n``cve_search`` capability's version: equal versions name byte-for-byte equal records\nand evidence, so a set sealed under one verifies under the other.",
+      "properties": {
+        "cve_search_version": {
+          "minLength": 1,
+          "title": "Cve Search Version",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ServedDatasetKind"
+        }
+      },
+      "required": [
+        "kind",
+        "cve_search_version"
+      ],
+      "title": "ServedDataset",
+      "type": "object"
+    },
+    "ServedDatasetKind": {
+      "enum": [
+        "synthetic_fixture",
+        "corpus_store"
+      ],
+      "title": "ServedDatasetKind",
+      "type": "string"
+    },
+    "SessionDatasetIdentity": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "store_name": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "served": {
+            "properties": {
+              "kind": {
+                "const": "corpus_store"
+              }
+            }
+          }
+        }
+      },
+      "properties": {
+        "corpus_content_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Corpus Content Sha256",
+          "type": "string"
+        },
+        "fight_snapshot_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Fight Snapshot Sha256"
+        },
+        "mitre_snapshot_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mitre Snapshot Sha256"
+        },
+        "served": {
+          "$ref": "#/$defs/ServedDataset"
+        },
+        "store_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Store Manifest Sha256",
+          "type": "string"
+        },
+        "store_name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Store Name"
+        }
+      },
+      "required": [
+        "served",
+        "store_name",
+        "store_manifest_sha256",
+        "corpus_content_sha256",
+        "fight_snapshot_sha256",
+        "mitre_snapshot_sha256"
+      ],
+      "then": {
+        "properties": {
+          "store_name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "title": "SessionDatasetIdentity",
+      "type": "object"
+    },
+    "ToolFailureCode": {
+      "enum": [
+        "session_call_limit",
+        "session_dataset_mismatch",
+        "session_recording_failed",
+        "invalid_arguments",
+        "invalid_cursor",
+        "arguments_too_large",
+        "unknown_evidence_id",
+        "server_busy",
+        "data_loading",
+        "timed_out",
+        "response_too_large",
+        "integrity_check_failed",
+        "internal_error",
+        "filter_unsupported"
+      ],
+      "title": "ToolFailureCode",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "title": "Command",
+      "type": "string"
+    },
+    "dataset": {
+      "$ref": "#/$defs/SessionDatasetIdentity"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+      "title": "Finished At",
+      "type": "string"
+    },
+    "interface": {
+      "enum": [
+        "cli",
+        "mcp"
+      ],
+      "title": "Interface",
+      "type": "string"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "const": "ok",
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/ToolFailureCode"
+        }
+      ],
+      "title": "Outcome"
+    },
+    "request": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Validated request with defaults; null if argument validation failed.",
+      "title": "Request"
+    },
+    "response_file": {
+      "pattern": "^responses/[0-9]{4}\\.json$(?!\\n)",
+      "title": "Response File",
+      "type": "string"
+    },
+    "response_schema": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Response Schema",
+      "type": "string"
+    },
+    "sequence": {
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "started_at": {
+      "format": "date-time",
+      "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+      "title": "Started At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "sequence",
+    "interface",
+    "command",
+    "request",
+    "dataset",
+    "outcome",
+    "response_file",
+    "response_schema",
+    "started_at",
+    "finished_at"
+  ],
+  "title": "SessionCall",
+  "type": "object"
+}

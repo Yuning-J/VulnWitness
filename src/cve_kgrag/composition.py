@@ -73,6 +73,7 @@ from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail
 from cve_kgrag.domain.provenance import SourceRegistry
 from cve_kgrag.domain.search import SemanticUnavailableDetail
 from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
+from cve_kgrag.domain.session_record import SessionDatasetIdentity
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.domain.topic_context import KnowledgeSource
 from cve_kgrag.domain.weakness_mapping import WeaknessMapping
@@ -423,7 +424,16 @@ def build_serving_data_plane(
         )
     if fight_source is None:
         fight_source, pinned_fight_snapshot = load_packaged_fight_source(clock)
+    fight_description = fight_source.describe()
+    session_dataset = SessionDatasetIdentity(
+        **served_corpus.describe_session_corpus().model_dump(),
+        fight_snapshot_sha256=(
+            fight_description.snapshot_sha256 if fight_description is not None else None
+        ),
+        mitre_snapshot_sha256=weakness_mapping.describe().snapshot_sha256,
+    )
     return ServingDataPlane(
+        session_dataset=session_dataset,
         served_dataset=served_corpus.describe_served_dataset(),
         topic_registry=build_topic_registry(),
         search_service=search_service,

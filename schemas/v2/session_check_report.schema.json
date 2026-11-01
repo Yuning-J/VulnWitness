@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "SessionViolation": {
+      "additionalProperties": false,
+      "properties": {
+        "location": {
+          "title": "Location",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "location",
+        "message"
+      ],
+      "title": "SessionViolation",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "calls_checked": {
+      "minimum": 0,
+      "title": "Calls Checked",
+      "type": "integer"
+    },
+    "citations_checked": {
+      "minimum": 0,
+      "title": "Citations Checked",
+      "type": "integer"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.47",
+      "default": "2.0.0-dev.47",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "support_limitation": {
+      "const": "This check does not establish that a statement is supported by its evidence. Narrative support is never established by IDs alone.",
+      "default": "This check does not establish that a statement is supported by its evidence. Narrative support is never established by IDs alone.",
+      "title": "Support Limitation",
+      "type": "string"
+    },
+    "violations": {
+      "items": {
+        "$ref": "#/$defs/SessionViolation"
+      },
+      "title": "Violations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "calls_checked",
+    "citations_checked",
+    "violations",
+    "support_limitation"
+  ],
+  "title": "SessionCheckReport",
+  "type": "object"
+}

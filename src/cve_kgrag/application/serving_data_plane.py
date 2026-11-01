@@ -16,6 +16,7 @@ from cve_kgrag.application.product_query import ProductQueryService
 from cve_kgrag.application.search import SearchService
 from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
 from cve_kgrag.domain.served_dataset import ServedDataset
+from cve_kgrag.domain.session_record import SessionDatasetIdentity
 from cve_kgrag.domain.threat_context import KnownFightSnapshot
 from cve_kgrag.ports.sources import FightSource
 from cve_kgrag.topics.registry import TopicRegistry
@@ -35,3 +36,4 @@ class ServingDataPlane:
     fight_source: FightSource
     pinned_fight_snapshot: KnownFightSnapshot | None
     evidence_catalog: EvidenceCatalog
+    session_dataset: SessionDatasetIdentity

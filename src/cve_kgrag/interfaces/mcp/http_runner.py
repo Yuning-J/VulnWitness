@@ -30,6 +30,7 @@ from cve_kgrag.interfaces.http.status_routes import (
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.interfaces.mcp.sdk_answers import SdkAnswersRestated
 from cve_kgrag.interfaces.mcp.server import build_knowledge_mcp_server
+from cve_kgrag.ports.session_recording import SessionRecording
 
 MCP_PATH = "/mcp"
 
@@ -45,13 +46,18 @@ class SessionManagerLifespan:
 
 
 def build_mcp_http_app(
-    toolbox: KnowledgeToolbox, *, host: str, port: int, token: SecretStr
+    toolbox: KnowledgeToolbox,
+    *,
+    host: str,
+    port: int,
+    token: SecretStr,
+    recorder: SessionRecording | None = None,
 ) -> HttpGuard:
     """The guarded app serving ``toolbox``'s tools at ``/mcp`` for a server on ``host``
     and ``port``. ``/ready`` answers 204 while the toolbox has a free worker. The request
     deadline is ``find_request_deadline_seconds``."""
     session_manager = StreamableHTTPSessionManager(
-        app=build_knowledge_mcp_server(toolbox),
+        app=build_knowledge_mcp_server(toolbox, recorder),
         json_response=True,
         stateless=True,
         security_settings=TransportSecuritySettings(enable_dns_rebinding_protection=False),
@@ -77,11 +83,18 @@ def build_mcp_http_app(
     )
 
 
-def serve_http(toolbox: KnowledgeToolbox, *, host: str, port: int, token: SecretStr) -> bool:
+def serve_http(
+    toolbox: KnowledgeToolbox,
+    *,
+    host: str,
+    port: int,
+    token: SecretStr,
+    recorder: SessionRecording | None = None,
+) -> bool:
     """Serve ``toolbox``'s tools over MCP Streamable HTTP until the process is
     interrupted; ``False`` when the server could not start."""
     return serve(
-        build_mcp_http_app(toolbox, host=host, port=port, token=token),
+        build_mcp_http_app(toolbox, host=host, port=port, token=token, recorder=recorder),
         host,
         port,
         command="mcp --http",

@@ -20,6 +20,13 @@ from cve_kgrag.domain.planning import QueryPlan
 from cve_kgrag.domain.product_query import ProductQueryRequest, ProductQueryResponse
 from cve_kgrag.domain.relevance import RelevanceProposal
 from cve_kgrag.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
+from cve_kgrag.domain.session_record import (
+    SessionCall,
+    SessionCheckReport,
+    SessionFindings,
+    SessionRecord,
+)
+from cve_kgrag.domain.session_response import SessionResponse
 from cve_kgrag.domain.store_status import StoreStatus
 from cve_kgrag.domain.timestamps import END_OF_VALUE
 from cve_kgrag.domain.tool_contracts import (
@@ -40,6 +47,7 @@ MANIFEST_FILE = "manifest.json"
 # The evidence-set schema relies on ``prefixItems``, which earlier drafts read differently.
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
+    "session_findings": SessionFindings,
     "product_query_request": ProductQueryRequest,
     "search_request": SearchRequest,
     "topic_context_request": TopicContextRequest,
@@ -58,6 +66,10 @@ REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
     "affectedness_request": AffectednessRequest,
 }
 RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
+    "session_record": SessionRecord,
+    "session_call": SessionCall,
+    "session_response": SessionResponse,
+    "session_check_report": SessionCheckReport,
     "product_query_response": ProductQueryResponse,
     "search_response": SearchResponse,
     "topic_context_response": TopicContextResponse,

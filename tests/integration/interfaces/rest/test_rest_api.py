@@ -83,6 +83,9 @@ VERIFY_BODY_CAP_BYTES = 4 * 1024 * 1024
 ROUTE_BODY_CAP_BYTES = 256 * 1024
 # Each failure's status, as ADR 0007 decision 8 publishes it.
 EXPECTED_FAILURE_STATUSES = {
+    ToolFailureCode.SESSION_CALL_LIMIT: 429,
+    ToolFailureCode.SESSION_DATASET_MISMATCH: 409,
+    ToolFailureCode.SESSION_RECORDING_FAILED: 500,
     ToolFailureCode.INVALID_ARGUMENTS: 422,
     ToolFailureCode.INVALID_CURSOR: 422,
     ToolFailureCode.ARGUMENTS_TOO_LARGE: 413,

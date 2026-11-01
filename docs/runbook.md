@@ -49,7 +49,8 @@ Lookup text shows catalogue paths and limits; search text shows word-match ranks
 outcomes and warnings. `product --vendor democorp --all --limit 20` traverses one fixed corpus,
 printing a JSON array of unchanged `ProductQueryResponse` pages, each with its cursors
 and evidence. `--max-pages` defaults to 100; an unfinished traversal exits 2 without
-output. `--output FILE --export csv|jsonl` exports every matching CVE even without `--all`;
+printing pages or publishing an export. `--output FILE --export csv|jsonl` exports every
+matching CVE even without `--all`;
 CSV excludes descriptions, JSONL keeps them. Multi-valued CSV cells contain JSON arrays;
 version-note outcomes appear with `--version`. Exports publish atomically as 0600 files;
 overwriting requires `--force`. Full traversal rejects `--cursor`; `--format text` cannot
@@ -209,3 +210,82 @@ authenticity; MITRE has no reviewed catalog. Unset uses the manifest-pinned exce
 Non-regular, unreadable, oversized (over 32 MiB), invalid or mismatched files fail with
 `mitre_snapshot_*`, never fallback. Restart after changing files/settings. See
 [association limits](architecture.md#weakness-associations) and [bounded answers](architecture.md#bounded-investigation).
+
+## Record and check a session
+
+Add `--session DIR` to `lookup`, `search`, `product`, `investigate`, `topic`, `evidence`,
+`affectedness`, `capabilities`, `resolve` or `verify`. Use JSON output; `--session` with
+`--format text` is refused with exit 2 on lookup, search, product and investigate. The first call
+creates private metadata, call logs and exact response files. Later calls must serve the
+same corpus store and FiGHT/MITRE snapshots. Recorded commands load that complete dataset;
+a changed identity refuses the call without appending anything.
+
+```sh
+cve-kgrag product --vendor democorp --limit 1 --session /data/cve-kgrag/session \
+  --session-call-limit 20 --session-goal 'Review the selected product'
+cve-kgrag lookup CVE-9999-0007 --session /data/cve-kgrag/session
+cve-kgrag session check /data/cve-kgrag/session
+cve-kgrag session check /data/cve-kgrag/session --format text
+```
+
+Use an ID actually returned by your product call for the lookup. The default session call
+limit is 100. Set a smaller limit at creation with `--session-call-limit`; it cannot change
+later. A refusal at the limit does not execute the call. Optional `--session-goal` and
+`--session-scope` also set creation metadata. Recording failures withhold the answer.
+Keep the directory outside the corpus store root and do not use a symlink.
+
+With `product --all --session DIR`, each page is a separate recorded call, including its
+validated request and cursor. The CLI prints the usual JSON array only when traversal
+finishes. `--output FILE --export csv|jsonl --session DIR` records those same page calls,
+even without `--all`, then publishes the export. The export file is not part of the
+session record; keep it outside `DIR`. Saved responses are the individual JSON pages,
+not the combined array or exported rows.
+
+The session call limit applies per page. If it is reached mid-traversal, the command
+exits 2 without executing or recording the refused page. Completed page calls remain;
+no partial call, combined stdout or new export is written. Reaching `--max-pages` also
+retains completed page calls and exits 2 without publishing output. An existing export
+stays unchanged on either limit, including with `--force`.
+
+For agents, start `cve-kgrag mcp --session DIR`, or add `--http` for the authenticated HTTP
+transport. Every dispatched tool call, failures included, is recorded. There is no tool
+that edits findings. REST recording is unavailable.
+
+Author `DIR/findings.yaml` yourself. The server never creates or edits it. Start with:
+
+```yaml
+findings: []
+selections:
+  cve_ids: []
+  product_queries: []
+open_questions: []
+```
+
+A finding contains `id`, `statement`, `kind`, `status` and `citations`. For example, after
+replacing the evidence ID with a complete anchor returned by the cited call:
+
+```yaml
+findings:
+  - id: review-1
+    statement: 'The selected product appears in the returned product fields.'
+    kind: product_field_match
+    status: unconfirmed
+    citations:
+      - call: 1
+        evidence_id: 'ev:000000000000000000000000'
+selections:
+  cve_ids: []
+  product_queries: []
+open_questions: []
+```
+
+For each product query, `selections.product_queries` can hold `vendor`, `product`, `version`,
+`calls` (page-call sequence numbers), `next_cursor` and `complete`. Save progress as you
+follow the returned cursor. These fields and finding statuses are your declarations.
+See the [session findings schema](../schemas/v2/session_findings.schema.json) for all kinds
+and fields.
+
+The checker validates files and resolves each citation only within its cited successful
+call and dataset. It exits 0 on success and 1 with located violations otherwise. It does
+not establish that a statement is supported by its evidence. Narrative support is never
+established by IDs alone. Treat session contents and source text as untrusted input.

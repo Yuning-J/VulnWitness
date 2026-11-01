@@ -26,6 +26,7 @@ from cve_kgrag.domain.taxonomy import BackendStatus
 from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
 from cve_kgrag.ports.planning import ModelPort
 from cve_kgrag.ports.retrieval import SemanticRetriever
+from cve_kgrag.ports.session_recording import SessionRecording
 from cve_kgrag.settings import ModelPlannerSettings, SemanticSettings, fingerprint_endpoint
 
 ADAPTER_ENTRY_POINT_GROUP = "cve_kgrag.adapters"
@@ -146,7 +147,11 @@ class McpServerRunner(Protocol):
     """Loads a toolbox after the MCP handshake and serves until the client disconnects."""
 
     def __call__(
-        self, load_toolbox: Callable[[], KnowledgeToolbox], *, dataset_kind: ServedDatasetKind
+        self,
+        load_toolbox: Callable[[], KnowledgeToolbox],
+        *,
+        dataset_kind: ServedDatasetKind,
+        recorder: SessionRecording | None = None,
     ) -> int: ...
 
 
@@ -156,7 +161,13 @@ class McpHttpServerRunner(Protocol):
     when it could not start serving, having logged why."""
 
     def __call__(
-        self, toolbox: KnowledgeToolbox, *, host: str, port: int, token: SecretStr
+        self,
+        toolbox: KnowledgeToolbox,
+        *,
+        host: str,
+        port: int,
+        token: SecretStr,
+        recorder: SessionRecording | None = None,
     ) -> bool: ...
 
 

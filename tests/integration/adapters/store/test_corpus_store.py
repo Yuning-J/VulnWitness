@@ -243,6 +243,7 @@ def test_load_corpus_store_returns_manifest_records_and_anchors_as_written(
 
     # Assert
     assert corpus_store == CorpusStore(
+        store_name=imported_store.name,
         manifest=imported_contents.manifest,
         store_manifest_sha256=sha256_hex((imported_store / STORE_MANIFEST_FILE).read_bytes()),
         corpus_content_sha256=sha256_hex(build_content_identity(imported_store)),
@@ -361,6 +362,7 @@ def test_store_written_with_store_writers_loads_back_unchanged(
 
     # Assert
     assert corpus_store == CorpusStore(
+        store_name=rewritten_dir.name,
         manifest=manifest,
         store_manifest_sha256=sha256_hex((rewritten_dir / STORE_MANIFEST_FILE).read_bytes()),
         corpus_content_sha256=sha256_hex(build_content_identity(rewritten_dir)),

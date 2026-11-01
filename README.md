@@ -63,11 +63,17 @@ The [runbook](docs/runbook.md) covers local-feed reuse, sizing and recovery.
 - CLI search: `cve-kgrag search "authentication bypass" --format text` — ranked word
   matches; JSON is the default.
 - CLI product: `cve-kgrag product --vendor democorp --version 2.0 --format text` — counted
-  inventory pages; `--all` traverses every page, with optional `--output FILE --export jsonl|csv`.
+  inventory pages. With JSON output, `--all` prints every page;
+  `--output FILE --export jsonl|csv` exports every page without requiring `--all`.
 - CLI investigate: `cve-kgrag investigate 5G-AKA --scope mixed --format text` — bounded evidence set.
 - CLI capabilities: `cve-kgrag capabilities` — sources, coverage and available tools.
 - REST: `curl -H "Authorization: Bearer $CVE_KGRAG_HTTP_TOKEN" http://127.0.0.1:8766/api/v2/capabilities`.
 - MCP: `cve-kgrag mcp` (stdio), or `cve-kgrag mcp --http` (authenticated `/mcp` on port 8765).
+
+Record data calls with `--session DIR` and JSON output; `--format text` is refused.
+Product traversals and exports record each page as a separate call, subject to the
+session call limit. Export files are outside the session record. See
+[recording and checking sessions](docs/runbook.md#record-and-check-a-session).
 
 ## Limits
 

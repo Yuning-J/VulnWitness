@@ -26,16 +26,22 @@ from cve_kgrag.interfaces.mcp.server import (
 from cve_kgrag.interfaces.mcp.stdio_connection import StdioConnection
 from cve_kgrag.interfaces.mcp.stdio_input import StdioInput
 from cve_kgrag.interfaces.mcp.stdio_reader import StdioReader
+from cve_kgrag.ports.session_recording import SessionRecording
 
 
 class StdioServer:
     """Publish one complete toolbox after initialization; cancel startup on disconnect."""
 
     def __init__(
-        self, load_toolbox: Callable[[], KnowledgeToolbox], dataset_kind: ServedDatasetKind
+        self,
+        load_toolbox: Callable[[], KnowledgeToolbox],
+        dataset_kind: ServedDatasetKind,
+        recorder: SessionRecording | None = None,
     ) -> None:
         self._load_toolbox = load_toolbox
-        self._handlers = KnowledgeToolHandlers(None, build_mcp_tools(KNOWLEDGE_TOOL_SPECS))
+        self._handlers = KnowledgeToolHandlers(
+            None, build_mcp_tools(KNOWLEDGE_TOOL_SPECS), recorder
+        )
         self._server = build_mcp_server(self._handlers, dataset_kind)
         self._initialized = anyio.Event()
         self._stdin_closed = anyio.Event()
@@ -132,16 +138,21 @@ class StdioServer:
 
 
 async def run_stdio_server(
-    load_toolbox: Callable[[], KnowledgeToolbox], dataset_kind: ServedDatasetKind
+    load_toolbox: Callable[[], KnowledgeToolbox],
+    dataset_kind: ServedDatasetKind,
+    recorder: SessionRecording | None = None,
 ) -> int:
-    return await StdioServer(load_toolbox, dataset_kind).run()
+    return await StdioServer(load_toolbox, dataset_kind, recorder).run()
 
 
 def serve_stdio(
-    load_toolbox: Callable[[], KnowledgeToolbox], *, dataset_kind: ServedDatasetKind
+    load_toolbox: Callable[[], KnowledgeToolbox],
+    *,
+    dataset_kind: ServedDatasetKind,
+    recorder: SessionRecording | None = None,
 ) -> int:
     """Serve static MCP metadata immediately and tools once ``load_toolbox`` completes."""
     try:
-        return anyio.run(run_stdio_server, load_toolbox, dataset_kind)
+        return anyio.run(run_stdio_server, load_toolbox, dataset_kind, recorder)
     except KeyboardInterrupt:
         return 0

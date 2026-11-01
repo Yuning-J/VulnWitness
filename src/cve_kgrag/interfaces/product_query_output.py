@@ -3,13 +3,12 @@
 import csv
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import mkstemp
 from typing import TextIO
 
-from cve_kgrag.application.product_query import ProductQueryService
 from cve_kgrag.domain.product_query import (
     ProductQueryRequest,
     ProductQueryResponse,
@@ -56,12 +55,14 @@ def validate_product_output(request: ProductQueryRequest, options: ProductOutput
 
 
 def collect_product_pages(
-    service: ProductQueryService, request: ProductQueryRequest, options: ProductOutputOptions
+    query: Callable[[ProductQueryRequest], ProductQueryResponse],
+    request: ProductQueryRequest,
+    options: ProductOutputOptions,
 ) -> list[ProductQueryResponse]:
-    """Traverse one service's fixed corpus, returning nothing if the page cap is reached."""
+    """Traverse a fixed corpus through the supplied page call, enforcing the page cap."""
     pages: list[ProductQueryResponse] = []
     while True:
-        page = service.query(request)
+        page = query(request)
         pages.append(page)
         if not (options.all_pages or options.output is not None) or page.next_cursor is None:
             return pages
