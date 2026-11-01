@@ -1,8 +1,8 @@
 """Workspace investigation requests, derived status and tool answers."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import Field, JsonValue, StrictBool
+from pydantic import Field, JsonValue, StrictBool, field_validator, model_validator
 
 from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CveId
@@ -21,6 +21,10 @@ from vulnwitness.domain.tool_contracts import ToolFailure
 from vulnwitness.domain.triage import TriageSummary
 
 INVESTIGATION_ID_PATTERN = r"^inv_[a-z2-7]{20}$"
+MAX_FINDING_STATEMENT_BYTES = 8 * 1024
+MAX_FINDINGS_PER_BATCH = 200
+MAX_FINDINGS_REQUEST_BYTES = 1024 * 1024
+MAX_WORKSPACE_FINDINGS_BYTES = 16 * 1024 * 1024
 InvestigationId = Annotated[str, Field(pattern=INVESTIGATION_ID_PATTERN)]
 RequestKey = Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]{1,64}$")]
 WorkflowStatus = Literal[
@@ -65,10 +69,26 @@ class ReadCallRequest(InvestigationRequest):
 
 class AgentFinding(SessionFinding):
     author: Literal["agent"] = "agent"
+    statement: str | None = Field(
+        default=None, min_length=1, max_length=MAX_FINDING_STATEMENT_BYTES
+    )
+
+    @field_validator("statement")
+    @classmethod
+    def bound_statement(cls, statement: str | None) -> str | None:
+        if statement is not None and len(statement.encode("utf-8")) > MAX_FINDING_STATEMENT_BYTES:
+            raise ValueError("finding statement exceeds the 8 KiB UTF-8 limit")
+        return statement
 
 
 class AddFindingsRequest(InvestigationRequest):
-    findings: tuple[AgentFinding, ...] = Field(min_length=1, max_length=1000)
+    findings: tuple[AgentFinding, ...] = Field(min_length=1, max_length=MAX_FINDINGS_PER_BATCH)
+
+    @model_validator(mode="after")
+    def bound_request(self) -> Self:
+        if len(self.model_dump_json().encode("utf-8")) > MAX_FINDINGS_REQUEST_BYTES:
+            raise ValueError("findings request exceeds the 1 MiB serialized limit")
+        return self
 
 
 class RenderReportRequest(InvestigationRequest):

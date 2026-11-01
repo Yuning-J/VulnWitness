@@ -7,8 +7,45 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
+from tests.support.paths import REPOSITORY_SCHEMA_DIR
+from tests.support.workspaces import agent_note
 from vulnwitness.domain.session_record import SessionCorpusIdentity, SessionFindings
+from vulnwitness.domain.workspace import AddFindingsRequest
 from vulnwitness.schema_snapshots import render_schema
+
+
+@pytest.mark.parametrize("author,accepted", [(None, True), ("agent", True), ("workflow", False)])
+@pytest.mark.parametrize("kind", ["analyst_note", "product_field_match"])
+def test_confirmed_agent_requests_agree_with_committed_schema(
+    author: str | None, accepted: bool, kind: str
+) -> None:
+    # Arrange
+    finding = agent_note("confirmed", status="confirmed")
+    if kind == "product_field_match":
+        finding["kind"] = kind
+        del finding["statement"]
+        finding["claim"] = {
+            "kind": kind,
+            "call": 1,
+            "cve_id": "CVE-9999-0001",
+            "vendor": "democorp",
+            "product": "demo_gateway",
+        }
+    if author is not None:
+        finding["author"] = author
+    request = {"session_id": "inv_" + "a" * 20, "findings": [finding]}
+    schema = json.loads((REPOSITORY_SCHEMA_DIR / "add_findings_request.schema.json").read_text())
+
+    # Act
+    schema_accepts = Draft202012Validator(schema).is_valid(request)
+    try:
+        AddFindingsRequest.model_validate(request)
+        runtime_accepts = True
+    except ValidationError:
+        runtime_accepts = False
+
+    # Assert
+    assert schema_accepts == runtime_accepts == accepted
 
 
 @pytest.mark.parametrize(

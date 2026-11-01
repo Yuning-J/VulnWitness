@@ -127,7 +127,7 @@ def describe_finding_shape() -> dict[str, JsonValue]:
     )
     rules.append(
         {
-            "if": {"properties": {"author": {"const": "workflow"}}},
+            "if": {"required": ["author"], "properties": {"author": {"const": "workflow"}}},
             "then": {"properties": {"status": {"const": "unconfirmed"}}},
         }
     )

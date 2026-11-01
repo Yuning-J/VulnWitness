@@ -132,7 +132,7 @@ Use these exact values when interpreting responses. Do not assign new verdicts.
 | Topic review | `reviewed`, `pending_review` |
 | Result status | `ok`, `no_match`, `partial`, `incomplete_index`, `source_unavailable`, `backend_error`, `policy_blocked` |
 | Stop reason | `sufficient`, `no_evidence`, `budget_exhausted`, `source_unavailable`, `policy_blocked`, `invalid_evidence`, `needs_unmet` |
-| Tool failure | `invalid_arguments`, `invalid_cursor`, `arguments_too_large`, `unknown_evidence_id`, `server_busy`, `data_loading`, `timed_out`, `response_too_large`, `integrity_check_failed`, `internal_error`, `filter_unsupported`, `session_call_limit`, `session_dataset_mismatch`, `session_recording_failed`, `investigations_not_enabled`, `unknown_investigation`, `investigation_busy`, `workspace_busy`, `request_key_conflict`, `workspace_full`, `investigation_interrupted`, `finding_id_conflict` |
+| Tool failure | `invalid_arguments`, `invalid_cursor`, `arguments_too_large`, `unknown_evidence_id`, `server_busy`, `data_loading`, `timed_out`, `response_too_large`, `integrity_check_failed`, `internal_error`, `filter_unsupported`, `session_call_limit`, `session_dataset_mismatch`, `session_recording_failed`, `investigations_not_enabled`, `unknown_investigation`, `investigation_busy`, `workspace_busy`, `request_key_conflict`, `workspace_full`, `investigation_interrupted`, `finding_id_conflict`, `findings_too_large` |
 | Affectedness blocker | `blocked_unverified` |
 | Catalogue terminal | `no_attack_mapping` |
 | Triage outcome | `complete`, `stopped_at_cap`, `no_match`, `failed` |
@@ -188,6 +188,11 @@ reject the whole batch. Identical IDs/content are retry no-ops; different conten
 under an existing ID returns `finding_id_conflict`. Revise with a new ID and
 `supersedes` naming an earlier effective finding. Each target can be superseded
 once; originals remain stored. Checks and reports use effective findings only.
+Each statement is limited to 8 KiB of UTF-8. A batch has at most 200 findings and
+a normalized serialized request at most 1 MiB. All workspace tool arguments also
+obey the knowledge toolbox's byte limit (64 KiB by default, including stdio).
+A combined findings document over 16 MiB returns `findings_too_large` without
+publishing any part of the batch.
 Well-formed wrong content is saved: `written: true` from `add_findings` is not
 “passed”. Read `batch_check` and the whole investigation's `check`.
 

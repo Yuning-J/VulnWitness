@@ -38,6 +38,7 @@ from vulnwitness.interfaces.knowledge_tools import (
     SERVER_INSTRUCTIONS,
     KnowledgeToolName,
     ToolAnswer,
+    ToolLimits,
     ToolSpec,
     build_tool_failure,
 )
@@ -158,6 +159,14 @@ class KnowledgeToolHandlers:
     async def call_workspace(self, params: CallToolRequestParams) -> CallToolResult:
         assert self._workspace is not None
         try:
+            argument_bytes = json.dumps(
+                params.arguments or {}, ensure_ascii=False, allow_nan=False
+            ).encode("utf-8")
+            limits = self._toolbox.limits if self._toolbox is not None else ToolLimits()
+            if len(argument_bytes) > limits.max_argument_bytes:
+                return encode_workspace_answer(
+                    build_tool_failure(ToolFailureCode.ARGUMENTS_TOO_LARGE)
+                )
             for spec in WORKSPACE_TOOL_SPECS:
                 if params.name == spec.name:
                     answer = await anyio.to_thread.run_sync(

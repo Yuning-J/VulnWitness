@@ -184,7 +184,10 @@
               "author": {
                 "const": "workflow"
               }
-            }
+            },
+            "required": [
+              "author"
+            ]
           },
           "then": {
             "properties": {
@@ -274,6 +277,7 @@
         "statement": {
           "anyOf": [
             {
+              "maxLength": 8192,
               "minLength": 1,
               "type": "string"
             },
@@ -952,7 +956,7 @@
       "items": {
         "$ref": "#/$defs/AgentFinding"
       },
-      "maxItems": 1000,
+      "maxItems": 200,
       "minItems": 1,
       "title": "Findings",
       "type": "array"

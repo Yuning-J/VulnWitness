@@ -10,6 +10,10 @@ from vulnwitness.domain.session_record import SessionCheckReport, SessionFinding
 from vulnwitness.domain.triage import TriageSummary
 
 
+def serialize_findings(findings: SessionFindings) -> bytes:
+    return yaml.safe_dump(findings.model_dump(mode="json"), sort_keys=False).encode("utf-8")
+
+
 class SessionTriageArtifacts:
     """Publish workflow files atomically and delegate verification to the session checker."""
 
@@ -35,8 +39,7 @@ class SessionTriageArtifacts:
             )
 
     def write_findings(self, findings: SessionFindings) -> None:
-        document = yaml.safe_dump(findings.model_dump(mode="json"), sort_keys=False)
-        atomic_write(self._directory / "findings.yaml", document.encode("utf-8"))
+        atomic_write(self._directory / "findings.yaml", serialize_findings(findings))
 
     def check(self) -> SessionCheckReport:
         return SessionChecker(self._directory).check()

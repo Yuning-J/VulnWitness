@@ -828,7 +828,10 @@
               "author": {
                 "const": "workflow"
               }
-            }
+            },
+            "required": [
+              "author"
+            ]
           },
           "then": {
             "properties": {

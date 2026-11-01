@@ -44,6 +44,17 @@ injected random bytes. It is also its directory name. Inputs must match
 and requires a direct, non-symlink child of the fixed workspace root. No tool accepts a
 file path. Stored response filenames are not used as path authority.
 
+### Threat model
+
+Path validation prevents model-supplied paths and static symlinks. At startup and before
+investigation writes, the workspace root must be owned by the current user, must not be
+a symlink, and must have no group or other write permission (`mode & 0o022 == 0`).
+Investigation directories are created 0700 and must also be owned by the user and not
+group or other writable. Concurrent filesystem manipulation by another process of the
+same user is outside this protection: that process can modify records directly. The
+check layers report the tampering they can observe; pathname checks do not pin directories
+against concurrent replacement.
+
 `start_investigation` creates a manual record with empty findings. `triage_product` creates
 a triage record, then runs the existing bounded workflow. `session.json` holds immutable
 `origin` (`manual` or `triage`), the normalized triage request where applicable, and the
@@ -136,6 +147,15 @@ ID. An identical existing ID is a no-op; different content for an existing ID re
 whole batch with `finding_id_conflict`. Schema errors, claim-kind shape errors, unknown
 call numbers and invalid supersession reject the entire batch without publishing bytes.
 
+Agent statements are limited to 8 KiB of UTF-8, batches to 200 findings, and normalized
+serialized findings requests to 1 MiB. Every workspace tool, including knowledge calls
+with `session_id`, also obeys the knowledge toolbox's argument-byte limit on every
+transport, including stdio (64 KiB by default, measured as UTF-8 JSON with unescaped
+Unicode). This transport limit can be stricter than the findings request limit.
+Before publishing `findings.yaml`, the complete combined YAML document is serialized;
+above 16 MiB the whole batch fails with `findings_too_large`, leaving existing bytes
+intact. This storage bound is below the session reader's 64 MiB cap.
+
 Well-formed but wrong content is saved. An unresolved citation or a contradicted or
 unverifiable claim returns `written: true` together with the batch and whole-record layered
 checks. “Written” never means “passed”. An all-retry batch reports `written: false` and
@@ -168,7 +188,8 @@ writes or read behavior.
 Failures use fixed-message `ToolFailure` values, with no exception text. Workspace codes
 are `investigations_not_enabled`, `unknown_investigation`, `investigation_busy`,
 `workspace_busy`, `request_key_conflict`, `workspace_full`, `investigation_interrupted`
-and `finding_id_conflict`, alongside existing argument, recording and size failures.
+and `finding_id_conflict`, plus `findings_too_large` for combined findings storage,
+alongside existing argument, recording and size failures.
 Request and answer schemas, workspace knowledge-input schemas and artifact schemas are
 exported under `schemas/v2`.
 

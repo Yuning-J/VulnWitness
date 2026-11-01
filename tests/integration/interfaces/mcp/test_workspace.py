@@ -35,9 +35,10 @@ from vulnwitness.composition import (
 )
 from vulnwitness.domain.session_record import SessionRecord
 from vulnwitness.domain.workspace import TriageStarted
-from vulnwitness.interfaces.knowledge_tools import KNOWLEDGE_TOOL_SPECS
+from vulnwitness.interfaces.knowledge_tools import KNOWLEDGE_TOOL_SPECS, ToolLimits
 from vulnwitness.interfaces.mcp.http_runner import build_mcp_http_app
 from vulnwitness.interfaces.mcp.server import build_knowledge_mcp_server
+from vulnwitness.interfaces.mcp.workspace_tools import WORKSPACE_TOOL_SPECS
 from vulnwitness.schema_snapshots import render_schema
 from vulnwitness.workspace_composition import (
     build_workspace_investigations,
@@ -69,6 +70,25 @@ async def start(client: Client, **arguments: Any) -> dict[str, Any]:
     return (
         await client.call_tool("start_investigation", {"goal": "Review demo", **arguments})
     ).structured_content
+
+
+async def test_oversized_workspace_arguments_are_refused_on_each_transport(
+    workspace_client: Client,
+) -> None:
+    # Arrange
+    arguments = {"padding": "x" * ToolLimits().max_argument_bytes}
+    refusals = []
+
+    # Act
+    for spec in WORKSPACE_TOOL_SPECS:
+        refusals.append(await workspace_client.call_tool(spec.name, arguments))
+    listing = await workspace_client.call_tool("list_investigations", {})
+
+    # Assert
+    for refusal in refusals:
+        assert refusal.is_error
+        assert refusal.structured_content["code"] == "arguments_too_large"
+    assert listing.structured_content["investigations"] == []
 
 
 async def test_triage_get_render_check_keeps_typed_outcome_and_current_report(

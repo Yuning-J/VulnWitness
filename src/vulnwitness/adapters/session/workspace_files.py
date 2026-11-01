@@ -19,7 +19,7 @@ from vulnwitness.adapters.session.files import (
     make_private_directory,
     read_session_file,
 )
-from vulnwitness.adapters.session.triage_artifacts import SessionTriageArtifacts
+from vulnwitness.adapters.session.triage_artifacts import serialize_findings
 from vulnwitness.adapters.session.validation import parse_session_document
 from vulnwitness.domain.session_record import (
     SessionCheckReport,
@@ -30,7 +30,21 @@ from vulnwitness.domain.session_record import (
 )
 from vulnwitness.domain.session_report import CheckedSession
 from vulnwitness.domain.tool_contracts import ToolFailureCode
-from vulnwitness.domain.workspace import INVESTIGATION_ID_PATTERN, RequestRecord
+from vulnwitness.domain.workspace import (
+    INVESTIGATION_ID_PATTERN,
+    MAX_WORKSPACE_FINDINGS_BYTES,
+    RequestRecord,
+)
+
+
+def check_private_directory(directory: Path) -> None:
+    """Refuse unsafe existing directories without changing their permissions."""
+    check_session_path(directory)
+    metadata = directory.stat()
+    if metadata.st_uid != os.getuid():
+        raise ValueError("workspace directories must be owned by the current user")
+    if metadata.st_mode & 0o022:
+        raise ValueError("workspace directories must not be group or other writable")
 
 
 class LocalWorkspaceFiles:
@@ -48,7 +62,11 @@ class LocalWorkspaceFiles:
         check_session_path(root, store_root)
         if store_root is not None and root.resolve().is_relative_to(store_root.resolve()):
             raise ValueError("workspace directory must be outside the store root")
-        make_private_directory(root)
+        if root.exists():
+            check_private_directory(root)
+        else:
+            make_private_directory(root)
+        check_private_directory(root)
         self.root = root.resolve()
         self._lock_wait = lock_wait
         self._monotonic = monotonic
@@ -56,6 +74,7 @@ class LocalWorkspaceFiles:
         make_private_directory(self.root / "requests")
 
     def resolve(self, session_id: str) -> Path:
+        check_private_directory(self.root)
         if re.fullmatch(INVESTIGATION_ID_PATTERN, session_id) is None:
             raise SessionRecordingError(ToolFailureCode.INVALID_ARGUMENTS)
         directory = self.root / session_id
@@ -63,11 +82,12 @@ class LocalWorkspaceFiles:
             raise SessionRecordingError(ToolFailureCode.UNKNOWN_INVESTIGATION)
         if directory.resolve().parent != self.root or not directory.is_dir():
             raise SessionRecordingError(ToolFailureCode.UNKNOWN_INVESTIGATION)
+        check_private_directory(directory)
         return directory
 
     @contextlib.contextmanager
     def workspace_lock(self) -> Iterator[None]:
-        check_session_path(self.root)
+        check_private_directory(self.root)
         descriptor = os.open(
             self.root / ".workspace.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600
         )
@@ -116,7 +136,7 @@ class LocalWorkspaceFiles:
         return tuple(session_ids)
 
     def _request_path(self, key: str) -> Path:
-        check_session_path(self.root)
+        check_private_directory(self.root)
         if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", key) is None:
             raise SessionRecordingError(ToolFailureCode.INVALID_ARGUMENTS)
         directory = self.root / "requests"
@@ -133,7 +153,7 @@ class LocalWorkspaceFiles:
         atomic_write(self._request_path(key), record.model_dump_json().encode())
 
     def create(self, session: SessionRecord) -> None:
-        check_session_path(self.root)
+        check_private_directory(self.root)
         if re.fullmatch(INVESTIGATION_ID_PATTERN, session.name) is None:
             raise ValueError("invalid investigation ID")
         directory = self.root / session.name
@@ -163,7 +183,10 @@ class LocalWorkspaceFiles:
         return read_session_file(self._file_path(session_id, name))
 
     def write_findings(self, session_id: str, findings: SessionFindings) -> None:
-        SessionTriageArtifacts(self.resolve(session_id)).write_findings(findings)
+        content = serialize_findings(findings)
+        if len(content) > MAX_WORKSPACE_FINDINGS_BYTES:
+            raise SessionRecordingError(ToolFailureCode.FINDINGS_TOO_LARGE)
+        self.write(session_id, "findings.yaml", content)
 
     def write(self, session_id: str, name: str, content: bytes) -> None:
         atomic_write(self._file_path(session_id, name), content)

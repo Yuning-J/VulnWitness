@@ -9,6 +9,40 @@ from mcp import StdioServerParameters
 
 from tests.support.stdio_client import observe_stdio_client, read_until_notice
 from vulnwitness.cli import main
+from vulnwitness.interfaces.knowledge_tools import ToolLimits
+from vulnwitness.interfaces.mcp.workspace_tools import WORKSPACE_TOOL_SPECS
+
+
+@pytest.mark.anyio
+async def test_oversized_stdio_workspace_arguments_are_refused_before_dispatch(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    environment: dict[str, str] = {}
+    for name, value in os.environ.items():
+        if not name.startswith("VULNWITNESS_"):
+            environment[name] = value
+    root = tmp_path / "workspace"
+    server = StdioServerParameters(
+        command=str(Path(sys.executable).parent / "vulnwitness"),
+        args=["mcp", "--workspace", str(root)],
+        env=environment,
+    )
+    refusals = []
+    arguments = {"padding": "x" * ToolLimits().max_argument_bytes}
+    async with observe_stdio_client(server) as (client, stderr):
+        await read_until_notice(stderr, b" ready after ")
+
+        # Act
+        for spec in WORKSPACE_TOOL_SPECS:
+            refusals.append(await client.call_tool(spec.name, arguments))
+        listing = await client.call_tool("list_investigations", {})
+
+    # Assert
+    for refusal in refusals:
+        assert refusal.is_error
+        assert refusal.structured_content["code"] == "arguments_too_large"
+    assert listing.structured_content["investigations"] == []
 
 
 @pytest.mark.anyio

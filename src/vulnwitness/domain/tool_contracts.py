@@ -102,6 +102,7 @@ class EvidenceLookup(ContractModel):
 
 
 class ToolFailureCode(StrEnum):
+    FINDINGS_TOO_LARGE = "findings_too_large"
     FINDING_ID_CONFLICT = "finding_id_conflict"
     INVESTIGATION_INTERRUPTED = "investigation_interrupted"
     WORKSPACE_FULL = "workspace_full"
@@ -128,6 +129,7 @@ class ToolFailureCode(StrEnum):
 
 # The one sentence a failure of each code carries; it never quotes the caller's input.
 TOOL_FAILURE_MESSAGES: dict[ToolFailureCode, str] = {
+    ToolFailureCode.FINDINGS_TOO_LARGE: "The combined findings exceed the storage size limit.",
     ToolFailureCode.FINDING_ID_CONFLICT: "A finding ID already has different content.",
     ToolFailureCode.INVESTIGATION_INTERRUPTED: (
         "The interrupted investigation cannot accept appends."

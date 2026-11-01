@@ -121,6 +121,7 @@
     },
     "ToolFailureCode": {
       "enum": [
+        "findings_too_large",
         "finding_id_conflict",
         "investigation_interrupted",
         "workspace_full",

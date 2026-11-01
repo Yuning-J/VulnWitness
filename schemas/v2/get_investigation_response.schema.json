@@ -149,8 +149,8 @@
           "$ref": "#/$defs/SessionRecordCheck"
         },
         "schema_version": {
-          "const": "2.0.0-dev.51",
-          "default": "2.0.0-dev.51",
+          "const": "2.0.0-dev.52",
+          "default": "2.0.0-dev.52",
           "title": "Schema Version",
           "type": "string"
         },
@@ -412,8 +412,8 @@
           "type": "integer"
         },
         "contract_version": {
-          "const": "2.0.0-dev.51",
-          "default": "2.0.0-dev.51",
+          "const": "2.0.0-dev.52",
+          "default": "2.0.0-dev.52",
           "title": "Contract Version",
           "type": "string"
         },
@@ -565,6 +565,7 @@
     },
     "ToolFailureCode": {
       "enum": [
+        "findings_too_large",
         "finding_id_conflict",
         "investigation_interrupted",
         "workspace_full",
@@ -794,8 +795,8 @@
           "type": "array"
         },
         "schema_version": {
-          "const": "2.0.0-dev.51",
-          "default": "2.0.0-dev.51",
+          "const": "2.0.0-dev.52",
+          "default": "2.0.0-dev.52",
           "title": "Schema Version",
           "type": "string"
         },
