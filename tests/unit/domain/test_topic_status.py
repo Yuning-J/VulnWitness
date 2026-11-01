@@ -2,8 +2,8 @@
 
 import pytest
 
-from cve_kgrag.domain.taxonomy import ResultStatus
-from cve_kgrag.domain.topic_context import (
+from vulnwitness.domain.taxonomy import ResultStatus
+from vulnwitness.domain.topic_context import (
     KnowledgeSource,
     QueryScope,
     SourceOutcome,

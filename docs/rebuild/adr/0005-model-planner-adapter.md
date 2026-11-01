@@ -65,8 +65,8 @@ of its share is not read; with the run in time, either is recorded as the failed
 record, so it takes the same path without timing. Only a call still running at the run's
 deadline is `model_timed_out`. An investigation with a model planner may therefore leave
 up to three abandoned calls behind: each round's planner call at the end of its share,
-and one call at the run's deadline. Only `cve-kgrag investigate` plans with a model, one
-process per investigation, and `cve-kgrag eval planner`, whose runs go one after another
+and one call at the run's deadline. Only `vulnwitness investigate` plans with a model, one
+process per investigation, and `vulnwitness eval planner`, whose runs go one after another
 on one call runner and start only once every call an earlier run abandoned has returned,
 so its process holds no more than one investigation's. The MCP tools plan with the
 policy, so ADR 0003 §8's bound on their abandoned calls stands.
@@ -74,7 +74,7 @@ policy, so ADR 0003 §8's bound on their abandoned calls stands.
 ### 3. The request
 
 - Headers: `Authorization: Bearer <key>` (built per request from the `SecretStr`),
-  `Content-Type` and `Accept: application/json`, `User-Agent: cve-kgrag-planner`.
+  `Content-Type` and `Accept: application/json`, `User-Agent: vulnwitness-planner`.
 - Body: `model`, `messages` (the fixed system instructions, then the round's
   `PlanningInput` as JSON), `response_format: {type: json_object}`, `stream: false`, and
   `reasoning_effort` only when configured. No `temperature` or `max_tokens`: replay uses
@@ -142,7 +142,7 @@ policy, so ADR 0003 §8's bound on their abandoned calls stands.
 ### 5. Live tests are opt-in
 
 `tests/live/` is outside `testpaths`, and its tests carry the `live` marker. They are
-skipped unless `CVE_KGRAG_LIVE_TESTS=1`; once opted in, missing planner settings fail.
+skipped unless `VULNWITNESS_LIVE_TESTS=1`; once opted in, missing planner settings fail.
 They check that the configured endpoint answers a round with a plan, that the sealed set
 holds no key, and, for `reasoning_effort` `none`, that the answer carries no reasoning.
 They print nothing of a reply, assert on secrets only through `assert_secret_absent`,
@@ -151,11 +151,11 @@ and are never run with `--showlocals`. `tests/live` is linted with the offline l
 ## Consequences
 
 - An enabled planner with a key plans through this adapter. For DeepSeek:
-  `CVE_KGRAG_PLANNER_BASE_URL=https://api.deepseek.com`,
-  `CVE_KGRAG_PLANNER_MODEL_NAME=deepseek-flash`, `CVE_KGRAG_PLANNER_REASONING_EFFORT=none`.
+  `VULNWITNESS_PLANNER_BASE_URL=https://api.deepseek.com`,
+  `VULNWITNESS_PLANNER_MODEL_NAME=deepseek-flash`, `VULNWITNESS_PLANNER_REASONING_EFFORT=none`.
 - A server that rejects `response_format: json_object` answers 400, which is
   `ENDPOINT_ERROR` every round; the policy plans.
-- The adapter's identity version is the cve-kgrag distribution's version, so a change to
+- The adapter's identity version is the vulnwitness distribution's version, so a change to
   the instructions or the request body changes what a planner does without changing
   `adapter_version` until the package version moves; during development every build is
   `2.0.0.dev0`.

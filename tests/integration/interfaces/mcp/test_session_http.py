@@ -8,14 +8,6 @@ import pytest
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 
-from cve_kgrag.adapters.session.check import SessionChecker
-from cve_kgrag.adapters.session.recorder import SessionRecorder
-from cve_kgrag.composition import (
-    build_knowledge_toolbox,
-    build_serving_data_plane,
-    load_packaged_fixture,
-)
-from cve_kgrag.interfaces.mcp.http_runner import build_mcp_http_app
 from tests.support.asgi import (
     AUTHORIZATION,
     HTTP_HOST,
@@ -26,6 +18,14 @@ from tests.support.asgi import (
 )
 from tests.support.clocks import read_fixed_clock
 from tests.support.session_files import write_findings
+from vulnwitness.adapters.session.check import SessionChecker
+from vulnwitness.adapters.session.recorder import SessionRecorder
+from vulnwitness.composition import (
+    build_knowledge_toolbox,
+    build_serving_data_plane,
+    load_packaged_fixture,
+)
+from vulnwitness.interfaces.mcp.http_runner import build_mcp_http_app
 
 pytestmark = pytest.mark.anyio
 

@@ -9,5 +9,5 @@ uv run pytest -q
 uv run ruff check
 uv run ruff format --check
 uv run mypy
-uv run cve-kgrag schema check
+uv run vulnwitness schema check
 uv lock --check

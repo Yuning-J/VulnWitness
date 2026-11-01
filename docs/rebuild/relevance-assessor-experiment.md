@@ -44,7 +44,7 @@ answer as a whole. FiGHT techniques are left for a second round, if the CVE part
   `scripts/experiments/` whether the experiment passes or fails, so a failure can be
   checked too. It is not part of the package, adds no CLI command and does not run in
   CI. The key, the input records, the replies and the per-item labels stay under
-  `~/data/cve-kgrag/runs/relevance/`; the script, this note and aggregate figures are
+  `~/data/vulnwitness/runs/relevance/`; the script, this note and aggregate figures are
   committed (M7b data rules). No contract, schema or version changes.
 
 ## Scoring against the gold

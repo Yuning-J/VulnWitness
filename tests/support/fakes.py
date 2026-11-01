@@ -9,18 +9,18 @@ from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from cve_kgrag.domain.affectedness import AffectednessFailure, AffectednessRequest
-from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.search import RetrievalMatch, RetrievalOutcome
-from cve_kgrag.domain.taxonomy import BackendFailure, BackendStatus
-from cve_kgrag.domain.threat_context import (
+from tests.support.clocks import SteppingClock
+from vulnwitness.domain.affectedness import AffectednessFailure, AffectednessRequest
+from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.search import RetrievalMatch, RetrievalOutcome
+from vulnwitness.domain.taxonomy import BackendFailure, BackendStatus
+from vulnwitness.domain.threat_context import (
     FightSnapshotInfo,
     ThreatContextItem,
     ThreatContextOutcome,
 )
-from cve_kgrag.ports.retrieval import LexicalRetriever
-from cve_kgrag.ports.sources import FightSource
-from tests.support.clocks import SteppingClock
+from vulnwitness.ports.retrieval import LexicalRetriever
+from vulnwitness.ports.sources import FightSource
 
 # No fixture stores this record, so a channel returning it invents evidence.
 INVENTED_CVE_ID = "CVE-9999-7777"

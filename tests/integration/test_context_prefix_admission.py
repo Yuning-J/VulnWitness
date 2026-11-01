@@ -8,33 +8,6 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.deadline_checkpoint import ignore_checkpoint
-from cve_kgrag.application.decision_path_audit import audit_decision_path
-from cve_kgrag.application.investigate import InvestigationService
-from cve_kgrag.application.investigation_deployment import InvestigationDeployment
-from cve_kgrag.application.planner_setup import DeterministicPlanning
-from cve_kgrag.application.trajectory_replay import (
-    ReplayCompleted,
-    ReplayDifference,
-    replay_evidence_set,
-)
-from cve_kgrag.domain.hashing import canonical_json_bytes
-from cve_kgrag.domain.investigation import (
-    KnowledgeEvidenceSet,
-    StepAdmission,
-    build_prefix_omitted_warning,
-)
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.result_prefix import (
-    build_prefix_admission,
-    measure_response_bytes,
-    slice_response,
-)
-from cve_kgrag.domain.search import SearchResponse
-from cve_kgrag.domain.topic import ReviewStatus
-from cve_kgrag.domain.topic_context import TopicContextResponse
-from cve_kgrag.domain.validation import EvidenceValidationError
 from tests.support.investigation import (
     FIGHT_FREE_TEXT_QUERY,
     build_exact_lookup_call,
@@ -48,6 +21,33 @@ from tests.support.investigation import (
 )
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
 from tests.support.planners import ScriptedModelPort, build_plan_reply, plan_with
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.deadline_checkpoint import ignore_checkpoint
+from vulnwitness.application.decision_path_audit import audit_decision_path
+from vulnwitness.application.investigate import InvestigationService
+from vulnwitness.application.investigation_deployment import InvestigationDeployment
+from vulnwitness.application.planner_setup import DeterministicPlanning
+from vulnwitness.application.trajectory_replay import (
+    ReplayCompleted,
+    ReplayDifference,
+    replay_evidence_set,
+)
+from vulnwitness.domain.hashing import canonical_json_bytes
+from vulnwitness.domain.investigation import (
+    KnowledgeEvidenceSet,
+    StepAdmission,
+    build_prefix_omitted_warning,
+)
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.result_prefix import (
+    build_prefix_admission,
+    measure_response_bytes,
+    slice_response,
+)
+from vulnwitness.domain.search import SearchResponse
+from vulnwitness.domain.topic import ReviewStatus
+from vulnwitness.domain.topic_context import TopicContextResponse
+from vulnwitness.domain.validation import EvidenceValidationError
 
 EXACT_QUERY = "CVE-9999-0001 CVE-9999-0002 CVE-9999-0003"
 Forgery = Literal[

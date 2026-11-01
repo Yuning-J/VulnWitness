@@ -2,12 +2,6 @@
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.investigation_policy import interpret_request
-from cve_kgrag.application.trajectory_replay import ReplayCompleted, replay_evidence_set
-from cve_kgrag.domain.planning import ProductQueryCall
-from cve_kgrag.domain.result_prefix import measure_response_bytes, slice_response
-from cve_kgrag.domain.search import SearchRequest
 from tests.support.investigation import (
     build_investigation_request,
     build_test_deployment,
@@ -21,6 +15,12 @@ from tests.support.product_investigations import (
     build_product_investigation_bundle,
 )
 from tests.support.services import build_fixture_service
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.investigation_policy import interpret_request
+from vulnwitness.application.trajectory_replay import ReplayCompleted, replay_evidence_set
+from vulnwitness.domain.planning import ProductQueryCall
+from vulnwitness.domain.result_prefix import measure_response_bytes, slice_response
+from vulnwitness.domain.search import SearchRequest
 
 
 @pytest.fixture

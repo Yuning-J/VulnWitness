@@ -10,11 +10,11 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from cve_kgrag.composition import load_packaged_source_registry
-from cve_kgrag.domain.cve import CveRecord
-from cve_kgrag.domain.served_dataset import ServedDatasetKind
-from cve_kgrag.domain.threat_context import ThreatContextItem
-from cve_kgrag.interfaces.knowledge_tools import (
+from vulnwitness.composition import load_packaged_source_registry
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.served_dataset import ServedDatasetKind
+from vulnwitness.domain.threat_context import ThreatContextItem
+from vulnwitness.interfaces.knowledge_tools import (
     CVE_RECORD_SOURCE_TEXT_FIELDS,
     FIGHT_TECHNIQUE_SOURCE_TEXT_FIELDS,
     KNOWLEDGE_TOOL_SPECS,
@@ -23,7 +23,7 @@ from cve_kgrag.interfaces.knowledge_tools import (
     SERVER_INSTRUCTIONS,
     ToolLimits,
 )
-from cve_kgrag.schema_snapshots import REQUEST_CONTRACTS, RESPONSE_CONTRACTS, render_schema
+from vulnwitness.schema_snapshots import REQUEST_CONTRACTS, RESPONSE_CONTRACTS, render_schema
 
 EXPECTED_TOOL_NAMES = {
     "get_knowledge_capabilities",

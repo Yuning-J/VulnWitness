@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.migration.candidate_staging import (
+from vulnwitness.adapters.migration.candidate_staging import (
     SIZE_CHECK_INTERVAL_ROWS,
     CandidateStaging,
     CandidateState,
@@ -23,9 +23,9 @@ from cve_kgrag.adapters.migration.candidate_staging import (
     StagedCandidate,
     resolve_cve,
 )
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.domain.corpus_store_manifest import NvdFeedFormat
-from cve_kgrag.domain.migration_report import (
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.domain.corpus_store_manifest import NvdFeedFormat
+from vulnwitness.domain.migration_report import (
     CandidateOutcome,
     CveOutcome,
     MigrationFailed,

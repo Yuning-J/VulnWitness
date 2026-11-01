@@ -1,6 +1,6 @@
 # ADR 0009 — Store activation and serving
 
-Status: accepted (M6 WP10). Applies to `cve-kgrag store`, to how every surface chooses
+Status: accepted (M6 WP10). Applies to `vulnwitness store`, to how every surface chooses
 the records and evidence it serves, and to the operator FiGHT snapshot. It takes the
 corpus store ADR 0008 writes and settles what ADR 0008 §11 hands over. It restates and
 refines the M6 plan's WP10 scope (below, "Deviations"). It amends ADR 0008 §2, §4, §9,
@@ -13,7 +13,7 @@ channel's state when a store is served, §14) and ADR 0006 §5 (legacy `KEV-` ch
 
 ## Context
 
-`cve-kgrag migrate legacy` writes a verified corpus store: a directory whose
+`vulnwitness migrate legacy` writes a verified corpus store: a directory whose
 `manifest.json` pins `records.jsonl` and `anchors.jsonl` (ADR 0008 §9). Nothing serves
 it yet. Every surface takes its records and evidence from
 `composition.load_served_bundle()`, which returns the packaged synthetic fixture; the
@@ -106,10 +106,10 @@ where `v1` is the `identity_version`.
 
 ADR 0004 §1 lists these variables with the others.
 
-- `CVE_KGRAG_STORE_ROOT`: an absolute directory path, always read with the other
+- `VULNWITNESS_STORE_ROOT`: an absolute directory path, always read with the other
   settings. Unset, every surface serves the packaged fixture. A relative or otherwise
   invalid value is a usage error naming the variable.
-- `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` and `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`: both or neither.
+- `VULNWITNESS_FIGHT_SNAPSHOT_PATH` and `VULNWITNESS_FIGHT_SNAPSHOT_SHA256`: both or neither.
   Neither serves the packaged excerpt. The path is absolute, the hash 64 lower-case hex
   characters; one without the other is a usage error. The pairing is an explicit check
   in `load_settings`, not a model validator, whose error has no field location.
@@ -207,7 +207,7 @@ ADR 0004 §1 lists these variables with the others.
   valid target, as long as its format is one this reader reads (§15). The previous
   store is verified again and its digest checked, since it may have changed or gone
   since. With no previous store, rollback exits 1; serving the fixture again means
-  unsetting `CVE_KGRAG_STORE_ROOT`.
+  unsetting `VULNWITNESS_STORE_ROOT`.
 - Activating the store already active verifies it again and keeps the previous store:
   `ACTIVE` is replaced only if the manifest digest differs, so rollback still lands on
   the store active before it.
@@ -217,7 +217,7 @@ ADR 0004 §1 lists these variables with the others.
 
 ### 8. The `store` commands
 
-- `cve-kgrag store validate NAME | activate NAME | rollback | status`, implemented in
+- `vulnwitness store validate NAME | activate NAME | rollback | status`, implemented in
   `adapters/store/store_activation.py` beside the store reader (`application/` may not
   import adapters; WP9's orchestration sits in `adapters/migration` the same way).
 - Exit codes: 2 for a usage error, which includes an unset root (naming the variable)
@@ -246,7 +246,7 @@ ADR 0004 §1 lists these variables with the others.
   after printing otherwise; a previous store that is not `ok` does not fail it. No
   output names the root, and no manifest free text appears.
 - The importer's fixed rollback instruction names this command: "After activation, use
-  `cve-kgrag store rollback`." Each manifest keeps the instruction its importer wrote,
+  `vulnwitness store rollback`." Each manifest keeps the instruction its importer wrote,
   so a `2.0.0-dev.25` store carries that release's wording; the reader accepts any
   bounded instruction text and no command prints it (ADR 0008 §9).
 
@@ -268,7 +268,7 @@ ADR 0004 §1 lists these variables with the others.
 - A root without `ACTIVE` refuses to start: serving the fixture there would silently
   serve synthetic data to an operator who configured real data (owner decision 16).
 - A one-shot command exits 2 with one line; `mcp`, `mcp --http` and `api` print
-  `cve-kgrag <command> cannot start: store unavailable: <reason>` and exit 2 before
+  `vulnwitness <command> cannot start: store unavailable: <reason>` and exit 2 before
   binding an HTTP port. Stdio completes its handshake before loading and exits on load
   failure. The order is settings, then the HTTP token, then the extra and runner, then
   the store, then the FiGHT snapshot (§11), so a core install without an extra exits 1
@@ -317,7 +317,7 @@ of §11: the operator snapshot when one is configured, the packaged excerpt othe
   planner`'s line also says it uses the FiGHT source each gold case names and not a
   configured snapshot. The line names no path, no setting's value and no manifest text.
   Their standard output stays byte for byte the same, and a test runs both with
-  `CVE_KGRAG_STORE_ROOT` set and checks they serve the fixture. The report's own
+  `VULNWITNESS_STORE_ROOT` set and checks they serve the fixture. The report's own
   `dataset` and `corpus_content_sha256` come with the M7b identity change, so the report
   format moves once.
 - Requirement D11 is read accordingly: every surface that serves CVE records, search or
@@ -338,7 +338,7 @@ of §11: the operator snapshot when one is configured, the packaged excerpt othe
   one open, never on a second open of the path: a read within a 4 MiB cap checked while
   reading (the catalogued full file is 1.1 MiB), then the SHA-256 against the
   configured hash, then the catalog lookup, then the strict YAML parse.
-- A failure gives one fixed reason code in the line `cve-kgrag <command> cannot start:
+- A failure gives one fixed reason code in the line `vulnwitness <command> cannot start:
   FiGHT snapshot unavailable: <reason>`, with no traceback, path, file content or
   exception text: `fight_snapshot_missing` (no such file),
   `fight_snapshot_not_regular_file` (a symbolic link or anything but a regular file),
@@ -482,7 +482,7 @@ matched count for `search`. §15 lists the schemas this section changes.
   capability versions.
 - Sharing the data plane removes the second deployment's index build. The operator
   lane (§17) measures startup time and peak RSS; detailed measurements stay in the
-  operator's external run directory under `~/data/cve-kgrag/runs/`.
+  operator's external run directory under `~/data/vulnwitness/runs/`.
   `gc.freeze()` is added only if the lane shows stalls.
 - Health probes see connection refused while an HTTP server loads. MCP stdio
   completes initialization before loading, returns a
@@ -524,7 +524,7 @@ matched count for `search`. §15 lists the schemas this section changes.
   IDs overlap the store, whose hits could then make an investigation `sufficient`
   through `semantic_only` relevance.
 - So in store mode no command loads the semantic adapter or opens the collection,
-  whatever `CVE_KGRAG_SEMANTIC_ENABLED` and `--semantic` say. A `capabilities` run that
+  whatever `VULNWITNESS_SEMANTIC_ENABLED` and `--semantic` say. A `capabilities` run that
   requests the channel reports `semantic_channel` unavailable with a new
   `SemanticUnavailableDetail`, `COLLECTION_NOT_BOUND` ("the semantic collection is not
   bound to the served corpus store"). A `search`, `topic` or `investigate` run that
@@ -557,7 +557,7 @@ that:
 
 - `store_status.schema.json` is published (§8).
 - `migration_report.schema.json`: the report carries the rollback instruction that names
-  `cve-kgrag store rollback`, and a `corpus_content_sha256`, present exactly when the
+  `vulnwitness store rollback`, and a `corpus_content_sha256`, present exactly when the
   report names a store (`imported` or `already_imported`) and taken from the
   verification of that store, the one the run wrote or the existing one it found; and
   the failure codes `target_in_store_root` and `store_root_unusable` (§4).
@@ -594,7 +594,7 @@ The two version axes:
 - The import identity keeps the contract version (ADR 0008 §4), passed in by the caller
   like the importer version, so a re-import under another contract is another import.
 - `dev.26` changes no persisted shape. New stores record `2.0.0-dev.26` and the
-  instruction that names `cve-kgrag store rollback`.
+  instruction that names `vulnwitness store rollback`.
 - The evaluation identity and `investigation_id` keep their shapes;
   `knowledge_capabilities` changes only by the semantic detail above, and a store's
   `cve_search` version differs from the fixture's only in value. A
@@ -705,7 +705,7 @@ watchdog interruptions.
 
 All criteria pass; `graph_expand` remains available on corpus stores, with no tuning
 or contract change. The operator's `measurement.json` and `summary.md` under
-`~/data/cve-kgrag/runs/graph-expand/` retain the per-seed figures and CVE IDs without
+`~/data/vulnwitness/runs/graph-expand/` retain the per-seed figures and CVE IDs without
 record text. The check is bounded to these twenty single-CVE queries and does not
 establish a bound for arbitrary multi-seed searches. See also the release-check paragraph
 in [`PLAN.md`](../PLAN.md).

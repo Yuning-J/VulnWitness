@@ -2,9 +2,9 @@
 
 import pytest
 
-from cve_kgrag.domain.cve import VersionRange
-from cve_kgrag.domain.nvd_version_note import build_nvd_version_note, list_nvd_version_notes
 from tests.support.builders import build_cve_record, build_versioned_product
+from vulnwitness.domain.cve import VersionRange
+from vulnwitness.domain.nvd_version_note import build_nvd_version_note, list_nvd_version_notes
 
 
 @pytest.mark.parametrize(

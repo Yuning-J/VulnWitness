@@ -11,12 +11,12 @@ record_count="${1:-250000}"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 mkdir "$work_dir/inputs" "$work_dir/stores"
-export CVE_KGRAG_STORE_ROOT="$work_dir/stores"
+export VULNWITNESS_STORE_ROOT="$work_dir/stores"
 
 uv run python scripts/operator/build_synthetic_feeds.py "$work_dir/inputs" "$record_count"
-uv run cve-kgrag migrate legacy \
+uv run vulnwitness migrate legacy \
   --inputs "$work_dir/inputs/inputs.yaml" --target "$work_dir/stores/synthetic" > /dev/null
-uv run cve-kgrag store activate synthetic > /dev/null
+uv run vulnwitness store activate synthetic > /dev/null
 echo "store: $(du -sk "$work_dir/stores/synthetic" | cut -f1) KiB"
 
 if [ "$(uname)" = "Darwin" ]; then time_flag="-l"; else time_flag="-v"; fi

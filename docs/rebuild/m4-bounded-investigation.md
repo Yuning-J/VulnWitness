@@ -662,7 +662,7 @@ set resealed with an emptied, reordered or rewritten capability list is rejected
 and the cross-checks against the run catch a composition root that describes its
 deployment wrongly. The rest
 of the trajectory is checked by re-deriving it from its own parts, by the
-decision-path audit, and by replay. `cve-kgrag verify` (`verify_evidence_set`) runs
+decision-path audit, and by replay. `vulnwitness verify` (`verify_evidence_set`) runs
 the validator, the audit and replay on a set handed back, against the deployment's
 sources; the `get_evidence` knowledge tool serves the catalog's anchor under an
 evidence ID, which a consumer compares with the anchor it holds. A set
@@ -861,7 +861,7 @@ the controller runs at seal, as the controller does.
 
 Run together, the three tie a set's decisions to the sources' responses. The
 service runs the validator and the audit on every set it seals. Replay needs the
-sources, so a caller holding a set runs it: `cve-kgrag verify`
+sources, so a caller holding a set runs it: `vulnwitness verify`
 (`verify_evidence_set`) runs the validator, the audit and replay on a set handed back.
 
 Validator and audit cannot catch a step summary rewritten over a real hash. Two
@@ -983,7 +983,7 @@ only.
   nothing about the set either way.
 - **Replay is not run at seal.** The service validates and audits every set it
   returns. Replay re-executes every call, so it is run by a caller that holds a set
-  and the deployment's sources: `cve-kgrag verify` (`verify_evidence_set`). A step
+  and the deployment's sources: `vulnwitness verify` (`verify_evidence_set`). A step
   summary rewritten over a real hash is caught only when someone verifies the set.
 - **Round 1's answer is read from the final answer.** The audit decides whether
   round 1 alone found an answer from the final answer. Each item is kept or dropped
@@ -1008,6 +1008,6 @@ only.
 - **The claim-subject rule** requires every cited anchor to be about the claim's
   subject; derived CVE→CWE→FiGHT mappings will need a relaxed rule.
 - **No planner flags on the CLI.** The planner comes from the settings (ADR 0004).
-  `cve-kgrag investigate QUERY --scope SCOPE [--vendor V]... [--product P]... [--purl U]...`
+  `vulnwitness investigate QUERY --scope SCOPE [--vendor V]... [--product P]... [--purl U]...`
   and the budget options of M6 WP5 print the evidence set and exit 0 only when the
   status is `ok`.

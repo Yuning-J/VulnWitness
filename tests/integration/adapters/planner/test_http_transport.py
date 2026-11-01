@@ -7,14 +7,14 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from cve_kgrag.adapters.planner.http_transport import (
+from tests.support.fake_chat_server import FakeChatServers, ScriptedAnswer
+from vulnwitness.adapters.planner.http_transport import (
     MAX_RESPONSE_BYTES,
     HttpAnswer,
     open_connection,
     post_json,
 )
-from cve_kgrag.domain.planning import ModelReplyFailureDetail
-from tests.support.fake_chat_server import FakeChatServers, ScriptedAnswer
+from vulnwitness.domain.planning import ModelReplyFailureDetail
 
 REQUEST_BODY = b'{"model": "example-chat"}'
 REQUEST_HEADERS = {"Content-Type": "application/json", "Authorization": "Bearer sk-test-key"}

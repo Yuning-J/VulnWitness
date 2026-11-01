@@ -5,8 +5,8 @@ from typing import Any
 
 import yaml
 
-from cve_kgrag.domain.product_query import ProductQueryResponse
-from cve_kgrag.domain.search import SearchResponse
+from vulnwitness.domain.product_query import ProductQueryResponse
+from vulnwitness.domain.search import SearchResponse
 
 
 def write_findings(directory: Path, citations: list[dict[str, Any]]) -> None:

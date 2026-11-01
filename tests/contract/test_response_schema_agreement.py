@@ -16,45 +16,6 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
-from cve_kgrag.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
-from cve_kgrag.application.affectedness import check_affectedness
-from cve_kgrag.application.evidence_set_verification import check_evidence_set
-from cve_kgrag.application.investigate import InvestigationService
-from cve_kgrag.composition import (
-    build_search_service,
-    build_topic_context_service,
-    build_topic_registry,
-    load_packaged_fight_source,
-)
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.evidence_set_verification_report import MAX_VIOLATION_CHARS
-from cve_kgrag.domain.http_rejection import (
-    HTTP_REJECTION_MESSAGES,
-    HttpRejectionCode,
-    build_http_rejection,
-)
-from cve_kgrag.domain.investigation import FightUnavailableDetail, KnowledgeEvidenceSet
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail, ModelReplyFailureDetail
-from cve_kgrag.domain.search import SearchRequest, SemanticUnavailableDetail
-from cve_kgrag.domain.taxonomy import BackendFailureDetail
-from cve_kgrag.domain.timestamps import CalendarDate, Timestamp
-from cve_kgrag.domain.tool_contracts import (
-    TOOL_FAILURE_MESSAGES,
-    ConceptResolution,
-    EvidenceLookup,
-    InvalidField,
-    KnowledgeCapabilities,
-    ToolFailure,
-    ToolFailureCode,
-)
-from cve_kgrag.domain.topic import ProtocolTopic
-from cve_kgrag.domain.topic_context import TopicContextRequest
-from cve_kgrag.domain.validation import EvidenceValidationError
-from cve_kgrag.interfaces.knowledge_toolbox import describe_knowledge_capabilities
-from cve_kgrag.schema_snapshots import REQUEST_CONTRACTS, RESPONSE_CONTRACTS
 from tests.support.affectedness import build_affectedness_request
 from tests.support.clocks import read_fixed_clock
 from tests.support.investigation import (
@@ -84,6 +45,45 @@ from tests.support.investigation_runs import (
 )
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
 from tests.support.planners import DETERMINISTIC_VERIFIER
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
+from vulnwitness.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
+from vulnwitness.application.affectedness import check_affectedness
+from vulnwitness.application.evidence_set_verification import check_evidence_set
+from vulnwitness.application.investigate import InvestigationService
+from vulnwitness.composition import (
+    build_search_service,
+    build_topic_context_service,
+    build_topic_registry,
+    load_packaged_fight_source,
+)
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.evidence_set_verification_report import MAX_VIOLATION_CHARS
+from vulnwitness.domain.http_rejection import (
+    HTTP_REJECTION_MESSAGES,
+    HttpRejectionCode,
+    build_http_rejection,
+)
+from vulnwitness.domain.investigation import FightUnavailableDetail, KnowledgeEvidenceSet
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.planning import ModelPlannerUnavailableDetail, ModelReplyFailureDetail
+from vulnwitness.domain.search import SearchRequest, SemanticUnavailableDetail
+from vulnwitness.domain.taxonomy import BackendFailureDetail
+from vulnwitness.domain.timestamps import CalendarDate, Timestamp
+from vulnwitness.domain.tool_contracts import (
+    TOOL_FAILURE_MESSAGES,
+    ConceptResolution,
+    EvidenceLookup,
+    InvalidField,
+    KnowledgeCapabilities,
+    ToolFailure,
+    ToolFailureCode,
+)
+from vulnwitness.domain.topic import ProtocolTopic
+from vulnwitness.domain.topic_context import TopicContextRequest
+from vulnwitness.domain.validation import EvidenceValidationError
+from vulnwitness.interfaces.knowledge_toolbox import describe_knowledge_capabilities
+from vulnwitness.schema_snapshots import REQUEST_CONTRACTS, RESPONSE_CONTRACTS
 
 CONTRACT_MODELS: dict[str, type[BaseModel]] = {**REQUEST_CONTRACTS, **RESPONSE_CONTRACTS}
 EARLIER_SCHEMA_VERSION = "2.0.0-dev.8"

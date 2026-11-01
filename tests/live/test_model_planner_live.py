@@ -1,14 +1,14 @@
 """The configured model planner against its real endpoint. Opt-in only: these tests run
-when ``CVE_KGRAG_LIVE_TESTS=1`` is set, and then require the planner settings.
+when ``VULNWITNESS_LIVE_TESTS=1`` is set, and then require the planner settings.
 
 Run them with the key from your own shell, never with ``--showlocals``:
 
-    CVE_KGRAG_LIVE_TESTS=1 \\
-    CVE_KGRAG_PLANNER_ENABLED=true \\
-    CVE_KGRAG_PLANNER_BASE_URL=https://api.deepseek.com \\
-    CVE_KGRAG_PLANNER_MODEL_NAME=deepseek-flash \\
-    CVE_KGRAG_PLANNER_REASONING_EFFORT=none \\
-    CVE_KGRAG_PLANNER_API_KEY="$DEEPSEEK_API_KEY" \\
+    VULNWITNESS_LIVE_TESTS=1 \\
+    VULNWITNESS_PLANNER_ENABLED=true \\
+    VULNWITNESS_PLANNER_BASE_URL=https://api.deepseek.com \\
+    VULNWITNESS_PLANNER_MODEL_NAME=deepseek-flash \\
+    VULNWITNESS_PLANNER_REASONING_EFFORT=none \\
+    VULNWITNESS_PLANNER_API_KEY="$DEEPSEEK_API_KEY" \\
     uv run pytest tests/live -m live
 
 Nothing here prints a reply's text.
@@ -22,30 +22,30 @@ from dataclasses import dataclass, field
 import pytest
 from pydantic import SecretStr
 
-from cve_kgrag.adapter_discovery import discover_planner_setup
-from cve_kgrag.adapters.fixture.synthetic_fixture import default_fixture_dir, load_fixture_bundle
-from cve_kgrag.adapters.planner.http_transport import HttpAnswer, post_json
-from cve_kgrag.adapters.planner.openai_compatible import OpenAiCompatibleModelPort
-from cve_kgrag.application.planner_setup import ModelPlanning
-from cve_kgrag.composition import build_investigation_service, build_serving_data_plane
-from cve_kgrag.domain.investigation import InvestigationRequest
-from cve_kgrag.domain.planning import ModelReplyFailureDetail
-from cve_kgrag.domain.taxonomy import BackendStatus
-from cve_kgrag.domain.topic_context import QueryScope
-from cve_kgrag.settings import ModelPlannerSettings, load_settings
 from tests.support.planners import EXAMPLE_PLANNING_INPUT
 from tests.support.secrets import assert_secret_absent
+from vulnwitness.adapter_discovery import discover_planner_setup
+from vulnwitness.adapters.fixture.synthetic_fixture import default_fixture_dir, load_fixture_bundle
+from vulnwitness.adapters.planner.http_transport import HttpAnswer, post_json
+from vulnwitness.adapters.planner.openai_compatible import OpenAiCompatibleModelPort
+from vulnwitness.application.planner_setup import ModelPlanning
+from vulnwitness.composition import build_investigation_service, build_serving_data_plane
+from vulnwitness.domain.investigation import InvestigationRequest
+from vulnwitness.domain.planning import ModelReplyFailureDetail
+from vulnwitness.domain.taxonomy import BackendStatus
+from vulnwitness.domain.topic_context import QueryScope
+from vulnwitness.settings import ModelPlannerSettings, load_settings
 
 pytestmark = [
     pytest.mark.live,
     pytest.mark.skipif(
-        os.environ.get("CVE_KGRAG_LIVE_TESTS") != "1",
-        reason="live tests run only with CVE_KGRAG_LIVE_TESTS=1",
+        os.environ.get("VULNWITNESS_LIVE_TESTS") != "1",
+        reason="live tests run only with VULNWITNESS_LIVE_TESTS=1",
     ),
 ]
 MISSING_SETTINGS = (
-    "set CVE_KGRAG_PLANNER_ENABLED, CVE_KGRAG_PLANNER_BASE_URL, CVE_KGRAG_PLANNER_MODEL_NAME "
-    "and CVE_KGRAG_PLANNER_API_KEY to run the live tests"
+    "set VULNWITNESS_PLANNER_ENABLED, VULNWITNESS_PLANNER_BASE_URL, VULNWITNESS_PLANNER_MODEL_NAME "
+    "and VULNWITNESS_PLANNER_API_KEY to run the live tests"
 )
 
 
@@ -108,7 +108,7 @@ def test_reasoning_effort_none_turns_reasoning_off(
     configured_planner: ConfiguredPlanner,
 ) -> None:
     if configured_planner.settings.reasoning_effort != "none":
-        pytest.skip("checks CVE_KGRAG_PLANNER_REASONING_EFFORT=none only")
+        pytest.skip("checks VULNWITNESS_PLANNER_REASONING_EFFORT=none only")
     kept_answers = KeptAnswers()
     model_port = OpenAiCompatibleModelPort(
         base_url=configured_planner.settings.base_url,

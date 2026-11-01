@@ -1,7 +1,10 @@
-# telecom-cve-kgrag
+# VulnWitness
 
-A read-only evidence layer for CVEs and telecom threat context, with cited sources and
-bounded investigations over synthetic fixtures or operator-imported NVD/KEV data.
+An evidence-backed vulnerability investigation workbench for analysts and AI agents.
+
+The general evidence core covers CVE/KEV records, product queries, CWE → CAPEC → ATT&CK
+catalogue associations, and sessions over synthetic fixtures or operator-imported data.
+A built-in telecom extension adds topic cards and MITRE FiGHT threat context.
 Catalogue associations are not attack paths or evidence of exploitation. Product
 matches and NVD version notes leave affectedness `unknown`.
 
@@ -28,12 +31,12 @@ source .venv/bin/activate
 
 ## Quick start
 
-With `CVE_KGRAG_STORE_ROOT` unset, these use the packaged synthetic fixture:
+With `VULNWITNESS_STORE_ROOT` unset, these use the packaged synthetic fixture:
 
 ```sh
-cve-kgrag demo
-cve-kgrag lookup CVE-9999-0001
-cve-kgrag investigate 5G-AKA --scope mixed --format text
+vulnwitness demo
+vulnwitness lookup CVE-9999-0001
+vulnwitness investigate 5G-AKA --scope mixed --format text
 ```
 
 `investigate` exits 1 when needs remain unmet, including this pending-card example.
@@ -43,11 +46,11 @@ cve-kgrag investigate 5G-AKA --scope mixed --format text
 Create a store root outside the repository, then fetch, import and activate:
 
 ```sh
-mkdir -p ~/data/cve-kgrag/stores
-export CVE_KGRAG_STORE_ROOT="$HOME/data/cve-kgrag/stores"
-.venv/bin/python scripts/operator/refresh_store.py --feeds-dir ~/data/cve-kgrag/feeds/2026-10-31 --store nvd-2026-10-31 --activate
-export CVE_KGRAG_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-cve-kgrag api
+mkdir -p ~/data/vulnwitness/stores
+export VULNWITNESS_STORE_ROOT="$HOME/data/vulnwitness/stores"
+.venv/bin/python scripts/operator/refresh_store.py --feeds-dir ~/data/vulnwitness/feeds/2026-10-31 --store nvd-2026-10-31 --activate
+export VULNWITNESS_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+vulnwitness api
 ```
 
 The bundled demo requires no corpus download. For the full NVD corpus, we recommend a
@@ -58,17 +61,17 @@ The [runbook](docs/runbook.md) covers local-feed reuse, sizing and recovery.
 
 ## Entry points
 
-- CLI lookup: `cve-kgrag lookup CVE-9999-0001 --format text` — exact record and weakness
+- CLI lookup: `vulnwitness lookup CVE-9999-0001 --format text` — exact record and weakness
   paths; JSON is the default.
-- CLI search: `cve-kgrag search "authentication bypass" --format text` — ranked word
+- CLI search: `vulnwitness search "authentication bypass" --format text` — ranked word
   matches; JSON is the default.
-- CLI product: `cve-kgrag product --vendor democorp --version 2.0 --format text` — counted
+- CLI product: `vulnwitness product --vendor democorp --version 2.0 --format text` — counted
   inventory pages. With JSON output, `--all` prints every page;
   `--output FILE --export jsonl|csv` exports every page without requiring `--all`.
-- CLI investigate: `cve-kgrag investigate 5G-AKA --scope mixed --format text` — bounded evidence set.
-- CLI capabilities: `cve-kgrag capabilities` — sources, coverage and available tools.
-- REST: `curl -H "Authorization: Bearer $CVE_KGRAG_HTTP_TOKEN" http://127.0.0.1:8766/api/v2/capabilities`.
-- MCP: `cve-kgrag mcp` (stdio), or `cve-kgrag mcp --http` (authenticated `/mcp` on port 8765).
+- CLI investigate: `vulnwitness investigate 5G-AKA --scope mixed --format text` — bounded evidence set.
+- CLI capabilities: `vulnwitness capabilities` — sources, coverage and available tools.
+- REST: `curl -H "Authorization: Bearer $VULNWITNESS_HTTP_TOKEN" http://127.0.0.1:8766/api/v2/capabilities`.
+- MCP: `vulnwitness mcp` (stdio), or `vulnwitness mcp --http` (authenticated `/mcp` on port 8765).
 
 Record data calls with `--session DIR` and JSON output; `--format text` is refused.
 Product traversals and exports record each page as a separate call, subject to the
@@ -77,13 +80,13 @@ session call limit. Export files are outside the session record. See
 
 ## Use with an AI agent
 
-Give your agent the [investigation Skill](skills/cve-kgrag-investigation/SKILL.md)
+Give your agent the [investigation Skill](skills/vulnwitness-investigation/SKILL.md)
 for product triage, CVE lookup, and telecom questions with cited findings.
-Use the [MCP configuration snippets](skills/cve-kgrag-investigation/mcp-config/README.md)
+Use the [MCP configuration snippets](skills/vulnwitness-investigation/mcp-config/README.md)
 for Claude Code, Codex, or Cursor; the plain stdio variants serve packaged demo data.
-Launch `cve-kgrag mcp --session DIR` to record tool calls and exact responses,
+Launch `vulnwitness mcp --session DIR` to record tool calls and exact responses,
 including failures. The agent authors `DIR/findings.yaml` separately, then runs
-`cve-kgrag session check DIR`. A passing check validates record consistency and
+`vulnwitness session check DIR`. A passing check validates record consistency and
 citation resolution; it does not establish that statements are supported by evidence.
 
 ## Limits

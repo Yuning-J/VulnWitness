@@ -7,32 +7,6 @@ from collections.abc import Sequence
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.budget import BudgetBreach
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.investigation import (
-    DecisionBasis,
-    EvidenceNeedKind,
-    FightBackendRequest,
-    FightBlock,
-    FightBlockReason,
-    InvestigationWarning,
-    KnowledgeEvidenceSet,
-    NeedOutcome,
-    PlannerOutcome,
-    StepAdmission,
-    StepReason,
-    StopReason,
-)
-from cve_kgrag.domain.planning import PlanRejection, PlanRejectionCode, QueryIntent, ToolName
-from cve_kgrag.domain.taxonomy import ResultStatus
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.domain.topic_context import (
-    KnowledgeSource,
-    TopicContextWarning,
-    TopicContextWarningCode,
-)
-from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.collect import list_technique_ids
 from tests.support.evaluation import run_deterministically, run_with_replies
 from tests.support.investigation import (
@@ -61,6 +35,32 @@ from tests.support.planners import (
     ScriptedModelPort,
     build_plan_reply,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.budget import BudgetBreach
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.investigation import (
+    DecisionBasis,
+    EvidenceNeedKind,
+    FightBackendRequest,
+    FightBlock,
+    FightBlockReason,
+    InvestigationWarning,
+    KnowledgeEvidenceSet,
+    NeedOutcome,
+    PlannerOutcome,
+    StepAdmission,
+    StepReason,
+    StopReason,
+)
+from vulnwitness.domain.planning import PlanRejection, PlanRejectionCode, QueryIntent, ToolName
+from vulnwitness.domain.taxonomy import ResultStatus
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.domain.topic_context import (
+    KnowledgeSource,
+    TopicContextWarning,
+    TopicContextWarningCode,
+)
+from vulnwitness.topics.registry import TopicRegistry
 
 FIGHT_DIRECT_SEARCH = {"tool": "fight_direct_search"}
 

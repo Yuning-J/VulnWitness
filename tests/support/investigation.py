@@ -10,45 +10,6 @@ from typing import Any, Literal
 
 import yaml
 
-from cve_kgrag.adapters.fight.pinned_yaml import UnavailableFightSource
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
-from cve_kgrag.application.decision_path_audit import audit_decision_path
-from cve_kgrag.application.investigate import InvestigationService
-from cve_kgrag.application.investigation_deployment import InvestigationDeployment
-from cve_kgrag.application.planner_setup import DeterministicPlanning, PlannerSetup
-from cve_kgrag.application.serving_data_plane import ServingDataPlane
-from cve_kgrag.composition import (
-    build_investigation_deployment,
-    build_investigation_service,
-    build_serving_data_plane,
-    load_packaged_fight_source,
-)
-from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.investigation import (
-    EvidenceNeedKind,
-    InvestigationRequest,
-    KnowledgeEvidenceSet,
-    NeedOutcome,
-    SourceCapability,
-    StepReason,
-)
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.planning import (
-    CveExactLookupCall,
-    CveSearchCall,
-    ModelPlannerUnavailableDetail,
-    ToolName,
-    TopicContextCall,
-)
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.domain.topic import ReviewStatus, TopicReview
-from cve_kgrag.ports.affectedness import TrustifyPort
-from cve_kgrag.ports.planning import ModelPort
-from cve_kgrag.ports.sources import FightSource
-from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.clocks import SteppingClock, read_fixed_clock
 from tests.support.fakes import (
     BlockingFightSource,
@@ -59,6 +20,45 @@ from tests.support.fakes import (
 from tests.support.paths import GOLD_DIR
 from tests.support.planners import plan_with
 from tests.support.services import build_fixture_service
+from vulnwitness.adapters.fight.pinned_yaml import UnavailableFightSource
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
+from vulnwitness.application.decision_path_audit import audit_decision_path
+from vulnwitness.application.investigate import InvestigationService
+from vulnwitness.application.investigation_deployment import InvestigationDeployment
+from vulnwitness.application.planner_setup import DeterministicPlanning, PlannerSetup
+from vulnwitness.application.serving_data_plane import ServingDataPlane
+from vulnwitness.composition import (
+    build_investigation_deployment,
+    build_investigation_service,
+    build_serving_data_plane,
+    load_packaged_fight_source,
+)
+from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.investigation import (
+    EvidenceNeedKind,
+    InvestigationRequest,
+    KnowledgeEvidenceSet,
+    NeedOutcome,
+    SourceCapability,
+    StepReason,
+)
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.planning import (
+    CveExactLookupCall,
+    CveSearchCall,
+    ModelPlannerUnavailableDetail,
+    ToolName,
+    TopicContextCall,
+)
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.domain.topic import ReviewStatus, TopicReview
+from vulnwitness.ports.affectedness import TrustifyPort
+from vulnwitness.ports.planning import ModelPort
+from vulnwitness.ports.sources import FightSource
+from vulnwitness.topics.registry import TopicRegistry
 
 FightChoice = Literal["packaged", "unavailable", "failing"]
 BlockingBackend = Literal["lexical", "fight"]

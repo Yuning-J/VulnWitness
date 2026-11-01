@@ -11,24 +11,24 @@ import pytest
 import yaml
 from jsonschema import Draft202012Validator
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.affectedness import AffectednessFailure, ApplicabilityStatus
-from cve_kgrag.domain.investigation import NeedOutcome, StopReason
-from cve_kgrag.domain.nvd_version_note import NvdVersionHit, NvdVersionNoHit, NvdVersionUnknown
-from cve_kgrag.domain.product_query import DescriptionMentionBasis, ProductFieldBasis
-from cve_kgrag.domain.relevance import RelevanceLabel
-from cve_kgrag.domain.session_contracts import CLI_SESSION_CONTRACTS
-from cve_kgrag.domain.session_record import SessionFindings
-from cve_kgrag.domain.taxonomy import ResultStatus
-from cve_kgrag.domain.tool_contracts import ToolFailureCode
-from cve_kgrag.domain.topic import ReviewStatus
-from cve_kgrag.domain.topic_context import QueryScope
-from cve_kgrag.domain.weakness_associations import WeaknessAssociationPath
-from cve_kgrag.interfaces.knowledge_tools import KNOWLEDGE_TOOL_SPECS, KnowledgeToolName
 from tests.support.paths import REPOSITORY_ROOT
 from tests.support.toolbox import build_test_toolbox, require_answer
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.affectedness import AffectednessFailure, ApplicabilityStatus
+from vulnwitness.domain.investigation import NeedOutcome, StopReason
+from vulnwitness.domain.nvd_version_note import NvdVersionHit, NvdVersionNoHit, NvdVersionUnknown
+from vulnwitness.domain.product_query import DescriptionMentionBasis, ProductFieldBasis
+from vulnwitness.domain.relevance import RelevanceLabel
+from vulnwitness.domain.session_contracts import CLI_SESSION_CONTRACTS
+from vulnwitness.domain.session_record import SessionFindings
+from vulnwitness.domain.taxonomy import ResultStatus
+from vulnwitness.domain.tool_contracts import ToolFailureCode
+from vulnwitness.domain.topic import ReviewStatus
+from vulnwitness.domain.topic_context import QueryScope
+from vulnwitness.domain.weakness_associations import WeaknessAssociationPath
+from vulnwitness.interfaces.knowledge_tools import KNOWLEDGE_TOOL_SPECS, KnowledgeToolName
 
-SKILL_DIRECTORY = REPOSITORY_ROOT / "skills" / "cve-kgrag-investigation"
+SKILL_DIRECTORY = REPOSITORY_ROOT / "skills" / "vulnwitness-investigation"
 
 
 def enum_values(enum_type: type[StrEnum]) -> set[str]:
@@ -177,9 +177,9 @@ def test_client_snippets_parse_and_select_the_packaged_demo(client: str) -> None
     server_entries: list[dict[str, Any]] = []
     for snippet in snippets:
         if client == "codex":
-            server = tomllib.loads(snippet)["mcp_servers"]["cve-kgrag"]
+            server = tomllib.loads(snippet)["mcp_servers"]["vulnwitness"]
         else:
-            server = json.loads(snippet)["mcpServers"]["cve-kgrag"]
+            server = json.loads(snippet)["mcpServers"]["vulnwitness"]
         server_entries.append(server)
 
     # Assert
@@ -187,14 +187,14 @@ def test_client_snippets_parse_and_select_the_packaged_demo(client: str) -> None
     assert server_entries[0]["args"] == ["mcp"]
     assert server_entries[1]["args"] == ["mcp", "--session", "/absolute/path/to/session"]
     for server in server_entries:
-        assert server["command"] == "cve-kgrag"
-        assert server["env"]["CVE_KGRAG_STORE_ROOT"] == ""
-        assert server["env"]["CVE_KGRAG_MITRE_SNAPSHOT_PATH"] == ""
-        assert server["env"]["CVE_KGRAG_MITRE_SNAPSHOT_SHA256"] == ""
-        assert server["env"]["CVE_KGRAG_FIGHT_SNAPSHOT_PATH"] == ""
-        assert server["env"]["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] == ""
-        assert server["env"]["CVE_KGRAG_PLANNER_ENABLED"] == "false"
-        assert server["env"]["CVE_KGRAG_SEMANTIC_ENABLED"] == "false"
+        assert server["command"] == "vulnwitness"
+        assert server["env"]["VULNWITNESS_STORE_ROOT"] == ""
+        assert server["env"]["VULNWITNESS_MITRE_SNAPSHOT_PATH"] == ""
+        assert server["env"]["VULNWITNESS_MITRE_SNAPSHOT_SHA256"] == ""
+        assert server["env"]["VULNWITNESS_FIGHT_SNAPSHOT_PATH"] == ""
+        assert server["env"]["VULNWITNESS_FIGHT_SNAPSHOT_SHA256"] == ""
+        assert server["env"]["VULNWITNESS_PLANNER_ENABLED"] == "false"
+        assert server["env"]["VULNWITNESS_SEMANTIC_ENABLED"] == "false"
 
 
 def test_example_citations_resolve_in_the_corresponding_fixture_call(

@@ -7,19 +7,23 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fight.pinned_yaml import UnavailableFightSource
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
-from cve_kgrag.application.topic_context import TopicContextService, TopicExploration
-from cve_kgrag.composition import (
+from tests.support.builders import build_anchor, build_bundle_with
+from tests.support.clocks import read_fixed_clock
+from tests.support.fakes import CannedRetriever, LexicalRequestRecorder
+from tests.support.services import build_fixture_service
+from vulnwitness.adapters.fight.pinned_yaml import UnavailableFightSource
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
+from vulnwitness.application.topic_context import TopicContextService, TopicExploration
+from vulnwitness.composition import (
     build_evidence_catalog,
     build_topic_context_service,
     load_packaged_fight_source,
 )
-from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.search import ChannelOutcome, RetrievalMatch, RetrievalOutcome
-from cve_kgrag.domain.taxonomy import (
+from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.search import ChannelOutcome, RetrievalMatch, RetrievalOutcome
+from vulnwitness.domain.taxonomy import (
     BackendFailure,
     BackendFailureDetail,
     BackendStatus,
@@ -27,15 +31,15 @@ from cve_kgrag.domain.taxonomy import (
     ResultStatus,
     RetrievalChannel,
 )
-from cve_kgrag.domain.threat_context import (
+from vulnwitness.domain.threat_context import (
     FightSnapshotInfo,
     KnownFightSnapshot,
     SnapshotCoverage,
     ThreatContextItem,
     ThreatContextOutcome,
 )
-from cve_kgrag.domain.topic import RelevanceTier
-from cve_kgrag.domain.topic_context import (
+from vulnwitness.domain.topic import RelevanceTier
+from vulnwitness.domain.topic_context import (
     KnowledgeSource,
     QueryScope,
     TopicContextRequest,
@@ -43,13 +47,9 @@ from cve_kgrag.domain.topic_context import (
     TopicContextWarning,
     TopicContextWarningCode,
 )
-from cve_kgrag.domain.validation import EvidenceValidationError, validate_topic_context_response
-from cve_kgrag.ports.sources import FightSource
-from cve_kgrag.topics.registry import TopicRegistry
-from tests.support.builders import build_anchor, build_bundle_with
-from tests.support.clocks import read_fixed_clock
-from tests.support.fakes import CannedRetriever, LexicalRequestRecorder
-from tests.support.services import build_fixture_service
+from vulnwitness.domain.validation import EvidenceValidationError, validate_topic_context_response
+from vulnwitness.ports.sources import FightSource
+from vulnwitness.topics.registry import TopicRegistry
 
 FULL_SNAPSHOT = FightSnapshotInfo(
     repository_url="https://github.com/mitre/FiGHT",

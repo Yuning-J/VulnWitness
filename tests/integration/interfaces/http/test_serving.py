@@ -8,21 +8,21 @@ from pathlib import Path
 import httpx2
 import pytest
 
-from cve_kgrag.cli import main
 from tests.support.asgi import AUTHORIZATION
 from tests.support.corpus_stores import import_store
 from tests.support.process_servers import (
-    CVE_KGRAG_SCRIPT,
     SERVER_START_SECONDS,
+    VULNWITNESS_SCRIPT,
     build_server_environment,
     find_free_loopback_port,
     run_on_a_port_in_use,
 )
 from tests.support.stdio_client import read_until_notice
+from vulnwitness.cli import main
 
 
 @pytest.fixture(
-    params=[(["api"], "CVE_KGRAG_API_PORT"), (["mcp", "--http"], "CVE_KGRAG_MCP_HTTP_PORT")]
+    params=[(["api"], "VULNWITNESS_API_PORT"), (["mcp", "--http"], "VULNWITNESS_MCP_HTTP_PORT")]
 )
 def http_command(request: pytest.FixtureRequest) -> tuple[list[str], str]:
     command: tuple[list[str], str] = request.param
@@ -34,7 +34,7 @@ def store_settings(tmp_path: Path) -> dict[str, str]:
     store_root = tmp_path / "stores"
     store_root.mkdir()
     import_store(store_root, "first")
-    settings = {"CVE_KGRAG_STORE_ROOT": str(store_root)}
+    settings = {"VULNWITNESS_STORE_ROOT": str(store_root)}
     assert main(["store", "activate", "first"], settings) == 0
     return settings
 
@@ -47,7 +47,7 @@ def starting_server(
     host = "127.0.0.1"
     port = find_free_loopback_port(host)
     server_process = subprocess.Popen(
-        [str(CVE_KGRAG_SCRIPT), *arguments],
+        [str(VULNWITNESS_SCRIPT), *arguments],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -80,11 +80,11 @@ async def test_ready_notice_names_a_serving_port_after_the_data_loaded_notice(
     notice_lines = notices.decode().splitlines()
     assert len(notice_lines) == 3
     assert notice_lines[0] == (
-        f"cve-kgrag {command}: loading store first; a full NVD store takes minutes"
+        f"vulnwitness {command}: loading store first; a full NVD store takes minutes"
     )
     assert " data loaded after " in notice_lines[1]
     assert "ready" not in notice_lines[1]
-    assert notice_lines[2] == f"cve-kgrag {command}: ready on {server_url}"
+    assert notice_lines[2] == f"vulnwitness {command}: ready on {server_url}"
     assert server_process.returncode == 0
     assert stdout == ""
     assert stderr == ""

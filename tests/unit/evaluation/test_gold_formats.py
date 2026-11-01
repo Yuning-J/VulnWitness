@@ -4,8 +4,8 @@ other mapping, part of the labelled-case keys included, is refused without quoti
 
 import pytest
 
-from cve_kgrag.evaluation.gold_cases import MAX_GOLD_FILE_BYTES, GoldFileError
-from cve_kgrag.evaluation.gold_formats import (
+from vulnwitness.evaluation.gold_cases import MAX_GOLD_FILE_BYTES, GoldFileError
+from vulnwitness.evaluation.gold_formats import (
     GoldFormat,
     classify_gold_document,
     read_gold_document,

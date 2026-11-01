@@ -2,8 +2,6 @@
 
 import pytest
 
-from cve_kgrag.adapters.mitre.catalogue_parser import build_mapping_snapshot
-from cve_kgrag.domain.weakness_associations import MAX_WEAKNESS_PATHS
 from tests.support.builders import build_cve_record
 from tests.support.mitre_catalogues import (
     CAPEC_XML,
@@ -11,6 +9,8 @@ from tests.support.mitre_catalogues import (
     build_attack_json,
     build_snippet_mapping,
 )
+from vulnwitness.adapters.mitre.catalogue_parser import build_mapping_snapshot
+from vulnwitness.domain.weakness_associations import MAX_WEAKNESS_PATHS
 
 
 def test_direct_path_retains_every_hop_source() -> None:

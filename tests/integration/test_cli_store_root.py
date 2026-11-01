@@ -11,21 +11,6 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapter_discovery import InterfaceUnavailable
-from cve_kgrag.adapters.store.corpus_store import load_corpus_store
-from cve_kgrag.cli import load_search_service_or_exit, main, run_mcp_server
-from cve_kgrag.domain.investigation import (
-    KnowledgeEvidenceSet,
-    SourceCapability,
-    SourceCapabilityState,
-)
-from cve_kgrag.domain.search import SearchResponse, SemanticUnavailableDetail
-from cve_kgrag.domain.served_dataset import ServedDatasetKind
-from cve_kgrag.domain.store_status import ActiveRecordState, StoreCondition, StoreStatus
-from cve_kgrag.domain.taxonomy import BackendFailureDetail
-from cve_kgrag.domain.tool_contracts import KnowledgeCapabilities
-from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
-from cve_kgrag.settings import ServiceSettings, load_settings
 from tests.support.clocks import SteppingClock
 from tests.support.collect import find_capability
 from tests.support.corpus_stores import import_store
@@ -38,6 +23,21 @@ from tests.support.legacy_inputs import (
     write_gzip_feed,
     write_inputs_manifest,
 )
+from vulnwitness.adapter_discovery import InterfaceUnavailable
+from vulnwitness.adapters.store.corpus_store import load_corpus_store
+from vulnwitness.cli import load_search_service_or_exit, main, run_mcp_server
+from vulnwitness.domain.investigation import (
+    KnowledgeEvidenceSet,
+    SourceCapability,
+    SourceCapabilityState,
+)
+from vulnwitness.domain.search import SearchResponse, SemanticUnavailableDetail
+from vulnwitness.domain.served_dataset import ServedDatasetKind
+from vulnwitness.domain.store_status import ActiveRecordState, StoreCondition, StoreStatus
+from vulnwitness.domain.taxonomy import BackendFailureDetail
+from vulnwitness.domain.tool_contracts import KnowledgeCapabilities
+from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.settings import ServiceSettings, load_settings
 
 STORE_MARKER = "storemarker"
 STORE_DESCRIPTION = f"SYNTHETIC: {STORE_MARKER} gateway mishandles input."
@@ -67,7 +67,7 @@ def store_root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def root_settings(store_root: Path) -> dict[str, str]:
-    return {"CVE_KGRAG_STORE_ROOT": str(store_root)}
+    return {"VULNWITNESS_STORE_ROOT": str(store_root)}
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def unservable_settings(tmp_path: Path) -> dict[str, str]:
     store_root = tmp_path / "unservable"
     store_root.mkdir()
     import_store(store_root, "first")
-    return {"CVE_KGRAG_STORE_ROOT": str(store_root)}
+    return {"VULNWITNESS_STORE_ROOT": str(store_root)}
 
 
 def run_usage_error(arguments: list[str], environment: Mapping[str, str]) -> int:
@@ -102,7 +102,7 @@ def test_store_command_without_a_root_is_a_usage_error_naming_the_variable(
     exit_code = run_usage_error(["store", "status"], {})
 
     assert exit_code == 2
-    assert "CVE_KGRAG_STORE_ROOT: required by store" in capsys.readouterr().err
+    assert "VULNWITNESS_STORE_ROOT: required by store" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("name", ["ACTIVE", "active", "../first", ".hidden", "a/b", "x" * 65])
@@ -148,7 +148,7 @@ def test_store_failure_exits_one_with_its_code_and_no_path(
     assert exit_code == 1
     assert captured.out == ""
     assert captured.err == (
-        "cve-kgrag store validate failed: store_missing: no store has that name under the root\n"
+        "vulnwitness store validate failed: store_missing: no store has that name under the root\n"
     )
     assert str(store_root) not in captured.err
 
@@ -195,7 +195,7 @@ def test_store_command_on_an_unusable_root_names_the_reason_not_the_root(
 ) -> None:
     missing_root = tmp_path / "missing-root"
 
-    exit_code = main(["store", "status"], {"CVE_KGRAG_STORE_ROOT": str(missing_root)})
+    exit_code = main(["store", "status"], {"VULNWITNESS_STORE_ROOT": str(missing_root)})
 
     captured = capsys.readouterr()
     assert exit_code == 1
@@ -282,7 +282,7 @@ def test_serving_command_on_a_root_without_active_refuses_to_start(
     assert exit_code == 2
     assert captured.out == ""
     assert captured.err == (
-        f"cve-kgrag {arguments[0]} cannot start: store unavailable: no_active_store\n"
+        f"vulnwitness {arguments[0]} cannot start: store unavailable: no_active_store\n"
     )
 
 
@@ -311,7 +311,7 @@ def test_mcp_serves_the_active_store(active_settings: dict[str, str], store_root
 def test_mcp_without_its_runner_exits_before_it_touches_the_root(
     unservable_settings: dict[str, str], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    store_root = Path(unservable_settings["CVE_KGRAG_STORE_ROOT"])
+    store_root = Path(unservable_settings["VULNWITNESS_STORE_ROOT"])
 
     exit_code = run_mcp_server(
         InterfaceUnavailable("the 'mcp' extra is not installed"),
@@ -326,7 +326,7 @@ def test_mcp_on_a_root_without_active_refuses_to_start(
     unservable_settings: dict[str, str], capsys: pytest.CaptureFixture[str]
 ) -> None:
     runner = RecordingMcpServerRunner()
-    store_root = Path(unservable_settings["CVE_KGRAG_STORE_ROOT"])
+    store_root = Path(unservable_settings["VULNWITNESS_STORE_ROOT"])
 
     with pytest.raises(SystemExit) as raised:
         run_mcp_server(runner, ServiceSettings(store_root=store_root))
@@ -334,7 +334,7 @@ def test_mcp_on_a_root_without_active_refuses_to_start(
     assert raised.value.code == 2
     assert runner.served_toolboxes == []
     assert capsys.readouterr().err == (
-        "cve-kgrag mcp cannot start: store unavailable: no_active_store\n"
+        "vulnwitness mcp cannot start: store unavailable: no_active_store\n"
     )
 
 
@@ -397,8 +397,8 @@ def test_loading_a_store_names_it_and_the_seconds_to_load_on_stderr(
     )
     assert captured.out == ""
     assert captured.err == (
-        "cve-kgrag search: loading store second; a full NVD store takes minutes\n"
-        f"cve-kgrag search: {cve_search_version} data loaded after 12 s\n"
+        "vulnwitness search: loading store second; a full NVD store takes minutes\n"
+        f"vulnwitness search: {cve_search_version} data loaded after 12 s\n"
     )
 
 
@@ -417,9 +417,9 @@ def test_command_over_a_store_announces_loading_on_stderr_and_prints_only_json(
     assert exit_code == 0
     assert json.loads(captured.out)
     assert notice_lines[0] == (
-        f"cve-kgrag {arguments[0]}: loading store second; a full NVD store takes minutes"
+        f"vulnwitness {arguments[0]}: loading store second; a full NVD store takes minutes"
     )
-    assert notice_lines[1].startswith(f"cve-kgrag {arguments[0]}: corpus-store-v1@sha256:")
+    assert notice_lines[1].startswith(f"vulnwitness {arguments[0]}: corpus-store-v1@sha256:")
     assert " data loaded after " in notice_lines[1]
 
 
@@ -445,7 +445,7 @@ def test_mcp_over_a_store_announces_loading_on_stderr_and_writes_nothing_to_stdo
     assert exit_code == 0
     assert captured.out == ""
     assert captured.err.startswith(
-        "cve-kgrag mcp: loading store second; a full NVD store takes minutes\n"
+        "vulnwitness mcp: loading store second; a full NVD store takes minutes\n"
     )
     assert " data loaded after " in captured.err
 
@@ -483,7 +483,7 @@ def test_eval_planner_runs_on_the_fixture_with_a_root_without_active(
 
     assert exit_code == 0
     assert capsys.readouterr().err.startswith(
-        "cve-kgrag eval planner runs investigation trajectories on the packaged synthetic "
+        "vulnwitness eval planner runs investigation trajectories on the packaged synthetic "
         "fixture, not the store root, and the FiGHT source each gold case names, not a "
         "configured snapshot\n"
     )
@@ -512,7 +512,7 @@ def test_migrate_runs_with_a_root_without_active(
     manifest_path = write_inputs_manifest(
         inputs_dir, [build_declaration("nvdcve-2.0-2099.json.gz")]
     )
-    store_root = Path(unservable_settings["CVE_KGRAG_STORE_ROOT"])
+    store_root = Path(unservable_settings["VULNWITNESS_STORE_ROOT"])
 
     exit_code = main(
         ["migrate", "legacy", "--inputs", str(manifest_path), "--target", str(store_root / "new")],
@@ -535,7 +535,7 @@ def test_demo_says_once_it_uses_the_fixture_and_prints_what_it_prints_without_a_
     assert exit_code == 0
     assert captured.out == output_without_root.out
     assert captured.err == (
-        "cve-kgrag demo uses the packaged synthetic fixture, not the store root\n"
+        "vulnwitness demo uses the packaged synthetic fixture, not the store root\n"
     )
     assert output_without_root.err == captured.err
 
@@ -548,8 +548,8 @@ def build_store_semantic_settings(
 ) -> dict[str, str]:
     return {
         **active_settings,
-        "CVE_KGRAG_SEMANTIC_ENABLED": "true",
-        "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": str(persist_directory),
+        "VULNWITNESS_SEMANTIC_ENABLED": "true",
+        "VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY": str(persist_directory),
     }
 
 
@@ -572,7 +572,7 @@ def test_semantic_request_against_a_store_reports_the_collection_unbound_and_ope
     persist_directory = tmp_path / "vectors"
     environment = build_store_semantic_settings(active_settings, persist_directory)
 
-    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.DEBUG, logger="vulnwitness.adapter_discovery"):
         main(arguments, environment)
 
     output = capsys.readouterr().out
@@ -622,8 +622,8 @@ def test_store_capabilities_report_the_semantic_channel_by_whether_it_is_request
 @pytest.fixture
 def missing_snapshot_settings(tmp_path: Path) -> dict[str, str]:
     return {
-        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(tmp_path / "missing-fight.yaml"),
-        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": EXCERPT_SHA256,
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": str(tmp_path / "missing-fight.yaml"),
+        "VULNWITNESS_FIGHT_SNAPSHOT_SHA256": EXCERPT_SHA256,
     }
 
 
@@ -648,7 +648,7 @@ def test_command_that_uses_fight_refuses_a_missing_configured_snapshot(
     assert exit_code == 2
     assert captured.out == ""
     assert captured.err == (
-        f"cve-kgrag {arguments[0]} cannot start: FiGHT snapshot unavailable: "
+        f"vulnwitness {arguments[0]} cannot start: FiGHT snapshot unavailable: "
         "fight_snapshot_missing\n"
     )
 
@@ -733,10 +733,10 @@ def test_capabilities_name_the_configured_snapshot_computed_digest(
     snapshot_path = tmp_path / "fight.yaml"
     snapshot_path.write_bytes(EXCERPT_BYTES)
     environment = {
-        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
     }
     if has_expected_hash:
-        environment["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
+        environment["VULNWITNESS_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
 
     # Act
     exit_code = main(["capabilities"], environment)
@@ -756,7 +756,7 @@ def test_path_only_snapshot_binds_evidence_identity_and_replays_with_expected_ha
     # Arrange
     snapshot_path = tmp_path / "fight.yaml"
     snapshot_path.write_bytes(EXCERPT_BYTES)
-    environment = {"CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path)}
+    environment = {"VULNWITNESS_FIGHT_SNAPSHOT_PATH": str(snapshot_path)}
 
     # Act
     investigation_exit = main(
@@ -767,7 +767,7 @@ def test_path_only_snapshot_binds_evidence_identity_and_replays_with_expected_ha
     set_path.write_text(sealed_set.model_dump_json())
     verification_exit = main(["verify", str(set_path)], environment)
     capsys.readouterr()
-    environment["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
+    environment["VULNWITNESS_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
     compared_verification_exit = main(["verify", str(set_path)], environment)
     capability = find_capability(sealed_set.source_capabilities, "mitre_fight")
 
@@ -789,7 +789,7 @@ def test_store_whose_manifest_nests_too_deep_fails_as_invalid_without_a_tracebac
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.err == (
-        "cve-kgrag store validate failed: store_invalid: the store fails verification\n"
+        "vulnwitness store validate failed: store_invalid: the store fails verification\n"
     )
 
 
@@ -848,7 +848,7 @@ def test_migrate_with_a_store_root_that_loops_prints_its_report(
             str(target_parent / "store"),
             "--dry-run",
         ],
-        {"CVE_KGRAG_STORE_ROOT": str(looped_root)},
+        {"VULNWITNESS_STORE_ROOT": str(looped_root)},
     )
 
     report = json.loads(capsys.readouterr().out)

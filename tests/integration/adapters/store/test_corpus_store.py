@@ -24,7 +24,18 @@ from typing import Any, TypeVar
 
 import pytest
 
-from cve_kgrag.adapters.store.corpus_store import (
+from tests.support.builders import build_anchor
+from tests.support.legacy_inputs import (
+    build_declaration,
+    build_kev_row,
+    build_v2_entry,
+    build_v2_feed,
+    run_test_migration,
+    write_gzip_feed,
+    write_inputs_manifest,
+    write_kev_csv,
+)
+from vulnwitness.adapters.store.corpus_store import (
     ANCHORS_FILE,
     MAX_STORE_MANIFEST_BYTES,
     RECORDS_FILE,
@@ -39,24 +50,13 @@ from cve_kgrag.adapters.store.corpus_store import (
     verify_corpus_store,
     write_store_manifest,
 )
-from cve_kgrag.domain.corpus_store_manifest import CorpusStoreManifest
-from cve_kgrag.domain.cve import CveRecord
-from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.migration_report import MigrationOutcome
-from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
-from cve_kgrag.domain.taxonomy import KnowledgeScope
-from tests.support.builders import build_anchor
-from tests.support.legacy_inputs import (
-    build_declaration,
-    build_kev_row,
-    build_v2_entry,
-    build_v2_feed,
-    run_test_migration,
-    write_gzip_feed,
-    write_inputs_manifest,
-    write_kev_csv,
-)
+from vulnwitness.domain.corpus_store_manifest import CorpusStoreManifest
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.migration_report import MigrationOutcome
+from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
+from vulnwitness.domain.taxonomy import KnowledgeScope
 
 KEV_SOURCE_NAME = "cisa_kev"
 EMPTY_FILE_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

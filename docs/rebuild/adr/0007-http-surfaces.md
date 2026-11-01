@@ -22,8 +22,8 @@ can reach a loopback port.
    would duplicate the `schemas/v2` contracts and answer with its own error detail,
    which echoes input. FastAPI is in no dependency group. The dev group declares the HTTP
    test client (`httpx2`) the HTTP tests import.
-2. **Two processes, two extras.** REST (`cve-kgrag api`) and MCP over HTTP
-   (`cve-kgrag mcp --http`) run as separate processes. They share the guard, the host,
+2. **Two processes, two extras.** REST (`vulnwitness api`) and MCP over HTTP
+   (`vulnwitness mcp --http`) run as separate processes. They share the guard, the host,
    the token and the limits, and each has its own port variable. The `mcp` extra owns
    MCP over HTTP, so a user who wants it installs nothing REST needs; `api` is a new
    extra. There is no `neo4j` extra: no v2 Neo4j adapter exists, and ADR 0001 declares
@@ -99,7 +99,7 @@ can reach a loopback port.
 ## Consequences
 
 - WP6 adds `HttpSettings`, the guard, `mcp --http` and the `HttpRejection` contract
-  (`2.0.0-dev.23`); WP7 adds the `api` extra, `cve-kgrag api`, its routes and the
+  (`2.0.0-dev.23`); WP7 adds the `api` extra, `vulnwitness api`, its routes and the
   `route_busy` rejection for the verification route's one-at-a-time bound
   (`2.0.0-dev.24`).
 - Nothing listens on a network address other than loopback, and nothing answers an

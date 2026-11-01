@@ -1,4 +1,4 @@
-"""``cve-kgrag mcp`` serves the knowledge tools over stdio through the ``mcp_server`` entry
+"""``vulnwitness mcp`` serves the knowledge tools over stdio through the ``mcp_server`` entry
 point, with nothing but the protocol on stdout."""
 
 import json
@@ -14,10 +14,6 @@ import pytest
 from mcp import StdioServerParameters
 from mcp.types import LATEST_PROTOCOL_VERSION
 
-from cve_kgrag.cli import main
-from cve_kgrag.domain.investigation import SourceCapabilityState
-from cve_kgrag.domain.tool_contracts import KnowledgeCapabilities, ToolFailure, ToolFailureCode
-from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName
 from tests.support.corpus_stores import import_store
 from tests.support.stdio_client import observe_stdio_client, read_process_line, read_until_notice
 from tests.support.toolbox import (
@@ -25,17 +21,21 @@ from tests.support.toolbox import (
     TOOL_ARGUMENTS,
     list_affectedness_capabilities,
 )
+from vulnwitness.cli import main
+from vulnwitness.domain.investigation import SourceCapabilityState
+from vulnwitness.domain.tool_contracts import KnowledgeCapabilities, ToolFailure, ToolFailureCode
+from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName
 
 pytestmark = pytest.mark.anyio
 
 # The console script of the environment running the tests.
-CVE_KGRAG_SCRIPT = Path(sys.executable).parent / "cve-kgrag"
-# The prefix of every setting the server reads (cve_kgrag.settings).
-SETTINGS_PREFIX = "CVE_KGRAG_"
+VULNWITNESS_SCRIPT = Path(sys.executable).parent / "vulnwitness"
+# The prefix of every setting the server reads (vulnwitness.settings).
+SETTINGS_PREFIX = "VULNWITNESS_"
 
 
 def build_server_environment() -> dict[str, str]:
-    """The test process's environment without any cve-kgrag setting, so the server runs on
+    """The test process's environment without any vulnwitness setting, so the server runs on
     its defaults whatever the shell running the tests exports."""
     server_environment: dict[str, str] = {}
     for variable_name, value in os.environ.items():
@@ -66,9 +66,9 @@ UNDECODABLE_FRAMES = (
 )
 
 
-async def test_cve_kgrag_mcp_over_stdio_lists_tools_and_answers_capabilities() -> None:
+async def test_vulnwitness_mcp_over_stdio_lists_tools_and_answers_capabilities() -> None:
     server_parameters = StdioServerParameters(
-        command=str(CVE_KGRAG_SCRIPT), args=["mcp"], env=build_server_environment()
+        command=str(VULNWITNESS_SCRIPT), args=["mcp"], env=build_server_environment()
     )
 
     async with observe_stdio_client(server_parameters) as (client, stderr):
@@ -89,10 +89,10 @@ async def test_cve_kgrag_mcp_over_stdio_lists_tools_and_answers_capabilities() -
     ]
 
 
-def test_cve_kgrag_mcp_with_stdin_closed_exits_zero_and_writes_nothing() -> None:
+def test_vulnwitness_mcp_with_stdin_closed_exits_zero_and_writes_nothing() -> None:
     """Nothing reaches stdout outside the protocol: no banner, no stdout log handler."""
     server_process = subprocess.run(
-        [str(CVE_KGRAG_SCRIPT), "mcp"],
+        [str(VULNWITNESS_SCRIPT), "mcp"],
         stdin=subprocess.DEVNULL,
         capture_output=True,
         timeout=60,
@@ -116,7 +116,7 @@ def test_undecodable_frames_get_no_reply_and_later_requests_are_answered() -> No
     ]
 
     server_process = subprocess.run(
-        [str(CVE_KGRAG_SCRIPT), "mcp"],
+        [str(VULNWITNESS_SCRIPT), "mcp"],
         input=("\n".join(frames) + "\n").encode(),
         capture_output=True,
         timeout=60,
@@ -149,7 +149,7 @@ def test_cancelled_requests_do_not_keep_the_server_alive_after_stdin_closes(
     ]
 
     server_process = subprocess.run(
-        [str(CVE_KGRAG_SCRIPT), "mcp"],
+        [str(VULNWITNESS_SCRIPT), "mcp"],
         input=("\n".join(json.dumps(frame) for frame in frames) + "\n").encode(),
         capture_output=True,
         timeout=5,
@@ -188,7 +188,7 @@ def test_json_rpc_errors_carry_no_data_and_repeat_nothing_sent() -> None:
     ]
 
     server_process = subprocess.Popen(
-        [str(CVE_KGRAG_SCRIPT), "mcp"],
+        [str(VULNWITNESS_SCRIPT), "mcp"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -218,18 +218,18 @@ def test_json_rpc_errors_carry_no_data_and_repeat_nothing_sent() -> None:
     assert marked_method.encode() not in unknown_method_answer + invalid_params_answer
 
 
-async def test_cve_kgrag_mcp_never_serves_the_semantic_channel_whatever_the_settings(
+async def test_vulnwitness_mcp_never_serves_the_semantic_channel_whatever_the_settings(
     tmp_path: Path,
 ) -> None:
     """The tools are read-only and the semantic store cannot be opened read-only, so the
     server loads no semantic adapter even when the settings enable one."""
     server_environment = {
         **build_server_environment(),
-        "CVE_KGRAG_SEMANTIC_ENABLED": "true",
-        "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": str(tmp_path / "vectors"),
+        "VULNWITNESS_SEMANTIC_ENABLED": "true",
+        "VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY": str(tmp_path / "vectors"),
     }
     server_parameters = StdioServerParameters(
-        command=str(CVE_KGRAG_SCRIPT), args=["mcp"], env=server_environment
+        command=str(VULNWITNESS_SCRIPT), args=["mcp"], env=server_environment
     )
 
     async with observe_stdio_client(server_parameters) as (client, stderr):
@@ -247,13 +247,13 @@ async def test_cve_kgrag_mcp_never_serves_the_semantic_channel_whatever_the_sett
     assert not (tmp_path / "vectors").exists()
 
 
-def test_cve_kgrag_mcp_over_a_store_announces_loading_on_stderr_and_keeps_stdout_protocol_only(
+def test_vulnwitness_mcp_over_a_store_announces_loading_on_stderr_and_keeps_stdout_protocol_only(
     tmp_path: Path,
 ) -> None:
     store_root = tmp_path / "stores"
     store_root.mkdir()
     import_store(store_root, "first")
-    root_settings = {"CVE_KGRAG_STORE_ROOT": str(store_root)}
+    root_settings = {"VULNWITNESS_STORE_ROOT": str(store_root)}
     assert main(["store", "activate", "first"], root_settings) == 0
     frames = [
         json.dumps(INITIALIZE_FRAME),
@@ -262,7 +262,7 @@ def test_cve_kgrag_mcp_over_a_store_announces_loading_on_stderr_and_keeps_stdout
     ]
 
     server_process = subprocess.Popen(
-        [str(CVE_KGRAG_SCRIPT), "mcp"],
+        [str(VULNWITNESS_SCRIPT), "mcp"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -289,8 +289,8 @@ def test_cve_kgrag_mcp_over_a_store_announces_loading_on_stderr_and_keeps_stdout
     assert server_process.returncode == 0
     assert answered_ids == [1, 2]
     assert trailing_stdout == b""
-    assert notice_lines[0] == "cve-kgrag mcp: loading store first; a full NVD store takes minutes"
-    assert notice_lines[1].startswith("cve-kgrag mcp: corpus-store-v1@sha256:")
+    assert notice_lines[0] == "vulnwitness mcp: loading store first; a full NVD store takes minutes"
+    assert notice_lines[1].startswith("vulnwitness mcp: corpus-store-v1@sha256:")
     assert " data loaded after " in notice_lines[1]
     assert " ready after " in notice_lines[2]
     assert len(notice_lines) == 3

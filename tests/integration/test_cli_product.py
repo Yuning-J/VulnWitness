@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.cli import main
-from cve_kgrag.composition import build_product_query_service
-from cve_kgrag.domain.product_query import ProductQueryRequest
 from tests.support.product_queries import PRODUCT
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.cli import main
+from vulnwitness.composition import build_product_query_service
+from vulnwitness.domain.product_query import ProductQueryRequest
 
 
 def test_product_json_prints_the_shared_service_answer_with_the_requested_cap(

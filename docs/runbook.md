@@ -9,7 +9,7 @@ Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/). From a checkout:
 ```sh
 uv sync --locked
 source .venv/bin/activate
-cve-kgrag demo
+vulnwitness demo
 ```
 
 `uv` can install Python. The locked checkout includes development, MCP, API and migration
@@ -19,17 +19,17 @@ Install the semantic extra separately in a checkout.
 ## Command reference
 
 ```sh
-cve-kgrag lookup CVE-9999-0001
-cve-kgrag search "authentication bypass" --graph-expand
-cve-kgrag product --vendor democorp --version 2.0 --format text
-cve-kgrag topic 5G-AKA --scope mixed
-cve-kgrag investigate 5G-AKA --scope mixed --format text
-cve-kgrag capabilities
-cve-kgrag resolve 5G-AKA
-cve-kgrag affectedness CVE-9999-0003 --purl pkg:generic/open5gs@2.7.0
-cve-kgrag evidence ev:d8097ae9c31b754d26a1ef92
-cve-kgrag investigate 5G-AKA --scope mixed > /data/cve-kgrag/evidence-set.json
-cve-kgrag verify /data/cve-kgrag/evidence-set.json
+vulnwitness lookup CVE-9999-0001
+vulnwitness search "authentication bypass" --graph-expand
+vulnwitness product --vendor democorp --version 2.0 --format text
+vulnwitness topic 5G-AKA --scope mixed
+vulnwitness investigate 5G-AKA --scope mixed --format text
+vulnwitness capabilities
+vulnwitness resolve 5G-AKA
+vulnwitness affectedness CVE-9999-0003 --purl pkg:generic/open5gs@2.7.0
+vulnwitness evidence ev:d8097ae9c31b754d26a1ef92
+vulnwitness investigate 5G-AKA --scope mixed > /data/vulnwitness/evidence-set.json
+vulnwitness verify /data/vulnwitness/evidence-set.json
 ```
 
 Create output directories first. Commands print JSON; lookup/search/investigation/product
@@ -58,34 +58,34 @@ accompany `--all` or `--output`.
 
 ## Configuration
 
-Settings are startup-only `CVE_KGRAG_*` variables; invalid settings are usage errors
+Settings are startup-only `VULNWITNESS_*` variables; invalid settings are usage errors
 naming the variable. Keep secrets in the environment, never arguments.
 
-- `CVE_KGRAG_STORE_ROOT`: absolute store root; unset selects the synthetic fixture.
-- `CVE_KGRAG_FIGHT_SNAPSHOT_PATH`, optional `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`:
+- `VULNWITNESS_STORE_ROOT`: absolute store root; unset selects the synthetic fixture.
+- `VULNWITNESS_FIGHT_SNAPSHOT_PATH`, optional `VULNWITNESS_FIGHT_SNAPSHOT_SHA256`:
   [FiGHT file and pin](#the-operator-fight-snapshot).
-- `CVE_KGRAG_MITRE_SNAPSHOT_PATH`, optional `CVE_KGRAG_MITRE_SNAPSHOT_SHA256`:
+- `VULNWITNESS_MITRE_SNAPSHOT_PATH`, optional `VULNWITNESS_MITRE_SNAPSHOT_SHA256`:
   [weakness mapping and pin](#weakness-association-mapping).
-- `CVE_KGRAG_PLANNER_*`: opt-in CLI/evaluation model; see
+- `VULNWITNESS_PLANNER_*`: opt-in CLI/evaluation model; see
   [configuration](evaluation.md#optional-live-model-checks).
-- `CVE_KGRAG_SEMANTIC_*`: optional Chroma channel, disabled by default; requires an
+- `VULNWITNESS_SEMANTIC_*`: optional Chroma channel, disabled by default; requires an
   operator-named directory in the supported collection format, which this repo does
   not build. Imported stores report `collection_not_bound` for `--semantic` with
-  `CVE_KGRAG_SEMANTIC_ENABLED`; without the request the channel is `not_configured`.
+  `VULNWITNESS_SEMANTIC_ENABLED`; without the request the channel is `not_configured`.
 
 ### REST and MCP
 
 ```sh
-export CVE_KGRAG_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-cve-kgrag api
-# Separate process: cve-kgrag mcp --http; or use cve-kgrag mcp for stdio.
-curl -H "Authorization: Bearer $CVE_KGRAG_HTTP_TOKEN" \
+export VULNWITNESS_HTTP_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+vulnwitness api
+# Separate process: vulnwitness mcp --http; or use vulnwitness mcp for stdio.
+curl -H "Authorization: Bearer $VULNWITNESS_HTTP_TOKEN" \
   -H 'Content-Type: application/json' -d '{"vendor":"democorp","limit":10}' \
   http://127.0.0.1:8766/api/v2/product
 ```
 
-Run curl after readiness. HTTP needs a token. `CVE_KGRAG_HTTP_HOST` defaults to `127.0.0.1`
-(also `::1`); `CVE_KGRAG_API_PORT` is 8766, `CVE_KGRAG_MCP_HTTP_PORT` 8765 (`POST /mcp`).
+Run curl after readiness. HTTP needs a token. `VULNWITNESS_HTTP_HOST` defaults to `127.0.0.1`
+(also `::1`); `VULNWITNESS_API_PORT` is 8766, `VULNWITNESS_MCP_HTTP_PORT` 8765 (`POST /mcp`).
 Host/Origin guards restrict access to the configured loopback endpoint.
 REST: `POST /api/v2/search`, `/api/v2/product`, `/api/v2/investigate`, `/api/v2/verify`;
 `GET /api/v2/evidence/{evidence_id}`, `/api/v2/capabilities`. Bodies follow `schemas/v2/`.
@@ -108,9 +108,9 @@ Keep feeds, manifests, stores, snapshots and outputs outside repositories under 
 [data terms](../THIRD_PARTY_DATA.md). Create the store root first, then:
 
 ```sh
-export CVE_KGRAG_STORE_ROOT=/srv/cve-kgrag/stores
+export VULNWITNESS_STORE_ROOT=/srv/vulnwitness/stores
 .venv/bin/python scripts/operator/refresh_store.py \
-  --feeds-dir ~/data/cve-kgrag/feeds/2026-10-31 --store nvd-2026-10-31 --activate
+  --feeds-dir ~/data/vulnwitness/feeds/2026-10-31 --store nvd-2026-10-31 --activate
 ```
 
 Fetch downloads NVD 2.0 year feeds from 2002 through the current year, `modified` and
@@ -121,23 +121,23 @@ fresh store name; failures stop before activation. Activation verifies the store
 and preserves the previous store. Restart API/MCP after activation: there is no hot reload.
 Use `--inputs /data/feeds/inputs.yaml` instead of `--feeds-dir` to reuse local feeds
 without fetching. Omit `--activate` to keep `ACTIVE`; the command prints activation steps.
-For a hand-managed manifest, `cve-kgrag migrate legacy --inputs /data/feeds/inputs.yaml
---target /srv/cve-kgrag/stores/nvd-2026-10-31 --dry-run` checks before importing;
+For a hand-managed manifest, `vulnwitness migrate legacy --inputs /data/feeds/inputs.yaml
+--target /srv/vulnwitness/stores/nvd-2026-10-31 --dry-run` checks before importing;
 remove `--dry-run` to write. Manifests declare raw NVD 1.1/2.0 and KEV CSV with acquisition
 times. Import never overwrites targets or writes beside inputs; derived exports are refused.
 
 ```sh
-cve-kgrag store validate nvd-2026-10-31
-cve-kgrag store activate nvd-2026-10-31
-cve-kgrag store status
-cve-kgrag store rollback
+vulnwitness store validate nvd-2026-10-31
+vulnwitness store activate nvd-2026-10-31
+vulnwitness store status
+vulnwitness store rollback
 ```
 
 Validate is read-only. Status exits 0 for an `ok` active store even if the previous
 store is bad; it can verify both stores. Re-activating the active store re-verifies
 it and preserves the previous store. Rollback verifies the recorded previous store,
 makes it active and clears the previous slot: only one level. Restart services.
-Unset `CVE_KGRAG_STORE_ROOT` to serve synthetic fixtures again.
+Unset `VULNWITNESS_STORE_ROOT` to serve synthetic fixtures again.
 
 ## Recovery and resource needs
 
@@ -170,12 +170,12 @@ one-shot CLI search runs without that tool limit.
 ## The operator FiGHT snapshot
 
 Unset, FiGHT serves the six-technique excerpt. For full coverage, fetch the `coverage:
-full` entry pinned in `src/cve_kgrag/knowledge/fight_snapshots.yaml`:
+full` entry pinned in `src/vulnwitness/knowledge/fight_snapshots.yaml`:
 
 ```sh
-curl -fsSLo /srv/cve-kgrag/fight.yaml \
+curl -fsSLo /srv/vulnwitness/fight.yaml \
   https://raw.githubusercontent.com/mitre/FiGHT/097cd5f73811dc34916ef84d5acc3fe7aba70450/fight.yaml
-export CVE_KGRAG_FIGHT_SNAPSHOT_PATH=/srv/cve-kgrag/fight.yaml
+export VULNWITNESS_FIGHT_SNAPSHOT_PATH=/srv/vulnwitness/fight.yaml
 ```
 
 Every load checks the computed SHA-256 against the reviewed catalog before parsing;
@@ -191,11 +191,11 @@ release versions/input SHA-256 in an operator inventory and verify it before bui
 The builder reads without modifying inputs and contacts no service:
 
 ```sh
-cve-kgrag mitre build --cwe /data/cwec_v5.0.xml --capec /data/capec_latest.xml \
+vulnwitness mitre build --cwe /data/cwec_v5.0.xml --capec /data/capec_latest.xml \
   --attack /data/enterprise-attack.json --out /data/weakness-mapping.json
-export CVE_KGRAG_MITRE_SNAPSHOT_PATH=/data/weakness-mapping.json
-cve-kgrag capabilities
-cve-kgrag lookup CVE-2026-12345
+export VULNWITNESS_MITRE_SNAPSHOT_PATH=/data/weakness-mapping.json
+vulnwitness capabilities
+vulnwitness lookup CVE-2026-12345
 ```
 
 Use a fresh output path; overwrites/input paths are refused. Build prints size, digest,
@@ -203,7 +203,7 @@ link/inheritance counts and deprecated/revoked skip counts. To reproduce the
 excerpt, use its `sources`-pinned full inputs and repeat `--cwe-id` for CWE-20, CWE-79,
 CWE-787, CWE-284, CWE-269, CWE-78 and CWE-120; inheritance uses the full inputs.
 Serving requires mapping format 2 and an absolute path. Optional
-`CVE_KGRAG_MITRE_SNAPSHOT_SHA256` must be lowercase and needs a path. Without a pin,
+`VULNWITNESS_MITRE_SNAPSHOT_SHA256` must be lowercase and needs a path. Without a pin,
 capabilities say “File identity recorded; no expected SHA-256 supplied.” With one,
 “Compared with expected SHA-256.” Identity alone proves neither unchanged bytes nor
 authenticity; MITRE has no reviewed catalog. Unset uses the manifest-pinned excerpt.
@@ -221,11 +221,11 @@ same corpus store and FiGHT/MITRE snapshots. Recorded commands load that complet
 a changed identity refuses the call without appending anything.
 
 ```sh
-cve-kgrag product --vendor democorp --limit 1 --session /data/cve-kgrag/session \
+vulnwitness product --vendor democorp --limit 1 --session /data/vulnwitness/session \
   --session-call-limit 20 --session-goal 'Review the selected product'
-cve-kgrag lookup CVE-9999-0007 --session /data/cve-kgrag/session
-cve-kgrag session check /data/cve-kgrag/session
-cve-kgrag session check /data/cve-kgrag/session --format text
+vulnwitness lookup CVE-9999-0007 --session /data/vulnwitness/session
+vulnwitness session check /data/vulnwitness/session
+vulnwitness session check /data/vulnwitness/session --format text
 ```
 
 Use an ID actually returned by your product call for the lookup. The default session call
@@ -247,7 +247,7 @@ no partial call, combined stdout or new export is written. Reaching `--max-pages
 retains completed page calls and exits 2 without publishing output. An existing export
 stays unchanged on either limit, including with `--force`.
 
-For agents, start `cve-kgrag mcp --session DIR`, or add `--http` for the authenticated HTTP
+For agents, start `vulnwitness mcp --session DIR`, or add `--http` for the authenticated HTTP
 transport. Every dispatched tool call, failures included, is recorded. There is no tool
 that edits findings. REST recording is unavailable.
 

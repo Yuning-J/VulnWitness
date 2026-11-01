@@ -3,10 +3,12 @@
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
-from cve_kgrag.domain.evidence import EvidenceAnchor, seal_evidence_anchor
-from cve_kgrag.domain.search import Candidate, ScopeAssessment, SearchResponse
-from cve_kgrag.domain.taxonomy import (
+from tests.support.builders import build_anchor, build_claim, build_cve_record
+from tests.support.investigation import list_packaged_fight_anchors
+from vulnwitness.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
+from vulnwitness.domain.evidence import EvidenceAnchor, seal_evidence_anchor
+from vulnwitness.domain.search import Candidate, ScopeAssessment, SearchResponse
+from vulnwitness.domain.taxonomy import (
     AssertionKind,
     BackendFailureDetail,
     KnowledgeScope,
@@ -14,16 +16,14 @@ from cve_kgrag.domain.taxonomy import (
     RetrievalChannel,
     SourceType,
 )
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.domain.validation import (
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.domain.validation import (
     EvidenceValidationError,
     find_pinned_fight_violations,
     validate_claims,
     validate_search_response,
     validate_served_anchor,
 )
-from tests.support.builders import build_anchor, build_claim, build_cve_record
-from tests.support.investigation import list_packaged_fight_anchors
 
 FIGHT_CONTEXT_ANCHOR = build_anchor(
     authoritative_record_id="FGT1234",

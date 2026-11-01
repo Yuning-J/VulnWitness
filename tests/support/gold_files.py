@@ -5,11 +5,11 @@ from typing import Any
 
 import yaml
 
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.evaluation.gold_cases import GoldCase, read_gold_cases
-from cve_kgrag.evaluation.gold_formats import read_gold_document
-from cve_kgrag.evaluation.labelled_cases import GoldFile, read_gold_file
 from tests.support.fight_excerpt import EXCERPT_SHA256
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.evaluation.gold_cases import GoldCase, read_gold_cases
+from vulnwitness.evaluation.gold_formats import read_gold_document
+from vulnwitness.evaluation.labelled_cases import GoldFile, read_gold_file
 
 UNKNOWN_CORPUS_SHA256 = "0" * 64
 

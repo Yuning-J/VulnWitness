@@ -1,6 +1,6 @@
 # ADR 0008 — Read-only legacy-data importer
 
-Status: accepted (M6 WP9). Applies to `cve-kgrag migrate legacy` and the corpus store it
+Status: accepted (M6 WP9). Applies to `vulnwitness migrate legacy` and the corpus store it
 writes; WP10 activates and serves that store. It restates and refines the M6 plan's
 importer decisions (below, "Deviations") and the repository split plan's WP9 scope
 (CVE-KGRAG `docs/rebuild/repository-split-plan.md`, WP9). It agrees with CVE-KGRAG's
@@ -330,7 +330,7 @@ KEV enrichment runs after §5, on the final NVD records only.
   meets the cap where a real run would. A zip's end record must declare one member and a
   central directory no larger than one member needs before `zipfile` reads it. The
   per-file cap is a constant; detailed operator measurements stay in the external run
-  directory under `~/data/cve-kgrag/runs/`.
+  directory under `~/data/vulnwitness/runs/`.
 - An operator lane (not CI) builds 250,000 synthetic records and records the migration's
   peak RSS, temporary disk and run time.
 
@@ -381,7 +381,7 @@ KEV enrichment runs after §5, on the final NVD records only.
   `--legacy-root`, and its parent directory must hold no input, so nothing is ever
   created next to an input. A symbolic link at the target that resolves nowhere,
   dangling or looping, is an existing entry and is refused, never followed. With
-  `CVE_KGRAG_STORE_ROOT` set, the target must not be the root or lie under it unless the
+  `VULNWITNESS_STORE_ROOT` set, the target must not be the root or lie under it unless the
   root is its parent and its last component is a valid store name (exit 1,
   `target_in_store_root`), and a target under the root needs a root that is a directory
   and not a symbolic link (`store_root_unusable`; ADR 0009 §4).
@@ -427,7 +427,7 @@ KEV enrichment runs after §5, on the final NVD records only.
   changes.) The store manifest and the report record the rollback as fixed values,
   `rollback_kind: delete_unactivated_target` and `rollback_scope:
   before_activation_only`, with the server's fixed instruction: "Before activation,
-  remove the newly created target directory. After activation, use `cve-kgrag store
+  remove the newly created target directory. After activation, use `vulnwitness store
   rollback`." The report, fresh output of the run, must carry exactly these three
   values. The manifest describes the store as it was created: the reader accepts the two
   values above and any bounded instruction text, so rewording the instruction never
@@ -436,7 +436,7 @@ KEV enrichment runs after §5, on the final NVD records only.
   store by its `import_identity_sha256` and its manifest's SHA-256, so the operator can
   tell which directory to remove, and from `2.0.0-dev.26` names the dataset it holds by
   its `corpus_content_sha256` (ADR 0009 §2). `migrate` has no delete command and never
-  rolls back by itself; an activated store is rolled back with `cve-kgrag store
+  rolls back by itself; an activated store is rolled back with `vulnwitness store
   rollback` (ADR 0009 §7).
 
 ### 10. Contracts

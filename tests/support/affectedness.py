@@ -1,6 +1,6 @@
 """A genuine affectedness request: a fixture CVE against one package version."""
 
-from cve_kgrag.domain.affectedness import AffectednessRequest
+from vulnwitness.domain.affectedness import AffectednessRequest
 
 
 def build_affectedness_request() -> AffectednessRequest:

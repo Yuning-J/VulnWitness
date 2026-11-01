@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from cve_kgrag.adapters.provenance.source_registry import (
+from vulnwitness.adapters.provenance.source_registry import (
     default_source_registry_file,
     load_source_registry,
 )

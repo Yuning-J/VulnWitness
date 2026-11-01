@@ -10,14 +10,14 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.migration.inputs_manifest import (
+from tests.support.legacy_inputs import build_declaration, write_inputs_manifest
+from vulnwitness.adapters.migration.inputs_manifest import (
     InputsManifestError,
     load_inputs_manifest,
 )
-from cve_kgrag.domain.corpus_store_manifest import NvdArtifact, NvdFeedFormat, StoreSource
-from cve_kgrag.domain.evidence_set_verification_report import MAX_REPORTED_VIOLATIONS
-from cve_kgrag.domain.migration_inputs import MAX_MANIFEST_BYTES, MAX_MANIFEST_INPUTS
-from tests.support.legacy_inputs import build_declaration, write_inputs_manifest
+from vulnwitness.domain.corpus_store_manifest import NvdArtifact, NvdFeedFormat, StoreSource
+from vulnwitness.domain.evidence_set_verification_report import MAX_REPORTED_VIOLATIONS
+from vulnwitness.domain.migration_inputs import MAX_MANIFEST_BYTES, MAX_MANIFEST_INPUTS
 
 # Text no problem message could hold unless it quoted the manifest.
 MARKER = "QUOTEDMARKER7f3a"

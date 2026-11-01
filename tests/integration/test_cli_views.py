@@ -2,11 +2,11 @@
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.cli import main
-from cve_kgrag.composition import build_search_service
-from cve_kgrag.domain.search import SearchRequest
-from cve_kgrag.domain.weakness_associations import DERIVED_ASSOCIATION_NOTE
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.cli import main
+from vulnwitness.composition import build_search_service
+from vulnwitness.domain.search import SearchRequest
+from vulnwitness.domain.weakness_associations import DERIVED_ASSOCIATION_NOTE
 
 
 def test_lookup_text_shows_paths_missing_reasons_and_catalogue_limits_before_anchors(

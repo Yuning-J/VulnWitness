@@ -31,7 +31,7 @@ trap 'kill "$sampler_pid" 2>/dev/null || true; rm -rf "$work_dir"' EXIT
 
 if [ "$(uname)" = "Darwin" ]; then time_flag="-l"; else time_flag="-v"; fi
 start_seconds="$(date +%s)"
-/usr/bin/time "$time_flag" uv run cve-kgrag migrate legacy \
+/usr/bin/time "$time_flag" uv run vulnwitness migrate legacy \
   --inputs "$work_dir/inputs/inputs.yaml" --target "$work_dir/stores/store" \
   > "$work_dir/report.json" 2> "$work_dir/time.txt"
 end_seconds="$(date +%s)"

@@ -4,19 +4,19 @@ import json
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.nvd_version_note import NvdVersionHit, build_nvd_version_note
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.domain.validation import EvidenceValidationError
 from tests.support.investigation import reseal_evidence_set
 from tests.support.investigation_runs import (
     investigate,
     run_exact_id,
     run_gateway_version_question,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.investigation import KnowledgeEvidenceSet
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.nvd_version_note import NvdVersionHit, build_nvd_version_note
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.domain.validation import EvidenceValidationError
 
 
 def test_version_question_keeps_named_retrieval_needs_and_stop_with_three_note_outcomes(

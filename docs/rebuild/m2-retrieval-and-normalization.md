@@ -80,9 +80,9 @@ claim. A CVE candidate may cite only `implementation_vulnerability` evidence.
 
 ## Optional semantic adapter
 
-`cve_kgrag.adapter_discovery` is the only dynamic-loading location. When typed
+`vulnwitness.adapter_discovery` is the only dynamic-loading location. When typed
 settings enable semantics, it resolves the `semantic` entry point in group
-`cve_kgrag.adapters`; the listing is injectable. A missing extra, a load failure
+`vulnwitness.adapters`; the listing is injectable. A missing extra, a load failure
 or more than one installed `semantic` adapter returns an unavailable retriever;
 there is no silent lexical fallback under a semantic label.
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.evaluation.planner_runner import REPORT_FILE_NAME
-from cve_kgrag.evaluation.result_directory import ResultDirectory
+from vulnwitness.evaluation.planner_runner import REPORT_FILE_NAME
+from vulnwitness.evaluation.result_directory import ResultDirectory
 
 OWNER_ONLY_DIRECTORY = 0o700
 OWNER_ONLY_FILE = 0o600

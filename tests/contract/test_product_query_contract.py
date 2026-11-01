@@ -7,11 +7,11 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.composition import build_product_query_service
-from cve_kgrag.domain.product_query import ProductQueryRequest, ProductQueryResponse
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
 from tests.support.product_queries import PRODUCT
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.composition import build_product_query_service
+from vulnwitness.domain.product_query import ProductQueryRequest, ProductQueryResponse
 
 
 @pytest.mark.parametrize(

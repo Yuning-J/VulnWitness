@@ -3,17 +3,17 @@
 import json
 from typing import Any
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.relevance_assessment import build_relevance_input
-from cve_kgrag.domain.cve import CveRecord
-from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
-from cve_kgrag.domain.planning import ModelReply
 from tests.support.builders import build_bundle_with
 from tests.support.investigation import (
     build_investigation_request,
     build_test_investigation_service,
 )
 from tests.support.planners import ScriptedModelPort, build_text_reply
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.relevance_assessment import build_relevance_input
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from vulnwitness.domain.planning import ModelReply
 
 QUESTION = "gateway"
 REFINED_QUERY = "sourced component"

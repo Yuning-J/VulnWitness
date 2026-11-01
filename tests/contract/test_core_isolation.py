@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-import cve_kgrag
+import vulnwitness
 from tests.support.module_walk import IMPORT_EVERY_MODULE
 
-PACKAGE_DIR = Path(cve_kgrag.__file__).resolve().parent
+PACKAGE_DIR = Path(vulnwitness.__file__).resolve().parent
 HEAVY_OR_OPTIONAL_MODULES = (
     "anyio",
     "chromadb",
@@ -38,38 +38,38 @@ HEAVY_OR_OPTIONAL_MODULES = (
 # interfaces import neither the composition root, adapter discovery, adapters nor the CLI.
 FORBIDDEN_IMPORTS_BY_LAYER = {
     "domain": (
-        "cve_kgrag.ports",
-        "cve_kgrag.application",
-        "cve_kgrag.adapters",
-        "cve_kgrag.cli",
-        "cve_kgrag.composition",
-        "cve_kgrag.interfaces",
+        "vulnwitness.ports",
+        "vulnwitness.application",
+        "vulnwitness.adapters",
+        "vulnwitness.cli",
+        "vulnwitness.composition",
+        "vulnwitness.interfaces",
     ),
     "ports": (
-        "cve_kgrag.application",
-        "cve_kgrag.adapters",
-        "cve_kgrag.cli",
-        "cve_kgrag.composition",
-        "cve_kgrag.interfaces",
+        "vulnwitness.application",
+        "vulnwitness.adapters",
+        "vulnwitness.cli",
+        "vulnwitness.composition",
+        "vulnwitness.interfaces",
     ),
     "topics": (
-        "cve_kgrag.application",
-        "cve_kgrag.adapters",
-        "cve_kgrag.cli",
-        "cve_kgrag.composition",
-        "cve_kgrag.interfaces",
+        "vulnwitness.application",
+        "vulnwitness.adapters",
+        "vulnwitness.cli",
+        "vulnwitness.composition",
+        "vulnwitness.interfaces",
     ),
     "application": (
-        "cve_kgrag.adapters",
-        "cve_kgrag.cli",
-        "cve_kgrag.composition",
-        "cve_kgrag.interfaces",
+        "vulnwitness.adapters",
+        "vulnwitness.cli",
+        "vulnwitness.composition",
+        "vulnwitness.interfaces",
     ),
     "interfaces": (
-        "cve_kgrag.adapters",
-        "cve_kgrag.adapter_discovery",
-        "cve_kgrag.cli",
-        "cve_kgrag.composition",
+        "vulnwitness.adapters",
+        "vulnwitness.adapter_discovery",
+        "vulnwitness.cli",
+        "vulnwitness.composition",
     ),
 }
 
@@ -100,7 +100,7 @@ def list_relative_imports(source_text: str) -> list[int]:
 
 def test_core_distribution_depends_only_on_pydantic_and_pyyaml() -> None:
     core_requirements: list[str] = []
-    for requirement in requires("cve-kgrag") or []:
+    for requirement in requires("vulnwitness") or []:
         if ";" not in requirement:
             core_requirements.append(requirement)
     assert core_requirements == ["pydantic<3,>=2.12", "pyyaml<7,>=6.0.2"]
@@ -136,9 +136,9 @@ def test_inner_layers_never_import_outer_layers() -> None:
 @pytest.mark.parametrize(
     ("source_text", "imported_module"),
     [
-        ("import cve_kgrag.adapter_discovery", "cve_kgrag.adapter_discovery"),
-        ("from cve_kgrag import adapter_discovery", "cve_kgrag.adapter_discovery"),
-        ("from cve_kgrag.adapters import fixture", "cve_kgrag.adapters.fixture"),
+        ("import vulnwitness.adapter_discovery", "vulnwitness.adapter_discovery"),
+        ("from vulnwitness import adapter_discovery", "vulnwitness.adapter_discovery"),
+        ("from vulnwitness.adapters import fixture", "vulnwitness.adapters.fixture"),
     ],
     ids=["dotted_import", "from_package_import_module", "from_subpackage_import_module"],
 )

@@ -4,28 +4,28 @@ port's reason, and an investigation never calls the port."""
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.investigate import describe_service_capabilities
-from cve_kgrag.application.planner_setup import DeterministicPlanning
-from cve_kgrag.composition import (
-    AffectednessConfigurationError,
-    build_investigation_deployment,
-    build_serving_data_plane,
-)
-from cve_kgrag.domain.affectedness import AffectednessDetail, AffectednessFailure
-from cve_kgrag.domain.investigation import (
-    KnowledgeEvidenceSet,
-    SourceCapability,
-    SourceCapabilityState,
-)
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.topic_context import KnowledgeSource
 from tests.support.fakes import InMemoryTrustifyPort, MisansweringTrustifyPort
 from tests.support.investigation import (
     build_investigation_request,
     build_test_deployment,
     build_test_investigation_service,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.investigate import describe_service_capabilities
+from vulnwitness.application.planner_setup import DeterministicPlanning
+from vulnwitness.composition import (
+    AffectednessConfigurationError,
+    build_investigation_deployment,
+    build_serving_data_plane,
+)
+from vulnwitness.domain.affectedness import AffectednessDetail, AffectednessFailure
+from vulnwitness.domain.investigation import (
+    KnowledgeEvidenceSet,
+    SourceCapability,
+    SourceCapabilityState,
+)
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.topic_context import KnowledgeSource
 
 # What a port might give instead of an AffectednessFailure: verdict text, a capability it
 # authored, or nothing.

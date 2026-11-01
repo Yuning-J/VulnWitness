@@ -4,7 +4,7 @@
 # `modified` feed, and the current CISA KEV catalog, from their official URLs, into a new
 # directory DIR. Each NVD feed is checked against the SHA-256 its `.meta` file states for
 # the decompressed JSON. Writes `provenance.tsv` (file, URL, retrieval time, file SHA-256,
-# payload SHA-256, bytes) and `inputs.yaml`, the input manifest `cve-kgrag migrate legacy`
+# payload SHA-256, bytes) and `inputs.yaml`, the input manifest `vulnwitness migrate legacy`
 # reads (ADR 0008), with each file's retrieval time. Both are written under `.partial` names
 # and renamed only when every file has arrived and verified, so a failed run never leaves a
 # manifest that looks complete. The files are data under NVD's and CISA's terms: keep DIR

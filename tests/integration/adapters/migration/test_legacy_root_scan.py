@@ -12,19 +12,19 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.migration.json_fingerprint import classify_json_prefix
-from cve_kgrag.adapters.migration.legacy_root_scan import scan_legacy_root
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.domain.migration_report import (
-    LegacyFileKind,
-    MigrationFailed,
-    MigrationFailureCode,
-)
 from tests.support.legacy_inputs import (
     build_v2_entry,
     build_v2_feed,
     encode_feed,
     snapshot_tree,
+)
+from vulnwitness.adapters.migration.json_fingerprint import classify_json_prefix
+from vulnwitness.adapters.migration.legacy_root_scan import scan_legacy_root
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.domain.migration_report import (
+    LegacyFileKind,
+    MigrationFailed,
+    MigrationFailureCode,
 )
 
 PICKLE_BYTES = b"\x80\x04\x95\x05\x00\x00\x00\x00\x00\x00\x00N."

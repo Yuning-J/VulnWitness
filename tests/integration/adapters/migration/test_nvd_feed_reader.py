@@ -19,17 +19,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.migration.input_files import DecompressionBudget, PayloadStream
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.adapters.migration.nvd_feed_reader import (
-    MAX_HEADER_VALUE_CHARS,
-    MAX_TOP_LEVEL_KEYS,
-    read_nvd_feed,
-)
-from cve_kgrag.adapters.migration.parser_types import FeedHeader
-from cve_kgrag.domain.corpus_store_manifest import NvdFeedFormat
-from cve_kgrag.domain.hashing import canonical_sha256, sha256_hex
-from cve_kgrag.domain.migration_report import MigrationFailed, MigrationFailureCode
 from tests.support.legacy_inputs import (
     V1_FEED_TIMESTAMP,
     V2_FEED_TIMESTAMP,
@@ -39,6 +28,17 @@ from tests.support.legacy_inputs import (
     build_v2_feed,
     encode_feed,
 )
+from vulnwitness.adapters.migration.input_files import DecompressionBudget, PayloadStream
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.adapters.migration.nvd_feed_reader import (
+    MAX_HEADER_VALUE_CHARS,
+    MAX_TOP_LEVEL_KEYS,
+    read_nvd_feed,
+)
+from vulnwitness.adapters.migration.parser_types import FeedHeader
+from vulnwitness.domain.corpus_store_manifest import NvdFeedFormat
+from vulnwitness.domain.hashing import canonical_sha256, sha256_hex
+from vulnwitness.domain.migration_report import MigrationFailed, MigrationFailureCode
 
 DEFAULT_LIMITS = MigrationLimits()
 V2_DECLARATION = '"format": "NVD_CVE", "version": "2.0"'

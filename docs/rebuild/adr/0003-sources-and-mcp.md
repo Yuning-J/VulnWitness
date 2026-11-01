@@ -92,7 +92,7 @@ separate task. It starts only after one of these is available:
 
 That task adds:
 
-- the `trustify` extra and the `cve_kgrag.adapters` entry point;
+- the `trustify` extra and the `vulnwitness.adapters` entry point;
 - typed settings for the endpoint, from configuration and an allowlist and never from
   a caller, and for the OIDC secret;
 - finite retry for the read tools only;
@@ -468,7 +468,7 @@ full CVE IDs are taken out. A query with nothing left answers `no_match` with
 `no_searchable_terms`; it calls no channel, or only the structured channel when a
 filter is active, which never creates a candidate. Filters only narrow a result.
 
-### 10. A set handed back is verified by `verify_evidence_set` and `cve-kgrag verify`
+### 10. A set handed back is verified by `verify_evidence_set` and `vulnwitness verify`
 
 `verify_evidence_set(evidence_set, deployment, accepted_planner_capabilities)`
 (`application/evidence_set_verification.py`) runs three checks in order:
@@ -485,7 +485,7 @@ It raises `EvidenceValidationError` when validation or the audit rejects the set
 when the replayed set fails the checks the controller runs at seal, and returns the
 replay outcome otherwise.
 
-`cve-kgrag verify FILE` checks against the dataset the process serves, the active corpus
+`vulnwitness verify FILE` checks against the dataset the process serves, the active corpus
 store or, with no store root set, the packaged fixture (ADR 0009 §10, §16), and the
 planners its settings configure (ADR 0004 §7); with no planner configured, a
 model-planned set is `invalid` there. It reads at most 4 MiB and prints a
@@ -518,7 +518,7 @@ a re-derived ID.
 - The `mcp` extra holds `mcp>=2.3,<3`, `anyio>=4.9,<5`, `starlette>=0.48,<2` and
   `uvicorn>=0.31.1,<1`. The servers import `anyio` directly, and MCP over Streamable HTTP
   imports Starlette and uvicorn (ADR 0007).
-- The `dev` group includes `cve-kgrag[mcp]`, so the default lane, strict mypy and the
+- The `dev` group includes `vulnwitness[mcp]`, so the default lane, strict mypy and the
   MCP tests run with the SDK.
 - There is no `trustify` extra, because no code needs it (ADR 0001 §2).
 
@@ -536,13 +536,13 @@ a re-derived ID.
 
 **Start-up.**
 
-- `cve-kgrag mcp` starts the stdio server over the dataset the process serves (the
+- `vulnwitness mcp` starts the stdio server over the dataset the process serves (the
   active corpus store, or the packaged synthetic fixture with no store root set; ADR
   0009 §9), the deterministic planner, the disabled Trustify adapter and no semantic
   channel.
 - The CLI loads the runner through `discover_mcp_server_runner`, from the entry
-  point `mcp_server = "cve_kgrag.interfaces.mcp.stdio_runner:serve_stdio"` in the
-  `cve_kgrag.adapters` group, and hands it the SDK-free toolbox the composition root
+  point `mcp_server = "vulnwitness.interfaces.mcp.stdio_runner:serve_stdio"` in the
+  `vulnwitness.adapters` group, and hands it the SDK-free toolbox the composition root
   builds (`build_knowledge_toolbox`). The runner is looked up first, so an install
   that cannot serve the command never loads the served dataset or the FiGHT snapshot.
 - That group stays the single dynamic-loading point (ADR 0001 §3). An optional
@@ -599,12 +599,12 @@ a re-derived ID.
   the SDK has decoded the whole frame, and a frame it cannot decode gets no reply
   (§7).
 - The core-only install lacks the SDK:
-  - its import-every-module check skips `cve_kgrag.interfaces.mcp.*`;
+  - its import-every-module check skips `vulnwitness.interfaces.mcp.*`;
   - its test run excludes the MCP test directory by an explicit `--ignore`;
-  - `cve-kgrag mcp` exits 1.
+  - `vulnwitness mcp` exits 1.
 - A consumer checks one anchor by comparing it with what `get_evidence` serves under
-  its ID, and a whole set through `cve-kgrag verify`.
+  its ID, and a whole set through `vulnwitness verify`.
 - A set is verified against the planners the verifying settings configure, not the
-  planner it records (ADR 0004 §7). With no planner configured, `cve-kgrag verify`
+  planner it records (ADR 0004 §7). With no planner configured, `vulnwitness verify`
   reports a model-planned set `invalid`, even one a deployment running that model
   sealed.

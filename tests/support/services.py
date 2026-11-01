@@ -3,17 +3,17 @@ structured channel over the fixture records that name no package URL."""
 
 from typing import Any
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.graph.in_memory_graph import InMemoryRelationGraph
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
-from cve_kgrag.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
-from cve_kgrag.adapters.mitre.mapping_file import load_weakness_mapping
-from cve_kgrag.adapters.structured.in_memory_filter import (
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.graph.in_memory_graph import InMemoryRelationGraph
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
+from vulnwitness.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
+from vulnwitness.adapters.mitre.mapping_file import load_weakness_mapping
+from vulnwitness.adapters.structured.in_memory_filter import (
     InMemoryStructuredIndex,
     names_package_url,
 )
-from cve_kgrag.application.search import SearchService
+from vulnwitness.application.search import SearchService
 
 
 def build_fixture_service(bundle: FixtureBundle, **retrievers: Any) -> SearchService:

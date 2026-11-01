@@ -6,17 +6,17 @@ import threading
 import anyio
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.served_dataset import ServedDatasetKind
-from cve_kgrag.domain.tool_contracts import ToolFailureCode
-from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
-from cve_kgrag.interfaces.mcp.stdio_runner import StdioServer
 from tests.support.stdio_streams import (
     BlockedToolboxLoader,
     ImmediateStdioInput,
     PausedStdioOutput,
 )
 from tests.support.toolbox import build_test_toolbox
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.served_dataset import ServedDatasetKind
+from vulnwitness.domain.tool_contracts import ToolFailureCode
+from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.mcp.stdio_runner import StdioServer
 
 pytestmark = pytest.mark.anyio
 

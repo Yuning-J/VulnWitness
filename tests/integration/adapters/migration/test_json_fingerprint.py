@@ -11,8 +11,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.migration.json_fingerprint import classify_json_prefix
-from cve_kgrag.domain.migration_report import LegacyFileKind
 from tests.support.legacy_inputs import (
     build_v1_feed,
     build_v1_item,
@@ -20,6 +18,8 @@ from tests.support.legacy_inputs import (
     build_v2_feed,
     encode_feed,
 )
+from vulnwitness.adapters.migration.json_fingerprint import classify_json_prefix
+from vulnwitness.domain.migration_report import LegacyFileKind
 
 ENHANCED_DOCUMENT = {
     "id": "doc-CVE-9999-0001",

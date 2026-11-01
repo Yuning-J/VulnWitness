@@ -9,15 +9,15 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.corpus_store_manifest import NvdArtifact, NvdFeedFormat
-from cve_kgrag.domain.migration_inputs import (
+from tests.support.legacy_inputs import build_declaration
+from vulnwitness.domain.corpus_store_manifest import NvdArtifact, NvdFeedFormat
+from vulnwitness.domain.migration_inputs import (
     MAX_MANIFEST_BYTES,
     MAX_MANIFEST_INPUTS,
     MAX_MANIFEST_PATH_CHARS,
     InputDeclaration,
     InputsManifest,
 )
-from tests.support.legacy_inputs import build_declaration
 
 
 def build_manifest_fields(declarations: list[dict[str, Any]]) -> dict[str, Any]:

@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.evidence_set_verification_report import (
+from vulnwitness.domain.evidence_set_verification_report import (
     MAX_REPORTED_VIOLATIONS,
     MAX_VIOLATION_CHARS,
     TRUNCATION_MARK,

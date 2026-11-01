@@ -7,28 +7,6 @@ from typing import TypeVar
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.investigate import PLANNER_CAP_REPLY
-from cve_kgrag.domain.investigation import (
-    KnowledgeEvidenceSet,
-    PlannerOutcome,
-    RoundRecord,
-    StopReason,
-)
-from cve_kgrag.domain.planning import ModelReply, PlanRejection, PlanRejectionCode
-from cve_kgrag.domain.search import SearchWarning, SearchWarningCode
-from cve_kgrag.domain.taxonomy import ResultStatus
-from cve_kgrag.domain.topic import ReviewStatus
-from cve_kgrag.evaluation.planner_analysis import CaseRuns, analyze_planner_runs
-from cve_kgrag.evaluation.planner_report import (
-    ModelSection,
-    NotComparableReason,
-    PlannerEvaluationReport,
-    Proportion,
-    RunSummary,
-    ToolCallComparison,
-    format_report,
-)
 from tests.support.evaluation import build_identity, run_deterministically, run_with_replies
 from tests.support.investigation import reseal_evidence_set, rewrite_step, update_trajectory
 from tests.support.planners import (
@@ -36,6 +14,28 @@ from tests.support.planners import (
     UNAVAILABLE_REPLY,
     build_plan_reply,
     build_text_reply,
+)
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.investigate import PLANNER_CAP_REPLY
+from vulnwitness.domain.investigation import (
+    KnowledgeEvidenceSet,
+    PlannerOutcome,
+    RoundRecord,
+    StopReason,
+)
+from vulnwitness.domain.planning import ModelReply, PlanRejection, PlanRejectionCode
+from vulnwitness.domain.search import SearchWarning, SearchWarningCode
+from vulnwitness.domain.taxonomy import ResultStatus
+from vulnwitness.domain.topic import ReviewStatus
+from vulnwitness.evaluation.planner_analysis import CaseRuns, analyze_planner_runs
+from vulnwitness.evaluation.planner_report import (
+    ModelSection,
+    NotComparableReason,
+    PlannerEvaluationReport,
+    Proportion,
+    RunSummary,
+    ToolCallComparison,
+    format_report,
 )
 
 SEARCH_AUSF_SUCI = {"tool": "cve_search", "query": "ausf suci"}

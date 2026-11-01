@@ -6,36 +6,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
-from cve_kgrag.adapters.semantic.vector_retriever import VectorSemanticRetriever
-from cve_kgrag.adapters.store.corpus_store import load_corpus_store
-from cve_kgrag.application.search import SearchService
-from cve_kgrag.composition import build_search_service
-from cve_kgrag.domain.cve import CveRecord
-from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.search import (
-    ChannelHit,
-    GraphPath,
-    RetrievalMatch,
-    RetrievalOutcome,
-    SearchFilters,
-    SearchRequest,
-    SearchResponse,
-    SearchWarning,
-    SearchWarningCode,
-    UnsupportedFilter,
-)
-from cve_kgrag.domain.taxonomy import (
-    BackendFailureDetail,
-    BackendStatus,
-    KnowledgeScope,
-    ResultStatus,
-    RetrievalChannel,
-)
-from cve_kgrag.domain.validation import EvidenceValidationError, validate_search_response
 from tests.support.collect import list_candidate_cve_ids, list_codes
 from tests.support.corpus_stores import COMPATIBILITY_STORE
 from tests.support.fakes import (
@@ -48,6 +18,36 @@ from tests.support.fakes import (
 from tests.support.investigation import DISGUISED_LOW_SIGNAL_WORDS
 from tests.support.services import build_fixture_service
 from tests.support.vector_store import FakeCollection, FixedEncoder
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
+from vulnwitness.adapters.semantic.vector_retriever import VectorSemanticRetriever
+from vulnwitness.adapters.store.corpus_store import load_corpus_store
+from vulnwitness.application.search import SearchService
+from vulnwitness.composition import build_search_service
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.search import (
+    ChannelHit,
+    GraphPath,
+    RetrievalMatch,
+    RetrievalOutcome,
+    SearchFilters,
+    SearchRequest,
+    SearchResponse,
+    SearchWarning,
+    SearchWarningCode,
+    UnsupportedFilter,
+)
+from vulnwitness.domain.taxonomy import (
+    BackendFailureDetail,
+    BackendStatus,
+    KnowledgeScope,
+    ResultStatus,
+    RetrievalChannel,
+)
+from vulnwitness.domain.validation import EvidenceValidationError, validate_search_response
 
 
 @dataclass

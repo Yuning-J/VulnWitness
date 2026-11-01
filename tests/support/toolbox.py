@@ -6,24 +6,24 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.store.corpus_store import load_corpus_store
-from cve_kgrag.application.threaded_call_runner import CALL_THREAD_NAME
-from cve_kgrag.composition import (
-    build_knowledge_toolbox,
-    build_serving_data_plane,
-    load_packaged_fight_source,
-)
-from cve_kgrag.domain.affectedness import AffectednessDetail
-from cve_kgrag.domain.tool_contracts import ToolFailure
-from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
-from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolAnswer, ToolLimits
-from cve_kgrag.ports.affectedness import TrustifyPort
-from cve_kgrag.ports.sources import FightSource
 from tests.support.affectedness import build_affectedness_request
 from tests.support.clocks import ONE_SECOND_RUN_REAL_SECONDS, SteppingClock, read_fixed_clock
 from tests.support.corpus_stores import COMPATIBILITY_STORE
 from tests.support.services import build_fixture_service
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.store.corpus_store import load_corpus_store
+from vulnwitness.application.threaded_call_runner import CALL_THREAD_NAME
+from vulnwitness.composition import (
+    build_knowledge_toolbox,
+    build_serving_data_plane,
+    load_packaged_fight_source,
+)
+from vulnwitness.domain.affectedness import AffectednessDetail
+from vulnwitness.domain.tool_contracts import ToolFailure
+from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName, ToolAnswer, ToolLimits
+from vulnwitness.ports.affectedness import TrustifyPort
+from vulnwitness.ports.sources import FightSource
 
 # Well formed, but no anchor of the fixture or the FiGHT excerpt has it.
 UNKNOWN_EVIDENCE_ID = "ev:" + "0" * 24

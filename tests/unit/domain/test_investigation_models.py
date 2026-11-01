@@ -5,8 +5,9 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.affectedness import AffectednessDetail
-from cve_kgrag.domain.budget import (
+from tests.support.builders import build_recorded_step, build_threat_context_item
+from vulnwitness.domain.affectedness import AffectednessDetail
+from vulnwitness.domain.budget import (
     MAX_CONTEXT_BYTES,
     MAX_ROUNDS,
     MAX_SOURCES,
@@ -14,7 +15,7 @@ from cve_kgrag.domain.budget import (
     MAX_WALL_TIME_SECONDS,
     InvestigationBudget,
 )
-from cve_kgrag.domain.investigation import (
+from vulnwitness.domain.investigation import (
     FightUnavailableDetail,
     InvestigationRequest,
     SourceCapability,
@@ -26,11 +27,10 @@ from cve_kgrag.domain.investigation import (
     format_threat_context_statement,
     list_answer_sources,
 )
-from cve_kgrag.domain.planning import ModelReply, ModelReplyFailureDetail
-from cve_kgrag.domain.search import MAX_RESULTS_PER_CALL, SearchFilters
-from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus
-from cve_kgrag.domain.topic_context import KnowledgeSource, QueryScope
-from tests.support.builders import build_recorded_step, build_threat_context_item
+from vulnwitness.domain.planning import ModelReply, ModelReplyFailureDetail
+from vulnwitness.domain.search import MAX_RESULTS_PER_CALL, SearchFilters
+from vulnwitness.domain.taxonomy import BackendStatus, ResultStatus
+from vulnwitness.domain.topic_context import KnowledgeSource, QueryScope
 
 CAPS = {
     "max_rounds": MAX_ROUNDS,

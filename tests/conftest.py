@@ -8,27 +8,27 @@ from functools import partialmethod
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import (
+from tests.support.clocks import read_fixed_clock
+from tests.support.fake_chat_server import FakeChatServers
+from tests.support.network_guard import NetworkGuard, guarded_connect, guarded_connect_ex
+from tests.support.product_queries import build_product_query_bundle
+from vulnwitness.adapters.fixture.synthetic_fixture import (
     FixtureBundle,
     default_fixture_dir,
     load_fixture_bundle,
 )
-from cve_kgrag.application.search import SearchService
-from cve_kgrag.composition import (
+from vulnwitness.application.search import SearchService
+from vulnwitness.composition import (
     build_evidence_catalog,
     build_search_service,
     build_topic_registry,
     load_packaged_fight_source,
 )
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.topics.registry import TopicRegistry
-from tests.support.clocks import read_fixed_clock
-from tests.support.fake_chat_server import FakeChatServers
-from tests.support.network_guard import NetworkGuard, guarded_connect, guarded_connect_ex
-from tests.support.product_queries import build_product_query_bundle
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.topics.registry import TopicRegistry
 
-LIVE_TESTS_VARIABLE = "CVE_KGRAG_LIVE_TESTS"
+LIVE_TESTS_VARIABLE = "VULNWITNESS_LIVE_TESTS"
 NETWORK_GUARD_KEY = pytest.StashKey[NetworkGuard]()
 NETWORK_GUARD_PATCH_KEY = pytest.StashKey[pytest.MonkeyPatch]()
 
@@ -90,7 +90,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     Collection imports the test modules, so the guard is in place before any test code
     runs, at module level included. Only an explicitly enabled live run
-    (CVE_KGRAG_LIVE_TESTS=1, see tests/live) goes without it.
+    (VULNWITNESS_LIVE_TESTS=1, see tests/live) goes without it.
     """
     if os.environ.get(LIVE_TESTS_VARIABLE) == "1":
         return

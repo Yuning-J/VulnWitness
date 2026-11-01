@@ -7,19 +7,19 @@ from typing import Any
 import pytest
 import yaml
 
-from cve_kgrag.domain.evidence_set_verification_report import (
+from tests.support.evaluation import build_gold_row, encode_gold
+from tests.support.gold_files import load_trajectory_cases
+from tests.support.investigation import GOLD_FILE
+from vulnwitness.domain.evidence_set_verification_report import (
     MAX_REPORTED_VIOLATIONS,
     MAX_VIOLATION_CHARS,
 )
-from cve_kgrag.evaluation.gold_cases import (
+from vulnwitness.evaluation.gold_cases import (
     MAX_GOLD_CASES,
     MAX_GOLD_FILE_BYTES,
     GoldCase,
     GoldFileError,
 )
-from tests.support.evaluation import build_gold_row, encode_gold
-from tests.support.gold_files import load_trajectory_cases
-from tests.support.investigation import GOLD_FILE
 
 GOLD_MARKER = "gold-marker-91c2"
 

@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.settings import (
+from tests.support.secrets import assert_secret_absent
+from vulnwitness.settings import (
     FightSnapshotSettings,
     HttpSettings,
     ModelPlannerSettings,
@@ -16,14 +17,13 @@ from cve_kgrag.settings import (
     fingerprint_endpoint,
     load_settings,
 )
-from tests.support.secrets import assert_secret_absent
 
 PLANNER_KEY = "sk-test-settings-key-0123456789"
 ENABLED_PLANNER = {
-    "CVE_KGRAG_PLANNER_ENABLED": "true",
-    "CVE_KGRAG_PLANNER_BASE_URL": "https://api.example.test/v1",
-    "CVE_KGRAG_PLANNER_MODEL_NAME": "example-chat",
-    "CVE_KGRAG_PLANNER_API_KEY": PLANNER_KEY,
+    "VULNWITNESS_PLANNER_ENABLED": "true",
+    "VULNWITNESS_PLANNER_BASE_URL": "https://api.example.test/v1",
+    "VULNWITNESS_PLANNER_MODEL_NAME": "example-chat",
+    "VULNWITNESS_PLANNER_API_KEY": PLANNER_KEY,
 }
 HTTP_TOKEN = "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE-_.~+/R"
 CREDENTIAL_URL = "https://planner-user:hunter2-password@api.example.test/v1"
@@ -43,9 +43,9 @@ def test_empty_environment_leaves_every_adapter_off() -> None:
 @pytest.mark.parametrize("switch", ["", "false", "0", "no", "OFF"])
 def test_planner_switched_off_ignores_its_other_variables(switch: str) -> None:
     environment = {
-        "CVE_KGRAG_PLANNER_ENABLED": switch,
-        "CVE_KGRAG_PLANNER_BASE_URL": "ftp://not-read",
-        "CVE_KGRAG_PLANNER_API_KEY": PLANNER_KEY,
+        "VULNWITNESS_PLANNER_ENABLED": switch,
+        "VULNWITNESS_PLANNER_BASE_URL": "ftp://not-read",
+        "VULNWITNESS_PLANNER_API_KEY": PLANNER_KEY,
     }
 
     settings = load_settings(environment)
@@ -55,7 +55,7 @@ def test_planner_switched_off_ignores_its_other_variables(switch: str) -> None:
 
 @pytest.mark.parametrize("switch", ["true", "1", "yes", "On", " TRUE "])
 def test_enabled_planner_reads_its_endpoint_model_and_key(switch: str) -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_ENABLED": switch}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_ENABLED": switch}
 
     settings = load_settings(environment)
 
@@ -68,7 +68,7 @@ def test_enabled_planner_reads_its_endpoint_model_and_key(switch: str) -> None:
 
 
 def test_empty_key_counts_as_unset_so_the_planner_has_no_key() -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_API_KEY": ""}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_API_KEY": ""}
 
     settings = load_settings(environment)
 
@@ -78,20 +78,20 @@ def test_empty_key_counts_as_unset_so_the_planner_has_no_key() -> None:
 
 def test_switch_that_is_not_a_boolean_is_an_error_naming_the_variable() -> None:
     with pytest.raises(SettingsError) as raised:
-        load_settings({"CVE_KGRAG_PLANNER_ENABLED": "maybe"})
+        load_settings({"VULNWITNESS_PLANNER_ENABLED": "maybe"})
 
     assert str(raised.value) == (
-        "invalid settings: CVE_KGRAG_PLANNER_ENABLED: must be true or false"
+        "invalid settings: VULNWITNESS_PLANNER_ENABLED: must be true or false"
     )
 
 
 def test_enabled_planner_without_endpoint_or_model_names_both_variables() -> None:
     with pytest.raises(SettingsError) as raised:
-        load_settings({"CVE_KGRAG_PLANNER_ENABLED": "true"})
+        load_settings({"VULNWITNESS_PLANNER_ENABLED": "true"})
 
     assert str(raised.value) == (
-        "invalid settings: CVE_KGRAG_PLANNER_BASE_URL: Field required; "
-        "CVE_KGRAG_PLANNER_MODEL_NAME: Field required"
+        "invalid settings: VULNWITNESS_PLANNER_BASE_URL: Field required; "
+        "VULNWITNESS_PLANNER_MODEL_NAME: Field required"
     )
 
 
@@ -145,13 +145,13 @@ def test_enabled_planner_without_endpoint_or_model_names_both_variables() -> Non
 def test_endpoint_that_could_misdirect_the_key_is_rejected_without_quoting_it(
     base_url: str,
 ) -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_BASE_URL": base_url}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_BASE_URL": base_url}
 
     with pytest.raises(SettingsError) as raised:
         load_settings(environment)
 
     raised_text = describe_raised(raised.value)
-    assert str(raised.value).startswith("invalid settings: CVE_KGRAG_PLANNER_BASE_URL: ")
+    assert str(raised.value).startswith("invalid settings: VULNWITNESS_PLANNER_BASE_URL: ")
     assert base_url not in raised_text
     assert "hunter2-password" not in raised_text
 
@@ -162,7 +162,7 @@ def test_endpoint_that_could_misdirect_the_key_is_rejected_without_quoting_it(
     ids=["localhost", "ipv4_loopback", "ipv6_loopback"],
 )
 def test_plain_http_is_accepted_only_to_a_loopback_host(base_url: str) -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_BASE_URL": base_url}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_BASE_URL": base_url}
 
     settings = load_settings(environment)
 
@@ -171,13 +171,13 @@ def test_plain_http_is_accepted_only_to_a_loopback_host(base_url: str) -> None:
 
 
 def test_invalid_model_name_error_never_quotes_the_key_or_the_name() -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_MODEL_NAME": f"name with {PLANNER_KEY}"}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_MODEL_NAME": f"name with {PLANNER_KEY}"}
 
     with pytest.raises(SettingsError) as raised:
         load_settings(environment)
 
     raised_text = describe_raised(raised.value)
-    assert str(raised.value).startswith("invalid settings: CVE_KGRAG_PLANNER_MODEL_NAME: ")
+    assert str(raised.value).startswith("invalid settings: VULNWITNESS_PLANNER_MODEL_NAME: ")
     assert PLANNER_KEY not in raised_text
     assert raised.value.__context__ is None
 
@@ -185,7 +185,7 @@ def test_invalid_model_name_error_never_quotes_the_key_or_the_name() -> None:
 def test_settings_error_logged_with_its_traceback_quotes_no_value(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_BASE_URL": CREDENTIAL_URL}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_BASE_URL": CREDENTIAL_URL}
 
     with caplog.at_level(logging.ERROR):
         try:
@@ -194,7 +194,7 @@ def test_settings_error_logged_with_its_traceback_quotes_no_value(
             logging.getLogger(__name__).exception("settings rejected")
 
     logged_text = caplog.text
-    assert "CVE_KGRAG_PLANNER_BASE_URL" in logged_text
+    assert "VULNWITNESS_PLANNER_BASE_URL" in logged_text
     assert "hunter2-password" not in logged_text
     assert PLANNER_KEY not in logged_text
 
@@ -275,7 +275,7 @@ def test_another_endpoint_has_another_fingerprint_that_names_no_host(
     ids=["one_trailing_slash", "two_trailing_slashes", "none"],
 )
 def test_endpoint_loses_exactly_one_trailing_slash(base_url: str, expected_base_url: str) -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_BASE_URL": base_url}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_BASE_URL": base_url}
 
     settings = load_settings(environment)
 
@@ -285,7 +285,7 @@ def test_endpoint_loses_exactly_one_trailing_slash(base_url: str, expected_base_
 
 def load_endpoint_fingerprint(base_url: str) -> str:
     """The fingerprint of ``base_url`` as the settings hand it to the adapter."""
-    settings = load_settings({**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_BASE_URL": base_url})
+    settings = load_settings({**ENABLED_PLANNER, "VULNWITNESS_PLANNER_BASE_URL": base_url})
     assert settings.model_planner is not None
     return fingerprint_endpoint(settings.model_planner.base_url)
 
@@ -316,12 +316,12 @@ def test_configured_endpoint_with_more_trailing_slashes_is_another_endpoint(
     ids=["trailing_newline", "embedded_space", "non_ascii", "over_1024_characters"],
 )
 def test_key_a_request_header_cannot_carry_is_rejected_without_quoting_it(api_key: str) -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_API_KEY": api_key}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_API_KEY": api_key}
 
     with pytest.raises(SettingsError) as raised:
         load_settings(environment)
 
-    assert str(raised.value).startswith("invalid settings: CVE_KGRAG_PLANNER_API_KEY: ")
+    assert str(raised.value).startswith("invalid settings: VULNWITNESS_PLANNER_API_KEY: ")
     assert_secret_absent(describe_raised(raised.value), PLANNER_KEY, "the settings error")
 
 
@@ -331,16 +331,16 @@ def test_key_a_request_header_cannot_carry_is_rejected_without_quoting_it(api_ke
     ids=["non_ascii_path", "non_ascii_host"],
 )
 def test_endpoint_that_is_not_ascii_is_rejected(base_url: str) -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_BASE_URL": base_url}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_BASE_URL": base_url}
 
     with pytest.raises(SettingsError) as raised:
         load_settings(environment)
 
-    assert str(raised.value).startswith("invalid settings: CVE_KGRAG_PLANNER_BASE_URL: ")
+    assert str(raised.value).startswith("invalid settings: VULNWITNESS_PLANNER_BASE_URL: ")
 
 
 def test_reasoning_effort_is_read_when_set_and_absent_otherwise() -> None:
-    configured = load_settings({**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_REASONING_EFFORT": "none"})
+    configured = load_settings({**ENABLED_PLANNER, "VULNWITNESS_PLANNER_REASONING_EFFORT": "none"})
     unconfigured = load_settings(ENABLED_PLANNER)
 
     assert configured.model_planner is not None
@@ -351,19 +351,19 @@ def test_reasoning_effort_is_read_when_set_and_absent_otherwise() -> None:
 
 @pytest.mark.parametrize("reasoning_effort", ["High", "very high", "x" * 17], ids=str)
 def test_reasoning_effort_outside_the_pattern_is_rejected(reasoning_effort: str) -> None:
-    environment = {**ENABLED_PLANNER, "CVE_KGRAG_PLANNER_REASONING_EFFORT": reasoning_effort}
+    environment = {**ENABLED_PLANNER, "VULNWITNESS_PLANNER_REASONING_EFFORT": reasoning_effort}
 
     with pytest.raises(SettingsError) as raised:
         load_settings(environment)
 
-    assert str(raised.value).startswith("invalid settings: CVE_KGRAG_PLANNER_REASONING_EFFORT: ")
+    assert str(raised.value).startswith("invalid settings: VULNWITNESS_PLANNER_REASONING_EFFORT: ")
 
 
 def test_enabled_semantic_channel_takes_the_store_s_collection_and_model_defaults() -> None:
     settings = load_settings(
         {
-            "CVE_KGRAG_SEMANTIC_ENABLED": "true",
-            "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": "/srv/vectors",
+            "VULNWITNESS_SEMANTIC_ENABLED": "true",
+            "VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY": "/srv/vectors",
         }
     )
 
@@ -376,19 +376,19 @@ def test_enabled_semantic_channel_takes_the_store_s_collection_and_model_default
 
 def test_enabled_semantic_channel_without_a_directory_is_an_error_naming_it() -> None:
     with pytest.raises(SettingsError) as raised:
-        load_settings({"CVE_KGRAG_SEMANTIC_ENABLED": "true"})
+        load_settings({"VULNWITNESS_SEMANTIC_ENABLED": "true"})
 
     assert str(raised.value) == (
-        "invalid settings: CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY: Field required"
+        "invalid settings: VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY: Field required"
     )
 
 
 def test_enabled_semantic_channel_reads_its_collection_directory_and_model() -> None:
     environment = {
-        "CVE_KGRAG_SEMANTIC_ENABLED": "yes",
-        "CVE_KGRAG_SEMANTIC_COLLECTION_NAME": "cve_chunks",
-        "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": "/srv/vectors",
-        "CVE_KGRAG_SEMANTIC_MODEL_NAME": "BAAI/bge-small-en-v1.5",
+        "VULNWITNESS_SEMANTIC_ENABLED": "yes",
+        "VULNWITNESS_SEMANTIC_COLLECTION_NAME": "cve_chunks",
+        "VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY": "/srv/vectors",
+        "VULNWITNESS_SEMANTIC_MODEL_NAME": "BAAI/bge-small-en-v1.5",
     }
 
     settings = load_settings(environment)
@@ -401,7 +401,7 @@ def test_enabled_semantic_channel_reads_its_collection_directory_and_model() -> 
 
 
 def test_semantic_switch_off_ignores_its_other_variables() -> None:
-    environment = {"CVE_KGRAG_SEMANTIC_COLLECTION_NAME": "x"}
+    environment = {"VULNWITNESS_SEMANTIC_COLLECTION_NAME": "x"}
 
     settings = load_settings(environment)
 
@@ -411,10 +411,10 @@ def test_semantic_switch_off_ignores_its_other_variables() -> None:
 @pytest.mark.parametrize(
     ("variable_name", "value"),
     [
-        ("CVE_KGRAG_SEMANTIC_COLLECTION_NAME", "Zq"),
-        ("CVE_KGRAG_SEMANTIC_COLLECTION_NAME", "has space"),
-        ("CVE_KGRAG_SEMANTIC_MODEL_NAME", "model with spaces"),
-        ("CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY", "/srv/vectors\x00/../etc"),
+        ("VULNWITNESS_SEMANTIC_COLLECTION_NAME", "Zq"),
+        ("VULNWITNESS_SEMANTIC_COLLECTION_NAME", "has space"),
+        ("VULNWITNESS_SEMANTIC_MODEL_NAME", "model with spaces"),
+        ("VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY", "/srv/vectors\x00/../etc"),
     ],
     ids=["collection_too_short", "collection_with_a_space", "model_with_spaces", "nul_in_path"],
 )
@@ -422,8 +422,8 @@ def test_invalid_semantic_setting_names_the_variable_not_the_value(
     variable_name: str, value: str
 ) -> None:
     environment = {
-        "CVE_KGRAG_SEMANTIC_ENABLED": "true",
-        "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": "/srv/vectors",
+        "VULNWITNESS_SEMANTIC_ENABLED": "true",
+        "VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY": "/srv/vectors",
         variable_name: value,
     }
 
@@ -436,10 +436,10 @@ def test_invalid_semantic_setting_names_the_variable_not_the_value(
 
 def test_invalid_semantic_switch_is_an_error_naming_it() -> None:
     with pytest.raises(SettingsError) as raised:
-        load_settings({"CVE_KGRAG_SEMANTIC_ENABLED": "sometimes"})
+        load_settings({"VULNWITNESS_SEMANTIC_ENABLED": "sometimes"})
 
     assert (
-        str(raised.value) == "invalid settings: CVE_KGRAG_SEMANTIC_ENABLED: must be true or false"
+        str(raised.value) == "invalid settings: VULNWITNESS_SEMANTIC_ENABLED: must be true or false"
     )
 
 
@@ -451,10 +451,10 @@ def test_http_settings_default_to_loopback_port_8765_and_no_token() -> None:
 
 def test_http_settings_read_their_host_port_and_token() -> None:
     environment = {
-        "CVE_KGRAG_HTTP_HOST": "::1",
-        "CVE_KGRAG_MCP_HTTP_PORT": "9001",
-        "CVE_KGRAG_API_PORT": "9002",
-        "CVE_KGRAG_HTTP_TOKEN": HTTP_TOKEN,
+        "VULNWITNESS_HTTP_HOST": "::1",
+        "VULNWITNESS_MCP_HTTP_PORT": "9001",
+        "VULNWITNESS_API_PORT": "9002",
+        "VULNWITNESS_HTTP_TOKEN": HTTP_TOKEN,
     }
 
     http_settings = load_settings(environment).http
@@ -469,21 +469,21 @@ def test_http_settings_read_their_host_port_and_token() -> None:
 @pytest.mark.parametrize(
     ("variable_name", "value"),
     [
-        ("CVE_KGRAG_HTTP_HOST", "0.0.0.0"),
-        ("CVE_KGRAG_HTTP_HOST", "0:0:0:0:0:0:0:0"),
-        ("CVE_KGRAG_HTTP_HOST", "localhost"),
-        ("CVE_KGRAG_HTTP_HOST", "127.0.0.2"),
-        ("CVE_KGRAG_HTTP_HOST", "::ffff:127.0.0.1"),
-        ("CVE_KGRAG_HTTP_HOST", "192.0.2.10"),
-        ("CVE_KGRAG_MCP_HTTP_PORT", "00000"),
-        ("CVE_KGRAG_MCP_HTTP_PORT", "65536"),
-        ("CVE_KGRAG_MCP_HTTP_PORT", "port-eighty"),
-        ("CVE_KGRAG_API_PORT", "70000"),
-        ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0a"),
-        ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE secret"),
-        ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aEé"),
-        ("CVE_KGRAG_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE=x"),
-        ("CVE_KGRAG_HTTP_TOKEN", "K" * 513),
+        ("VULNWITNESS_HTTP_HOST", "0.0.0.0"),
+        ("VULNWITNESS_HTTP_HOST", "0:0:0:0:0:0:0:0"),
+        ("VULNWITNESS_HTTP_HOST", "localhost"),
+        ("VULNWITNESS_HTTP_HOST", "127.0.0.2"),
+        ("VULNWITNESS_HTTP_HOST", "::ffff:127.0.0.1"),
+        ("VULNWITNESS_HTTP_HOST", "192.0.2.10"),
+        ("VULNWITNESS_MCP_HTTP_PORT", "00000"),
+        ("VULNWITNESS_MCP_HTTP_PORT", "65536"),
+        ("VULNWITNESS_MCP_HTTP_PORT", "port-eighty"),
+        ("VULNWITNESS_API_PORT", "70000"),
+        ("VULNWITNESS_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0a"),
+        ("VULNWITNESS_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE secret"),
+        ("VULNWITNESS_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aEé"),
+        ("VULNWITNESS_HTTP_TOKEN", "Kq3vY8xN2pL5sT7wB9dF1gH4jM6zC0aE=x"),
+        ("VULNWITNESS_HTTP_TOKEN", "K" * 513),
     ],
     ids=[
         "every_ipv4_address",
@@ -515,7 +515,7 @@ def test_invalid_http_setting_names_the_variable_not_the_value(
 
 
 def test_http_token_is_masked_in_every_rendering_of_the_settings() -> None:
-    settings = load_settings({"CVE_KGRAG_HTTP_TOKEN": HTTP_TOKEN})
+    settings = load_settings({"VULNWITNESS_HTTP_TOKEN": HTTP_TOKEN})
 
     renderings = [
         repr(settings),
@@ -541,25 +541,25 @@ def test_served_data_defaults_to_the_packaged_fixture_and_excerpt() -> None:
 
 def test_served_data_settings_read_the_store_root_and_the_snapshot_pin() -> None:
     environment = {
-        "CVE_KGRAG_STORE_ROOT": "/srv/cve-kgrag/stores",
-        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": "/srv/cve-kgrag/fight.yaml",
-        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
+        "VULNWITNESS_STORE_ROOT": "/srv/vulnwitness/stores",
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": "/srv/vulnwitness/fight.yaml",
+        "VULNWITNESS_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
     }
 
     settings = load_settings(environment)
 
-    assert settings.store_root == Path("/srv/cve-kgrag/stores")
+    assert settings.store_root == Path("/srv/vulnwitness/stores")
     assert settings.fight_snapshot == FightSnapshotSettings(
-        path=Path("/srv/cve-kgrag/fight.yaml"), sha256=SNAPSHOT_SHA256
+        path=Path("/srv/vulnwitness/fight.yaml"), sha256=SNAPSHOT_SHA256
     )
 
 
 def test_settings_open_nothing_the_served_data_variables_name(tmp_path: Path) -> None:
     missing_root = tmp_path / "no-such-root"
     environment = {
-        "CVE_KGRAG_STORE_ROOT": str(missing_root),
-        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(tmp_path / "no-such-snapshot.yaml"),
-        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
+        "VULNWITNESS_STORE_ROOT": str(missing_root),
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": str(tmp_path / "no-such-snapshot.yaml"),
+        "VULNWITNESS_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
     }
 
     settings = load_settings(environment)
@@ -571,13 +571,13 @@ def test_settings_open_nothing_the_served_data_variables_name(tmp_path: Path) ->
 @pytest.mark.parametrize(
     ("variable_name", "value"),
     [
-        ("CVE_KGRAG_STORE_ROOT", "stores"),
-        ("CVE_KGRAG_STORE_ROOT", "./stores"),
-        ("CVE_KGRAG_STORE_ROOT", "~/stores"),
-        ("CVE_KGRAG_STORE_ROOT", "/srv/stores\x01"),
-        ("CVE_KGRAG_STORE_ROOT", "/" + "s" * 4096),
-        ("CVE_KGRAG_FIGHT_SNAPSHOT_PATH", "fight.yaml"),
-        ("CVE_KGRAG_FIGHT_SNAPSHOT_PATH", "/srv/fight\n.yaml"),
+        ("VULNWITNESS_STORE_ROOT", "stores"),
+        ("VULNWITNESS_STORE_ROOT", "./stores"),
+        ("VULNWITNESS_STORE_ROOT", "~/stores"),
+        ("VULNWITNESS_STORE_ROOT", "/srv/stores\x01"),
+        ("VULNWITNESS_STORE_ROOT", "/" + "s" * 4096),
+        ("VULNWITNESS_FIGHT_SNAPSHOT_PATH", "fight.yaml"),
+        ("VULNWITNESS_FIGHT_SNAPSHOT_PATH", "/srv/fight\n.yaml"),
     ],
     ids=[
         "relative_root",
@@ -593,8 +593,8 @@ def test_path_that_is_not_absolute_names_the_variable_not_the_value(
     variable_name: str, value: str
 ) -> None:
     environment = {
-        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": "/srv/fight.yaml",
-        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": "/srv/fight.yaml",
+        "VULNWITNESS_FIGHT_SNAPSHOT_SHA256": SNAPSHOT_SHA256,
         variable_name: value,
     }
 
@@ -615,21 +615,21 @@ def test_snapshot_hash_that_is_not_lower_case_hex_names_the_variable(
     snapshot_sha256: str,
 ) -> None:
     environment = {
-        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": "/srv/fight.yaml",
-        "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256": snapshot_sha256,
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": "/srv/fight.yaml",
+        "VULNWITNESS_FIGHT_SNAPSHOT_SHA256": snapshot_sha256,
     }
 
     with pytest.raises(SettingsError) as raised:
         load_settings(environment)
 
-    assert str(raised.value).startswith("invalid settings: CVE_KGRAG_FIGHT_SNAPSHOT_SHA256: ")
+    assert str(raised.value).startswith("invalid settings: VULNWITNESS_FIGHT_SNAPSHOT_SHA256: ")
     assert snapshot_sha256 not in describe_raised(raised.value)
 
 
 @pytest.mark.parametrize(
     ("present_variable", "value", "missing_variable"),
     [
-        ("CVE_KGRAG_FIGHT_SNAPSHOT_SHA256", SNAPSHOT_SHA256, "CVE_KGRAG_FIGHT_SNAPSHOT_PATH"),
+        ("VULNWITNESS_FIGHT_SNAPSHOT_SHA256", SNAPSHOT_SHA256, "VULNWITNESS_FIGHT_SNAPSHOT_PATH"),
     ],
     ids=["hash_without_path"],
 )
@@ -650,7 +650,7 @@ def test_snapshot_path_without_expected_hash_is_configured(source: str) -> None:
     path = "/srv/snapshot"
 
     # Act
-    settings = load_settings({f"CVE_KGRAG_{source}_SNAPSHOT_PATH": path})
+    settings = load_settings({f"VULNWITNESS_{source}_SNAPSHOT_PATH": path})
     snapshot = settings.fight_snapshot if source == "FIGHT" else settings.mitre_snapshot
 
     # Assert

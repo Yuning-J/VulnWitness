@@ -76,7 +76,7 @@ def test_test_module_connecting_at_import_fails_collection_with_the_guard(
     )
     # The live-test opt-in is the one variable that turns the guard off.
     environment = dict(os.environ)
-    environment.pop("CVE_KGRAG_LIVE_TESTS", None)
+    environment.pop("VULNWITNESS_LIVE_TESTS", None)
 
     completed = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "tests.conftest", str(probe)],

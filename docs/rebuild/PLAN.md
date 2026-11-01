@@ -7,13 +7,13 @@ milestone once its exit criterion is met and the offline lane is green.
 | Milestone | Scope | Status |
 |---|---|---|
 | M0 | Baseline, v1 consumer check, characterization tests, packaging/migration ADR (the baseline and the characterization tests live in CVE-KGRAG: `docs/rebuild/baseline.md`, `tests/characterization/`) | done |
-| M1 | `pyproject`, `cve_kgrag` core: canonical contracts + JSON Schemas, synthetic fixture + manifest, in-memory repository, exact-ID and lexical search, claim/evidence validator, minimal CLI | done |
+| M1 | `pyproject`, `vulnwitness` core: canonical contracts + JSON Schemas, synthetic fixture + manifest, in-memory repository, exact-ID and lexical search, claim/evidence validator, minimal CLI | done |
 | M2 | Structured filters, graph channel, typed backend outcomes, legacy ports, optional semantic adapter, NVD normalizer; review fixes (filter semantics, CVE-anchor scope rule, legacy wrapper, NVD boundary validation); the legacy wrapper is not part of this repository (ADR 0006) | done |
 | M3 | Topic registry + draft 5G-AKA and mobile-core GTP cards (`pending_review`, no named reviewer, investigations using either carry `topic_pending_review`; card sources and scope limits in m3-topics-and-threat-context.md), pinned FiGHT YAML source + licensed excerpt, relevance tiers, scoped topic-context service, gold queries, source registry and THIRD_PARTY_DATA.md | done |
 | M4 | Bounded investigation state machine, deterministic policy m4.1, model-planner port with plan gate and deterministic fallback, budgets, replayable trajectory, gold trajectories, hard wall time via abandoning call runner, per-request result cap, catalog re-check of served content, trajectory cross-validation (network LLM adapter follows separately) | done |
-| M5 | Trustify port + disabled adapter (real adapter BLOCKED_UNVERIFIED, ADR 0003), read-only stdio MCP server with eight bounded tools, evidence-set verification (`cve-kgrag verify`), server-owned text at the MCP boundary (typed affectedness and backend failures, vouched match explanations), search-tool boundary below; contracts `2.0.0-dev.16` | done |
+| M5 | Trustify port + disabled adapter (real adapter BLOCKED_UNVERIFIED, ADR 0003), read-only stdio MCP server with eight bounded tools, evidence-set verification (`vulnwitness verify`), server-owned text at the MCP boundary (typed affectedness and backend failures, vouched match explanations), search-tool boundary below; contracts `2.0.0-dev.16` | done |
 | M6 | v2 API, full CLI, read-only legacy-data importer, dependency split, offline CI; Streamable HTTP (opt-in, loopback, auth, health/readiness), typed settings boundary, semantic load-failure capability, set verification over HTTP; no v1 compatibility (ADR 0006); work packages in [`m6-api-cli-and-migration.md`](m6-api-cli-and-migration.md) (done: WP1 settings and secrets, ADR 0004; the model planner adapter, ADR 0005; WP2 semantic settings; WP-S repository split, ADR 0006; WP3′ HTTP surfaces, ADR 0007; WP4 offline CI; WP5 full CLI and the verification report contract, with bounded violations in the server's own words; WP6 HTTP guard, HTTP settings and MCP over Streamable HTTP; WP7 v2 REST API with set verification over HTTP; WP9 read-only legacy-data importer, ADR 0008; WP10 store activation and serving, the operator FiGHT snapshot, visible truncation and the M6 exit audit, ADR 0009; contracts `2.0.0-dev.26`); exit audit in [`m6-exit-audit.md`](m6-exit-audit.md) | done |
-| M7a | Planner behaviour baseline before WP9: `cve-kgrag eval planner`, a pure analyzer over the evidence sets' trajectories (outcomes, fallbacks, divergence from the policy's plans, run stability), the deterministic baseline on the M4 gold file; no agent, vocabulary, round or contract change; [`m7a-planner-baseline.md`](m7a-planner-baseline.md) | done offline; live model runs are started by hand, outside CI |
+| M7a | Planner behaviour baseline before WP9: `vulnwitness eval planner`, a pure analyzer over the evidence sets' trajectories (outcomes, fallbacks, divergence from the policy's plans, run stability), the deterministic baseline on the M4 gold file; no agent, vocabulary, round or contract change; [`m7a-planner-baseline.md`](m7a-planner-baseline.md) | done offline; live model runs are started by hand, outside CI |
 | M7 | M7b after WP10: the same evaluation on imported data with hand-labelled sufficiency, then the decision on evidence gaps, controlled term expansion and more rounds; review packet | in progress: gold cases and the M7b evaluation done; the first model run, its causes and the planned work order in [`m7b-results-2026-10-28.md`](m7b-results-2026-10-28.md); A1 and A2 done, A2 as the `term_not_indexed` warning without the measured admission rule ([`m7b-work-packages.md`](m7b-work-packages.md)); B, evidence needs deciding stop and refinement ([`m7b-b-evidence-needs.md`](m7b-b-evidence-needs.md)); C, FiGHT protocol threat context from the question's own words with one shared phrase-BM25 FiGHT order ([`m7b-c-fight-direct-search.md`](m7b-c-fight-direct-search.md), contracts `2.0.0-dev.30`, policy `m7b.2`), implemented and awaiting owner review; C follow-up, mixed-script words read as the CVE side reads them ([`m7b-work-packages.md`](m7b-work-packages.md#c-follow-up--mixed-script-words), contracts `2.0.0-dev.31`, policy `m7b.3`), implemented and awaiting owner review; free text planned by the policy, the model planning only questions that name a CVE ID or resolve a reviewed topic (ADR 0005 §3, contracts `2.0.0-dev.32`, policy `m7b.3`, report format 5), implemented and awaiting owner review; real-use acceptance package 1: a purls filter refused (`filter_unsupported`) on a dataset that names no package URL, `result_limit_reached` without a count, `term_not_indexed` at the top of an investigation, store loading reported on stderr and a real-data README section (contracts `2.0.0-dev.33`, policy `m7b.3`), implemented and awaiting owner review; real-use acceptance package 2: a resolved topic explored first in every scope, and a need `found` only through an exact lookup of a named CVE or a reviewed topic's mapping, so free-text answers end `partial` with their matches `matches_unassessed` ([`m7b-work-packages.md`](m7b-work-packages.md#package-2--topic-first-and-unassessed-matches), contracts `2.0.0-dev.34`, policy `m7b.4`), implemented and awaiting owner review |
 
 Product vulnerabilities: explicit vendor/product entry with capped, counted CVEs, matching basis and optional NVD version-condition facts through CLI, REST and MCP; contracts `2.0.0-dev.42`, implemented and awaiting owner review.
@@ -62,9 +62,9 @@ The key comes from a variable already in the shell, so it never appears in a com
 line or its history:
 
 ```bash
-CVE_KGRAG_LIVE_TESTS=1 CVE_KGRAG_PLANNER_ENABLED=true \
-CVE_KGRAG_PLANNER_BASE_URL=https://api.deepseek.com CVE_KGRAG_PLANNER_MODEL_NAME=deepseek-flash \
-CVE_KGRAG_PLANNER_REASONING_EFFORT=none CVE_KGRAG_PLANNER_API_KEY="$DEEPSEEK_API_KEY" \
+VULNWITNESS_LIVE_TESTS=1 VULNWITNESS_PLANNER_ENABLED=true \
+VULNWITNESS_PLANNER_BASE_URL=https://api.deepseek.com VULNWITNESS_PLANNER_MODEL_NAME=deepseek-flash \
+VULNWITNESS_PLANNER_REASONING_EFFORT=none VULNWITNESS_PLANNER_API_KEY="$DEEPSEEK_API_KEY" \
 uv run pytest tests/live -m live
 ```
 
@@ -72,10 +72,10 @@ The planner evaluation's model runs use the same variables, and only the report 
 to be shared ([`m7a-planner-baseline.md`](m7a-planner-baseline.md#live-runs)):
 
 ```bash
-CVE_KGRAG_PLANNER_ENABLED=true \
-CVE_KGRAG_PLANNER_BASE_URL=https://api.deepseek.com CVE_KGRAG_PLANNER_MODEL_NAME=deepseek-flash \
-CVE_KGRAG_PLANNER_REASONING_EFFORT=none CVE_KGRAG_PLANNER_API_KEY="$DEEPSEEK_API_KEY" \
-uv run cve-kgrag eval planner --gold eval/gold/m4_trajectories.yaml --out eval-results \
+VULNWITNESS_PLANNER_ENABLED=true \
+VULNWITNESS_PLANNER_BASE_URL=https://api.deepseek.com VULNWITNESS_PLANNER_MODEL_NAME=deepseek-flash \
+VULNWITNESS_PLANNER_REASONING_EFFORT=none VULNWITNESS_PLANNER_API_KEY="$DEEPSEEK_API_KEY" \
+uv run vulnwitness eval planner --gold eval/gold/m4_trajectories.yaml --out eval-results \
   --model-runs 5
 ```
 
@@ -90,7 +90,7 @@ of these is available:
 
 Its scope:
 
-- the adapter behind `TrustifyPort`, the `trustify` extra and its `cve_kgrag.adapters`
+- the adapter behind `TrustifyPort`, the `trustify` extra and its `vulnwitness.adapters`
   entry point; typed settings for the endpoint (from configuration and an allowlist,
   never from a caller) and for the OIDC secret; finite retry for the read tools only;
   detection of tool-schema drift against the pinned trustify-mcp snapshot; live tests
@@ -146,13 +146,13 @@ Recorded when M6 closed; none blocks M7b unless it says so.
   A 1,073,741,825-byte file is refused as `decompressed_file_too_large` before it is
   parsed. The staging cap is 16 GiB. Detailed import measurements made with
   `/usr/bin/time -l` stay in the operator's external run directory under
-  `~/data/cve-kgrag/runs/`.
+  `~/data/vulnwitness/runs/`.
 - M7b loads the store once per evaluation. Lexical search is an inverted index that
   builds a match object only for the results it returns; `gc.freeze()` is not needed.
   The lexical check covers 1,056 searches (the M7b run's queries and 300 sampled ones,
   at three limits and filters each).
   Detailed serving measurements from `scripts/operator/measure_serving.py` stay in the
-  operator's external run directory under `~/data/cve-kgrag/runs/`.
+  operator's external run directory under `~/data/vulnwitness/runs/`.
 - 18 NVD records are excluded at import because a vulnerable CPE names no concrete
   vendor or product (`cpe:2.3:h:qualcomm:-:-:…`, `cpe:2.3:o:-:-:-:…`). An alternative
   is keeping the record and dropping only that CPE match; decide it if a gold case turns
@@ -181,7 +181,7 @@ Recorded when M6 closed; none blocks M7b unless it says so.
   1 GiB allowance over the recorded serving baseline. Graph expansion remains available,
   with no tuning or contract change. The operator output contains the degree figures,
   per-seed timings and peak RSS in `measurement.json` and `summary.md` under
-  `~/data/cve-kgrag/runs/graph-expand/`. This check covers these twenty single-CVE
+  `~/data/vulnwitness/runs/graph-expand/`. This check covers these twenty single-CVE
   queries, not arbitrary multi-seed searches.
 
 ## Offline lane
@@ -196,5 +196,5 @@ scripts/ci/core_only_lane.sh 3.12     # the wheel in a fresh venv, no dev group,
 
 A network guard (`tests/conftest.py`) refuses connects outside loopback from before
 collection to the end of the run, so module-level test code is covered too. Only an
-explicitly enabled live run (`CVE_KGRAG_LIVE_TESTS=1`, the live lane above) goes without
+explicitly enabled live run (`VULNWITNESS_LIVE_TESTS=1`, the live lane above) goes without
 it.

@@ -9,24 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.store.active_record import (
-    ActiveRecord,
-    StorePointer,
-    encode_active_record,
-)
-from cve_kgrag.adapters.store.active_record_writer import OsActiveRecordFiles
-from cve_kgrag.adapters.store.active_store import load_active_store
-from cve_kgrag.adapters.store.corpus_store import load_corpus_store, verify_corpus_store
-from cve_kgrag.adapters.store.store_activation import StoreActivation
-from cve_kgrag.composition import (
-    build_investigation_deployment,
-    build_serving_data_plane,
-    load_served_corpus,
-)
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.served_dataset import ServedDatasetKind
-from cve_kgrag.domain.store_status import StoreUnavailable, StoreUnavailableReason
-from cve_kgrag.domain.taxonomy import ResultStatus
 from tests.support.corpus_stores import (
     ROOT_BREAKERS,
     copy_compatibility_store,
@@ -37,6 +19,24 @@ from tests.support.corpus_stores import (
     tamper_with_anchors,
 )
 from tests.support.legacy_inputs import snapshot_tree
+from vulnwitness.adapters.store.active_record import (
+    ActiveRecord,
+    StorePointer,
+    encode_active_record,
+)
+from vulnwitness.adapters.store.active_record_writer import OsActiveRecordFiles
+from vulnwitness.adapters.store.active_store import load_active_store
+from vulnwitness.adapters.store.corpus_store import load_corpus_store, verify_corpus_store
+from vulnwitness.adapters.store.store_activation import StoreActivation
+from vulnwitness.composition import (
+    build_investigation_deployment,
+    build_serving_data_plane,
+    load_served_corpus,
+)
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.served_dataset import ServedDatasetKind
+from vulnwitness.domain.store_status import StoreUnavailable, StoreUnavailableReason
+from vulnwitness.domain.taxonomy import ResultStatus
 
 
 @pytest.fixture

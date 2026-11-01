@@ -13,27 +13,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.evidence_set_verification import (
-    check_evidence_set,
-    verify_evidence_set,
-)
-from cve_kgrag.application.trajectory_replay import (
-    ReplayCompleted,
-    ReplayDifference,
-    ReplayTimedOut,
-)
-from cve_kgrag.composition import list_accepted_planner_capabilities
-from cve_kgrag.domain.evidence_set_verification_report import (
-    MAX_REPORTED_VIOLATIONS,
-    ReportedDifference,
-    VerificationReport,
-    VerificationVerdict,
-)
-from cve_kgrag.domain.investigation import KnowledgeEvidenceSet, SourceCapability
-from cve_kgrag.domain.search import RetrievalOutcome
-from cve_kgrag.domain.taxonomy import BackendStatus
-from cve_kgrag.domain.validation import EvidenceValidationError
 from tests.support.clocks import ONE_SECOND_RUN_REAL_SECONDS
 from tests.support.entry_points import FakeAdapterRegistry, FakeDistribution
 from tests.support.fakes import BlockingRetriever, RecordingRetriever
@@ -76,6 +55,27 @@ from tests.support.planners import (
     reconfigure_planner,
 )
 from tests.support.services import build_purl_free_structured_index
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.evidence_set_verification import (
+    check_evidence_set,
+    verify_evidence_set,
+)
+from vulnwitness.application.trajectory_replay import (
+    ReplayCompleted,
+    ReplayDifference,
+    ReplayTimedOut,
+)
+from vulnwitness.composition import list_accepted_planner_capabilities
+from vulnwitness.domain.evidence_set_verification_report import (
+    MAX_REPORTED_VIOLATIONS,
+    ReportedDifference,
+    VerificationReport,
+    VerificationVerdict,
+)
+from vulnwitness.domain.investigation import KnowledgeEvidenceSet, SourceCapability
+from vulnwitness.domain.search import RetrievalOutcome
+from vulnwitness.domain.taxonomy import BackendStatus
+from vulnwitness.domain.validation import EvidenceValidationError
 
 NO_DIFFERENCE = ReplayCompleted(())
 SCRIPTED_REGISTRY = FakeAdapterRegistry([SCRIPTED_ENTRY_POINT])

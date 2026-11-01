@@ -25,17 +25,17 @@ v1 compatibility is not an M6 package here: it stays in CVE-KGRAG (ADR 0006).
 
 Decisions: ADR 0004.
 
-- `settings.py` reads five `CVE_KGRAG_PLANNER_*` variables, once, at the CLI entry
-  point. The planner is off unless `CVE_KGRAG_PLANNER_ENABLED` is on. Invalid settings
+- `settings.py` reads five `VULNWITNESS_PLANNER_*` variables, once, at the CLI entry
+  point. The planner is off unless `VULNWITNESS_PLANNER_ENABLED` is on. Invalid settings
   are a usage error naming the variables, never their values.
 - An enabled planner without a key, or without a usable `model_planner` adapter, leaves
   the deterministic policy planning and reports `model_planner: unavailable` with a
   server sentence. The OpenAI-compatible adapter (ADR 0005) is the registered
   `model_planner` entry point.
-- `cve-kgrag investigate` plans with the discovered planner. `cve-kgrag verify` accepts
+- `vulnwitness investigate` plans with the discovered planner. `vulnwitness verify` accepts
   the planner capabilities the settings allow, without the key and without loading the
   adapter; a model-planned set verifies only where the same adapter is installed.
-  `cve-kgrag mcp` keeps the deterministic planner.
+  `vulnwitness mcp` keeps the deterministic planner.
 - A discovered adapter is guarded: anything it raises, and an answer that is not a valid
   reply, is logged by type only and recorded as a fixed failed reply. A failed reply
   carries one of the server's sentences, never adapter text.
@@ -62,7 +62,7 @@ Decisions: ADR 0004.
 
 Decisions: ADR 0005.
 
-- `cve_kgrag.adapters.planner.openai_compatible:build_model_port` is the core
+- `vulnwitness.adapters.planner.openai_compatible:build_model_port` is the core
   `model_planner` entry point: one chat-completions request per round on `http.client`,
   its reads ended by a watchdog at the deadline, with no redirect, no environment proxy,
   no error body read and no reply text logged.
@@ -78,7 +78,7 @@ Decisions: ADR 0005.
 ### Contracts at `2.0.0-dev.19`
 
 - `ModelPlannerIdentity` gains `reasoning_effort` (null when none is sent), set from
-  `CVE_KGRAG_PLANNER_REASONING_EFFORT`.
+  `VULNWITNESS_PLANNER_REASONING_EFFORT`.
 - `PlanningInput` gains `required_tools` (not part of any published response).
 - The settings refuse a key that is not printable ASCII without whitespace and an endpoint
   that is not ASCII.
@@ -86,19 +86,19 @@ Decisions: ADR 0005.
 ### Running with a planner configured
 
 ```bash
-export CVE_KGRAG_PLANNER_ENABLED=true
-export CVE_KGRAG_PLANNER_BASE_URL=https://api.deepseek.com
-export CVE_KGRAG_PLANNER_MODEL_NAME=deepseek-flash
-export CVE_KGRAG_PLANNER_REASONING_EFFORT=none   # DeepSeek reasons by default
-export CVE_KGRAG_PLANNER_API_KEY="$DEEPSEEK_API_KEY"   # or source an untracked .env:
+export VULNWITNESS_PLANNER_ENABLED=true
+export VULNWITNESS_PLANNER_BASE_URL=https://api.deepseek.com
+export VULNWITNESS_PLANNER_MODEL_NAME=deepseek-flash
+export VULNWITNESS_PLANNER_REASONING_EFFORT=none   # DeepSeek reasons by default
+export VULNWITNESS_PLANNER_API_KEY="$DEEPSEEK_API_KEY"   # or source an untracked .env:
                                                        # set -a; . ./.env; set +a
-cve-kgrag investigate "5G-AKA" --scope implementation_only
+vulnwitness investigate "5G-AKA" --scope implementation_only
 ```
 
 Never pass the key on the command line. The live tests read the same variables:
 
 ```bash
-CVE_KGRAG_LIVE_TESTS=1 uv run pytest tests/live -m live
+VULNWITNESS_LIVE_TESTS=1 uv run pytest tests/live -m live
 ```
 
 ### Known limits
@@ -121,7 +121,7 @@ CVE_KGRAG_LIVE_TESTS=1 uv run pytest tests/live -m live
 
 Decisions: ADR 0004 §1.
 
-- `CVE_KGRAG_SEMANTIC_ENABLED` turns the semantic channel on; its collection and model
+- `VULNWITNESS_SEMANTIC_ENABLED` turns the semantic channel on; its collection and model
   have the CVE-KGRAG pipeline's defaults, its directory is required, and each has its
   own variable.
 - `search`, `topic` and `investigate` load the semantic adapter only when run with
@@ -172,7 +172,7 @@ Decisions: ADR 0006.
   the shared `FakeCollection` and `FixedEncoder` (`tests/support/vector_store.py`), so
   chunk collapse, machine-independent failure details and over-long CVE IDs stay tested
   through the service. Filtered semantic search stays tested on that adapter.
-- `CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY` has no default: an enabled semantic channel
+- `VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY` has no default: an enabled semantic channel
   without it is a usage error naming the variable.
 - The legacy fine-tuned model's registry entry and `LocalStoragePolicy.COMMITTED_ARTIFACT`
   are not carried; no schema changes, and the contracts stay at `2.0.0-dev.20`.
@@ -195,9 +195,9 @@ amended to match.
 ## WP4 — offline CI
 
 - `scripts/ci/offline_lane.sh` runs `uv sync --locked`, pytest, `ruff check`,
-  `ruff format --check`, mypy, `cve-kgrag schema check` and `uv lock --check`.
+  `ruff format --check`, mypy, `vulnwitness schema check` and `uv lock --check`.
   `scripts/ci/core_only_lane.sh [python]` builds the wheel, installs it alone in a fresh
-  venv, runs `cve-kgrag demo`, expects `cve-kgrag mcp` to exit 1 with the missing-extra
+  venv, runs `vulnwitness demo`, expects `vulnwitness mcp` to exit 1 with the missing-extra
   refusal, and runs the unit, contract and integration tests outside the MCP interface. PLAN.md
   calls these scripts.
 - `.github/workflows/offline.yml` runs the offline lane on Python 3.11 and 3.12 and the
@@ -209,7 +209,7 @@ amended to match.
 - `pytest_configure` in `tests/conftest.py` installs a guard that refuses every connect
   outside loopback (`tests/support/network_guard.py`) before collection, so test modules
   are guarded while they are imported, and keeps it to the end of the run. Only an
-  explicitly enabled live run (`CVE_KGRAG_LIVE_TESTS=1`) goes without it.
+  explicitly enabled live run (`VULNWITNESS_LIVE_TESTS=1`) goes without it.
   `tests/unit/test_network_guard.py` checks that a documentation address is refused,
   loopback is allowed, and a test module that connects at import fails collection with
   the guard's refusal.
@@ -231,7 +231,7 @@ toolbox, whose limits exist for remote callers; ADR 0003 §10.
   `application/evidence_set_verification.check_evidence_set` parses the bytes and
   verifies them into a report, so the CLI, and later the API, share one path. It passes
   every violation list through `bound_violations`, which keeps the first 100 and cuts a
-  longer violation to 1024 characters ending in `...`. `cve-kgrag verify` prints the keys
+  longer violation to 1024 characters ending in `...`. `vulnwitness verify` prints the keys
   in declaration order (`verdict`, `violations`, `differences`) with non-ASCII text
   escaped, and exits 0 only for `verified`; tests pin the exact text of a `verified` and a
   `malformed` report and the escaping.
@@ -333,17 +333,17 @@ toolbox, whose limits exist for remote callers; ADR 0003 §10.
 
 Decisions: ADR 0007.
 
-- **Settings.** `HttpSettings` (`settings.py`) reads `CVE_KGRAG_HTTP_HOST` (`127.0.0.1`,
+- **Settings.** `HttpSettings` (`settings.py`) reads `VULNWITNESS_HTTP_HOST` (`127.0.0.1`,
   the default, or `::1`; any other value, `localhost`, other 127/8 addresses and mapped
-  forms included, is invalid), `CVE_KGRAG_MCP_HTTP_PORT` (1 to 65535, default 8765) and
-  `CVE_KGRAG_HTTP_TOKEN`: 32 to 512 characters of RFC 6750's `b64token` alphabet, held as
+  forms included, is invalid), `VULNWITNESS_MCP_HTTP_PORT` (1 to 65535, default 8765) and
+  `VULNWITNESS_HTTP_TOKEN`: 32 to 512 characters of RFC 6750's `b64token` alphabet, held as
   a `SecretStr`. The section has no switch: every command reads and validates it, and
-  only `mcp --http` and `api` (WP7, on `CVE_KGRAG_API_PORT`) serve.
-- **Command.** `cve-kgrag mcp --http` serves the packaged fixture's toolbox, with the
+  only `mcp --http` and `api` (WP7, on `VULNWITNESS_API_PORT`) serve.
+- **Command.** `vulnwitness mcp --http` serves the packaged fixture's toolbox, with the
   deterministic planner and no semantic channel, until it is interrupted (SIGINT), then
   exits 0 with nothing on stdout or stderr; on SIGTERM it shuts down the same way and
   ends by that signal, as uvicorn re-raises it. Without a token it is a usage error naming
-  `CVE_KGRAG_HTTP_TOKEN` (exit 2), checked before the runner is looked up. The runner
+  `VULNWITNESS_HTTP_TOKEN` (exit 2), checked before the runner is looked up. The runner
   loads through the `mcp_http_server` entry point (`interfaces/mcp/http_runner.py`);
   without the `mcp` extra the command exits 1 with the missing-extra line, which the
   core-only lane checks. A port that cannot be bound exits 1 after uvicorn logs why.
@@ -424,7 +424,7 @@ Decisions: ADR 0007.
     `/ready` answering 503 while the toolbox's only worker holds a call, the 50 s
     deadline and the stop waiting past it, and the exact status and body of eight
     requests the SDK answers itself, none repeating the marker it carries (a plain-text
-    server error becomes `internal_error`); and starts `cve-kgrag mcp --http` on a free
+    server error becomes `internal_error`); and starts `vulnwitness mcp --http` on a free
     port of `127.0.0.1` and of `::1`: the client lists the tools, `/ready` without the
     token is 401 without a `Server` header, a 1 MiB body is 413 over a real socket, an
     upgrade request and an unparsable one log nothing, and an interrupt exits 0 with
@@ -474,14 +474,14 @@ Decisions: ADR 0007.
 
 Decisions: ADR 0007, decisions 8 and 9.
 
-- **Command.** `cve-kgrag api` serves the packaged fixture's toolbox, with the
-  deterministic planner and no semantic channel, on `CVE_KGRAG_HTTP_HOST` and
-  `CVE_KGRAG_API_PORT` (default 8766) behind `CVE_KGRAG_HTTP_TOKEN`, until it is
+- **Command.** `vulnwitness api` serves the packaged fixture's toolbox, with the
+  deterministic planner and no semantic channel, on `VULNWITNESS_HTTP_HOST` and
+  `VULNWITNESS_API_PORT` (default 8766) behind `VULNWITNESS_HTTP_TOKEN`, until it is
   interrupted, as `mcp --http` does: exit 0 on SIGINT with nothing on stdout or stderr,
   exit 1 on a port it cannot bind, exit 2 without a token. The runner loads through the
   `api_server` entry point (`interfaces/rest/api_runner.py`); without the `api` extra
   the command exits 1 with `the 'api' extra is not installed: pip install
-  'cve-kgrag[api]'`, which the core-only lane checks.
+  'vulnwitness[api]'`, which the core-only lane checks.
 - **Routes**, all behind the WP6 guard and its 50 s request deadline:
 
   | Route | Tool or check | Arguments |
@@ -502,15 +502,15 @@ Decisions: ADR 0007, decisions 8 and 9.
   what the request sent. A percent-encoded evidence ID is not decoded, so
   `ev%3A...` is not an evidence ID. The guard routes a path ending in one segment after
   `/api/v2/evidence/` and nothing else there (`GuardedRoute.takes_path_segment`).
-- **Verification.** `POST /api/v2/verify` checks the body as `cve-kgrag verify` checks
+- **Verification.** `POST /api/v2/verify` checks the body as `vulnwitness verify` checks
   a file: against the packaged fixture and the planners the settings configure
   (`list_accepted_planner_capabilities`), and answers the `VerificationReport` with 200
   for every verdict. It checks one set at a time: a request arriving while a check runs,
   one abandoned at its deadline included, is answered 503 `route_busy` without waiting.
   The check takes the route on its worker thread, so a request cancelled before its
   check starts holds nothing. Its body cap is `MAX_EVIDENCE_SET_BYTES` (4 MiB), the size
-  `cve-kgrag verify` reads, defined once in `application/evidence_set_verification.py`;
-  every other route keeps 256 KiB. `cve-kgrag verify` and the route build their check
+  `vulnwitness verify` reads, defined once in `application/evidence_set_verification.py`;
+  every other route keeps 256 KiB. `vulnwitness verify` and the route build their check
   the same way (`build_evidence_set_check`).
 - **Packaging.** The `api` extra declares anyio, Starlette and uvicorn and no MCP SDK;
   discovery reports it missing when one of those three modules is (`API_EXTRA`), while a
@@ -530,7 +530,7 @@ Decisions: ADR 0007, decisions 8 and 9.
     verification answered `route_busy` and a later one 200; a check abandoned at its
     deadline answered 504 and keeping the route until it returns; a verification
     cancelled before its check starts leaving the route free; 405 for each route's other
-    method; 401 on every route but `/health`; and `cve-kgrag api` as a process:
+    method; 401 on every route but `/health`; and `vulnwitness api` as a process:
     investigate, verify, an interrupt with empty output, and a port in use exiting 1
     without the token in its output.
   - `test_cli.py` checks that the API's verification accepts the planners the settings
@@ -550,12 +550,12 @@ Decisions: ADR 0007, decisions 8 and 9.
 
 Decisions: ADR 0008.
 
-- **Command.** `cve-kgrag migrate legacy --inputs FILE --target DIR [--legacy-root DIR]
+- **Command.** `vulnwitness migrate legacy --inputs FILE --target DIR [--legacy-root DIR]
   [--dry-run]` imports the raw NVD 1.1 and 2.0 feeds and the CISA KEV catalog CSV the
   input manifest declares into a new corpus store at `--target`, and prints the
   `MigrationReport`. Exit 0 for `imported`, `already_imported` and `dry_run`; 1 for
   `failed`, which the report explains, and without the `migration` extra (`the
-  'migration' extra is not installed: pip install 'cve-kgrag[migration]'`, checked by
+  'migration' extra is not installed: pip install 'vulnwitness[migration]'`, checked by
   the core-only lane); 2 for an input manifest that is not valid, reported without
   quoting it. The parsers load through the `migration_parsers` entry point
   (`adapters/migration/nvd_feed_reader.py`, `build_migration_parsers`); every importer
@@ -645,7 +645,7 @@ Decisions: ADR 0008.
   `before_activation_only` and the instruction); WP9 never deletes anything itself.
 - **Scale.** `scripts/operator/migration_scale.sh` (an operator lane, not CI) imports
   synthetic gzipped 2.0 feeds with 250,000 records. Detailed measurements stay in the
-  operator's external run directory under `~/data/cve-kgrag/runs/`.
+  operator's external run directory under `~/data/vulnwitness/runs/`.
 - **Packaging.** The `migration` extra declares `ijson` only (`ijson` 3.6.0 in
   `uv.lock`, no transitive dependency); the dev group installs it, so the default lane
   runs the importer's tests. `ijson_events`, `json_fingerprint` and `nvd_feed_reader`
@@ -680,8 +680,8 @@ Decisions: ADR 0008.
 Decisions: ADR 0009, which amends ADR 0003, 0004, 0006 and 0008. Operator steps:
 [`docs/runbook.md`](../runbook.md).
 
-- **Settings.** `CVE_KGRAG_STORE_ROOT`, an absolute directory, and the pair
-  `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` and `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256`, set together, are
+- **Settings.** `VULNWITNESS_STORE_ROOT`, an absolute directory, and the pair
+  `VULNWITNESS_FIGHT_SNAPSHOT_PATH` and `VULNWITNESS_FIGHT_SNAPSHOT_SHA256`, set together, are
   always read and open nothing; errors name the variable, never its value.
 - **The seam.** Every composition function takes a `ServedCorpus` (`ports/served_corpus.py`):
   the packaged `FixtureBundle` or a `CorpusStore`. Its `ServedDataset` names the kind and
@@ -729,7 +729,7 @@ Decisions: ADR 0009, which amends ADR 0003, 0004, 0006 and 0008. Operator steps:
   manifest, record and anchor schemas raises the alarm on any change to them.
 - **Scale.** `scripts/operator/serving_scale.sh` is an operator lane using 250,000
   synthetic records; detailed measurements stay in the operator's external run
-  directory under `~/data/cve-kgrag/runs/`.
+  directory under `~/data/vulnwitness/runs/`.
 
 ### Known limits
 
@@ -746,7 +746,7 @@ Decisions: ADR 0009, which amends ADR 0003, 0004, 0006 and 0008. Operator steps:
   bounded provenance with no default, so the schema no longer moves with the contract
   version; a `2.0.0-dev.25` manifest is valid under it.
 - `migration_report.schema.json`: `corpus_content_sha256`, the instruction naming
-  `cve-kgrag store rollback`, and the failure codes `target_in_store_root` and
+  `vulnwitness store rollback`, and the failure codes `target_in_store_root` and
   `store_root_unusable`.
 - `knowledge_capabilities`, `search_response`, `topic_context_response` and
   `knowledge_evidence_set`: `collection_not_bound`; the topic and evidence-set schemas

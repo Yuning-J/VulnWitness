@@ -10,21 +10,21 @@ from typing import Any
 
 from pydantic import SecretStr
 
-from cve_kgrag.application.planner_setup import ModelPlanning
-from cve_kgrag.composition import list_accepted_planner_capabilities
-from cve_kgrag.domain.planning import (
+from tests.support.clocks import SteppingClock
+from tests.support.entry_points import FakeAdapterRegistry, FakeDistribution, FakeEntryPoint
+from vulnwitness.application.planner_setup import ModelPlanning
+from vulnwitness.composition import list_accepted_planner_capabilities
+from vulnwitness.domain.planning import (
     ModelPlannerIdentity,
     ModelReply,
     ModelReplyFailureDetail,
     PlannerKind,
     PlanningInput,
 )
-from cve_kgrag.domain.relevance import RelevanceInput
-from cve_kgrag.domain.taxonomy import BackendStatus
-from cve_kgrag.ports.planning import ModelPort
-from cve_kgrag.settings import ModelPlannerSettings, fingerprint_endpoint
-from tests.support.clocks import SteppingClock
-from tests.support.entry_points import FakeAdapterRegistry, FakeDistribution, FakeEntryPoint
+from vulnwitness.domain.relevance import RelevanceInput
+from vulnwitness.domain.taxonomy import BackendStatus
+from vulnwitness.ports.planning import ModelPort
+from vulnwitness.settings import ModelPlannerSettings, fingerprint_endpoint
 
 SCRIPTED_ADAPTER = "tests.support.planners:ScriptedModelPort"
 # Settings enabling the scripted planner's model; nothing here is ever sent anywhere.

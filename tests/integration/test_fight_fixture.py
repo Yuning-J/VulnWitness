@@ -7,17 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.fight.pinned_yaml import FightSnapshotError
-from cve_kgrag.adapters.fight.snapshot_catalog import (
+from tests.support.clocks import read_fixed_clock
+from tests.support.collect import list_technique_ids
+from vulnwitness.adapters.fight.pinned_yaml import FightSnapshotError
+from vulnwitness.adapters.fight.snapshot_catalog import (
     default_fight_snapshot_catalog_file,
     load_fight_snapshot_catalog,
 )
-from cve_kgrag.adapters.fixture.fight_fixture import default_fight_fixture_dir, load_fight_fixture
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureIntegrityError
-from cve_kgrag.domain.taxonomy import KnowledgeScope
-from cve_kgrag.domain.threat_context import FightSnapshotCatalog, SnapshotCoverage
-from tests.support.clocks import read_fixed_clock
-from tests.support.collect import list_technique_ids
+from vulnwitness.adapters.fixture.fight_fixture import default_fight_fixture_dir, load_fight_fixture
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureIntegrityError
+from vulnwitness.domain.taxonomy import KnowledgeScope
+from vulnwitness.domain.threat_context import FightSnapshotCatalog, SnapshotCoverage
 
 PINNED_COMMIT = "097cd5f73811dc34916ef84d5acc3fe7aba70450"
 EXCERPT_SHA256 = "08cd11d579889c819c00888ecbb85d6d4b470b8fdf9fea833324441e28635726"

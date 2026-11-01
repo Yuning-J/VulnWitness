@@ -2,13 +2,13 @@
 
 import pytest
 
-from cve_kgrag.adapters.semantic.chunk_hits import (
+from tests.support.collect import list_cve_ids
+from vulnwitness.adapters.semantic.chunk_hits import (
     ChunkHit,
     MalformedChunkHitError,
     collapse_chunk_hits,
     read_chroma_query_hits,
 )
-from tests.support.collect import list_cve_ids
 
 
 def test_chroma_answer_rows_become_chunk_hits() -> None:

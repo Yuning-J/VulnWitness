@@ -16,17 +16,17 @@ from typing import Any
 
 import yaml
 
-from cve_kgrag.adapter_discovery import InterfaceUnavailable, discover_migration_parsers
-from cve_kgrag.adapters.migration.inputs_manifest import load_inputs_manifest
-from cve_kgrag.adapters.migration.legacy_migration import (
+from vulnwitness.adapter_discovery import InterfaceUnavailable, discover_migration_parsers
+from vulnwitness.adapters.migration.inputs_manifest import load_inputs_manifest
+from vulnwitness.adapters.migration.legacy_migration import (
     MigrationDependencies,
     MigrationRequest,
     run_migration,
 )
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.composition import build_nvd_normalizer, load_packaged_source_registry
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.migration_report import MigrationReport
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.composition import build_nvd_normalizer, load_packaged_source_registry
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.migration_report import MigrationReport
 
 # After every retrieval time the builders use, so none is in the future.
 FIXED_NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)

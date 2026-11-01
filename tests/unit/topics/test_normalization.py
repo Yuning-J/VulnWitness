@@ -2,8 +2,8 @@
 
 import pytest
 
-from cve_kgrag.domain.text import TOKEN, list_query_terms, normalize_query
-from cve_kgrag.topics.normalization import TERM_BOUNDARY, alias_key, split_terms
+from vulnwitness.domain.text import TOKEN, list_query_terms, normalize_query
+from vulnwitness.topics.normalization import TERM_BOUNDARY, alias_key, split_terms
 
 # One probe per kind of character that can stand against an ASCII word with nothing
 # between: every kind must leave the ASCII words exactly as the CVE side reads them.

@@ -5,10 +5,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.topic_context import PROTOCOL_EXCLUSION_REASON
-from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
-from cve_kgrag.domain.taxonomy import KnowledgeScope
 from tests.support.collect import list_technique_ids
 from tests.support.investigation import (
     build_test_investigation_service,
@@ -18,6 +14,10 @@ from tests.support.investigation import (
     list_warning_codes,
     load_gold_rows,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.topic_context import PROTOCOL_EXCLUSION_REASON
+from vulnwitness.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from vulnwitness.domain.taxonomy import KnowledgeScope
 
 GOLD_ROWS = load_gold_rows()
 

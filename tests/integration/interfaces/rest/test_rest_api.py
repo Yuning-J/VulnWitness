@@ -16,30 +16,6 @@ import pytest
 from jsonschema import Draft202012Validator
 from starlette.types import ASGIApp
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.evidence_set_verification import check_evidence_set
-from cve_kgrag.composition import build_product_query_service
-from cve_kgrag.domain.evidence_set_verification_report import (
-    VerificationReport,
-    VerificationVerdict,
-)
-from cve_kgrag.domain.http_rejection import HttpRejection, HttpRejectionCode
-from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
-from cve_kgrag.domain.product_query import ProductQueryRequest
-from cve_kgrag.domain.search import SearchResponse
-from cve_kgrag.domain.tool_contracts import (
-    EvidenceLookup,
-    InvalidField,
-    KnowledgeCapabilities,
-    ToolFailure,
-    ToolFailureCode,
-)
-from cve_kgrag.interfaces.http.guard import GuardedRoute, HttpGuard
-from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
-from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
-from cve_kgrag.interfaces.rest.api_runner import build_api_app
-from cve_kgrag.interfaces.rest.tool_routes import TOOL_FAILURE_STATUSES
-from cve_kgrag.interfaces.rest.verification_route import EvidenceSetCheck, VerificationRoute
 from tests.support.asgi import (
     AUTHORIZATION,
     GENEROUS_WAIT_SECONDS,
@@ -75,6 +51,30 @@ from tests.support.toolbox import (
     build_compatibility_store_toolbox,
     build_test_toolbox,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.evidence_set_verification import check_evidence_set
+from vulnwitness.composition import build_product_query_service
+from vulnwitness.domain.evidence_set_verification_report import (
+    VerificationReport,
+    VerificationVerdict,
+)
+from vulnwitness.domain.http_rejection import HttpRejection, HttpRejectionCode
+from vulnwitness.domain.investigation import KnowledgeEvidenceSet
+from vulnwitness.domain.product_query import ProductQueryRequest
+from vulnwitness.domain.search import SearchResponse
+from vulnwitness.domain.tool_contracts import (
+    EvidenceLookup,
+    InvalidField,
+    KnowledgeCapabilities,
+    ToolFailure,
+    ToolFailureCode,
+)
+from vulnwitness.interfaces.http.guard import GuardedRoute, HttpGuard
+from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
+from vulnwitness.interfaces.rest.api_runner import build_api_app
+from vulnwitness.interfaces.rest.tool_routes import TOOL_FAILURE_STATUSES
+from vulnwitness.interfaces.rest.verification_route import EvidenceSetCheck, VerificationRoute
 
 pytestmark = pytest.mark.anyio
 
@@ -684,11 +684,11 @@ async def test_every_api_route_needs_the_token(fixture_bundle: FixtureBundle) ->
 
 @pytest.fixture
 def served_api() -> Iterator[ServedHttp]:
-    """``cve-kgrag api`` on a free 127.0.0.1 port."""
-    yield from start_served_http(["api"], "CVE_KGRAG_API_PORT", HTTP_HOST)
+    """``vulnwitness api`` on a free 127.0.0.1 port."""
+    yield from start_served_http(["api"], "VULNWITNESS_API_PORT", HTTP_HOST)
 
 
-def test_cve_kgrag_api_serves_the_routes_announces_ready_and_stops_on_interrupt(
+def test_vulnwitness_api_serves_the_routes_announces_ready_and_stops_on_interrupt(
     served_api: ServedHttp,
 ) -> None:
     capabilities_answer = httpx2.get(f"{served_api.url}/api/v2/capabilities", headers=AUTHORIZATION)
@@ -712,11 +712,11 @@ def test_cve_kgrag_api_serves_the_routes_announces_ready_and_stops_on_interrupt(
     assert json.loads(verification_answer.content)["verdict"] == "verified"
     assert served_api.process.returncode == 0
     assert stdout == b""
-    assert stderr.decode() == f"cve-kgrag api: ready on {served_api.url}\n"
+    assert stderr.decode() == f"vulnwitness api: ready on {served_api.url}\n"
 
 
-def test_cve_kgrag_api_on_a_port_in_use_exits_one_saying_why() -> None:
-    server_process = run_on_a_port_in_use(["api"], "CVE_KGRAG_API_PORT")
+def test_vulnwitness_api_on_a_port_in_use_exits_one_saying_why() -> None:
+    server_process = run_on_a_port_in_use(["api"], "VULNWITNESS_API_PORT")
 
     assert server_process.returncode == 1
     assert server_process.stdout == b""

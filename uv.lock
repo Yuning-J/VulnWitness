@@ -866,75 +866,6 @@ nvtx = [
 ]
 
 [[package]]
-name = "cve-kgrag"
-version = "2.0.0.dev0"
-source = { editable = "." }
-dependencies = [
-    { name = "pydantic" },
-    { name = "pyyaml" },
-]
-
-[package.optional-dependencies]
-api = [
-    { name = "anyio" },
-    { name = "starlette" },
-    { name = "uvicorn" },
-]
-mcp = [
-    { name = "anyio" },
-    { name = "mcp" },
-    { name = "starlette" },
-    { name = "uvicorn" },
-]
-migration = [
-    { name = "ijson" },
-]
-semantic = [
-    { name = "chromadb" },
-    { name = "sentence-transformers" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "cve-kgrag", extra = ["mcp", "migration"] },
-    { name = "httpx2" },
-    { name = "jsonschema" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anyio", marker = "extra == 'api'", specifier = ">=4.9,<5" },
-    { name = "anyio", marker = "extra == 'mcp'", specifier = ">=4.9,<5" },
-    { name = "chromadb", marker = "extra == 'semantic'", specifier = ">=1.0,<2" },
-    { name = "ijson", marker = "extra == 'migration'", specifier = ">=3.3,<4" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.3,<3" },
-    { name = "pydantic", specifier = ">=2.12,<3" },
-    { name = "pyyaml", specifier = ">=6.0.2,<7" },
-    { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=3.3,<6" },
-    { name = "starlette", marker = "extra == 'api'", specifier = ">=0.48,<2" },
-    { name = "starlette", marker = "extra == 'mcp'", specifier = ">=0.48,<2" },
-    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.31.1,<1" },
-    { name = "uvicorn", marker = "extra == 'mcp'", specifier = ">=0.31.1,<1" },
-]
-provides-extras = ["semantic", "mcp", "api", "migration"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "cve-kgrag", extras = ["mcp"] },
-    { name = "cve-kgrag", extras = ["migration"] },
-    { name = "httpx2", specifier = ">=2.10,<3" },
-    { name = "jsonschema", specifier = ">=4.23" },
-    { name = "mypy", specifier = ">=1.13" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "ruff", specifier = ">=0.8" },
-    { name = "types-pyyaml", specifier = ">=6.0.12" },
-]
-
-[[package]]
 name = "durationpy"
 version = "0.11"
 source = { registry = "https://pypi.org/simple" }
@@ -4433,6 +4364,75 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/83/f421a077712c1e87603bfec62744c3cd3a2f4b47378025db3d740df9af0d/uvloop-0.23.0-cp315-cp315t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:12634f15e6625f78b3f2922f91404c4d7173487eba11746764153f556e9852dc", size = 4661763, upload-time = "2026-10-01T03:16:38.719Z" },
     { url = "https://files.pythonhosted.org/packages/f5/62/25dcaa6b7e7b48f82ce633854ce96597ab768f9650931f4f86c572de392c/uvloop-0.23.0-cp315-cp315t-musllinux_1_2_aarch64.whl", hash = "sha256:378188efbb1524f2219d05246a3e1e5907217848d2882144dff59585f1b81d55", size = 4421324, upload-time = "2026-10-01T03:16:40.488Z" },
     { url = "https://files.pythonhosted.org/packages/05/46/04628239b43dcef703af314202a3307d6060918e2d76aa86c5b1188f5551/uvloop-0.23.0-cp315-cp315t-musllinux_1_2_x86_64.whl", hash = "sha256:4b8e207c67d207a8608fec57e116511030af3495dc0109b8c333cf9cb412b16f", size = 4462501, upload-time = "2026-10-01T03:16:42.359Z" },
+]
+
+[[package]]
+name = "vulnwitness"
+version = "2.0.0.dev0"
+source = { editable = "." }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+api = [
+    { name = "anyio" },
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
+mcp = [
+    { name = "anyio" },
+    { name = "mcp" },
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
+migration = [
+    { name = "ijson" },
+]
+semantic = [
+    { name = "chromadb" },
+    { name = "sentence-transformers" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx2" },
+    { name = "jsonschema" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+    { name = "vulnwitness", extra = ["mcp", "migration"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anyio", marker = "extra == 'api'", specifier = ">=4.9,<5" },
+    { name = "anyio", marker = "extra == 'mcp'", specifier = ">=4.9,<5" },
+    { name = "chromadb", marker = "extra == 'semantic'", specifier = ">=1.0,<2" },
+    { name = "ijson", marker = "extra == 'migration'", specifier = ">=3.3,<4" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.3,<3" },
+    { name = "pydantic", specifier = ">=2.12,<3" },
+    { name = "pyyaml", specifier = ">=6.0.2,<7" },
+    { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=3.3,<6" },
+    { name = "starlette", marker = "extra == 'api'", specifier = ">=0.48,<2" },
+    { name = "starlette", marker = "extra == 'mcp'", specifier = ">=0.48,<2" },
+    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.31.1,<1" },
+    { name = "uvicorn", marker = "extra == 'mcp'", specifier = ">=0.31.1,<1" },
+]
+provides-extras = ["semantic", "mcp", "api", "migration"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx2", specifier = ">=2.10,<3" },
+    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "mypy", specifier = ">=1.13" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "ruff", specifier = ">=0.8" },
+    { name = "types-pyyaml", specifier = ">=6.0.12" },
+    { name = "vulnwitness", extras = ["mcp"] },
+    { name = "vulnwitness", extras = ["migration"] },
 ]
 
 [[package]]

@@ -5,14 +5,14 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.evaluation.gold_cases import GoldFileError
-from cve_kgrag.evaluation.labelled_cases import (
+from tests.support.gold_files import build_case_row, encode_gold_file, load_labelled_gold_file
+from vulnwitness.evaluation.gold_cases import GoldFileError
+from vulnwitness.evaluation.labelled_cases import (
     EvidenceCategory,
     SetName,
     Split,
     Sufficiency,
 )
-from tests.support.gold_files import build_case_row, encode_gold_file, load_labelled_gold_file
 
 PROTOCOL_RULES = {
     "techniques": {

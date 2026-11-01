@@ -107,7 +107,7 @@ def test_workflow_reads_no_secret_and_enables_no_live_test() -> None:
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert SECRETS_CONTEXT.search(workflow_text) is None
-    assert "CVE_KGRAG_LIVE_TESTS" not in workflow_text
+    assert "VULNWITNESS_LIVE_TESTS" not in workflow_text
 
 
 def test_workflow_token_can_only_read_the_repository() -> None:

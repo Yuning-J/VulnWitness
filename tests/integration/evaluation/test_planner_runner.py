@@ -10,23 +10,6 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.planner_setup import ModelPlanning
-from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
-from cve_kgrag.domain.search import SCHEMA_VERSION
-from cve_kgrag.evaluation.case_runner import (
-    PACKAGE_CHANGED,
-    EvaluationStopped,
-    ModelRuns,
-    describe_fixture_dataset,
-)
-from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport, format_report
-from cve_kgrag.evaluation.planner_runner import (
-    REPORT_FILE_NAME,
-    read_source_revision,
-    run_planner_evaluation,
-)
-from cve_kgrag.evaluation.result_directory import ResultDirectory
 from tests.support.evaluation import (
     EVAL_RESULTS,
     SMALL_GOLD_ROWS,
@@ -43,6 +26,23 @@ from tests.support.planners import (
     ScriptedModelPort,
     plan_with,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.planner_setup import ModelPlanning
+from vulnwitness.domain.investigation import KnowledgeEvidenceSet
+from vulnwitness.domain.search import SCHEMA_VERSION
+from vulnwitness.evaluation.case_runner import (
+    PACKAGE_CHANGED,
+    EvaluationStopped,
+    ModelRuns,
+    describe_fixture_dataset,
+)
+from vulnwitness.evaluation.planner_report import PlannerEvaluationReport, format_report
+from vulnwitness.evaluation.planner_runner import (
+    REPORT_FILE_NAME,
+    read_source_revision,
+    run_planner_evaluation,
+)
+from vulnwitness.evaluation.result_directory import ResultDirectory
 
 
 def read_written_set(result_directory: ResultDirectory, relative_path: str) -> KnowledgeEvidenceSet:
@@ -278,8 +278,8 @@ def run_git(directory: Path, *arguments: str) -> str:
 
 
 def build_checkout(root: Path) -> Path:
-    """A git repository committing a ``src/cve_kgrag`` package; its package directory."""
-    package_dir = root / "src" / "cve_kgrag"
+    """A git repository committing a ``src/vulnwitness`` package; its package directory."""
+    package_dir = root / "src" / "vulnwitness"
     package_dir.mkdir(parents=True)
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
     run_git(root, "init", "--quiet")
@@ -334,7 +334,7 @@ def test_source_revision_ignores_untracked_files(tmp_path: Path) -> None:
 
 
 def test_source_revision_is_unavailable_outside_a_checkout(tmp_path: Path) -> None:
-    package_dir = tmp_path / "site-packages" / "cve_kgrag"
+    package_dir = tmp_path / "site-packages" / "vulnwitness"
     package_dir.mkdir(parents=True)
 
     assert read_source_revision(package_dir) == "unavailable"
@@ -346,7 +346,7 @@ def test_source_revision_is_unavailable_for_a_package_inside_another_repository(
     """An installed package in a virtual environment kept inside some repository is not
     that repository's source."""
     build_checkout(tmp_path)
-    installed_package_dir = tmp_path / ".venv" / "site-packages" / "cve_kgrag"
+    installed_package_dir = tmp_path / ".venv" / "site-packages" / "vulnwitness"
     installed_package_dir.mkdir(parents=True)
 
     assert read_source_revision(installed_package_dir) == "unavailable"

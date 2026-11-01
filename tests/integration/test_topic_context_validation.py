@@ -4,24 +4,25 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fight.snapshot_catalog import (
+from tests.support.builders import build_anchor, build_claim
+from vulnwitness.adapters.fight.snapshot_catalog import (
     default_fight_snapshot_catalog_file,
     load_fight_snapshot_catalog,
 )
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.composition import build_topic_context_service
-from cve_kgrag.domain.evidence import EvidenceAnchor, seal_evidence_anchor
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.search import ScopeAssessment
-from cve_kgrag.domain.taxonomy import (
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.composition import build_topic_context_service
+from vulnwitness.domain.evidence import EvidenceAnchor, seal_evidence_anchor
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.search import ScopeAssessment
+from vulnwitness.domain.taxonomy import (
     AssertionKind,
     BackendFailureDetail,
     KnowledgeScope,
     ResultStatus,
     SourceType,
 )
-from cve_kgrag.domain.threat_context import SnapshotCoverage
-from cve_kgrag.domain.topic_context import (
+from vulnwitness.domain.threat_context import SnapshotCoverage
+from vulnwitness.domain.topic_context import (
     KnowledgeSource,
     QueryScope,
     SourceOutcome,
@@ -30,12 +31,11 @@ from cve_kgrag.domain.topic_context import (
     TopicContextWarning,
     TopicContextWarningCode,
 )
-from cve_kgrag.domain.validation import (
+from vulnwitness.domain.validation import (
     EvidenceValidationError,
     validate_claims,
     validate_topic_context_response,
 )
-from tests.support.builders import build_anchor, build_claim
 
 PACKAGED_CATALOG = load_fight_snapshot_catalog(default_fight_snapshot_catalog_file())
 EXCERPT_SHA256 = "08cd11d579889c819c00888ecbb85d6d4b470b8fdf9fea833324441e28635726"

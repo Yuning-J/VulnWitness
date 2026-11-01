@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.taxonomy import (
+from tests.support.builders import build_anchor, build_catalog, build_known_snapshot
+from vulnwitness.domain.taxonomy import (
     BackendFailure,
     BackendFailureDetail,
     BackendStatus,
@@ -13,13 +14,12 @@ from cve_kgrag.domain.taxonomy import (
     ResultStatus,
     SourceType,
 )
-from cve_kgrag.domain.threat_context import (
+from vulnwitness.domain.threat_context import (
     FightSnapshotInfo,
     SnapshotCoverage,
     ThreatContextOutcome,
 )
-from cve_kgrag.domain.topic_context import KnowledgeSource, SourceOutcome
-from tests.support.builders import build_anchor, build_catalog, build_known_snapshot
+from vulnwitness.domain.topic_context import KnowledgeSource, SourceOutcome
 
 SNAPSHOT = FightSnapshotInfo(
     repository_url="https://github.com/mitre/FiGHT",

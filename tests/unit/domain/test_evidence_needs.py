@@ -6,23 +6,23 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.application.investigation_policy import interpret_request
-from cve_kgrag.domain.evidence_needs import is_need_open, judge_needs
-from cve_kgrag.domain.investigation import (
-    EvidenceNeed,
-    EvidenceNeedKind,
-    NeedOutcome,
-    ToolStep,
-)
-from cve_kgrag.domain.taxonomy import BackendFailureDetail
-from cve_kgrag.domain.threat_context import ThreatContextItem
-from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.builders import build_recorded_step
 from tests.support.investigation import (
     build_investigation_request,
     build_productless_catalog,
     choose_fight_source,
 )
+from vulnwitness.application.investigation_policy import interpret_request
+from vulnwitness.domain.evidence_needs import is_need_open, judge_needs
+from vulnwitness.domain.investigation import (
+    EvidenceNeed,
+    EvidenceNeedKind,
+    NeedOutcome,
+    ToolStep,
+)
+from vulnwitness.domain.taxonomy import BackendFailureDetail
+from vulnwitness.domain.threat_context import ThreatContextItem
+from vulnwitness.topics.registry import TopicRegistry
 
 DIRECT_SEARCH_REQUEST = [
     {"source": "mitre_fight", "terms": ["unregistered", "threats"], "limit": 20}

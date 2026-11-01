@@ -12,24 +12,24 @@ from typing import IO
 
 import pytest
 
-from cve_kgrag.adapters.fight.operator_snapshot import (
+from tests.support.builders import build_catalog, build_known_snapshot
+from tests.support.clocks import read_fixed_clock
+from tests.support.fight_excerpt import EXCERPT_BYTES, EXCERPT_SHA256
+from vulnwitness.adapters.fight.operator_snapshot import (
     MAX_FIGHT_SNAPSHOT_BYTES,
     FightSnapshotFailure,
     FightSnapshotUnavailable,
     load_operator_fight_snapshot,
 )
-from cve_kgrag.adapters.fight.snapshot_catalog import (
+from vulnwitness.adapters.fight.snapshot_catalog import (
     default_fight_snapshot_catalog_file,
     load_fight_snapshot_catalog,
 )
-from cve_kgrag.adapters.regular_files import open_regular_file
-from cve_kgrag.composition import load_fight_source
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.threat_context import FightSnapshotCatalog, SnapshotCoverage
-from cve_kgrag.settings import FightSnapshotSettings
-from tests.support.builders import build_catalog, build_known_snapshot
-from tests.support.clocks import read_fixed_clock
-from tests.support.fight_excerpt import EXCERPT_BYTES, EXCERPT_SHA256
+from vulnwitness.adapters.regular_files import open_regular_file
+from vulnwitness.composition import load_fight_source
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.threat_context import FightSnapshotCatalog, SnapshotCoverage
+from vulnwitness.settings import FightSnapshotSettings
 
 
 @pytest.fixture

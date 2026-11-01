@@ -1,8 +1,8 @@
 """The shipped affectedness source gives blocked_unverified as its reason and checks nothing."""
 
-from cve_kgrag.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
-from cve_kgrag.domain.affectedness import AffectednessFailure
 from tests.support.affectedness import build_affectedness_request
+from vulnwitness.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
+from vulnwitness.domain.affectedness import AffectednessFailure
 
 
 def test_describe_gives_blocked_unverified_as_the_reason() -> None:

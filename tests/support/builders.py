@@ -5,24 +5,24 @@ from typing import Any
 
 import yaml
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.cve import AffectedProduct, CveRecord
-from cve_kgrag.domain.evidence import (
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.cve import AffectedProduct, CveRecord
+from vulnwitness.domain.evidence import (
     UNSEALED_EVIDENCE_ID,
     Claim,
     EvidenceAnchor,
     seal_evidence_anchor,
 )
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.investigation import ToolStep
-from cve_kgrag.domain.taxonomy import AssertionKind, KnowledgeScope, SourceType, TrustLevel
-from cve_kgrag.domain.threat_context import (
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.investigation import ToolStep
+from vulnwitness.domain.taxonomy import AssertionKind, KnowledgeScope, SourceType, TrustLevel
+from vulnwitness.domain.threat_context import (
     FightSnapshotCatalog,
     KnownFightSnapshot,
     SnapshotCoverage,
     ThreatContextItem,
 )
-from cve_kgrag.domain.topic import ProtocolTopic
+from vulnwitness.domain.topic import ProtocolTopic
 
 FIGHT_TEST_COMMIT = "0" * 40
 
@@ -38,7 +38,7 @@ def build_anchor(**overrides: Any) -> EvidenceAnchor:
         "source_name": "test-source",
         "source_type": SourceType.SYNTHETIC_FIXTURE,
         "authoritative_record_id": "CVE-9999-0001",
-        "source_uri": "urn:cve-kgrag:test",
+        "source_uri": "urn:vulnwitness:test",
         "retrieved_at": FIXED_RETRIEVED_AT,
         "content_sha256": ZERO_SHA256,
         "locator": "records#/0",

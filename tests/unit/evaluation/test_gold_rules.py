@@ -6,7 +6,8 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.evaluation.gold_rules import (
+from tests.support.builders import build_cve_record
+from vulnwitness.evaluation.gold_rules import (
     CVE_PREDICATES,
     MAX_RULE_DEPTH,
     MAX_RULE_NODES,
@@ -19,7 +20,6 @@ from cve_kgrag.evaluation.gold_rules import (
     build_technique_subject,
     parse_rule,
 )
-from tests.support.builders import build_cve_record
 
 
 def build_subject(**overrides: Any) -> CveSubject:

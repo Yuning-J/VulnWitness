@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from mcp import StdioServerParameters
 
-from cve_kgrag.adapters.session.check import SessionChecker
 from tests.support.session_files import write_findings
 from tests.support.stdio_client import observe_stdio_client, read_until_notice
+from vulnwitness.adapters.session.check import SessionChecker
 
 UNKNOWN_ANCHOR = "ev:" + "0" * 24
 
@@ -23,10 +23,10 @@ async def test_mcp_stdio_records_success_failures_and_refuses_calls_over_the_lim
     directory = tmp_path / "review"
     environment: dict[str, str] = {}
     for name, value in os.environ.items():
-        if not name.startswith("CVE_KGRAG_"):
+        if not name.startswith("VULNWITNESS_"):
             environment[name] = value
     server = StdioServerParameters(
-        command=str(Path(sys.executable).parent / "cve-kgrag"),
+        command=str(Path(sys.executable).parent / "vulnwitness"),
         args=["mcp", "--session", str(directory), "--session-call-limit", "2"],
         env=environment,
     )

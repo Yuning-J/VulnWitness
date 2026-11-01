@@ -21,9 +21,9 @@ optional adapters (semantic, Neo4j, Trustify, API, MCP) remain available.
 
 ### 1. One distribution, `src/` layout
 
-- `pyproject.toml` defines the `cve-kgrag` distribution; the import package is
-  `src/cve_kgrag/`, the only directory packaged
-  (`[tool.hatch.build.targets.wheel] packages = ["src/cve_kgrag"]`).
+- `pyproject.toml` defines the `vulnwitness` distribution; the import package is
+  `src/vulnwitness/`, the only directory packaged
+  (`[tool.hatch.build.targets.wheel] packages = ["src/vulnwitness"]`).
 - Build backend: `hatchling`. Environment and lock: `uv` with a committed
   `uv.lock`. Minimum Python: 3.11.
 
@@ -43,7 +43,7 @@ optional adapters (semantic, Neo4j, Trustify, API, MCP) remain available.
 An extra is added in the milestone that adds the adapter which needs it; no
 empty extras are declared ahead of their code. The core must never depend on
 Torch, CUDA wheels, transformers, Gradio, Neo4j or Chroma; a test asserts that
-importing every `cve_kgrag` module leaves those packages out of `sys.modules`.
+importing every `vulnwitness` module leaves those packages out of `sys.modules`.
 
 ### 3. Optional adapters load only through entry points
 
@@ -52,13 +52,13 @@ dependency is not installed cannot be imported at module top level of the core
 or the composition root. The single sanctioned mechanism:
 
 - Each optional adapter lives in its own module under
-  `cve_kgrag/adapters/<name>/` with ordinary top-level imports of its
+  `vulnwitness/adapters/<name>/` with ordinary top-level imports of its
   dependency.
 - The distribution registers it under the entry-point group
-  `cve_kgrag.adapters`, e.g.
-  `semantic = "cve_kgrag.adapters.semantic.chroma_retriever:build_semantic_retriever"`.
+  `vulnwitness.adapters`, e.g.
+  `semantic = "vulnwitness.adapters.semantic.chroma_retriever:build_semantic_retriever"`.
   The adapter's dependencies are declared in the matching extra.
-- The composition root calls `importlib.metadata.entry_points(group="cve_kgrag.adapters")`
+- The composition root calls `importlib.metadata.entry_points(group="vulnwitness.adapters")`
   for the adapters enabled in typed settings, loads each enabled entry point, and
   passes the built adapter into the application services. A load failure
   (missing extra) becomes a typed "unavailable" capability, never a silent
@@ -77,13 +77,13 @@ with the first optional adapter (M2, semantic); M1 has none.
 ### 4. Inward dependency direction
 
 `interfaces → application → domain/ports ← adapters`. Domain and application
-modules import only the standard library, `pydantic`, and other `cve_kgrag`
+modules import only the standard library, `pydantic`, and other `vulnwitness`
 domain/ports modules. This is enforced by an import-boundary test as layers
 appear.
 
 ### 5. Legacy behaviour is reached through its outputs
 
-- New behavior is implemented in `cve_kgrag`. Legacy behaviour is reached through
+- New behavior is implemented in `vulnwitness`. Legacy behaviour is reached through
   the data it produces (the read-only importer, M6 WP9, ADR 0008; the semantic
   channel reading the Chroma store format, ADR 0006), not through wrappers around
   legacy modules. Legacy parsing knowledge (NVD 1.1/2.0 field paths, CPE/KEV/CSAF
@@ -100,7 +100,7 @@ provides no v1 facade, deprecation window or compatibility promise.
 
 ### 7. Contracts and schema snapshots
 
-External request/response types are Pydantic v2 models in `cve_kgrag`; their
+External request/response types are Pydantic v2 models in `vulnwitness`; their
 JSON Schemas are generated and committed under `schemas/v2/` with a manifest of
 SHA-256 hashes. A contract test fails when the generated schema differs from the
 committed snapshot. v2 is pre-release until M7: snapshots change with each
@@ -109,9 +109,9 @@ milestone, and every change is reviewed through the snapshot diff.
 ### 8. Runtime knowledge ships inside the package
 
 The brief sketches `knowledge/topics/` at the repository root. Reviewed topic
-cards (`cve_kgrag/knowledge/topics/*.yaml`), the source registry
-(`cve_kgrag/knowledge/sources.yaml`) and the pinned fixtures
-(`cve_kgrag/fixtures/`) live inside the package instead, so an installed wheel
+cards (`vulnwitness/knowledge/topics/*.yaml`), the source registry
+(`vulnwitness/knowledge/sources.yaml`) and the pinned fixtures
+(`vulnwitness/fixtures/`) live inside the package instead, so an installed wheel
 carries everything the core reads at runtime and nothing depends on a source
 checkout. Evaluation data that only tests read stays at the root (`eval/gold/`).
 

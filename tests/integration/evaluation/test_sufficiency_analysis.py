@@ -8,29 +8,29 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.investigation import KnowledgeEvidenceSet, StopReason
-from cve_kgrag.domain.topic import ReviewStatus
-from cve_kgrag.evaluation.gold_sets import DerivedSets
-from cve_kgrag.evaluation.labelled_cases import (
-    EvidenceCategory,
-    LabelledCase,
-    Split,
-    SubjectKind,
-)
-from cve_kgrag.evaluation.planner_analysis import CaseRuns
-from cve_kgrag.evaluation.planner_report import JudgedSufficiency
-from cve_kgrag.evaluation.sufficiency_analysis import (
-    JudgedCase,
-    analyze_sufficiency,
-    build_part,
-    judge_run,
-)
 from tests.support.evaluation import run_deterministically
 from tests.support.gold_files import build_case_row, encode_gold_file, load_labelled_gold_file
 from tests.support.investigation import (
     build_investigation_request,
     build_test_investigation_service,
+)
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.investigation import KnowledgeEvidenceSet, StopReason
+from vulnwitness.domain.topic import ReviewStatus
+from vulnwitness.evaluation.gold_sets import DerivedSets
+from vulnwitness.evaluation.labelled_cases import (
+    EvidenceCategory,
+    LabelledCase,
+    Split,
+    SubjectKind,
+)
+from vulnwitness.evaluation.planner_analysis import CaseRuns
+from vulnwitness.evaluation.planner_report import JudgedSufficiency
+from vulnwitness.evaluation.sufficiency_analysis import (
+    JudgedCase,
+    analyze_sufficiency,
+    build_part,
+    judge_run,
 )
 
 # "democorp gateway" lists CVE-9999-0001, -0002 and -0007 and stops needs_unmet, its

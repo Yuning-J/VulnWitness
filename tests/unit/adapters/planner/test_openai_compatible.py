@@ -9,25 +9,25 @@ from dataclasses import dataclass, field
 import pytest
 from pydantic import SecretStr
 
-from cve_kgrag.adapters.planner.http_transport import HttpAnswer
-from cve_kgrag.adapters.planner.openai_compatible import (
+from tests.support.fake_chat_server import build_completion_body
+from tests.support.planners import EXAMPLE_PLANNING_INPUT
+from tests.support.secrets import assert_secret_absent
+from vulnwitness.adapters.planner.http_transport import HttpAnswer
+from vulnwitness.adapters.planner.openai_compatible import (
     PLANNER_INSTRUCTIONS,
     OpenAiCompatibleModelPort,
 )
-from cve_kgrag.adapters.planner.relevance_prompt import (
+from vulnwitness.adapters.planner.relevance_prompt import (
     RUNTIME_ASSESSOR_INSTRUCTIONS,
 )
-from cve_kgrag.domain.planning import (
+from vulnwitness.domain.planning import (
     MAX_PLAN_TEXT_CHARS,
     ModelReply,
     ModelReplyFailureDetail,
 )
-from cve_kgrag.domain.relevance import AssessorQuestion, RelevanceInput
-from cve_kgrag.domain.taxonomy import BackendStatus
-from cve_kgrag.domain.topic_context import QueryScope
-from tests.support.fake_chat_server import build_completion_body
-from tests.support.planners import EXAMPLE_PLANNING_INPUT
-from tests.support.secrets import assert_secret_absent
+from vulnwitness.domain.relevance import AssessorQuestion, RelevanceInput
+from vulnwitness.domain.taxonomy import BackendStatus
+from vulnwitness.domain.topic_context import QueryScope
 
 PLANNER_KEY = "sk-test-adapter-key-0123456789"
 BASE_URL = "https://planner.invalid/v1"

@@ -2,9 +2,9 @@
 
 import pytest
 
-from cve_kgrag.domain.topic import ProtocolTopic, TopicMatchKind
-from cve_kgrag.topics.registry import TopicRegistry, TopicRegistryError
 from tests.support.builders import build_topic
+from vulnwitness.domain.topic import ProtocolTopic, TopicMatchKind
+from vulnwitness.topics.registry import TopicRegistry, TopicRegistryError
 
 
 def resolve(query: str) -> tuple[list[tuple[TopicMatchKind, str]], list[str]]:

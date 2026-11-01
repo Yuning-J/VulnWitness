@@ -3,7 +3,7 @@
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
-from cve_kgrag.adapter_discovery import AdapterEntryPoint
+from vulnwitness.adapter_discovery import AdapterEntryPoint
 
 
 @dataclass(frozen=True)

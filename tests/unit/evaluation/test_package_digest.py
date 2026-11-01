@@ -3,8 +3,8 @@ the same for the same content wherever it lies."""
 
 from pathlib import Path
 
-from cve_kgrag.evaluation.package_digest import fingerprint_package
 from tests.support.evaluation import build_package_dir
+from vulnwitness.evaluation.package_digest import fingerprint_package
 
 
 def test_package_digest_tells_apart_two_changes_to_the_same_file(tmp_path: Path) -> None:

@@ -11,12 +11,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.corpus_store_manifest import (
+from vulnwitness.domain.corpus_store_manifest import (
     ROLLBACK_INSTRUCTION,
     ROLLBACK_KIND,
     ROLLBACK_SCOPE,
 )
-from cve_kgrag.domain.migration_report import (
+from vulnwitness.domain.migration_report import (
     KEV_WITHOUT_NVD_RECORD_ADVICE,
     LEGACY_FORMATS_COMMIT,
     MAX_REPORTED_LOCATORS,
@@ -201,7 +201,7 @@ def test_report_naming_a_dataset_without_a_store_is_refused(outcome: str) -> Non
 
 
 def test_store_rollback_instruction_names_the_store_rollback_command() -> None:
-    assert ROLLBACK_INSTRUCTION.endswith("After activation, use cve-kgrag store rollback.")
+    assert ROLLBACK_INSTRUCTION.endswith("After activation, use vulnwitness store rollback.")
 
 
 @pytest.mark.parametrize(

@@ -13,51 +13,6 @@ from typing import Any, Literal
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import (
-    FixtureBundle,
-    default_fixture_dir,
-    load_fixture_bundle,
-)
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.application.investigation_deployment import InvestigationDeployment
-from cve_kgrag.application.trajectory_replay import (
-    ReplayCompleted,
-    ReplayDifference,
-    ReplayTimedOut,
-    replay_evidence_set,
-)
-from cve_kgrag.composition import (
-    build_evidence_catalog,
-    build_investigation_service,
-    build_serving_data_plane,
-)
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.investigation import (
-    InvestigationRequest,
-    InvestigationWarning,
-    InvestigationWarningCode,
-    KnowledgeEvidenceSet,
-    PlannerOutcome,
-    StepAdmission,
-    StopReason,
-    derive_investigation_id,
-)
-from cve_kgrag.domain.investigation_validation import (
-    UNCONFIGURED_SEMANTIC_WARNING,
-    validate_knowledge_evidence_set,
-)
-from cve_kgrag.domain.planning import ModelReply
-from cve_kgrag.domain.taxonomy import ResultStatus, RetrievalChannel
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.domain.topic import ReviewStatus
-from cve_kgrag.domain.topic_context import (
-    KnowledgeSource,
-    SourceOutcome,
-    TopicContextWarning,
-    TopicContextWarningCode,
-)
-from cve_kgrag.domain.validation import EvidenceValidationError
-from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.builders import build_bundle_with
 from tests.support.clocks import (
     LATE_START_SECONDS,
@@ -118,6 +73,51 @@ from tests.support.planners import (
     ScriptedModelPort,
     build_plan_reply,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import (
+    FixtureBundle,
+    default_fixture_dir,
+    load_fixture_bundle,
+)
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.application.investigation_deployment import InvestigationDeployment
+from vulnwitness.application.trajectory_replay import (
+    ReplayCompleted,
+    ReplayDifference,
+    ReplayTimedOut,
+    replay_evidence_set,
+)
+from vulnwitness.composition import (
+    build_evidence_catalog,
+    build_investigation_service,
+    build_serving_data_plane,
+)
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.investigation import (
+    InvestigationRequest,
+    InvestigationWarning,
+    InvestigationWarningCode,
+    KnowledgeEvidenceSet,
+    PlannerOutcome,
+    StepAdmission,
+    StopReason,
+    derive_investigation_id,
+)
+from vulnwitness.domain.investigation_validation import (
+    UNCONFIGURED_SEMANTIC_WARNING,
+    validate_knowledge_evidence_set,
+)
+from vulnwitness.domain.planning import ModelReply
+from vulnwitness.domain.taxonomy import ResultStatus, RetrievalChannel
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.domain.topic import ReviewStatus
+from vulnwitness.domain.topic_context import (
+    KnowledgeSource,
+    SourceOutcome,
+    TopicContextWarning,
+    TopicContextWarningCode,
+)
+from vulnwitness.domain.validation import EvidenceValidationError
+from vulnwitness.topics.registry import TopicRegistry
 
 # The deployment a set was produced on and is replayed against: the packaged one, one whose
 # pinned FiGHT backend is down, one whose lexical channel invents a record, or one with a

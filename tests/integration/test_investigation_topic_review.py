@@ -2,19 +2,19 @@
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.investigation import (
+from tests.support.investigation import (
+    build_investigation_request,
+    build_test_investigation_service,
+)
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.investigation import (
     DecisionBasis,
     InvestigationWarningCode,
     NeedOutcome,
     StopReason,
 )
-from cve_kgrag.domain.taxonomy import ResultStatus
-from cve_kgrag.domain.topic import ReviewStatus
-from tests.support.investigation import (
-    build_investigation_request,
-    build_test_investigation_service,
-)
+from vulnwitness.domain.taxonomy import ResultStatus
+from vulnwitness.domain.topic import ReviewStatus
 
 
 @pytest.mark.parametrize("scope", ["implementation_only", "protocol_context_only", "mixed"])

@@ -2,7 +2,7 @@
 
 The MIT licence of this repository covers its code only. Every data source is a
 separate provenance subject; the machine-readable registry is
-`src/cve_kgrag/knowledge/sources.yaml`. Terms below were read from the official
+`src/vulnwitness/knowledge/sources.yaml`. Terms below were read from the official
 pages on 2026-10-14, and the trustify-mcp licence on 2026-10-17. Where they could
 not be verified the entry says so, and this repository commits no data from that
 source.
@@ -12,7 +12,7 @@ source.
 | NVD | https://nvd.nist.gov/developers/terms-of-use | allowed with conditions | operator-supplied feeds and the corpus stores imported from them only |
 | CVE Program | https://www.cve.org/Legal/TermsOfUse | allowed with conditions | operator-supplied only |
 | CISA KEV | https://www.cisa.gov/sites/default/files/licenses/kev/license.txt | allowed (CC0 1.0) | operator-supplied catalogs and the corpus stores imported from them only |
-| MITRE FiGHT | https://fight.mitre.org/resources/terms/ | allowed with conditions (FiGHT Terms of Use; ATT&CK terms for derived content) | six-technique excerpt (`src/cve_kgrag/fixtures/fight/`); the full file only as an operator-supplied snapshot |
+| MITRE FiGHT | https://fight.mitre.org/resources/terms/ | allowed with conditions (FiGHT Terms of Use; ATT&CK terms for derived content) | six-technique excerpt (`src/vulnwitness/fixtures/fight/`); the full file only as an operator-supplied snapshot |
 | MITRE ATT&CK | https://attack.mitre.org/resources/legal-and-branding/terms-of-use/ | allowed with conditions | FiGHT excerpt and the derived weakness mapping excerpt (technique names, IDs and tactics) |
 | MITRE CWE | https://cwe.mitre.org/about/termsofuse.html | copies allowed with conditions | related CAPEC links in the derived weakness mapping excerpt |
 | MITRE CAPEC | https://capec.mitre.org/about/termsofuse.html | copies allowed with conditions | taxonomy mappings and parent chains in the derived weakness mapping excerpt |
@@ -20,7 +20,7 @@ source.
 | Trustify software | not verified; no adapter ships | unknown | nothing |
 | Data returned by Trustify | per upstream source; not verified; no adapter ships | unknown | nothing |
 | trustify-mcp tool schemas (commit ac8955f) | Apache-2.0 (LICENSE at that commit) | allowed with conditions | unmodified excerpt in `tests/contract/data/trustify_mcp_ac8955f/` |
-| Synthetic CVE fixture | this repository (MIT) | allowed | `src/cve_kgrag/fixtures/synthetic/` |
+| Synthetic CVE fixture | this repository (MIT) | allowed | `src/vulnwitness/fixtures/synthetic/` |
 | Format-1 compatibility store | this repository (MIT) | allowed | `tests/contract/data/corpus_store_format1_28e5b4d/` |
 
 ## Conditions, quoted
@@ -64,7 +64,7 @@ source.
   5. The `fight-data` contract notice covers that directory's tooling; keeping it
      in the notice is the conservative choice.
 
-  `src/cve_kgrag/fixtures/fight/NOTICE.md` reproduces every one of these texts
+  `src/vulnwitness/fixtures/fight/NOTICE.md` reproduces every one of these texts
   verbatim, which meets this attribution policy. Before a commercial public
   release, confirm the position with counsel or in writing with MITRE.
 - **MITRE ATT&CK / CWE / CAPEC.** Each grants a royalty-free licence whose copies
@@ -79,7 +79,7 @@ source.
 ## Operator-supplied data
 
 An operator imports NVD feeds and the CISA KEV catalog into a corpus store
-(`cve-kgrag migrate legacy`) and may supply the full FiGHT `fight.yaml` as a
+(`vulnwitness migrate legacy`) and may supply the full FiGHT `fight.yaml` as a
 pinned snapshot. Both stay on the operator's machine under the sources'
 own terms; neither belongs in version control. A server over a corpus store gives MCP
 clients the notice NVD asks services that use its data to display: "This product uses
@@ -96,13 +96,13 @@ for real inputs; it holds no data from those sources.
 
 Three excerpts.
 
-`src/cve_kgrag/fixtures/fight/fight-excerpt.yaml` holds six technique entries
+`src/vulnwitness/fixtures/fight/fight-excerpt.yaml` holds six technique entries
 (FGT1499.503, FGT1562.501, FGT5019, FGT5019.005, FGT5040, FGT5044) and their five
 tactics, cut byte for byte from `fight.yaml` at commit
 `097cd5f73811dc34916ef84d5acc3fe7aba70450` (upstream SHA-256
 `59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8`). Its manifest
 pins the excerpt's and the notice's SHA-256; the loader refuses either if changed.
-The reviewed snapshot catalog (`src/cve_kgrag/knowledge/fight_snapshots.yaml`)
+The reviewed snapshot catalog (`src/vulnwitness/knowledge/fight_snapshots.yaml`)
 records both the full upstream file and the excerpt, with their coverage and
 contents; a FiGHT file is served only when its hash is catalogued there.
 
@@ -113,8 +113,8 @@ at commit `ac8955f768a5bfef6f1c9a5c1d02ec5b5cf9bf5e`, byte for byte (SHA-256
 descriptions and input schemas of its twelve tools. The commit's `LICENSE` sits beside it. Only the
 contract tests read them; the wheel does not include them.
 
-`src/cve_kgrag/fixtures/mitre/weakness-mapping.json` is a derived excerpt built by
-`cve-kgrag mitre build` from CWE 5.0, CAPEC 3.9 and Enterprise ATT&CK 20.0 (STIX 2.1),
+`src/vulnwitness/fixtures/mitre/weakness-mapping.json` is a derived excerpt built by
+`vulnwitness mitre build` from CWE 5.0, CAPEC 3.9 and Enterprise ATT&CK 20.0 (STIX 2.1),
 downloaded on 2026-10-31. It selects seven CWEs and their explicit CAPEC associations;
 CAPEC `ChildOf` chains supply separately labelled inherited mappings. ATT&CK names
 and tactics come from active technique objects. Its `sources` pins the SHA-256 of

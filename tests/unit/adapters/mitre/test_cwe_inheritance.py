@@ -4,9 +4,9 @@ from xml.etree import ElementTree
 
 import pytest
 
-from cve_kgrag.adapters.mitre.catalogue_parser import build_mapping_snapshot
-from cve_kgrag.adapters.mitre.cwe_inheritance import read_cwe_parents
 from tests.support.mitre_catalogues import CAPEC_XML, CWE_XML, build_attack_json
+from vulnwitness.adapters.mitre.catalogue_parser import build_mapping_snapshot
+from vulnwitness.adapters.mitre.cwe_inheritance import read_cwe_parents
 
 
 @pytest.mark.parametrize(

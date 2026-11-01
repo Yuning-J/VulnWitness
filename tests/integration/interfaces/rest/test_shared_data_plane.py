@@ -14,24 +14,6 @@ import anyio
 import httpx2
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.serving_data_plane import ServingDataPlane
-from cve_kgrag.cli import build_evidence_set_check
-from cve_kgrag.composition import (
-    build_investigation_deployment,
-    build_investigation_service,
-    build_knowledge_toolbox,
-    build_serving_data_plane,
-)
-from cve_kgrag.domain.evidence_set_verification_report import (
-    VerificationReport,
-    VerificationVerdict,
-)
-from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
-from cve_kgrag.domain.search import SearchResponse
-from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
-from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
-from cve_kgrag.interfaces.rest.api_runner import build_api_app
 from tests.support.asgi import (
     GENEROUS_WAIT_SECONDS,
     HTTP_HOST,
@@ -41,6 +23,24 @@ from tests.support.asgi import (
 )
 from tests.support.fakes import BlockingTrustifyPort
 from tests.support.toolbox import TOOL_ARGUMENTS, require_answer
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.serving_data_plane import ServingDataPlane
+from vulnwitness.cli import build_evidence_set_check
+from vulnwitness.composition import (
+    build_investigation_deployment,
+    build_investigation_service,
+    build_knowledge_toolbox,
+    build_serving_data_plane,
+)
+from vulnwitness.domain.evidence_set_verification_report import (
+    VerificationReport,
+    VerificationVerdict,
+)
+from vulnwitness.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from vulnwitness.domain.search import SearchResponse
+from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
+from vulnwitness.interfaces.rest.api_runner import build_api_app
 
 pytestmark = pytest.mark.anyio
 

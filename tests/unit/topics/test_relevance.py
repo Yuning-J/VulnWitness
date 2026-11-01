@@ -2,11 +2,11 @@
 
 import pytest
 
-from cve_kgrag.domain.cve import CveRecord
-from cve_kgrag.domain.taxonomy import RetrievalChannel
-from cve_kgrag.domain.topic import RelevanceTier
-from cve_kgrag.topics.relevance import assess_relevance
 from tests.support.builders import build_cve_record, build_topic
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.taxonomy import RetrievalChannel
+from vulnwitness.domain.topic import RelevanceTier
+from vulnwitness.topics.relevance import assess_relevance
 
 LEXICAL = {RetrievalChannel.LEXICAL}
 

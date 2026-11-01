@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 import yaml
 
-from cve_kgrag.adapters.strict_yaml import (
+from vulnwitness.adapters.strict_yaml import (
     StrictYamlError,
     load_declaration_yaml,
     load_strict_yaml,

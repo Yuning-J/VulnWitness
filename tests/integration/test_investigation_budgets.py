@@ -6,26 +6,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.composition import (
-    build_investigation_service,
-    build_serving_data_plane,
-    load_packaged_fight_source,
-)
-from cve_kgrag.domain.budget import BudgetBreach
-from cve_kgrag.domain.investigation import (
-    CveBackendRequest,
-    FightBackendRequest,
-    KnowledgeEvidenceSet,
-    PlannerOutcome,
-    StepAdmission,
-    StopReason,
-)
-from cve_kgrag.domain.search import RetrievalOutcome
-from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus
-from cve_kgrag.domain.text import normalize_query
-from cve_kgrag.domain.topic import ReviewStatus
 from tests.support.clocks import ONE_SECOND_RUN_REAL_SECONDS, SteppingClock, read_fixed_clock
 from tests.support.fakes import (
     CannedRetriever,
@@ -51,6 +31,26 @@ from tests.support.investigation import (
 )
 from tests.support.planners import ScriptedModelPort, build_plan_reply
 from tests.support.services import build_fixture_service
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.composition import (
+    build_investigation_service,
+    build_serving_data_plane,
+    load_packaged_fight_source,
+)
+from vulnwitness.domain.budget import BudgetBreach
+from vulnwitness.domain.investigation import (
+    CveBackendRequest,
+    FightBackendRequest,
+    KnowledgeEvidenceSet,
+    PlannerOutcome,
+    StepAdmission,
+    StopReason,
+)
+from vulnwitness.domain.search import RetrievalOutcome
+from vulnwitness.domain.taxonomy import BackendStatus, ResultStatus
+from vulnwitness.domain.text import normalize_query
+from vulnwitness.domain.topic import ReviewStatus
 
 
 def list_backend_limits(evidence_set: KnowledgeEvidenceSet) -> list[int]:

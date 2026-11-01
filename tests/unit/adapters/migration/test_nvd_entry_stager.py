@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from cve_kgrag.adapters.migration.nvd_entry_stager import parse_nvd_time, to_microseconds
+from vulnwitness.adapters.migration.nvd_entry_stager import parse_nvd_time, to_microseconds
 
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 

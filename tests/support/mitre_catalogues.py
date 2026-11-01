@@ -4,13 +4,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from cve_kgrag.adapters.mitre.catalogue_parser import (
+from vulnwitness.adapters.mitre.catalogue_parser import (
     build_mapping_snapshot,
     serialize_mapping_snapshot,
 )
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.search import Candidate
-from cve_kgrag.domain.weakness_mapping import WeaknessMapping
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.search import Candidate
+from vulnwitness.domain.weakness_mapping import WeaknessMapping
 
 CWE_XML = b"""<Weakness_Catalog xmlns="http://cwe.mitre.org/cwe-8" Version="5.0">
 <Weaknesses><Weakness ID="79"><Related_Attack_Patterns>

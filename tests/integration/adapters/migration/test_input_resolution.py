@@ -15,19 +15,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.migration.input_resolution import (
-    ResolvedInput,
-    check_target,
-    compute_import_identity,
-    resolve_inputs,
-)
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.composition import load_packaged_source_registry
-from cve_kgrag.domain.corpus_store_manifest import InputContainer, NvdArtifact, StoreSource
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.migration_inputs import InputsManifest
-from cve_kgrag.domain.migration_report import MigrationFailed, MigrationFailureCode
-from cve_kgrag.domain.provenance import SourceRegistry
 from tests.support.legacy_inputs import (
     FIXED_NOW,
     TEST_IMPORTER_VERSION,
@@ -44,6 +31,19 @@ from tests.support.legacy_inputs import (
     write_plain_feed,
     write_zip_feed,
 )
+from vulnwitness.adapters.migration.input_resolution import (
+    ResolvedInput,
+    check_target,
+    compute_import_identity,
+    resolve_inputs,
+)
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.composition import load_packaged_source_registry
+from vulnwitness.domain.corpus_store_manifest import InputContainer, NvdArtifact, StoreSource
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.migration_inputs import InputsManifest
+from vulnwitness.domain.migration_report import MigrationFailed, MigrationFailureCode
+from vulnwitness.domain.provenance import SourceRegistry
 
 DEFAULT_LIMITS = MigrationLimits()
 V2_2024_NAME = "nvdcve-2.0-2024.json.gz"

@@ -8,43 +8,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
-from cve_kgrag.application.investigation_policy import describe_deterministic_planner
-from cve_kgrag.composition import describe_affectedness, describe_source_capabilities
-from cve_kgrag.domain.affectedness import AffectednessDetail
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.investigation import (
-    DecisionBasis,
-    FightUnavailableDetail,
-    InvestigationRequest,
-    KnowledgeEvidenceSet,
-    SourceCapability,
-    SourceCapabilityState,
-    StopReason,
-    ToolStep,
-    describe_planner_capability,
-)
-from cve_kgrag.domain.investigation_validation import (
-    UNCONFIGURED_SEMANTIC_WARNING,
-    validate_knowledge_evidence_set,
-)
-from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail
-from cve_kgrag.domain.search import (
-    ChannelOutcome,
-    RetrievalOutcome,
-    SearchWarning,
-    SemanticUnavailableDetail,
-)
-from cve_kgrag.domain.taxonomy import (
-    BackendFailureDetail,
-    BackendStatus,
-    ResultStatus,
-    RetrievalChannel,
-)
-from cve_kgrag.domain.threat_context import KnownFightSnapshot, SnapshotCoverage
-from cve_kgrag.domain.topic_context import KnowledgeSource, SourceOutcome
-from cve_kgrag.domain.validation import EvidenceValidationError
 from tests.support.fakes import CannedRetriever
 from tests.support.investigation import (
     DEPLOYMENT_VIOLATION,
@@ -60,6 +23,43 @@ from tests.support.investigation import (
 from tests.support.investigation_runs import run_semantic_hit
 from tests.support.planners import UNAVAILABLE_REPLY, ScriptedModelPort, build_plan_reply
 from tests.support.services import build_fixture_service
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.trustify.disabled_trustify_adapter import DisabledTrustifyAdapter
+from vulnwitness.application.investigation_policy import describe_deterministic_planner
+from vulnwitness.composition import describe_affectedness, describe_source_capabilities
+from vulnwitness.domain.affectedness import AffectednessDetail
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.investigation import (
+    DecisionBasis,
+    FightUnavailableDetail,
+    InvestigationRequest,
+    KnowledgeEvidenceSet,
+    SourceCapability,
+    SourceCapabilityState,
+    StopReason,
+    ToolStep,
+    describe_planner_capability,
+)
+from vulnwitness.domain.investigation_validation import (
+    UNCONFIGURED_SEMANTIC_WARNING,
+    validate_knowledge_evidence_set,
+)
+from vulnwitness.domain.planning import ModelPlannerUnavailableDetail
+from vulnwitness.domain.search import (
+    ChannelOutcome,
+    RetrievalOutcome,
+    SearchWarning,
+    SemanticUnavailableDetail,
+)
+from vulnwitness.domain.taxonomy import (
+    BackendFailureDetail,
+    BackendStatus,
+    ResultStatus,
+    RetrievalChannel,
+)
+from vulnwitness.domain.threat_context import KnownFightSnapshot, SnapshotCoverage
+from vulnwitness.domain.topic_context import KnowledgeSource, SourceOutcome
+from vulnwitness.domain.validation import EvidenceValidationError
 
 # A genuine set and the FiGHT pin of the deployment that produced it.
 PinnedRun = tuple[KnowledgeEvidenceSet, KnownFightSnapshot | None]

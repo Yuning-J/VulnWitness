@@ -10,10 +10,10 @@ Install the locked checkout using the [runbook](runbook.md#install), then run:
 .venv/bin/ruff check
 .venv/bin/ruff format --check
 .venv/bin/mypy
-.venv/bin/cve-kgrag schema check
+.venv/bin/vulnwitness schema check
 .venv/bin/pytest -q
-.venv/bin/cve-kgrag eval planner \
-  --gold eval/gold/m4_trajectories.yaml --out /data/cve-kgrag/evaluation
+.venv/bin/vulnwitness eval planner \
+  --gold eval/gold/m4_trajectories.yaml --out /data/vulnwitness/evaluation
 ```
 
 Tests use synthetic records/stores, packaged FiGHT/MITRE excerpts and fake local
@@ -27,10 +27,10 @@ Activate an imported store/full catalogued FiGHT snapshot using the runbook. Sup
 reviewed operator-owned cases/sets binding the corpus, FiGHT and exact case bytes:
 
 ```sh
-.venv/bin/cve-kgrag eval gold-sets --gold /data/evaluation/cases.yaml \
+.venv/bin/vulnwitness eval gold-sets --gold /data/evaluation/cases.yaml \
   --check /data/evaluation/sets.json
-.venv/bin/cve-kgrag eval planner --gold /data/evaluation/cases.yaml \
-  --sets /data/evaluation/sets.json --out /data/cve-kgrag/evaluation
+.venv/bin/vulnwitness eval planner --gold /data/evaluation/cases.yaml \
+  --sets /data/evaluation/sets.json --out /data/vulnwitness/evaluation
 ```
 
 Use exact archived feeds/acquisition metadata or a verified store, matching
@@ -44,12 +44,12 @@ cases. Public benchmarks cannot be treated as unseen acceptance data.
 ## Optional live model checks
 
 Live calls cost money and send queries/model input to the endpoint. Configure
-`CVE_KGRAG_PLANNER_ENABLED=true`, `CVE_KGRAG_PLANNER_BASE_URL`,
-`CVE_KGRAG_PLANNER_MODEL_NAME` and `CVE_KGRAG_PLANNER_API_KEY` in the environment,
-never credentials in arguments. Optional `CVE_KGRAG_PLANNER_REASONING_EFFORT` needs
+`VULNWITNESS_PLANNER_ENABLED=true`, `VULNWITNESS_PLANNER_BASE_URL`,
+`VULNWITNESS_PLANNER_MODEL_NAME` and `VULNWITNESS_PLANNER_API_KEY` in the environment,
+never credentials in arguments. Optional `VULNWITNESS_PLANNER_REASONING_EFFORT` needs
 endpoint support. Add `--model-runs 2` to evaluation (0–20, default 0). Runs need a
 usable enabled planner; fallback-only runs do not pass as model tests.
-Adapter checks: `CVE_KGRAG_LIVE_TESTS=1 .venv/bin/pytest tests/live -q`; never use
+Adapter checks: `VULNWITNESS_LIVE_TESTS=1 .venv/bin/pytest tests/live -q`; never use
 `--showlocals`. REST/MCP are deterministic. Free-text round 1 is policy-planned but
 may call the assessor; inspect both planning and assessment records.
 

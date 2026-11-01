@@ -15,26 +15,6 @@ from mcp.shared.exceptions import MCPError
 from mcp.types import INVALID_PARAMS, METHOD_NOT_FOUND, CallToolResult, TextContent, Tool
 from pydantic import BaseModel
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.store.corpus_store import load_corpus_store
-from cve_kgrag.application.evidence_set_verification import verify_evidence_set
-from cve_kgrag.application.trajectory_replay import ReplayCompleted
-from cve_kgrag.composition import (
-    build_knowledge_toolbox,
-    build_product_query_service,
-    build_serving_data_plane,
-)
-from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
-from cve_kgrag.domain.product_query import ProductQueryRequest
-from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
-from cve_kgrag.domain.tool_contracts import ToolFailure, ToolFailureCode
-from cve_kgrag.interfaces.knowledge_tools import (
-    KNOWLEDGE_TOOL_SPECS,
-    SERVER_INSTRUCTIONS,
-    KnowledgeToolName,
-)
-from cve_kgrag.interfaces.mcp.server import build_knowledge_mcp_server
-from cve_kgrag.schema_snapshots import REQUEST_CONTRACTS, RESPONSE_CONTRACTS
 from tests.support.corpus_stores import COMPATIBILITY_STORE
 from tests.support.fakes import RaisingRetriever
 from tests.support.investigation import (
@@ -47,6 +27,26 @@ from tests.support.paths import REPOSITORY_SCHEMA_DIR
 from tests.support.planners import DETERMINISTIC_VERIFIER
 from tests.support.product_queries import SMF_PRODUCT_ONLY, SMF_VENDOR_AND_PRODUCT
 from tests.support.toolbox import SECRET_ERROR_TEXT, TOOL_ARGUMENTS, build_test_toolbox
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.store.corpus_store import load_corpus_store
+from vulnwitness.application.evidence_set_verification import verify_evidence_set
+from vulnwitness.application.trajectory_replay import ReplayCompleted
+from vulnwitness.composition import (
+    build_knowledge_toolbox,
+    build_product_query_service,
+    build_serving_data_plane,
+)
+from vulnwitness.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from vulnwitness.domain.product_query import ProductQueryRequest
+from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
+from vulnwitness.domain.tool_contracts import ToolFailure, ToolFailureCode
+from vulnwitness.interfaces.knowledge_tools import (
+    KNOWLEDGE_TOOL_SPECS,
+    SERVER_INSTRUCTIONS,
+    KnowledgeToolName,
+)
+from vulnwitness.interfaces.mcp.server import build_knowledge_mcp_server
+from vulnwitness.schema_snapshots import REQUEST_CONTRACTS, RESPONSE_CONTRACTS
 
 pytestmark = pytest.mark.anyio
 

@@ -31,16 +31,16 @@ The CLI calls it once, with `os.environ`; tests pass a mapping.
 
 | Variable | Setting | Default |
 |---|---|---|
-| `CVE_KGRAG_PLANNER_ENABLED` | turns the model planner on (`true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`, any case) | off |
-| `CVE_KGRAG_PLANNER_BASE_URL` | the OpenAI-compatible endpoint | none; required when enabled |
-| `CVE_KGRAG_PLANNER_MODEL_NAME` | the model the planner names (`ModelPlannerIdentity.model_name`'s pattern) | none; required when enabled |
-| `CVE_KGRAG_PLANNER_API_KEY` | the key that authenticates it: 1 to 1024 printable ASCII characters without whitespace, since it travels in a header | none |
-| `CVE_KGRAG_PLANNER_REASONING_EFFORT` | sent as the request's `reasoning_effort` (`^[a-z]{1,16}$`); DeepSeek reasons by default and `none` turns it off (ADR 0005) | not sent |
+| `VULNWITNESS_PLANNER_ENABLED` | turns the model planner on (`true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`, any case) | off |
+| `VULNWITNESS_PLANNER_BASE_URL` | the OpenAI-compatible endpoint | none; required when enabled |
+| `VULNWITNESS_PLANNER_MODEL_NAME` | the model the planner names (`ModelPlannerIdentity.model_name`'s pattern) | none; required when enabled |
+| `VULNWITNESS_PLANNER_API_KEY` | the key that authenticates it: 1 to 1024 printable ASCII characters without whitespace, since it travels in a header | none |
+| `VULNWITNESS_PLANNER_REASONING_EFFORT` | sent as the request's `reasoning_effort` (`^[a-z]{1,16}$`); DeepSeek reasons by default and `none` turns it off (ADR 0005) | not sent |
 
 - An empty variable counts as unset, so `KEY=` in a sourced file leaves the key missing.
 - The planner's other variables are read only when it is enabled.
 - Variables the tables of this section do not name are ignored, including other
-  `CVE_KGRAG_*` names, so a test opt-in variable never aborts a command.
+  `VULNWITNESS_*` names, so a test opt-in variable never aborts a command.
 - No configuration file and no `.env` file is read; an operator who keeps settings in an
   untracked `.env` sources it in the shell (`set -a; . ./.env; set +a`). `.env` and
   `.env.*` are ignored by git.
@@ -55,10 +55,10 @@ The semantic channel is a second section, read the same way (M6 WP2):
 
 | Variable | Setting | Default when enabled |
 |---|---|---|
-| `CVE_KGRAG_SEMANTIC_ENABLED` | turns the semantic channel on | off |
-| `CVE_KGRAG_SEMANTIC_COLLECTION_NAME` | the Chroma collection (Chroma's name rule) | `cve_documents` |
-| `CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY` | the directory holding it, relative to the working directory unless absolute; no control character | required when enabled |
-| `CVE_KGRAG_SEMANTIC_MODEL_NAME` | the sentence-transformers model (`^[A-Za-z0-9._/-]{1,256}$`) | `sentence-transformers/all-MiniLM-L6-v2` |
+| `VULNWITNESS_SEMANTIC_ENABLED` | turns the semantic channel on | off |
+| `VULNWITNESS_SEMANTIC_COLLECTION_NAME` | the Chroma collection (Chroma's name rule) | `cve_documents` |
+| `VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY` | the directory holding it, relative to the working directory unless absolute; no control character | required when enabled |
+| `VULNWITNESS_SEMANTIC_MODEL_NAME` | the sentence-transformers model (`^[A-Za-z0-9._/-]{1,256}$`) | `sentence-transformers/all-MiniLM-L6-v2` |
 
 The collection and model defaults are what CVE-KGRAG's pipeline builds; the directory
 has no default (ADR 0006). Only an operator's own run opens the semantic store:
@@ -100,10 +100,10 @@ validates it, and only a command that serves over HTTP uses it (M6 WP6, ADR 0007
 
 | Variable | Setting | Default |
 |---|---|---|
-| `CVE_KGRAG_HTTP_HOST` | the address the HTTP servers listen on: `127.0.0.1` or `::1`, nothing else | `127.0.0.1` |
-| `CVE_KGRAG_MCP_HTTP_PORT` | the port of MCP over Streamable HTTP, 1 to 65535 | 8765 |
-| `CVE_KGRAG_API_PORT` | the port of the v2 REST API, 1 to 65535 | 8766 |
-| `CVE_KGRAG_HTTP_TOKEN` | the bearer token every route but `/health` requires: 32 to 512 characters of RFC 6750's `b64token` alphabet, a `SecretStr` | none; `mcp --http` and `api` refuse to start without it |
+| `VULNWITNESS_HTTP_HOST` | the address the HTTP servers listen on: `127.0.0.1` or `::1`, nothing else | `127.0.0.1` |
+| `VULNWITNESS_MCP_HTTP_PORT` | the port of MCP over Streamable HTTP, 1 to 65535 | 8765 |
+| `VULNWITNESS_API_PORT` | the port of the v2 REST API, 1 to 65535 | 8766 |
+| `VULNWITNESS_HTTP_TOKEN` | the bearer token every route but `/health` requires: 32 to 512 characters of RFC 6750's `b64token` alphabet, a `SecretStr` | none; `mcp --http` and `api` refuse to start without it |
 
 A fourth section names the served data, and has no switch either: every command reads
 and validates it, and only a command that loads a store or the FiGHT snapshot opens what
@@ -111,9 +111,9 @@ it names (ADR 0009 §3, §10).
 
 | Variable | Setting | Default |
 |---|---|---|
-| `CVE_KGRAG_STORE_ROOT` | the directory holding the corpus stores and `ACTIVE`: an absolute path | none: the packaged fixture is served |
-| `CVE_KGRAG_FIGHT_SNAPSHOT_PATH` | the operator FiGHT snapshot: an absolute path; set with the hash or not at all | none: the packaged excerpt is served |
-| `CVE_KGRAG_FIGHT_SNAPSHOT_SHA256` | the snapshot's SHA-256, 64 lower-case hex characters; set with the path or not at all. Whether the catalog lists it is checked when a command loads the snapshot, not here (ADR 0009 §11) | none |
+| `VULNWITNESS_STORE_ROOT` | the directory holding the corpus stores and `ACTIVE`: an absolute path | none: the packaged fixture is served |
+| `VULNWITNESS_FIGHT_SNAPSHOT_PATH` | the operator FiGHT snapshot: an absolute path; set with the hash or not at all | none: the packaged excerpt is served |
+| `VULNWITNESS_FIGHT_SNAPSHOT_SHA256` | the snapshot's SHA-256, 64 lower-case hex characters; set with the path or not at all. Whether the catalog lists it is checked when a command loads the snapshot, not here (ADR 0009 §11) | none |
 
 ### 2. The endpoint is one a key may be sent to
 
@@ -153,7 +153,7 @@ the operator's environment, never from a caller.
 - A missing key is not looked up any further: no entry point is listed.
 - The two sentences are `ModelPlannerUnavailableDetail`. Every unusable-adapter case
   shares one sentence; the log line names the case.
-- The entry point is `model_planner` in `cve_kgrag.adapters`. Its factory is
+- The entry point is `model_planner` in `vulnwitness.adapters`. Its factory is
   `ModelPortFactory`:
   `factory(*, base_url, model_name, api_key: SecretStr, reasoning_effort) -> ModelPort`.
   - Building the adapter does no network or file I/O.
@@ -175,11 +175,11 @@ server builds the identity every trajectory records (`describe_installed_planner
 
 | Field | From |
 |---|---|
-| `model_name` | `CVE_KGRAG_PLANNER_MODEL_NAME` |
+| `model_name` | `VULNWITNESS_PLANNER_MODEL_NAME` |
 | `adapter` | the entry point's object reference (`module:attribute`) |
 | `adapter_version` | the version of the distribution that installed the entry point |
 | `endpoint_sha256` | `fingerprint_endpoint(base_url)`: SHA-256 of the configured URL (one trailing `/` already removed) with its scheme and host in lower case, its port written out (the scheme's default when none is given) and its path exactly as written |
-| `reasoning_effort` | `CVE_KGRAG_PLANNER_REASONING_EFFORT`, or null |
+| `reasoning_effort` | `VULNWITNESS_PLANNER_REASONING_EFFORT`, or null |
 
 - So the same model name behind another endpoint, another adapter, another adapter
   version or another reasoning effort is another planner. The fingerprint binds the endpoint without naming its
@@ -244,8 +244,8 @@ round the record holds no reply for is answered `ADAPTER_FAILED`, since the reco
 gives no valid reply there; the round then differs from the recorded one and replay names
 `trajectory.rounds`. The replayed set is compared, never published.
 
-`cve-kgrag investigate` plans with the discovered planner. `cve-kgrag verify` accepts
-the capabilities the settings and the installed adapter allow. `cve-kgrag mcp` keeps the
+`vulnwitness investigate` plans with the discovered planner. `vulnwitness verify` accepts
+the capabilities the settings and the installed adapter allow. `vulnwitness mcp` keeps the
 deterministic planner.
 
 ## Consequences
@@ -259,7 +259,7 @@ deterministic planner.
   that enable a planner, whatever the verifier's key and adapter.
 - The core package registers one `model_planner` entry point, the OpenAI-compatible
   adapter (ADR 0005), so an enabled planner with a key plans through it.
-- Subprocess tests start the server without `CVE_KGRAG_*` variables, so a developer's
+- Subprocess tests start the server without `VULNWITNESS_*` variables, so a developer's
   exported settings cannot change them.
 - Not done here:
   - The published schema does not tie the trajectory's planner kind to the

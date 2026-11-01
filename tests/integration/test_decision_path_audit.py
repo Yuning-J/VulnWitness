@@ -6,55 +6,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.decision_path_audit import audit_decision_path
-from cve_kgrag.application.investigation_policy import (
-    build_fight_direct_search_call,
-    interpret_request,
-)
-from cve_kgrag.composition import build_topic_registry
-from cve_kgrag.domain.budget import BudgetBreach
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.investigation import (
-    BackendRequest,
-    CveBackendRequest,
-    DecisionBasis,
-    EvidenceNeed,
-    EvidenceNeedKind,
-    FightBlock,
-    FightBlockReason,
-    InvestigationState,
-    InvestigationWarning,
-    InvestigationWarningCode,
-    KnowledgeEvidenceSet,
-    NeedOutcome,
-    PlannerOutcome,
-    StateTransition,
-    StepReason,
-    StopReason,
-    ToolStep,
-    derive_investigation_id,
-)
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.planning import (
-    CveExactLookupCall,
-    CveSearchCall,
-    PlannerKind,
-    PlanRejection,
-    PlanRejectionCode,
-    QueryIntent,
-    compute_call_key,
-    compute_model_reply_sha256,
-    format_cve_tool_query,
-)
-from cve_kgrag.domain.search import SearchWarning, SearchWarningCode
-from cve_kgrag.domain.taxonomy import ResultStatus
-from cve_kgrag.domain.text import normalize_query
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.domain.topic import ReviewStatus
-from cve_kgrag.domain.topic_context import KnowledgeSource, SourceOutcome
-from cve_kgrag.domain.validation import EvidenceValidationError
-from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.investigation import (
     RANKING_VIOLATION,
     build_exact_lookup_call,
@@ -89,6 +40,55 @@ from tests.support.investigation_runs import (
     run_refinement,
 )
 from tests.support.planners import UNAVAILABLE_REPLY, build_plan_reply
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.decision_path_audit import audit_decision_path
+from vulnwitness.application.investigation_policy import (
+    build_fight_direct_search_call,
+    interpret_request,
+)
+from vulnwitness.composition import build_topic_registry
+from vulnwitness.domain.budget import BudgetBreach
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.investigation import (
+    BackendRequest,
+    CveBackendRequest,
+    DecisionBasis,
+    EvidenceNeed,
+    EvidenceNeedKind,
+    FightBlock,
+    FightBlockReason,
+    InvestigationState,
+    InvestigationWarning,
+    InvestigationWarningCode,
+    KnowledgeEvidenceSet,
+    NeedOutcome,
+    PlannerOutcome,
+    StateTransition,
+    StepReason,
+    StopReason,
+    ToolStep,
+    derive_investigation_id,
+)
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.planning import (
+    CveExactLookupCall,
+    CveSearchCall,
+    PlannerKind,
+    PlanRejection,
+    PlanRejectionCode,
+    QueryIntent,
+    compute_call_key,
+    compute_model_reply_sha256,
+    format_cve_tool_query,
+)
+from vulnwitness.domain.search import SearchWarning, SearchWarningCode
+from vulnwitness.domain.taxonomy import ResultStatus
+from vulnwitness.domain.text import normalize_query
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.domain.topic import ReviewStatus
+from vulnwitness.domain.topic_context import KnowledgeSource, SourceOutcome
+from vulnwitness.domain.validation import EvidenceValidationError
+from vulnwitness.topics.registry import TopicRegistry
 
 Forgery = Callable[[KnowledgeEvidenceSet], KnowledgeEvidenceSet]
 Run = Callable[[FixtureBundle], KnowledgeEvidenceSet]

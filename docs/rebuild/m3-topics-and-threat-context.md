@@ -8,7 +8,7 @@ source, CVE relevance tiers and a scoped topic-context service.
 - A topic card (`ProtocolTopic`, schema `schemas/v2/protocol_topic.schema.json`)
   holds the canonical name, exact and contextual aliases, entities with roles,
   ecosystem terms, exclusions with reasons, query templates, references and its
-  review state. Cards are YAML under `cve_kgrag/knowledge/topics/`, read with a
+  review state. Cards are YAML under `vulnwitness/knowledge/topics/`, read with a
   `SafeLoader` subclass that also rejects duplicate, unhashable and merge keys and
   turns any malformed input into a YAML error (`adapters/strict_yaml.py`), so a
   repeated key can never silently replace a reviewed field.
@@ -100,7 +100,7 @@ source, CVE relevance tiers and a scoped topic-context service.
 ## FiGHT
 
 - Coverage is never self-reported. A reviewed catalog of FiGHT snapshot files
-  (`cve_kgrag/knowledge/fight_snapshots.yaml`), keyed by SHA-256, is the only source
+  (`vulnwitness/knowledge/fight_snapshots.yaml`), keyed by SHA-256, is the only source
   of a snapshot's version, coverage (`full` or `excerpt`) and expected contents:
   the full 3.1.0 file (`59a9add…`, 183 techniques, 15 tactics) and the packaged
   excerpt (`08cd11d5…`), which names the full file it was cut from and lists its
@@ -141,7 +141,7 @@ source, CVE relevance tiers and a scoped topic-context service.
   Tactic entries are reached through their techniques and are not items
   themselves.
 - The package ships a verbatim six-technique excerpt of FiGHT 3.1.0
-  (`cve_kgrag/fixtures/fight/`) with a notice reproducing every licence and
+  (`vulnwitness/fixtures/fight/`) with a notice reproducing every licence and
   notice MITRE publishes; see `THIRD_PARTY_DATA.md`. Its coverage is `excerpt`,
   so responses built on it carry a `source_snapshot_is_excerpt` warning: the
   5G-AKA terms match 5 techniques in the excerpt and 30 in the full file. In the
@@ -231,7 +231,7 @@ and anchors and the FiGHT source's techniques and anchors
 technique is compared apart from the `matched_fields` and `matched_terms` of the
 search that found it. A holder who renames a technique, changes its observation
 status or rewrites a record behind its genuine anchors is therefore rejected. The
-CLI exposes the service as `cve-kgrag topic <query> --scope <scope>`.
+CLI exposes the service as `vulnwitness topic <query> --scope <scope>`.
 
 ## Gold queries
 

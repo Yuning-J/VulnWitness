@@ -4,7 +4,17 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.application.investigation_policy import (
+from tests.support.builders import build_recorded_step, build_topic
+from tests.support.investigation import (
+    FIVE_G_AKA_TOPIC_ID,
+    TWENTY_ONE_IDS,
+    build_exact_lookup_call,
+    build_investigation_request,
+    build_productless_catalog,
+    build_search_call,
+    build_topic_call,
+)
+from vulnwitness.application.investigation_policy import (
     PlannedStep,
     build_fight_direct_search_call,
     count_tool_calls,
@@ -16,8 +26,8 @@ from cve_kgrag.application.investigation_policy import (
     plan_first_round,
     plan_refinement,
 )
-from cve_kgrag.domain.evidence_needs import judge_needs
-from cve_kgrag.domain.investigation import (
+from vulnwitness.domain.evidence_needs import judge_needs
+from vulnwitness.domain.investigation import (
     DecisionBasis,
     EvidenceNeed,
     FightBlock,
@@ -28,24 +38,14 @@ from cve_kgrag.domain.investigation import (
     StopReason,
     ToolStep,
 )
-from cve_kgrag.domain.planning import (
+from vulnwitness.domain.planning import (
     QueryIntent,
     ToolCall,
     compute_call_key,
 )
-from cve_kgrag.domain.search import SearchWarning, SearchWarningCode
-from cve_kgrag.domain.topic_context import QueryScope
-from cve_kgrag.topics.registry import TopicRegistry
-from tests.support.builders import build_recorded_step, build_topic
-from tests.support.investigation import (
-    FIVE_G_AKA_TOPIC_ID,
-    TWENTY_ONE_IDS,
-    build_exact_lookup_call,
-    build_investigation_request,
-    build_productless_catalog,
-    build_search_call,
-    build_topic_call,
-)
+from vulnwitness.domain.search import SearchWarning, SearchWarningCode
+from vulnwitness.domain.topic_context import QueryScope
+from vulnwitness.topics.registry import TopicRegistry
 
 
 def describe_planned_steps(planned_steps: list[PlannedStep]) -> list[tuple[ToolCall, StepReason]]:

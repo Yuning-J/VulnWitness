@@ -14,16 +14,16 @@ own repository and to keep the legacy system, and its security fixes, in CVE-KGR
 
 ## Decision
 
-1. **Scope.** This repository holds the `cve_kgrag` package, its tests, `schemas/v2`,
+1. **Scope.** This repository holds the `vulnwitness` package, its tests, `schemas/v2`,
    `eval/gold` and the rebuild docs. They were imported from CVE-KGRAG at commit
    `53d75e3` without history, and this repository's first commit already contains the
    changes this ADR makes. The original commits are archived by the owner, not
    published; [`provenance.md`](../provenance.md) lists the carried paths with their git object IDs at the
    split commit and the original commits by hash and subject.
-2. **Names unchanged.** The package `cve_kgrag`, the distribution and command
-   `cve-kgrag`, the entry-point group `cve_kgrag.adapters`, the MCP server name and the
-   `CVE_KGRAG_*` settings keep their names. The URIs `urn:cve-kgrag:fixture:` and
-   `urn:cve-kgrag:test` are identifiers hashed into evidence IDs and are never renamed.
+2. **Names unchanged.** The package `vulnwitness`, the distribution and command
+   `vulnwitness`, the entry-point group `vulnwitness.adapters`, the MCP server name and the
+   `VULNWITNESS_*` settings keep their names. The URIs `urn:vulnwitness:fixture:` and
+   `urn:vulnwitness:test` are identifiers hashed into evidence IDs and are never renamed.
 3. **v1 is out of scope.** `/api/v1`, the Gradio UI and the legacy modules stay in
    CVE-KGRAG, and so do the `/api/v1` characterization tests (its
    `tests/characterization/`). This repository provides no v1 facade, no
@@ -38,7 +38,7 @@ own repository and to keep the legacy system, and its security fixes, in CVE-KGR
    CVE-KGRAG's `src/generators/rag_system.py` writes (collection `cve_documents`, entry
    IDs `<CVE ID>_chunk_N`, the CVE ID in `cve_id` metadata). This repository does not
    build that store. The operator names its directory
-   (`CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY`, required when the channel is enabled); there
+   (`VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY`, required when the channel is enabled); there
    is no default path. The collection and model names keep their defaults, because they
    describe the store format the adapter reads. A legacy collection may also hold
    `KEV-` chunks, whose `cve_id` metadata is not a CVE ID; the channel refuses such a
@@ -67,4 +67,4 @@ own repository and to keep the legacy system, and its security fixes, in CVE-KGR
 - A change to the Chroma store format in CVE-KGRAG must be checked against the semantic
   adapter here; the adapter was written against the format at the split commit.
 - An operator who enables the semantic channel without naming a directory gets a usage
-  error naming `CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY`.
+  error naming `VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY`.

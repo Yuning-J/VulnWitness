@@ -2,31 +2,32 @@
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.investigation_answer import (
+from tests.support.collect import list_technique_ids
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.investigation_answer import (
     AssembledAnswer,
     aggregate_source_outcomes,
     assemble_answer,
     build_claims,
     list_product_applicability,
 )
-from cve_kgrag.application.investigation_tools import (
+from vulnwitness.application.investigation_tools import (
     IssuedStep,
     ToolExecution,
     build_search_execution,
     build_tool_step,
 )
-from cve_kgrag.application.search import SearchService
-from cve_kgrag.composition import build_topic_context_service
-from cve_kgrag.domain.affectedness import AffectednessDetail
-from cve_kgrag.domain.investigation import (
+from vulnwitness.application.search import SearchService
+from vulnwitness.composition import build_topic_context_service
+from vulnwitness.domain.affectedness import AffectednessDetail
+from vulnwitness.domain.investigation import (
     CveBackendRequest,
     InvestigationCandidate,
     StepAdmission,
     StepReason,
     ToolStep,
 )
-from cve_kgrag.domain.planning import (
+from vulnwitness.domain.planning import (
     CveExactLookupCall,
     CveSearchCall,
     PlannerKind,
@@ -35,13 +36,12 @@ from cve_kgrag.domain.planning import (
     TopicContextCall,
     compute_call_key,
 )
-from cve_kgrag.domain.result_prefix import measure_response_bytes
-from cve_kgrag.domain.search import SearchFilters, SearchRequest
-from cve_kgrag.domain.taxonomy import KnowledgeScope, ResultStatus
-from cve_kgrag.domain.topic import ProtocolTopic
-from cve_kgrag.domain.topic_context import KnowledgeSource, QueryScope, TopicContextRequest
-from cve_kgrag.topics.registry import TopicRegistry
-from tests.support.collect import list_technique_ids
+from vulnwitness.domain.result_prefix import measure_response_bytes
+from vulnwitness.domain.search import SearchFilters, SearchRequest
+from vulnwitness.domain.taxonomy import KnowledgeScope, ResultStatus
+from vulnwitness.domain.topic import ProtocolTopic
+from vulnwitness.domain.topic_context import KnowledgeSource, QueryScope, TopicContextRequest
+from vulnwitness.topics.registry import TopicRegistry
 
 AdmittedStep = tuple[ToolStep, ToolExecution]
 # Answer assembly never reads a step's charge or backend requests.

@@ -24,7 +24,15 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.migration.input_files import (
+from tests.support.legacy_inputs import (
+    build_v2_entry,
+    build_v2_feed,
+    encode_feed,
+    write_gzip_feed,
+    write_plain_feed,
+    write_zip_feed,
+)
+from vulnwitness.adapters.migration.input_files import (
     HASH_CHUNK_BYTES,
     ZIP_END_SIGNATURE,
     ZIP_MAX_ONE_MEMBER_DIRECTORY_BYTES,
@@ -36,17 +44,9 @@ from cve_kgrag.adapters.migration.input_files import (
     open_payload,
     snapshot_input,
 )
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.domain.corpus_store_manifest import InputContainer
-from cve_kgrag.domain.migration_report import MigrationFailed, MigrationFailureCode
-from tests.support.legacy_inputs import (
-    build_v2_entry,
-    build_v2_feed,
-    encode_feed,
-    write_gzip_feed,
-    write_plain_feed,
-    write_zip_feed,
-)
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.domain.corpus_store_manifest import InputContainer
+from vulnwitness.domain.migration_report import MigrationFailed, MigrationFailureCode
 
 FEED = build_v2_feed([build_v2_entry(1), build_v2_entry(2)])
 FEED_PAYLOAD = encode_feed(FEED)
@@ -614,9 +614,9 @@ import signal
 import sys
 from pathlib import Path
 
-from cve_kgrag.adapters.migration.input_files import inspect_input_file, snapshot_input
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.domain.migration_report import MigrationFailed
+from vulnwitness.adapters.migration.input_files import inspect_input_file, snapshot_input
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.domain.migration_report import MigrationFailed
 
 input_path, snapshot_path, size_limit = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3])
 input_file = inspect_input_file(input_path, MigrationLimits())

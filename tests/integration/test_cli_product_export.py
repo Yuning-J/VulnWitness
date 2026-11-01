@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.cli import main
-from cve_kgrag.composition import build_product_query_service
-from cve_kgrag.domain.product_query import ProductQueryRequest, ProductQueryResponse
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.cli import main
+from vulnwitness.composition import build_product_query_service
+from vulnwitness.domain.product_query import ProductQueryRequest, ProductQueryResponse
 
 ALL_DEMOCORP = ["product", "--vendor", "democorp", "--limit", "1", "--all"]
 
@@ -323,4 +323,4 @@ def test_conflicting_export_or_traversal_options_exit_two_without_stdout(
     terminal = capsys.readouterr()
     assert exit_code == 2
     assert terminal.out == ""
-    assert "cve-kgrag product:" in terminal.err
+    assert "vulnwitness product:" in terminal.err

@@ -1,0 +1,17 @@
+# Client configuration snippets
+
+Install the package with its `mcp` extra in the environment that supplies
+`vulnwitness`. Use an absolute executable path if the client cannot find it on PATH.
+Choose [Claude Code](claude-code.md), [Codex](codex.md), or [Cursor](cursor.md).
+Merge one server entry into the indicated config file; do not replace unrelated
+settings. The snippets explicitly clear operator data paths and disable optional
+model/semantic settings so inherited environment values cannot select a real store.
+Empty data-path settings count as unset and serve the packaged synthetic CVEs and
+catalogue/FiGHT excerpts. No corpus download, token, or HTTP listener is needed.
+
+Each client file contains a plain stdio variant and a recording variant. Choose
+one. The recording option is verified through MCP stdio on the packaged fixture.
+Replace the session path with a private absolute directory outside any store root.
+Client format verification is documentation-based; these snippets have not been
+loaded in the three client applications. See the Skill's session contract section
+for recording and conclusion validation.

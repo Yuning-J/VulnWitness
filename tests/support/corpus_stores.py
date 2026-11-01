@@ -8,8 +8,6 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from cve_kgrag.adapters.store.active_record_writer import OsActiveRecordFiles
-from cve_kgrag.domain.migration_report import MigrationOutcome
 from tests.support.legacy_inputs import (
     build_declaration,
     build_kev_row,
@@ -20,6 +18,8 @@ from tests.support.legacy_inputs import (
     write_inputs_manifest,
     write_kev_csv,
 )
+from vulnwitness.adapters.store.active_record_writer import OsActiveRecordFiles
+from vulnwitness.domain.migration_report import MigrationOutcome
 
 COMPATIBILITY_STORE = (
     Path(__file__).resolve().parents[1]

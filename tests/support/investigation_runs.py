@@ -3,11 +3,6 @@ decision-path audit and replay tests start from, then forge or replay."""
 
 from typing import Any
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
-from cve_kgrag.domain.planning import ModelPlannerUnavailableDetail, ModelReply
-from cve_kgrag.domain.search import RetrievalOutcome
-from cve_kgrag.domain.taxonomy import BackendStatus
 from tests.support.clocks import SteppingClock
 from tests.support.fakes import (
     CannedRetriever,
@@ -30,6 +25,11 @@ from tests.support.planners import (
     ScriptedModelPort,
     build_plan_reply,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
+from vulnwitness.domain.planning import ModelPlannerUnavailableDetail, ModelReply
+from vulnwitness.domain.search import RetrievalOutcome
+from vulnwitness.domain.taxonomy import BackendStatus
 
 
 def investigate(

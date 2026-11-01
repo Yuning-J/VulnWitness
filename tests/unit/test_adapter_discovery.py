@@ -9,7 +9,14 @@ from typing import Any
 import pytest
 from pydantic import SecretStr
 
-from cve_kgrag.adapter_discovery import (
+from tests.support.entry_points import (
+    FailingRegistry,
+    FakeAdapterRegistry,
+    FakeDistribution,
+    FakeEntryPoint,
+)
+from tests.support.planners import AdapterAbort, ScriptedModelPort, reconfigure_planner
+from vulnwitness.adapter_discovery import (
     API_EXTRA,
     MCP_EXTRA,
     GuardedModelPort,
@@ -20,23 +27,16 @@ from cve_kgrag.adapter_discovery import (
     discover_planner_setup,
     discover_semantic_retriever,
 )
-from cve_kgrag.application.planner_setup import DeterministicPlanning, ModelPlanning
-from cve_kgrag.domain.planning import (
+from vulnwitness.application.planner_setup import DeterministicPlanning, ModelPlanning
+from vulnwitness.domain.planning import (
     ModelPlannerIdentity,
     ModelPlannerUnavailableDetail,
     PlannerKind,
     format_planner_version,
 )
-from cve_kgrag.domain.search import RetrievalOutcome, SemanticUnavailableDetail
-from cve_kgrag.domain.taxonomy import BackendStatus
-from cve_kgrag.settings import ModelPlannerSettings, SemanticSettings, fingerprint_endpoint
-from tests.support.entry_points import (
-    FailingRegistry,
-    FakeAdapterRegistry,
-    FakeDistribution,
-    FakeEntryPoint,
-)
-from tests.support.planners import AdapterAbort, ScriptedModelPort, reconfigure_planner
+from vulnwitness.domain.search import RetrievalOutcome, SemanticUnavailableDetail
+from vulnwitness.domain.taxonomy import BackendStatus
+from vulnwitness.settings import ModelPlannerSettings, SemanticSettings, fingerprint_endpoint
 
 ENABLED = SemanticSettings(persist_directory="/srv/vectors")
 # A local path an adapter's error may quote; no log line may carry it.
@@ -158,7 +158,7 @@ def test_installed_semantic_adapter_is_built_from_its_entry_point_and_the_settin
 def test_unusable_semantic_adapter_is_unavailable_and_logs_no_adapter_text(
     caplog: pytest.LogCaptureFixture, registry: FakeAdapterRegistry | FailingRegistry
 ) -> None:
-    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.DEBUG, logger="vulnwitness.adapter_discovery"):
         retriever = discover_semantic_retriever(ENABLED, registry.list_adapters)
 
     logged_text = describe_logged_lines(caplog)
@@ -204,7 +204,7 @@ def test_mcp_server_load_without_the_sdk_reports_the_missing_extra_and_logs_noth
 ) -> None:
     registry = FakeAdapterRegistry([FakeEntryPoint("mcp_server", load_without_the_mcp_sdk)])
 
-    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.DEBUG, logger="vulnwitness.adapter_discovery"):
         runner = discover_mcp_server_runner(registry.list_adapters)
 
     assert runner == InterfaceUnavailable(MCP_EXTRA.missing_detail)
@@ -229,7 +229,7 @@ def test_mcp_http_server_load_without_a_module_of_the_extra_reports_the_missing_
         [FakeEntryPoint("mcp_http_server", ImportFailure(missing_module).load)]
     )
 
-    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.DEBUG, logger="vulnwitness.adapter_discovery"):
         runner = discover_mcp_http_server_runner(registry.list_adapters)
 
     assert runner == InterfaceUnavailable(MCP_EXTRA.missing_detail)
@@ -254,7 +254,7 @@ def test_api_server_load_without_a_module_of_the_api_extra_reports_the_missing_e
         [FakeEntryPoint("api_server", ImportFailure(missing_module).load)]
     )
 
-    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.DEBUG, logger="vulnwitness.adapter_discovery"):
         runner = discover_api_server_runner(registry.list_adapters)
 
     assert runner == InterfaceUnavailable(API_EXTRA.missing_detail)
@@ -267,7 +267,7 @@ def test_api_server_load_failing_on_the_mcp_sdk_is_not_a_missing_api_extra(
     """The REST API needs no MCP SDK, so a runner importing it is broken, not uninstalled."""
     registry = FakeAdapterRegistry([FakeEntryPoint("api_server", ImportFailure("mcp").load)])
 
-    with caplog.at_level(logging.WARNING, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.WARNING, logger="vulnwitness.adapter_discovery"):
         runner = discover_api_server_runner(registry.list_adapters)
 
     assert runner == InterfaceUnavailable("api_server adapter could not load: ModuleNotFoundError")
@@ -303,7 +303,7 @@ def test_mcp_server_load_failing_with_the_sdk_installed_logs_the_traceback(
     """The detail names the exception type only; the traceback goes to the log."""
     registry = FakeAdapterRegistry([FakeEntryPoint("mcp_server", load_runner)])
 
-    with caplog.at_level(logging.WARNING, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.WARNING, logger="vulnwitness.adapter_discovery"):
         runner = discover_mcp_server_runner(registry.list_adapters)
 
     logged_warnings: list[tuple[int, str, bool]] = []
@@ -510,7 +510,7 @@ def test_planner_identity_changes_with_the_adapter_or_its_version() -> None:
 def test_unusable_planner_adapter_is_unavailable_and_logs_no_adapter_text(
     caplog: pytest.LogCaptureFixture, registry: FakeAdapterRegistry | FailingRegistry
 ) -> None:
-    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.DEBUG, logger="vulnwitness.adapter_discovery"):
         planner_setup = discover_planner_setup(PLANNER_SETTINGS, registry.list_adapters)
 
     logged_text = describe_logged_lines(caplog)

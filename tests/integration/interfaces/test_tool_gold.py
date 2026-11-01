@@ -5,13 +5,13 @@ from typing import Any
 import pytest
 import yaml
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.investigation import InvestigationState
-from cve_kgrag.domain.tool_contracts import ToolFailure
-from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName
 from tests.support.investigation import label_row
 from tests.support.paths import GOLD_DIR
 from tests.support.toolbox import build_test_toolbox
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.investigation import InvestigationState
+from vulnwitness.domain.tool_contracts import ToolFailure
+from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName
 
 GOLD_FILE = GOLD_DIR / "m5_tool_queries.yaml"
 GOLD_ROWS: list[dict[str, Any]] = yaml.safe_load(GOLD_FILE.read_text(encoding="utf-8"))["rows"]

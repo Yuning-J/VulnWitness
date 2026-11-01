@@ -378,7 +378,7 @@ and anchors. Signing responses was rejected: it adds key management for a
 property the service can already establish by lookup, and the catalog is the same
 lookup an evidence-by-ID read needs. The `get_evidence` knowledge tool serves the
 catalog's anchor under an evidence ID, which a consumer compares with the anchor it
-holds, and `cve-kgrag verify` (`verify_evidence_set`) runs the
+holds, and `vulnwitness verify` (`verify_evidence_set`) runs the
 validator, the audit and replay on a set handed back (ADR 0003 §10).
 
 ### 12. The trajectory is re-derived, not trusted
@@ -514,7 +514,7 @@ So the three checks split cleanly. The validator proves structure and catalog
 content, the audit proves the decisions follow from the recorded observations and
 model replies, and replay proves the recorded observations, and everything decided
 from them, follow from the sources' responses. Replay needs the sources, so it is
-not run at seal; `cve-kgrag verify` (`verify_evidence_set`) runs it on a set handed
+not run at seal; `vulnwitness verify` (`verify_evidence_set`) runs it on a set handed
 back.
 
 Re-derivation proves internal consistency, not authenticity. Whoever reseals a set
@@ -734,7 +734,7 @@ Rejected:
   anchors, CVE records and FiGHT techniques comes from re-checking them against
   the service's evidence catalog: the service does it at seal, a consumer for one
   anchor by comparing it with what the `get_evidence` knowledge tool serves, and
-  `cve-kgrag verify` for a set handed back.
+  `vulnwitness verify` for a set handed back.
 - A recorded trajectory that does not re-derive from its own calls, rounds,
   transitions and outcomes is rejected, so a holder cannot forge a call key,
   detach steps from the plan that ran them, or invent or erase a round without
@@ -742,7 +742,7 @@ Rejected:
   and is caught by the audit and by replay.
 - A step summary or answer rewritten over a real response hash passes the validator
   and the audit, and is caught only by replay, which needs the deployment's
-  sources. `cve-kgrag verify` replays a set handed back; such a rewrite goes
+  sources. `vulnwitness verify` replays a set handed back; such a rewrite goes
   unnoticed by whoever does not replay.
 - Replay reports a changed source as the changed stop, rounds and transitions a run
   gives now, not only as changed observations. It is bounded by the request's own

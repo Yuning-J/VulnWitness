@@ -10,32 +10,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.composition import build_knowledge_toolbox, build_serving_data_plane
-from cve_kgrag.domain.affectedness import AffectednessDetail, AffectednessFailure
-from cve_kgrag.domain.budget import MAX_WALL_TIME_SECONDS
-from cve_kgrag.domain.contract_model import ContractModel
-from cve_kgrag.domain.evidence import EvidenceAnchor, seal_evidence_anchor
-from cve_kgrag.domain.investigation import InvestigationRequest
-from cve_kgrag.domain.product_query import ProductQueryRequest
-from cve_kgrag.domain.search import RetrievalMatch, RetrievalOutcome, SearchRequest
-from cve_kgrag.domain.taxonomy import (
-    BACKEND_FAILURE_DETAILS,
-    AssertionKind,
-    BackendFailure,
-    BackendStatus,
-    KnowledgeScope,
-    SourceType,
-)
-from cve_kgrag.domain.tool_contracts import (
-    ConceptResolution,
-    EvidenceLookup,
-    InvalidField,
-    ToolFailure,
-    ToolFailureCode,
-)
-from cve_kgrag.interfaces.knowledge_toolbox import describe_knowledge_capabilities
-from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolAnswer, ToolLimits
 from tests.support.affectedness import build_affectedness_request
 from tests.support.builders import build_anchor
 from tests.support.clocks import ONE_SECOND_RUN_REAL_SECONDS, SteppingClock
@@ -74,6 +48,32 @@ from tests.support.toolbox import (
     require_answer,
     require_failure,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.composition import build_knowledge_toolbox, build_serving_data_plane
+from vulnwitness.domain.affectedness import AffectednessDetail, AffectednessFailure
+from vulnwitness.domain.budget import MAX_WALL_TIME_SECONDS
+from vulnwitness.domain.contract_model import ContractModel
+from vulnwitness.domain.evidence import EvidenceAnchor, seal_evidence_anchor
+from vulnwitness.domain.investigation import InvestigationRequest
+from vulnwitness.domain.product_query import ProductQueryRequest
+from vulnwitness.domain.search import RetrievalMatch, RetrievalOutcome, SearchRequest
+from vulnwitness.domain.taxonomy import (
+    BACKEND_FAILURE_DETAILS,
+    AssertionKind,
+    BackendFailure,
+    BackendStatus,
+    KnowledgeScope,
+    SourceType,
+)
+from vulnwitness.domain.tool_contracts import (
+    ConceptResolution,
+    EvidenceLookup,
+    InvalidField,
+    ToolFailure,
+    ToolFailureCode,
+)
+from vulnwitness.interfaces.knowledge_toolbox import describe_knowledge_capabilities
+from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName, ToolAnswer, ToolLimits
 
 # Each read advances this clock 0.03 s against a 0.05 s limit: a call that has not
 # returned by the runner's first wait is abandoned after about 0.02 real seconds.
@@ -83,7 +83,7 @@ AFFECTEDNESS_TIMEOUT_SECONDS = ToolLimits().affectedness_timeout_seconds
 # A call over the in-flight limit is answered without waiting for a slot: this bound is far
 # above the real time that answer takes, and any wait for a slot would exceed it.
 SERVER_BUSY_REAL_SECONDS = 0.2
-TOOLBOX_LOGGER = "cve_kgrag.interfaces.knowledge_toolbox"
+TOOLBOX_LOGGER = "vulnwitness.interfaces.knowledge_toolbox"
 # Adapter prose stating a verdict, which no answer may carry.
 VERDICT_TEXT = "CONFIRMED: demo_gateway is affected by CVE-9999-0003"
 # Well formed, but derived from no anchor's fields.

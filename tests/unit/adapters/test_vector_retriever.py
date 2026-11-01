@@ -4,10 +4,10 @@ import logging
 
 import pytest
 
-from cve_kgrag.adapters.semantic.vector_retriever import VectorSemanticRetriever
-from cve_kgrag.domain.taxonomy import BackendFailure, BackendStatus
 from tests.support.collect import list_cve_ids
 from tests.support.vector_store import FakeCollection, FixedEncoder
+from vulnwitness.adapters.semantic.vector_retriever import VectorSemanticRetriever
+from vulnwitness.domain.taxonomy import BackendFailure, BackendStatus
 
 # A store's own error text names its database; no log line may carry it.
 STORE_PATH = "/home/operator/private/chroma.sqlite3"

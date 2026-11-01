@@ -5,7 +5,7 @@ A model labels each implementation candidate of a deterministic evaluation run
 are scored against the gold sets. Nothing here changes a formal result: the script is not
 part of the package, adds no CLI command and does not run in CI.
 
-Usage, with every output under ~/data/cve-kgrag/runs/relevance/ (never committed):
+Usage, with every output under ~/data/vulnwitness/runs/relevance/ (never committed):
 
   .venv/bin/python scripts/experiments/relevance_assessor.py prepare \\
       --run-dir RUN_DIR --gold eval/gold/m7b_cases.yaml --sets eval/gold/m7b_sets.json \\
@@ -23,7 +23,7 @@ Keys are drawn after a seeded shuffle, so neither key nor order encodes the rank
 sentence appended to three descriptions of each case, after the cap.
 
 ``run`` makes one chat-completions call per case and repeat, without retry, through the
-planner adapter's transport. It reads CVE_KGRAG_PLANNER_BASE_URL, _MODEL_NAME,
+planner adapter's transport. It reads VULNWITNESS_PLANNER_BASE_URL, _MODEL_NAME,
 _REASONING_EFFORT and _API_KEY; the key is sent only in the request header and a reply
 that quotes it is refused unsaved.
 
@@ -51,24 +51,24 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from cve_kgrag.adapters.planner.chat_completion import ChatCompletion
-from cve_kgrag.adapters.planner.http_transport import OK_STATUS, HttpAnswer, post_json
-from cve_kgrag.adapters.planner.openai_compatible import CHAT_COMPLETIONS_ROUTE, quotes_key
-from cve_kgrag.adapters.planner.relevance_prompt import (
+from vulnwitness.adapters.planner.chat_completion import ChatCompletion
+from vulnwitness.adapters.planner.http_transport import OK_STATUS, HttpAnswer, post_json
+from vulnwitness.adapters.planner.openai_compatible import CHAT_COMPLETIONS_ROUTE, quotes_key
+from vulnwitness.adapters.planner.relevance_prompt import (
     ASSESSOR_INSTRUCTIONS,
 )
-from cve_kgrag.domain.cve import CveRecord
-from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
-from cve_kgrag.domain.planning import CveExactLookupCall
-from cve_kgrag.domain.relevance import DESCRIPTION_CAP_CHARS
-from cve_kgrag.domain.relevance_input import list_product_names, read_english_description
-from cve_kgrag.domain.search import MAX_RESULTS_PER_CALL
-from cve_kgrag.evaluation.gold_cases import GoldFileError
-from cve_kgrag.evaluation.gold_formats import read_gold_document
-from cve_kgrag.evaluation.gold_sets import RecordedSetLists, RecordedSetsFile, read_recorded_sets
-from cve_kgrag.evaluation.labelled_cases import GoldFile, LabelledCase, read_gold_file
-from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport
-from cve_kgrag.settings import (
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.investigation import KnowledgeEvidenceSet
+from vulnwitness.domain.planning import CveExactLookupCall
+from vulnwitness.domain.relevance import DESCRIPTION_CAP_CHARS
+from vulnwitness.domain.relevance_input import list_product_names, read_english_description
+from vulnwitness.domain.search import MAX_RESULTS_PER_CALL
+from vulnwitness.evaluation.gold_cases import GoldFileError
+from vulnwitness.evaluation.gold_formats import read_gold_document
+from vulnwitness.evaluation.gold_sets import RecordedSetLists, RecordedSetsFile, read_recorded_sets
+from vulnwitness.evaluation.labelled_cases import GoldFile, LabelledCase, read_gold_file
+from vulnwitness.evaluation.planner_report import PlannerEvaluationReport
+from vulnwitness.settings import (
     PLANNER_VARIABLES,
     ModelPlannerSettings,
     SettingsError,
@@ -88,7 +88,7 @@ CLASSES = (*GOLD_CLASSES, UNLABELLED)
 MIN_PAIRS = 40
 CALL_TIMEOUT_SECONDS = 120.0
 RATE_DECIMALS = 4
-USER_AGENT = "cve-kgrag-relevance-experiment"
+USER_AGENT = "vulnwitness-relevance-experiment"
 # One sentence per variant, appended to one candidate each in the injected copy. They are
 # ASCII without quotes, so the JSON message holds them as written.
 INJECTED_SENTENCES = {
@@ -374,7 +374,7 @@ def load_model_settings() -> tuple[ModelPlannerSettings, str]:
     except SettingsError as error:
         raise SystemExit(str(error)) from None
     if settings.api_key is None:
-        raise SystemExit("CVE_KGRAG_PLANNER_API_KEY is not set")
+        raise SystemExit("VULNWITNESS_PLANNER_API_KEY is not set")
     return settings, settings.api_key.get_secret_value()
 
 

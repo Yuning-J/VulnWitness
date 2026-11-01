@@ -2,9 +2,9 @@
 
 from typing import Any
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.cve import VersionRange
 from tests.support.builders import build_bundle_with, build_versioned_product
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.cve import VersionRange
 
 PRODUCT = "oai-cn5g-amf"
 VENDOR = "test_core"

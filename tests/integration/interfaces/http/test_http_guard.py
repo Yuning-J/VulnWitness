@@ -9,19 +9,6 @@ import anyio
 import pytest
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from cve_kgrag.domain.http_rejection import (
-    HTTP_REJECTION_MESSAGES,
-    HttpRejection,
-    HttpRejectionCode,
-)
-from cve_kgrag.interfaces.http.guard import (
-    REJECTION_STATUSES,
-    SECURITY_HEADERS,
-    GuardedRoute,
-    HttpGuard,
-    read_path_segment,
-)
-from cve_kgrag.interfaces.http.status_routes import ReadinessRoute, answer_health
 from tests.support.asgi import (
     GENEROUS_WAIT_SECONDS,
     HTTP_HOST,
@@ -43,6 +30,19 @@ from tests.support.asgi import (
     running_lifespan,
     send_request,
 )
+from vulnwitness.domain.http_rejection import (
+    HTTP_REJECTION_MESSAGES,
+    HttpRejection,
+    HttpRejectionCode,
+)
+from vulnwitness.interfaces.http.guard import (
+    REJECTION_STATUSES,
+    SECURITY_HEADERS,
+    GuardedRoute,
+    HttpGuard,
+    read_path_segment,
+)
+from vulnwitness.interfaces.http.status_routes import ReadinessRoute, answer_health
 
 pytestmark = pytest.mark.anyio
 

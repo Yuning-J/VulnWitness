@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from cve_kgrag.domain.relevance import RelevanceLabel
-from cve_kgrag.domain.relevance_reply import parse_relevance_reply
-from cve_kgrag.domain.relevance_terms import is_question_component, list_term_sources
 from tests.support.builders import build_cve_record, build_versioned_product
 from tests.support.planners import build_text_reply
+from vulnwitness.domain.relevance import RelevanceLabel
+from vulnwitness.domain.relevance_reply import parse_relevance_reply
+from vulnwitness.domain.relevance_terms import is_question_component, list_term_sources
 
 
 @pytest.mark.parametrize(

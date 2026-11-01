@@ -1,4 +1,4 @@
-"""``cve-kgrag eval planner`` on a gold file of labelled cases: the gold file's top-level
+"""``vulnwitness eval planner`` on a gold file of labelled cases: the gold file's top-level
 keys choose the evaluation, ``--sets`` binds the derived sets to it, every stated and
 loaded digest is checked before any case runs, and the report adds the dataset and the
 sufficiency section over the active store and the operator FiGHT snapshot."""
@@ -10,15 +10,15 @@ from typing import Any
 import pytest
 import yaml
 
-from cve_kgrag.adapters.store.corpus_store import verify_corpus_store
-from cve_kgrag.cli import main
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.investigation import InvestigationRequest
-from cve_kgrag.evaluation.gold_cases import compute_case_sha256
 from tests.support.corpus_stores import import_store
 from tests.support.evaluation import SMALL_GOLD_ROWS, write_gold_file
 from tests.support.fight_excerpt import EXCERPT_BYTES, EXCERPT_SHA256
 from tests.support.gold_files import UNKNOWN_CORPUS_SHA256, build_case_row, encode_gold_file
+from vulnwitness.adapters.store.corpus_store import verify_corpus_store
+from vulnwitness.cli import main
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.investigation import InvestigationRequest
+from vulnwitness.evaluation.gold_cases import compute_case_sha256
 
 FULL_FIGHT_SHA256 = "59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8"
 PROTOCOL_CASE = build_case_row(
@@ -54,11 +54,11 @@ def settings(tmp_path: Path, store_root: Path, request: pytest.FixtureRequest) -
     snapshot_path = tmp_path / "fight.yaml"
     snapshot_path.write_bytes(EXCERPT_BYTES)
     environment = {
-        "CVE_KGRAG_STORE_ROOT": str(store_root),
-        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
+        "VULNWITNESS_STORE_ROOT": str(store_root),
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
     }
     if request.param:
-        environment["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
+        environment["VULNWITNESS_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
     assert main(["store", "activate", "first"], environment) == 0
     return environment
 
@@ -196,10 +196,10 @@ def test_gold_file_and_sets_of_no_single_format_are_usage_errors(
 @pytest.mark.parametrize(
     ("removed_variables", "expected_variable"),
     [
-        (("CVE_KGRAG_STORE_ROOT",), "CVE_KGRAG_STORE_ROOT"),
+        (("VULNWITNESS_STORE_ROOT",), "VULNWITNESS_STORE_ROOT"),
         (
-            ("CVE_KGRAG_FIGHT_SNAPSHOT_PATH", "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"),
-            "CVE_KGRAG_FIGHT_SNAPSHOT_PATH",
+            ("VULNWITNESS_FIGHT_SNAPSHOT_PATH", "VULNWITNESS_FIGHT_SNAPSHOT_SHA256"),
+            "VULNWITNESS_FIGHT_SNAPSHOT_PATH",
         ),
     ],
     ids=["no_store_root", "no_fight_snapshot"],

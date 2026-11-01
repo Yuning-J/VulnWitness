@@ -2,9 +2,9 @@
 
 import pytest
 
-from cve_kgrag.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
-from cve_kgrag.domain.validation import EvidenceValidationError
 from tests.support.builders import build_anchor, build_cve_record, build_threat_context_item
+from vulnwitness.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
+from vulnwitness.domain.validation import EvidenceValidationError
 
 
 def test_catalog_returns_the_entry_held_under_an_id_and_none_otherwise() -> None:

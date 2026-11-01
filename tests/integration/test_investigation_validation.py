@@ -7,71 +7,6 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.adapters.fight.pinned_yaml import UnavailableFightSource
-from cve_kgrag.adapters.fixture.synthetic_fixture import (
-    FixtureBundle,
-    default_fixture_dir,
-    load_fixture_bundle,
-)
-from cve_kgrag.composition import (
-    build_evidence_catalog,
-    build_investigation_service,
-    build_serving_data_plane,
-    load_packaged_fight_source,
-)
-from cve_kgrag.domain.budget import BudgetBreach
-from cve_kgrag.domain.evidence import Claim, EvidenceAnchor, derive_evidence_id
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.investigation import (
-    ApplicabilityBasis,
-    ApplicabilityStatus,
-    CveBackendRequest,
-    DecisionBasis,
-    ExcludedInvestigationCandidate,
-    FightBackendRequest,
-    FightBlock,
-    FightBlockReason,
-    InvestigationState,
-    InvestigationWarning,
-    InvestigationWarningCode,
-    KnowledgeEvidenceSet,
-    NeedOutcome,
-    PlannerOutcome,
-    ProductApplicability,
-    RoundRecord,
-    StateTransition,
-    StepAdmission,
-    StepReason,
-    StopReason,
-    format_threat_context_statement,
-)
-from cve_kgrag.domain.investigation_validation import (
-    sends_searchable_text,
-    validate_knowledge_evidence_set,
-)
-from cve_kgrag.domain.planning import (
-    PlannerKind,
-    PlanRejection,
-    PlanRejectionCode,
-    ToolCall,
-    TopicContextCall,
-    compute_call_key,
-    compute_model_reply_sha256,
-)
-from cve_kgrag.domain.search import SearchWarning, SearchWarningCode
-from cve_kgrag.domain.taxonomy import ResultStatus, SourceType
-from cve_kgrag.domain.threat_context import (
-    KnownFightSnapshot,
-    ObservationStatus,
-    ThreatContextItem,
-)
-from cve_kgrag.domain.topic_context import (
-    KnowledgeSource,
-    QueryScope,
-    TopicContextWarning,
-    TopicContextWarningCode,
-)
-from cve_kgrag.domain.validation import EvidenceValidationError
 from tests.support.builders import build_bundle_with
 from tests.support.clocks import LATE_START_SECONDS, LateStartClock, SteppingClock, read_fixed_clock
 from tests.support.fakes import InventingRetriever
@@ -115,6 +50,71 @@ from tests.support.planners import (
     build_plan_reply,
 )
 from tests.support.services import build_fixture_service
+from vulnwitness.adapters.fight.pinned_yaml import UnavailableFightSource
+from vulnwitness.adapters.fixture.synthetic_fixture import (
+    FixtureBundle,
+    default_fixture_dir,
+    load_fixture_bundle,
+)
+from vulnwitness.composition import (
+    build_evidence_catalog,
+    build_investigation_service,
+    build_serving_data_plane,
+    load_packaged_fight_source,
+)
+from vulnwitness.domain.budget import BudgetBreach
+from vulnwitness.domain.evidence import Claim, EvidenceAnchor, derive_evidence_id
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.investigation import (
+    ApplicabilityBasis,
+    ApplicabilityStatus,
+    CveBackendRequest,
+    DecisionBasis,
+    ExcludedInvestigationCandidate,
+    FightBackendRequest,
+    FightBlock,
+    FightBlockReason,
+    InvestigationState,
+    InvestigationWarning,
+    InvestigationWarningCode,
+    KnowledgeEvidenceSet,
+    NeedOutcome,
+    PlannerOutcome,
+    ProductApplicability,
+    RoundRecord,
+    StateTransition,
+    StepAdmission,
+    StepReason,
+    StopReason,
+    format_threat_context_statement,
+)
+from vulnwitness.domain.investigation_validation import (
+    sends_searchable_text,
+    validate_knowledge_evidence_set,
+)
+from vulnwitness.domain.planning import (
+    PlannerKind,
+    PlanRejection,
+    PlanRejectionCode,
+    ToolCall,
+    TopicContextCall,
+    compute_call_key,
+    compute_model_reply_sha256,
+)
+from vulnwitness.domain.search import SearchWarning, SearchWarningCode
+from vulnwitness.domain.taxonomy import ResultStatus, SourceType
+from vulnwitness.domain.threat_context import (
+    KnownFightSnapshot,
+    ObservationStatus,
+    ThreatContextItem,
+)
+from vulnwitness.domain.topic_context import (
+    KnowledgeSource,
+    QueryScope,
+    TopicContextWarning,
+    TopicContextWarningCode,
+)
+from vulnwitness.domain.validation import EvidenceValidationError
 
 Forgery = Callable[[KnowledgeEvidenceSet, FixtureBundle], KnowledgeEvidenceSet]
 TrajectoryRun = Callable[[FixtureBundle], KnowledgeEvidenceSet]

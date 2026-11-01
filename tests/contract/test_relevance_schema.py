@@ -4,9 +4,9 @@ import json
 
 from jsonschema import Draft202012Validator
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
 from tests.support.relevance import build_relevance_bundle, run_relevance_loop
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
 
 
 def test_relevance_loop_evidence_set_satisfies_the_published_schema(

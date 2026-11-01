@@ -219,7 +219,7 @@
       "type": "string"
     },
     "importer_version": {
-      "description": "The cve-kgrag distribution version.",
+      "description": "The vulnwitness distribution version.",
       "maxLength": 64,
       "minLength": 1,
       "title": "Importer Version",

@@ -3,12 +3,12 @@
 import sys
 from pathlib import Path
 
-from cve_kgrag.cli import load_mcp_toolbox
-from cve_kgrag.domain.served_dataset import ServedDatasetKind
-from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
-from cve_kgrag.interfaces.mcp.stdio_runner import serve_stdio
-from cve_kgrag.settings import FightSnapshotSettings, ServiceSettings
 from tests.support.fight_excerpt import EXCERPT_SHA256
+from vulnwitness.cli import load_mcp_toolbox
+from vulnwitness.domain.served_dataset import ServedDatasetKind
+from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.mcp.stdio_runner import serve_stdio
+from vulnwitness.settings import FightSnapshotSettings, ServiceSettings
 
 
 class ControlledToolboxLoader:

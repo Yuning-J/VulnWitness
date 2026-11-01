@@ -108,7 +108,7 @@ Neither limit failures nor recording failures publish the combined array or expo
 `--max-pages` also preserves completed page calls. Output options are validated before
 loading the corpus or creating a session.
 
-`cve-kgrag mcp --session DIR` and `cve-kgrag mcp --http --session DIR` record all dispatched
+`vulnwitness mcp --session DIR` and `vulnwitness mcp --http --session DIR` record all dispatched
 tool calls, including unknown tools, invalid arguments, loading refusals and tool failures.
 Recorded MCP failures use typed tool errors with both JSON text and structured content;
 unknown recorded tools produce `invalid_arguments`. Invalid JSON-RPC frames that cannot be
@@ -149,7 +149,7 @@ regular-file and store-root identity helpers enforce those boundaries.
 
 ## Checking and trust
 
-`cve-kgrag session check DIR` emits a typed JSON check report;
+`vulnwitness session check DIR` emits a typed JSON check report;
 `--format text` emits a readable report. Exit 0 means all checks passed; exit 1 means
 violations, each with its file or field location.
 

@@ -5,16 +5,16 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.nvd.normalizer import (
+from vulnwitness.adapters.nvd.normalizer import (
     KevSource,
     NvdNormalizationError,
     NvdNormalizer,
     RejectedCveError,
     SourceSnapshot,
 )
-from cve_kgrag.composition import build_nvd_normalizer, load_packaged_source_registry
-from cve_kgrag.domain.normalization import NormalizationFailureCode
-from cve_kgrag.domain.taxonomy import SourceType, TrustLevel
+from vulnwitness.composition import build_nvd_normalizer, load_packaged_source_registry
+from vulnwitness.domain.normalization import NormalizationFailureCode
+from vulnwitness.domain.taxonomy import SourceType, TrustLevel
 
 
 def build_normalizer() -> NvdNormalizer:

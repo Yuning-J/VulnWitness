@@ -7,9 +7,10 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.evidence import EVIDENCE_ID_PATTERN, EvidenceAnchor, derive_evidence_id
-from cve_kgrag.domain.search import RetrievalMatch, RetrievalOutcome
-from cve_kgrag.domain.taxonomy import (
+from tests.support.builders import build_anchor, build_cve_record
+from vulnwitness.domain.evidence import EVIDENCE_ID_PATTERN, EvidenceAnchor, derive_evidence_id
+from vulnwitness.domain.search import RetrievalMatch, RetrievalOutcome
+from vulnwitness.domain.taxonomy import (
     AssertionKind,
     BackendFailure,
     BackendStatus,
@@ -17,7 +18,6 @@ from cve_kgrag.domain.taxonomy import (
     SourceType,
     TrustLevel,
 )
-from tests.support.builders import build_anchor, build_cve_record
 
 
 def test_inferred_anchor_without_inference_method_is_rejected() -> None:

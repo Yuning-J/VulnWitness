@@ -7,10 +7,10 @@ from pathlib import Path
 
 from pydantic import TypeAdapter, ValidationError
 
-from cve_kgrag.adapters.store.store_root import StoreRootUnusableError, check_store_root
-from cve_kgrag.cli import main as run_command
-from cve_kgrag.domain.store_status import StoreName
-from cve_kgrag.settings import SettingsError, load_settings
+from vulnwitness.adapters.store.store_root import StoreRootUnusableError, check_store_root
+from vulnwitness.cli import main as run_command
+from vulnwitness.domain.store_status import StoreName
+from vulnwitness.settings import SettingsError, load_settings
 
 
 def main() -> int:
@@ -22,7 +22,7 @@ def main() -> int:
     )
     inputs.add_argument("--inputs", type=Path, help="reuse an existing local input manifest")
     parser.add_argument(
-        "--store", required=True, help="fresh store name under CVE_KGRAG_STORE_ROOT"
+        "--store", required=True, help="fresh store name under VULNWITNESS_STORE_ROOT"
     )
     parser.add_argument("--activate", action="store_true", help="activate the imported store")
     arguments = parser.parse_args()
@@ -33,7 +33,7 @@ def main() -> int:
     except (SettingsError, ValidationError) as error:
         parser.error(str(error))
     if settings.store_root is None:
-        parser.error("CVE_KGRAG_STORE_ROOT is required")
+        parser.error("VULNWITNESS_STORE_ROOT is required")
     try:
         check_store_root(settings.store_root)
     except StoreRootUnusableError:
@@ -58,13 +58,15 @@ def main() -> int:
     if import_exit != 0:
         return import_exit
     if not arguments.activate:
-        print(f"Imported {store_name}; activation requires: cve-kgrag store activate {store_name}")
+        print(
+            f"Imported {store_name}; activation requires: vulnwitness store activate {store_name}"
+        )
         return 0
     print(f"Verifying and activating store {store_name}.", flush=True)
     activation_exit = run_command(["store", "activate", store_name], environment=environment)
     if activation_exit == 0:
         print(f"Activated {store_name}. Restart API and MCP services to serve it.")
-        print("To reverse activation: cve-kgrag store rollback; then restart services.")
+        print("To reverse activation: vulnwitness store rollback; then restart services.")
     return activation_exit
 
 

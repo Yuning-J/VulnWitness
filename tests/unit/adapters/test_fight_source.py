@@ -5,18 +5,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fight.pinned_yaml import (
-    FightSnapshotError,
-    PinnedFightYamlSource,
-    UnavailableFightSource,
-)
-from cve_kgrag.adapters.fight.snapshot_catalog import (
-    default_fight_snapshot_catalog_file,
-    load_fight_snapshot_catalog,
-)
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.taxonomy import BackendStatus, KnowledgeScope, SourceType
-from cve_kgrag.domain.threat_context import ObservationStatus, SnapshotCoverage
 from tests.support.builders import (
     FIGHT_TEST_COMMIT,
     build_catalog,
@@ -26,6 +14,18 @@ from tests.support.builders import (
 )
 from tests.support.clocks import FIXED_STARTED_AT, read_fixed_clock
 from tests.support.collect import list_technique_ids
+from vulnwitness.adapters.fight.pinned_yaml import (
+    FightSnapshotError,
+    PinnedFightYamlSource,
+    UnavailableFightSource,
+)
+from vulnwitness.adapters.fight.snapshot_catalog import (
+    default_fight_snapshot_catalog_file,
+    load_fight_snapshot_catalog,
+)
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.taxonomy import BackendStatus, KnowledgeScope, SourceType
+from vulnwitness.domain.threat_context import ObservationStatus, SnapshotCoverage
 
 
 def load_snapshot(snapshot: bytes, **catalog_entry: Any) -> PinnedFightYamlSource:

@@ -1,10 +1,10 @@
 """Every provenance subject the brief names is registered, and unverified terms stay uncommitted."""
 
-from cve_kgrag.adapters.provenance.source_registry import (
+from vulnwitness.adapters.provenance.source_registry import (
     default_source_registry_file,
     load_source_registry,
 )
-from cve_kgrag.domain.provenance import LocalStoragePolicy, Redistribution
+from vulnwitness.domain.provenance import LocalStoragePolicy, Redistribution
 
 REQUIRED_SOURCES = {
     "nvd",

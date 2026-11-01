@@ -7,15 +7,6 @@ from typing import Any
 
 import yaml
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.serving_data_plane import ServingDataPlane
-from cve_kgrag.domain.investigation import KnowledgeEvidenceSet
-from cve_kgrag.domain.planning import ModelReply, PlanningInput
-from cve_kgrag.domain.search import SCHEMA_VERSION
-from cve_kgrag.domain.topic import ReviewStatus
-from cve_kgrag.evaluation.case_runner import build_fixture_data_planes
-from cve_kgrag.evaluation.gold_cases import FightChoice
-from cve_kgrag.evaluation.planner_report import DatasetIdentity, EvaluationIdentity, FightProfile
 from tests.support.clocks import SteppingClock
 from tests.support.investigation import (
     build_investigation_request,
@@ -23,6 +14,15 @@ from tests.support.investigation import (
     with_topic_review,
 )
 from tests.support.planners import UNAVAILABLE_REPLY, ScriptedModelPort
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.serving_data_plane import ServingDataPlane
+from vulnwitness.domain.investigation import KnowledgeEvidenceSet
+from vulnwitness.domain.planning import ModelReply, PlanningInput
+from vulnwitness.domain.search import SCHEMA_VERSION
+from vulnwitness.domain.topic import ReviewStatus
+from vulnwitness.evaluation.case_runner import build_fixture_data_planes
+from vulnwitness.evaluation.gold_cases import FightChoice
+from vulnwitness.evaluation.planner_report import DatasetIdentity, EvaluationIdentity, FightProfile
 
 # The directory, under a test's tmp_path, that evaluation results go to.
 EVAL_RESULTS = "eval-results"

@@ -3,14 +3,14 @@ never establishes applicability."""
 
 import pytest
 
-from cve_kgrag.application.affectedness import check_affectedness
-from cve_kgrag.domain.affectedness import (
+from tests.support.affectedness import build_affectedness_request
+from tests.support.fakes import InMemoryTrustifyPort, MisansweringTrustifyPort
+from vulnwitness.application.affectedness import check_affectedness
+from vulnwitness.domain.affectedness import (
     AffectednessDetail,
     AffectednessFailure,
     ApplicabilityStatus,
 )
-from tests.support.affectedness import build_affectedness_request
-from tests.support.fakes import InMemoryTrustifyPort, MisansweringTrustifyPort
 
 FAILURE_DETAILS = [
     (AffectednessFailure.BLOCKED_UNVERIFIED, AffectednessDetail.BLOCKED_UNVERIFIED),

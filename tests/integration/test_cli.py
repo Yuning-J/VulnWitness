@@ -16,84 +16,6 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import SecretStr, TypeAdapter
 
-from cve_kgrag.adapter_discovery import (
-    API_EXTRA,
-    MCP_EXTRA,
-    MIGRATION_EXTRA,
-    InterfaceUnavailable,
-)
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.migration.input_files import PayloadStream
-from cve_kgrag.adapters.migration.parser_types import EntryHandler, FeedHeader, MigrationParsers
-from cve_kgrag.application.evidence_set_verification import MAX_EVIDENCE_SET_BYTES
-from cve_kgrag.application.investigation_policy import describe_deterministic_planner
-from cve_kgrag.cli import (
-    OVERSIZED_EVIDENCE_SET_MESSAGE,
-    PACKAGE_DIR,
-    build_parser,
-    main,
-    print_investigation,
-    print_verification,
-    run_api_server,
-    run_evidence_lookup,
-    run_legacy_migration_command,
-    run_mcp_http_server,
-    run_mcp_server,
-)
-from cve_kgrag.composition import (
-    build_investigation_deployment,
-    build_search_service,
-    build_serving_data_plane,
-    build_topic_context_service,
-)
-from cve_kgrag.domain.affectedness import AffectednessCheck, ApplicabilityStatus
-from cve_kgrag.domain.budget import InvestigationBudget
-from cve_kgrag.domain.evidence import seal_evidence_anchor
-from cve_kgrag.domain.evidence_set_verification_report import (
-    VerificationReport,
-    VerificationVerdict,
-)
-from cve_kgrag.domain.investigation import (
-    KnowledgeEvidenceSet,
-    PlannerOutcome,
-    SourceCapability,
-    SourceCapabilityState,
-    describe_planner_capability,
-)
-from cve_kgrag.domain.migration_report import (
-    LegacyFileKind,
-    MigrationFailureCode,
-    MigrationOutcome,
-    MigrationReport,
-)
-from cve_kgrag.domain.planning import (
-    ModelPlannerIdentity,
-    ModelPlannerUnavailableDetail,
-    ModelReplyFailureDetail,
-)
-from cve_kgrag.domain.search import (
-    SCHEMA_VERSION,
-    ChannelOutcome,
-    SearchFilters,
-    SearchRequest,
-    SearchResponse,
-    SemanticUnavailableDetail,
-)
-from cve_kgrag.domain.served_dataset import ServedDatasetKind
-from cve_kgrag.domain.taxonomy import (
-    AssertionKind,
-    BackendFailureDetail,
-    BackendStatus,
-    RetrievalChannel,
-)
-from cve_kgrag.domain.tool_contracts import ConceptResolution, EvidenceLookup, KnowledgeCapabilities
-from cve_kgrag.domain.topic_context import TopicContextRequest, TopicContextResponse
-from cve_kgrag.evaluation.package_digest import fingerprint_package
-from cve_kgrag.evaluation.planner_report import PlannerEvaluationReport
-from cve_kgrag.evaluation.planner_runner import REPORT_FILE_NAME
-from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
-from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName
-from cve_kgrag.settings import ServiceSettings, load_settings
 from tests.support.evaluation import SMALL_GOLD_ROWS, build_gold_row, write_gold_file
 from tests.support.fake_chat_server import (
     FakeChatServer,
@@ -114,18 +36,100 @@ from tests.support.legacy_inputs import build_declaration, write_inputs_manifest
 from tests.support.paths import REPOSITORY_ROOT, REPOSITORY_SCHEMA_DIR
 from tests.support.secrets import assert_secret_absent
 from tests.support.toolbox import FIXTURE_EVIDENCE_ID, UNKNOWN_EVIDENCE_ID, require_answer
+from vulnwitness.adapter_discovery import (
+    API_EXTRA,
+    MCP_EXTRA,
+    MIGRATION_EXTRA,
+    InterfaceUnavailable,
+)
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.migration.input_files import PayloadStream
+from vulnwitness.adapters.migration.parser_types import EntryHandler, FeedHeader, MigrationParsers
+from vulnwitness.application.evidence_set_verification import MAX_EVIDENCE_SET_BYTES
+from vulnwitness.application.investigation_policy import describe_deterministic_planner
+from vulnwitness.cli import (
+    OVERSIZED_EVIDENCE_SET_MESSAGE,
+    PACKAGE_DIR,
+    build_parser,
+    main,
+    print_investigation,
+    print_verification,
+    run_api_server,
+    run_evidence_lookup,
+    run_legacy_migration_command,
+    run_mcp_http_server,
+    run_mcp_server,
+)
+from vulnwitness.composition import (
+    build_investigation_deployment,
+    build_search_service,
+    build_serving_data_plane,
+    build_topic_context_service,
+)
+from vulnwitness.domain.affectedness import AffectednessCheck, ApplicabilityStatus
+from vulnwitness.domain.budget import InvestigationBudget
+from vulnwitness.domain.evidence import seal_evidence_anchor
+from vulnwitness.domain.evidence_set_verification_report import (
+    VerificationReport,
+    VerificationVerdict,
+)
+from vulnwitness.domain.investigation import (
+    KnowledgeEvidenceSet,
+    PlannerOutcome,
+    SourceCapability,
+    SourceCapabilityState,
+    describe_planner_capability,
+)
+from vulnwitness.domain.migration_report import (
+    LegacyFileKind,
+    MigrationFailureCode,
+    MigrationOutcome,
+    MigrationReport,
+)
+from vulnwitness.domain.planning import (
+    ModelPlannerIdentity,
+    ModelPlannerUnavailableDetail,
+    ModelReplyFailureDetail,
+)
+from vulnwitness.domain.search import (
+    SCHEMA_VERSION,
+    ChannelOutcome,
+    SearchFilters,
+    SearchRequest,
+    SearchResponse,
+    SemanticUnavailableDetail,
+)
+from vulnwitness.domain.served_dataset import ServedDatasetKind
+from vulnwitness.domain.taxonomy import (
+    AssertionKind,
+    BackendFailureDetail,
+    BackendStatus,
+    RetrievalChannel,
+)
+from vulnwitness.domain.tool_contracts import (
+    ConceptResolution,
+    EvidenceLookup,
+    KnowledgeCapabilities,
+)
+from vulnwitness.domain.topic_context import TopicContextRequest, TopicContextResponse
+from vulnwitness.evaluation.package_digest import fingerprint_package
+from vulnwitness.evaluation.planner_report import PlannerEvaluationReport
+from vulnwitness.evaluation.planner_runner import REPORT_FILE_NAME
+from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName
+from vulnwitness.settings import ServiceSettings, load_settings
 
 FORGED_SHA256 = "f" * 64
 NO_SETTINGS: Mapping[str, str] = {}
 CLI_PLANNER_KEY = "sk-test-cli-planner-key-0123456789"
-INSTALLED_PLANNER_ADAPTER = "cve_kgrag.adapters.planner.openai_compatible:build_model_port"
+INSTALLED_PLANNER_ADAPTER = "vulnwitness.adapters.planner.openai_compatible:build_model_port"
 SEARCH_5G_AKA = {"tool": "cve_search", "query": "5g aka"}
 # A model planner enabled without its key: investigations plan deterministically and
 # report it unavailable. No adapter is reached, installed or not.
 PLANNER_WITHOUT_A_KEY = {
-    "CVE_KGRAG_PLANNER_ENABLED": "true",
-    "CVE_KGRAG_PLANNER_BASE_URL": "https://planner.invalid/v1",
-    "CVE_KGRAG_PLANNER_MODEL_NAME": "example-chat",
+    "VULNWITNESS_PLANNER_ENABLED": "true",
+    "VULNWITNESS_PLANNER_BASE_URL": "https://planner.invalid/v1",
+    "VULNWITNESS_PLANNER_MODEL_NAME": "example-chat",
 }
 
 
@@ -137,7 +141,7 @@ HTTP_LISTENER: dict[str, Any] = {"host": "::1", "port": 9001, "token": SecretStr
 
 
 def run_cli(arguments: list[str], environment: Mapping[str, str] = NO_SETTINGS) -> int:
-    """``cve-kgrag`` with ``arguments`` and the settings ``environment`` holds, never the
+    """``vulnwitness`` with ``arguments`` and the settings ``environment`` holds, never the
     environment the tests run in."""
     return main(arguments, environment)
 
@@ -350,7 +354,7 @@ def test_investigate_with_invalid_arguments_is_a_usage_error(arguments: list[str
 
 @pytest.fixture
 def sealed_set(capsys: pytest.CaptureFixture[str]) -> KnowledgeEvidenceSet:
-    """The set ``cve-kgrag investigate`` prints for a protocol-context question."""
+    """The set ``vulnwitness investigate`` prints for a protocol-context question."""
     run_cli(["investigate", "5gaka", "--scope", "protocol_context_only"])
     return KnowledgeEvidenceSet.model_validate_json(capsys.readouterr().out)
 
@@ -367,7 +371,7 @@ def verify_file(
     capsys: pytest.CaptureFixture[str],
     environment: Mapping[str, str] = NO_SETTINGS,
 ) -> tuple[int, dict[str, Any]]:
-    """``cve-kgrag verify`` on a file holding ``evidence_set_bytes`` under ``environment``:
+    """``vulnwitness verify`` on a file holding ``evidence_set_bytes`` under ``environment``:
     its exit code and the report it prints."""
     exit_code = run_cli(
         ["verify", str(write_evidence_set_file(directory, evidence_set_bytes))], environment
@@ -519,7 +523,7 @@ def test_mcp_with_an_unusable_runner_exits_one_naming_the_reason(
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.out == ""
-    assert captured.err == f"cve-kgrag mcp cannot start: {detail}\n"
+    assert captured.err == f"vulnwitness mcp cannot start: {detail}\n"
 
 
 def test_mcp_serves_the_packaged_fixture_toolbox_and_exits_zero_when_the_runner_returns(
@@ -547,7 +551,7 @@ def test_mcp_http_without_a_token_is_a_usage_error_naming_the_variable(
     captured = capsys.readouterr()
     assert raised.value.code == 2
     assert captured.out == ""
-    assert "invalid settings: CVE_KGRAG_HTTP_TOKEN: required by mcp --http" in captured.err
+    assert "invalid settings: VULNWITNESS_HTTP_TOKEN: required by mcp --http" in captured.err
 
 
 def test_mcp_http_with_an_unusable_runner_exits_one_naming_the_reason(
@@ -560,7 +564,7 @@ def test_mcp_http_with_an_unusable_runner_exits_one_naming_the_reason(
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.out == ""
-    assert captured.err == f"cve-kgrag mcp --http cannot start: {MCP_EXTRA.missing_detail}\n"
+    assert captured.err == f"vulnwitness mcp --http cannot start: {MCP_EXTRA.missing_detail}\n"
 
 
 def test_mcp_http_serves_the_packaged_fixture_on_the_listener_it_is_given(
@@ -587,7 +591,7 @@ def test_api_without_a_token_is_a_usage_error_naming_the_variable(
 
     captured = capsys.readouterr()
     assert raised.value.code == 2
-    assert "invalid settings: CVE_KGRAG_HTTP_TOKEN: required by api" in captured.err
+    assert "invalid settings: VULNWITNESS_HTTP_TOKEN: required by api" in captured.err
 
 
 def test_api_with_an_unusable_runner_exits_one_naming_the_reason(
@@ -600,7 +604,7 @@ def test_api_with_an_unusable_runner_exits_one_naming_the_reason(
     captured = capsys.readouterr()
     assert exit_code == 1
     assert captured.out == ""
-    assert captured.err == f"cve-kgrag api cannot start: {API_EXTRA.missing_detail}\n"
+    assert captured.err == f"vulnwitness api cannot start: {API_EXTRA.missing_detail}\n"
 
 
 def test_api_serves_the_packaged_fixture_and_verifies_as_the_verify_command_does(
@@ -673,14 +677,14 @@ def test_invalid_settings_are_a_usage_error_naming_the_variable_not_its_value(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     credential_url = "https://planner-user:hunter2-password@planner.invalid/v1"
-    environment = {**PLANNER_WITHOUT_A_KEY, "CVE_KGRAG_PLANNER_BASE_URL": credential_url}
+    environment = {**PLANNER_WITHOUT_A_KEY, "VULNWITNESS_PLANNER_BASE_URL": credential_url}
 
     with pytest.raises(SystemExit) as raised:
         run_cli(["demo"], environment)
 
     error_output = capsys.readouterr().err
     assert raised.value.code == 2
-    assert "CVE_KGRAG_PLANNER_BASE_URL" in error_output
+    assert "VULNWITNESS_PLANNER_BASE_URL" in error_output
     assert "hunter2-password" not in error_output
 
 
@@ -736,22 +740,22 @@ def test_main_without_an_environment_reads_the_process_environment(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The entry point is where settings are read, so the process environment is its input."""
-    monkeypatch.setenv("CVE_KGRAG_PLANNER_ENABLED", "maybe")
+    monkeypatch.setenv("VULNWITNESS_PLANNER_ENABLED", "maybe")
 
     with pytest.raises(SystemExit) as raised:
         main(["demo"])
 
     assert raised.value.code == 2
-    assert "CVE_KGRAG_PLANNER_ENABLED" in capsys.readouterr().err
+    assert "VULNWITNESS_PLANNER_ENABLED" in capsys.readouterr().err
 
 
 def build_planner_environment(server: FakeChatServer) -> dict[str, str]:
     """Settings enabling the planner adapter against ``server`` on loopback http."""
     return {
-        "CVE_KGRAG_PLANNER_ENABLED": "true",
-        "CVE_KGRAG_PLANNER_BASE_URL": f"{server.base_url}/v1",
-        "CVE_KGRAG_PLANNER_MODEL_NAME": "example-chat",
-        "CVE_KGRAG_PLANNER_API_KEY": CLI_PLANNER_KEY,
+        "VULNWITNESS_PLANNER_ENABLED": "true",
+        "VULNWITNESS_PLANNER_BASE_URL": f"{server.base_url}/v1",
+        "VULNWITNESS_PLANNER_MODEL_NAME": "example-chat",
+        "VULNWITNESS_PLANNER_API_KEY": CLI_PLANNER_KEY,
     }
 
 
@@ -824,8 +828,8 @@ def build_semantic_environment(persist_directory: Path) -> dict[str, str]:
     """Settings enabling the semantic channel over an empty directory: whether or not the
     ``semantic`` extra is installed, its adapter cannot open the collection."""
     return {
-        "CVE_KGRAG_SEMANTIC_ENABLED": "true",
-        "CVE_KGRAG_SEMANTIC_PERSIST_DIRECTORY": str(persist_directory),
+        "VULNWITNESS_SEMANTIC_ENABLED": "true",
+        "VULNWITNESS_SEMANTIC_PERSIST_DIRECTORY": str(persist_directory),
     }
 
 
@@ -943,7 +947,7 @@ def test_command_that_does_not_ask_for_the_semantic_channel_loads_no_adapter(
 ) -> None:
     environment = build_semantic_environment(tmp_path / "vectors")
 
-    with caplog.at_level(logging.DEBUG, logger="cve_kgrag.adapter_discovery"):
+    with caplog.at_level(logging.DEBUG, logger="vulnwitness.adapter_discovery"):
         exit_code = run_cli(arguments, environment)
 
     assert exit_code in (0, 1)
@@ -1387,7 +1391,7 @@ def run_planner_evaluation_cli(
     *extra_arguments: str,
     gold_rows: list[dict[str, Any]] = SMALL_GOLD_ROWS,
 ) -> int:
-    """``cve-kgrag eval planner`` over a gold file of ``gold_rows``, writing under
+    """``vulnwitness eval planner`` over a gold file of ``gold_rows``, writing under
     ``tmp_path / "eval-results"``."""
     gold_path = write_gold_file(tmp_path, gold_rows)
     return run_cli(
@@ -1412,7 +1416,7 @@ def list_written_sets(tmp_path: Path, run_kind: str) -> list[Path]:
 
 
 def verify_written_sets(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> dict[str, str]:
-    """The ``cve-kgrag verify`` verdict on each deterministic set the evaluation run under
+    """The ``vulnwitness verify`` verdict on each deterministic set the evaluation run under
     ``tmp_path`` wrote, by the set's query."""
     verdicts: dict[str, str] = {}
     for set_path in list_written_sets(tmp_path, "deterministic"):
@@ -1465,7 +1469,7 @@ def test_eval_planner_model_runs_without_an_enabled_planner_are_a_usage_error(
         run_planner_evaluation_cli(tmp_path, NO_SETTINGS, "--model-runs", "2")
 
     assert raised.value.code == 2
-    assert "CVE_KGRAG_PLANNER_ENABLED" in capsys.readouterr().err
+    assert "VULNWITNESS_PLANNER_ENABLED" in capsys.readouterr().err
     assert not (tmp_path / EVAL_RESULTS).exists()
 
 
@@ -1506,7 +1510,7 @@ def test_eval_planner_names_the_source_it_evaluated(
     """The offline lanes run this checkout's package, so the report names its commit; the
     core-only lane installs it as a wheel, which no checkout holds."""
     expected_revisions = {"unavailable"}
-    if PACKAGE_DIR == REPOSITORY_ROOT / "src" / "cve_kgrag":
+    if PACKAGE_DIR == REPOSITORY_ROOT / "src" / "vulnwitness":
         head = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=REPOSITORY_ROOT,
@@ -1562,7 +1566,7 @@ def test_eval_planner_model_runs_plan_through_the_installed_adapter_and_report_n
         EVAL_MARKER,
         EVAL_QUERY_MARKER,
         server.base_url,
-        environment["CVE_KGRAG_PLANNER_MODEL_NAME"],
+        environment["VULNWITNESS_PLANNER_MODEL_NAME"],
     ):
         assert absent_text not in evaluation_output.out
     assert_secret_absent(evaluation_output.out, CLI_PLANNER_KEY, "stdout")
@@ -1635,7 +1639,7 @@ def test_eval_planner_writing_inside_the_package_is_a_usage_error(
         run_cli(["eval", "planner", "--gold", str(gold_path), "--out", str(out_dir)])
 
     assert raised.value.code == 2
-    assert "--out must not lie inside the installed cve_kgrag package" in capsys.readouterr().err
+    assert "--out must not lie inside the installed vulnwitness package" in capsys.readouterr().err
     assert not (PACKAGE_DIR / EVAL_RESULTS).exists()
 
 
@@ -1661,7 +1665,7 @@ def test_eval_planner_that_cannot_write_its_results_exits_one(
     evaluation_output = capsys.readouterr()
     assert exit_code == 1
     assert evaluation_output.out == ""
-    assert "cve-kgrag eval planner cannot write its results" in evaluation_output.err
+    assert "vulnwitness eval planner cannot write its results" in evaluation_output.err
 
 
 # migrate legacy (ADR 0008). Only what holds without the migration extra lives here, so
@@ -1697,7 +1701,7 @@ def test_migrate_legacy_without_the_migration_extra_exits_one_naming_it_before_r
     assert exit_code == 1
     assert captured.out == ""
     assert captured.err == (
-        f"cve-kgrag migrate legacy cannot start: {MIGRATION_EXTRA.missing_detail}\n"
+        f"vulnwitness migrate legacy cannot start: {MIGRATION_EXTRA.missing_detail}\n"
     )
     assert not target.exists()
 
@@ -1753,7 +1757,7 @@ def run_on_daemon_thread(command: Callable[[], int]) -> RecordedCommand:
 def build_migrate_legacy_command(
     manifest_path: Path, target: Path, parsers: MigrationParsers
 ) -> Callable[[], int]:
-    """``cve-kgrag migrate legacy`` on ``manifest_path``, ready to run with ``parsers``."""
+    """``vulnwitness migrate legacy`` on ``manifest_path``, ready to run with ``parsers``."""
     parser = build_parser()
     arguments = parser.parse_args(
         ["migrate", "legacy", "--inputs", str(manifest_path), "--target", str(target)]

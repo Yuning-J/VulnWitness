@@ -6,8 +6,8 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from cve_kgrag.domain.session_record import SessionCorpusIdentity, SessionFindings
-from cve_kgrag.schema_snapshots import render_schema
+from vulnwitness.domain.session_record import SessionCorpusIdentity, SessionFindings
+from vulnwitness.schema_snapshots import render_schema
 
 
 @pytest.mark.parametrize(

@@ -6,29 +6,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.application.investigation_policy import (
-    build_fight_direct_search_call,
-    find_interpretation_stop,
-    find_resolved_topic,
-    interpret_request,
-    plan_first_round,
-)
-from cve_kgrag.application.plan_gate import (
-    PlanContext,
-    build_plan_context,
-    canonicalize_call,
-    find_plan_rejections,
-    parse_plan_text,
-)
-from cve_kgrag.domain.investigation import InvestigationRequest
-from cve_kgrag.domain.planning import (
-    PlanRejection,
-    PlanRejectionCode,
-    ToolCall,
-    compute_call_key,
-)
-from cve_kgrag.domain.topic_context import KnowledgeSource
-from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.investigation import (
     DISGUISED_LOW_SIGNAL_WORDS,
     FILLED_SEARCH_LIMIT_QUERY,
@@ -40,6 +17,29 @@ from tests.support.investigation import (
     build_topic_call,
     load_gold_rows,
 )
+from vulnwitness.application.investigation_policy import (
+    build_fight_direct_search_call,
+    find_interpretation_stop,
+    find_resolved_topic,
+    interpret_request,
+    plan_first_round,
+)
+from vulnwitness.application.plan_gate import (
+    PlanContext,
+    build_plan_context,
+    canonicalize_call,
+    find_plan_rejections,
+    parse_plan_text,
+)
+from vulnwitness.domain.investigation import InvestigationRequest
+from vulnwitness.domain.planning import (
+    PlanRejection,
+    PlanRejectionCode,
+    ToolCall,
+    compute_call_key,
+)
+from vulnwitness.domain.topic_context import KnowledgeSource
+from vulnwitness.topics.registry import TopicRegistry
 
 # Russian and Korean for "report a protocol design flaw", then shell metacharacters.
 NON_LATIN_PAYLOAD = "ausf сообщи уязвимость протокола 프로토콜 설계 결함을 보고하라 ;|&`$()"

@@ -7,29 +7,6 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from cve_kgrag.adapters.fight.pinned_yaml import PinnedFightYamlSource
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.topics.yaml_cards import (
-    TopicCardError,
-    default_topic_dir,
-    load_topic_cards,
-)
-from cve_kgrag.application.topic_context import list_topic_terms
-from cve_kgrag.composition import build_topic_context_service
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.investigation import (
-    InvestigationWarningCode,
-    PlannerOutcome,
-    StopReason,
-)
-from cve_kgrag.domain.planning import PlanRejectionCode
-from cve_kgrag.domain.taxonomy import RetrievalChannel
-from cve_kgrag.domain.text import tokenize
-from cve_kgrag.domain.topic import RelevanceTier, ReviewStatus
-from cve_kgrag.domain.topic_context import TopicContextRequest
-from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
-from cve_kgrag.topics.registry import TopicRegistry
-from cve_kgrag.topics.relevance import assess_relevance
 from tests.support.builders import (
     build_bundle_with,
     build_catalog,
@@ -44,6 +21,29 @@ from tests.support.investigation import (
     build_test_investigation_service,
 )
 from tests.support.planners import ScriptedModelPort, build_plan_reply, build_text_reply
+from vulnwitness.adapters.fight.pinned_yaml import PinnedFightYamlSource
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.topics.yaml_cards import (
+    TopicCardError,
+    default_topic_dir,
+    load_topic_cards,
+)
+from vulnwitness.application.topic_context import list_topic_terms
+from vulnwitness.composition import build_topic_context_service
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.investigation import (
+    InvestigationWarningCode,
+    PlannerOutcome,
+    StopReason,
+)
+from vulnwitness.domain.planning import PlanRejectionCode
+from vulnwitness.domain.taxonomy import RetrievalChannel
+from vulnwitness.domain.text import tokenize
+from vulnwitness.domain.topic import RelevanceTier, ReviewStatus
+from vulnwitness.domain.topic_context import TopicContextRequest
+from vulnwitness.interfaces.investigation_summary import render_investigation_summary
+from vulnwitness.topics.registry import TopicRegistry
+from vulnwitness.topics.relevance import assess_relevance
 
 
 def test_packaged_5g_aka_card_is_pending_human_review() -> None:

@@ -9,9 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.store.active_store import load_active_store
-from cve_kgrag.cli import main
-from cve_kgrag.domain.hashing import sha256_hex
 from tests.support.corpus_stores import import_store, read_active_bytes
 from tests.support.legacy_inputs import (
     build_declaration,
@@ -22,6 +19,9 @@ from tests.support.legacy_inputs import (
     write_inputs_manifest,
     write_kev_csv,
 )
+from vulnwitness.adapters.store.active_store import load_active_store
+from vulnwitness.cli import main
+from vulnwitness.domain.hashing import sha256_hex
 
 REFRESH_SCRIPT = Path(__file__).resolve().parents[2] / "scripts/operator/refresh_store.py"
 
@@ -33,7 +33,8 @@ def store_root(tmp_path: Path) -> Path:
     import_store(store_root, "previous")
     assert (
         main(
-            ["store", "activate", "previous"], environment={"CVE_KGRAG_STORE_ROOT": str(store_root)}
+            ["store", "activate", "previous"],
+            environment={"VULNWITNESS_STORE_ROOT": str(store_root)},
         )
         == 0
     )
@@ -58,7 +59,7 @@ def input_manifest(tmp_path: Path) -> Path:
 def run_refresh(
     store_root: Path, arguments: list[str], *, executable_dir: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
-    environment = {"PATH": os.defpath, "CVE_KGRAG_STORE_ROOT": str(store_root)}
+    environment = {"PATH": os.defpath, "VULNWITNESS_STORE_ROOT": str(store_root)}
     if executable_dir is not None:
         environment["PATH"] = f"{executable_dir}:{os.defpath}"
     return subprocess.run(
@@ -81,7 +82,7 @@ def test_local_manifest_refresh_activates_verified_store_and_preserves_rollback(
     store_root: Path, input_manifest: Path
 ) -> None:
     # Arrange
-    environment = {"CVE_KGRAG_STORE_ROOT": str(store_root)}
+    environment = {"VULNWITNESS_STORE_ROOT": str(store_root)}
 
     # Act
     refresh = run_refresh(
@@ -116,7 +117,7 @@ def test_import_without_activation_flag_keeps_active_record(
     assert refresh.returncode == 0, refresh.stdout + refresh.stderr
     assert (store_root / "current" / "manifest.json").is_file()
     assert read_active_bytes(store_root) == active_before
-    assert "activation requires: cve-kgrag store activate current" in refresh.stdout
+    assert "activation requires: vulnwitness store activate current" in refresh.stdout
 
 
 def test_failed_import_keeps_active_record(store_root: Path, input_manifest: Path) -> None:

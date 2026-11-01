@@ -7,28 +7,28 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.semantic.vector_retriever import VectorSemanticRetriever
-from cve_kgrag.adapters.store.corpus_store import CorpusStore, load_corpus_store
-from cve_kgrag.composition import (
+from tests.support.collect import find_capability
+from tests.support.corpus_stores import COMPATIBILITY_STORE
+from tests.support.entry_points import FakeAdapterRegistry, FakeEntryPoint
+from tests.support.vector_store import FakeCollection, FixedEncoder
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.semantic.vector_retriever import VectorSemanticRetriever
+from vulnwitness.adapters.store.corpus_store import CorpusStore, load_corpus_store
+from vulnwitness.composition import (
     build_investigation_service,
     build_search_service,
     build_serving_data_plane,
     describe_semantic_capability,
 )
-from cve_kgrag.domain.investigation import (
+from vulnwitness.domain.investigation import (
     InvestigationRequest,
     SourceCapability,
     SourceCapabilityState,
 )
-from cve_kgrag.domain.search import SearchRequest, SemanticUnavailableDetail
-from cve_kgrag.domain.taxonomy import BackendFailureDetail, BackendStatus, RetrievalChannel
-from cve_kgrag.ports.served_corpus import ServedCorpus
-from cve_kgrag.settings import SemanticSettings
-from tests.support.collect import find_capability
-from tests.support.corpus_stores import COMPATIBILITY_STORE
-from tests.support.entry_points import FakeAdapterRegistry, FakeEntryPoint
-from tests.support.vector_store import FakeCollection, FixedEncoder
+from vulnwitness.domain.search import SearchRequest, SemanticUnavailableDetail
+from vulnwitness.domain.taxonomy import BackendFailureDetail, BackendStatus, RetrievalChannel
+from vulnwitness.ports.served_corpus import ServedCorpus
+from vulnwitness.settings import SemanticSettings
 
 # A record both the fixture and the compatibility store hold.
 OVERLAPPING_CVE_ID = "CVE-9999-0004"

@@ -5,12 +5,12 @@ from typing import Any
 import pytest
 import yaml
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
-from cve_kgrag.composition import build_topic_context_service
-from cve_kgrag.domain.topic_context import TopicContextRequest
-from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.paths import GOLD_DIR
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.topics.yaml_cards import default_topic_dir, load_topic_cards
+from vulnwitness.composition import build_topic_context_service
+from vulnwitness.domain.topic_context import TopicContextRequest
+from vulnwitness.topics.registry import TopicRegistry
 
 GOLD_FILE = GOLD_DIR / "m3_topic_queries.yaml"
 GOLD = yaml.safe_load(GOLD_FILE.read_text(encoding="utf-8"))

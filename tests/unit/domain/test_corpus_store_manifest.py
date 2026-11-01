@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.corpus_store_manifest import (
+from vulnwitness.domain.corpus_store_manifest import (
     ROLLBACK_INSTRUCTION,
     CorpusStoreManifest,
     NvdArtifact,
@@ -368,7 +368,7 @@ def test_store_manifest_records_imported_data_and_the_fixed_rollback() -> None:
 def test_rollback_instruction_is_the_servers_fixed_sentence() -> None:
     assert ROLLBACK_INSTRUCTION == (
         "Before activation, remove the newly created target directory. After activation, "
-        "use cve-kgrag store rollback."
+        "use vulnwitness store rollback."
     )
 
 

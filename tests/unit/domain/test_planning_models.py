@@ -6,7 +6,8 @@ from typing import Any
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from cve_kgrag.domain.planning import (
+from tests.support.investigation import build_exact_lookup_call, build_search_call, build_topic_call
+from vulnwitness.domain.planning import (
     CveExactLookupCall,
     CveSearchCall,
     PlannerIdentity,
@@ -15,7 +16,6 @@ from cve_kgrag.domain.planning import (
     TopicContextCall,
     compute_call_key,
 )
-from tests.support.investigation import build_exact_lookup_call, build_search_call, build_topic_call
 
 SEARCH_CALL = {"tool": "cve_search", "query": "ausf crash"}
 

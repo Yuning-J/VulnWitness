@@ -9,8 +9,8 @@ import sys
 import time
 from pathlib import Path
 
-from cve_kgrag.cli import build_evidence_set_check
-from cve_kgrag.composition import (
+from vulnwitness.cli import build_evidence_set_check
+from vulnwitness.composition import (
     build_knowledge_toolbox,
     build_serving_data_plane,
     load_served_corpus,

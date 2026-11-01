@@ -2,7 +2,7 @@
 
 import hashlib
 
-from cve_kgrag.adapters.planner.relevance_prompt import (
+from vulnwitness.adapters.planner.relevance_prompt import (
     ASSESSOR_INSTRUCTIONS,
     RUNTIME_ASSESSOR_INSTRUCTIONS,
 )

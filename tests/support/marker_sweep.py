@@ -7,16 +7,16 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from cve_kgrag.application.evidence_set_verification import check_evidence_set
-from cve_kgrag.application.investigation_deployment import InvestigationDeployment
-from cve_kgrag.domain.investigation import (
+from vulnwitness.application.evidence_set_verification import check_evidence_set
+from vulnwitness.application.investigation_deployment import InvestigationDeployment
+from vulnwitness.domain.investigation import (
     KnowledgeEvidenceSet,
     RoundRecord,
     SourceCapability,
     ToolStep,
     derive_investigation_id,
 )
-from cve_kgrag.domain.planning import compute_call_key, compute_model_reply_sha256
+from vulnwitness.domain.planning import compute_call_key, compute_model_reply_sha256
 
 # Lower case, so it also fits the slug and free-suffix patterns (topic IDs, package URLs,
 # model names) that an upper-case marker would fail to parse under.

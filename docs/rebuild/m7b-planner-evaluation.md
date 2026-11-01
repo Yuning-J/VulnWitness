@@ -11,7 +11,7 @@ binds them to their data, a dataset identity, and a `sufficiency` section.
 ## The command
 
 ```bash
-cve-kgrag eval planner --gold eval/gold/m7b_cases.yaml --sets eval/gold/m7b_sets.json \
+vulnwitness eval planner --gold eval/gold/m7b_cases.yaml --sets eval/gold/m7b_sets.json \
   --out eval-results [--model-runs N]
 ```
 
@@ -33,7 +33,7 @@ only. Every refusal is the server's sentence, never a quotation of the file.
 Every other rule of the command is M7a's: `--model-runs`, the planner settings, `--out`
 outside the package and the store root, the owner-only result directory, the stop
 conditions. An M7b evaluation additionally needs
-`CVE_KGRAG_STORE_ROOT` and the operator FiGHT snapshot (exit 2 without them).
+`VULNWITNESS_STORE_ROOT` and the operator FiGHT snapshot (exit 2 without them).
 
 ## Binding the files to the data
 

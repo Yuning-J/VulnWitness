@@ -9,9 +9,6 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.cli import main
-from cve_kgrag.domain.migration_report import MigrationOutcome
 from tests.support.legacy_inputs import (
     build_declaration,
     build_v2_entry,
@@ -22,6 +19,9 @@ from tests.support.legacy_inputs import (
 )
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
 from tests.support.product_queries import SMF_PRODUCT_ONLY, SMF_VENDOR_AND_PRODUCT
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.cli import main
+from vulnwitness.domain.migration_report import MigrationOutcome
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def smf_store_environment(
     store_root.mkdir()
     report = run_test_migration(manifest_path, store_root / "smf", store_root=store_root)
     assert report.outcome is MigrationOutcome.IMPORTED, report.failure
-    environment = {"CVE_KGRAG_STORE_ROOT": str(store_root)}
+    environment = {"VULNWITNESS_STORE_ROOT": str(store_root)}
     assert main(["store", "activate", "smf"], environment=environment) == 0
     capsys.readouterr()
     return environment

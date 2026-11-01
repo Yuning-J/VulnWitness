@@ -13,7 +13,7 @@ reaches the store, which imports the inspected bytes or fails as ``input_changed
 the store's modes do not depend on the umask; that the store manifest
 records each input's hashes and generation time; that anchors cite the registry's terms
 and URLs; that ``--legacy-root`` findings are reported; that a report never quotes an input;
-and that ``cve-kgrag migrate legacy`` prints the report and exits 0, 1 or 2 as §7
+and that ``vulnwitness migrate legacy`` prints the report and exits 0, 1 or 2 as §7
 states. The command needs the ``migration`` extra, so its runs live here, beside the
 importer's other tests, outside the core-only lane.
 """
@@ -35,50 +35,6 @@ from typing import Any
 import pytest
 import yaml
 
-from cve_kgrag.adapters.migration.input_files import PayloadStream
-from cve_kgrag.adapters.migration.legacy_migration import MigrationDependencies
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.adapters.migration.parser_types import EntryHandler, FeedHeader
-from cve_kgrag.adapters.nvd.normalizer import (
-    KevSource,
-    NormalizedCve,
-    NvdNormalizer,
-    SourceSnapshot,
-    SourceTerms,
-)
-from cve_kgrag.adapters.store.corpus_store import (
-    ANCHORS_FILE,
-    RECORDS_FILE,
-    STORE_MANIFEST_FILE,
-    CorpusStore,
-    load_corpus_store,
-)
-from cve_kgrag.cli import main
-from cve_kgrag.composition import load_packaged_source_registry
-from cve_kgrag.domain.corpus_store_manifest import (
-    ROLLBACK_INSTRUCTION,
-    InputContainer,
-    StoreInput,
-    StoreSource,
-)
-from cve_kgrag.domain.cve import CveRecord, KevEntry
-from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.migration_report import (
-    KEV_REMEDY,
-    KEV_WITHOUT_NVD_RECORD_ADVICE,
-    MAX_REPORTED_LOCATORS,
-    CandidateOutcome,
-    CveOutcome,
-    EntryLocator,
-    KevOutcome,
-    LegacyFileKind,
-    MigrationFailureCode,
-    MigrationOutcome,
-    MigrationReport,
-)
-from cve_kgrag.domain.normalization import NormalizationFailureCode
-from cve_kgrag.domain.taxonomy import SourceType
 from tests.support.legacy_inputs import (
     KEV_COLUMNS,
     RETRIEVED_AT,
@@ -101,6 +57,50 @@ from tests.support.legacy_inputs import (
     write_plain_feed,
     write_zip_feed,
 )
+from vulnwitness.adapters.migration.input_files import PayloadStream
+from vulnwitness.adapters.migration.legacy_migration import MigrationDependencies
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.adapters.migration.parser_types import EntryHandler, FeedHeader
+from vulnwitness.adapters.nvd.normalizer import (
+    KevSource,
+    NormalizedCve,
+    NvdNormalizer,
+    SourceSnapshot,
+    SourceTerms,
+)
+from vulnwitness.adapters.store.corpus_store import (
+    ANCHORS_FILE,
+    RECORDS_FILE,
+    STORE_MANIFEST_FILE,
+    CorpusStore,
+    load_corpus_store,
+)
+from vulnwitness.cli import main
+from vulnwitness.composition import load_packaged_source_registry
+from vulnwitness.domain.corpus_store_manifest import (
+    ROLLBACK_INSTRUCTION,
+    InputContainer,
+    StoreInput,
+    StoreSource,
+)
+from vulnwitness.domain.cve import CveRecord, KevEntry
+from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.migration_report import (
+    KEV_REMEDY,
+    KEV_WITHOUT_NVD_RECORD_ADVICE,
+    MAX_REPORTED_LOCATORS,
+    CandidateOutcome,
+    CveOutcome,
+    EntryLocator,
+    KevOutcome,
+    LegacyFileKind,
+    MigrationFailureCode,
+    MigrationOutcome,
+    MigrationReport,
+)
+from vulnwitness.domain.normalization import NormalizationFailureCode
+from vulnwitness.domain.taxonomy import SourceType
 
 V2_YEAR_FEED = "nvdcve-2.0-2099.json.gz"
 V2_MODIFIED_FEED = "nvdcve-2.0-modified.json.gz"
@@ -2817,14 +2817,14 @@ def test_feed_declaring_its_format_after_its_entries_is_imported(layout: ImportL
     assert report.outcome is MigrationOutcome.IMPORTED
 
 
-# cve-kgrag migrate legacy (§7)
+# vulnwitness migrate legacy (§7)
 
 MANIFEST_MARKER = "manifest-marker-3f9a"
 NO_SETTINGS: dict[str, str] = {}
 
 
 def run_migrate_legacy_cli(manifest_path: Path, target: Path, *options: str) -> int:
-    """``cve-kgrag migrate legacy`` with no settings from the environment the tests run in."""
+    """``vulnwitness migrate legacy`` with no settings from the environment the tests run in."""
     return main(
         ["migrate", "legacy", "--inputs", str(manifest_path), "--target", str(target), *options],
         NO_SETTINGS,

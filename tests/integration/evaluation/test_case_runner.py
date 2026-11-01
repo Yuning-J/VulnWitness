@@ -6,20 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.application.threaded_call_runner import ThreadedCallRunner
-from cve_kgrag.evaluation.case_runner import (
-    ABANDONED_CALLS_STILL_LIVE,
-    PACKAGE_CHANGED,
-    PACKAGE_UNREADABLE,
-    CaseRunner,
-    EvaluationStopped,
-    ModelRuns,
-    read_package_digest,
-)
-from cve_kgrag.evaluation.gold_cases import GoldCase
-from cve_kgrag.evaluation.package_digest import fingerprint_package
-from cve_kgrag.evaluation.result_directory import ResultDirectory
 from tests.support.evaluation import (
     EVAL_RESULTS,
     PackageEditingModelPort,
@@ -31,6 +17,20 @@ from tests.support.evaluation import (
 )
 from tests.support.gold_files import load_trajectory_cases
 from tests.support.planners import BlockingModelPort, plan_with
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.application.threaded_call_runner import ThreadedCallRunner
+from vulnwitness.evaluation.case_runner import (
+    ABANDONED_CALLS_STILL_LIVE,
+    PACKAGE_CHANGED,
+    PACKAGE_UNREADABLE,
+    CaseRunner,
+    EvaluationStopped,
+    ModelRuns,
+    read_package_digest,
+)
+from vulnwitness.evaluation.gold_cases import GoldCase
+from vulnwitness.evaluation.package_digest import fingerprint_package
+from vulnwitness.evaluation.result_directory import ResultDirectory
 
 # Long enough for a call that has returned to be counted done, short enough for a test.
 SHORT_IDLE_WAIT_SECONDS = 0.2

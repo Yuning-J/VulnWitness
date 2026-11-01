@@ -1,9 +1,9 @@
 """Reciprocal-rank fusion with exact-ID dominance."""
 
-from cve_kgrag.application.fusion import RRF_K, ChannelResult, fuse_channel_results
-from cve_kgrag.domain.search import RetrievalMatch
-from cve_kgrag.domain.taxonomy import RetrievalChannel
 from tests.support.collect import list_cve_ids
+from vulnwitness.application.fusion import RRF_K, ChannelResult, fuse_channel_results
+from vulnwitness.domain.search import RetrievalMatch
+from vulnwitness.domain.taxonomy import RetrievalChannel
 
 
 def build_match(cve_id: str, score: float = 1.0) -> RetrievalMatch:

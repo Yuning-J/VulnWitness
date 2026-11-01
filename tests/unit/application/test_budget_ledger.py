@@ -3,11 +3,11 @@ and reports the first breach."""
 
 import pytest
 
-from cve_kgrag.application.budget_ledger import BudgetLedger
-from cve_kgrag.domain.budget import BudgetBreach, InvestigationBudget
-from cve_kgrag.domain.investigation import StepAdmission
-from cve_kgrag.domain.topic_context import KnowledgeSource
 from tests.support.clocks import SteppingClock
+from vulnwitness.application.budget_ledger import BudgetLedger
+from vulnwitness.domain.budget import BudgetBreach, InvestigationBudget
+from vulnwitness.domain.investigation import StepAdmission
+from vulnwitness.domain.topic_context import KnowledgeSource
 
 
 def build_ledger(clock: SteppingClock, **budget_fields: int) -> BudgetLedger:

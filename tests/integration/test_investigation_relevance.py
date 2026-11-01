@@ -2,16 +2,6 @@
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.application.decision_path_audit import audit_decision_path
-from cve_kgrag.application.trajectory_replay import ReplayCompleted, replay_evidence_set
-from cve_kgrag.domain.investigation import NeedOutcome, StopReason
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.planning import ModelReply
-from cve_kgrag.domain.relevance import RelevanceLabel
-from cve_kgrag.domain.validation import EvidenceValidationError
-from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
 from tests.support.clocks import SteppingClock
 from tests.support.fakes import SlowRetriever
 from tests.support.investigation import (
@@ -31,6 +21,16 @@ from tests.support.relevance import (
     build_relevance_bundle,
     run_relevance_loop,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.application.decision_path_audit import audit_decision_path
+from vulnwitness.application.trajectory_replay import ReplayCompleted, replay_evidence_set
+from vulnwitness.domain.investigation import NeedOutcome, StopReason
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.planning import ModelReply
+from vulnwitness.domain.relevance import RelevanceLabel
+from vulnwitness.domain.validation import EvidenceValidationError
+from vulnwitness.interfaces.investigation_summary import render_investigation_summary
 
 
 @pytest.fixture

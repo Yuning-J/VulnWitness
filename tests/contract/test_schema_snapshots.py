@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from cve_kgrag.domain.search import SCHEMA_VERSION
-from cve_kgrag.schema_snapshots import find_schema_drift, render_contract_schemas
 from tests.support.paths import REPOSITORY_SCHEMA_DIR
+from vulnwitness.domain.search import SCHEMA_VERSION
+from vulnwitness.schema_snapshots import find_schema_drift, render_contract_schemas
 
 
 def test_committed_schemas_match_generated_schemas() -> None:

@@ -5,7 +5,8 @@ import unicodedata
 
 import pytest
 
-from cve_kgrag.domain.text import (
+from tests.support.investigation import MODEL_DISGUISED_LOW_SIGNAL_WORDS
+from vulnwitness.domain.text import (
     DEFAULT_IGNORABLE_RANGES,
     asks_affectedness,
     extract_search_text,
@@ -17,7 +18,6 @@ from cve_kgrag.domain.text import (
     remove_cve_id_tokens,
     tokenize,
 )
-from tests.support.investigation import MODEL_DISGUISED_LOW_SIGNAL_WORDS
 
 NAMED_ID = "CVE-9999-0003"
 

@@ -3,9 +3,9 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cve-kgrag"
+name = "vulnwitness"
 version = "2.0.0.dev0"
-description = "Telecom-focused, evidence-bound CVE and protocol threat-context knowledge service"
+description = "An evidence-backed vulnerability investigation workbench for analysts and AI agents."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/Yuning-J/telecom-cve-kgrag"
+Repository = "https://github.com/Yuning-J/vulnwitness"
 
 [project.optional-dependencies]
 semantic = [
@@ -43,16 +43,16 @@ migration = [
     "ijson>=3.3,<4",
 ]
 
-[project.entry-points."cve_kgrag.adapters"]
-semantic = "cve_kgrag.adapters.semantic.chroma_retriever:build_semantic_retriever"
-mcp_server = "cve_kgrag.interfaces.mcp.stdio_runner:serve_stdio"
-mcp_http_server = "cve_kgrag.interfaces.mcp.http_runner:serve_http"
-api_server = "cve_kgrag.interfaces.rest.api_runner:serve_api"
-migration_parsers = "cve_kgrag.adapters.migration.nvd_feed_reader:build_migration_parsers"
-model_planner = "cve_kgrag.adapters.planner.openai_compatible:build_model_port"
+[project.entry-points."vulnwitness.adapters"]
+semantic = "vulnwitness.adapters.semantic.chroma_retriever:build_semantic_retriever"
+mcp_server = "vulnwitness.interfaces.mcp.stdio_runner:serve_stdio"
+mcp_http_server = "vulnwitness.interfaces.mcp.http_runner:serve_http"
+api_server = "vulnwitness.interfaces.rest.api_runner:serve_api"
+migration_parsers = "vulnwitness.adapters.migration.nvd_feed_reader:build_migration_parsers"
+model_planner = "vulnwitness.adapters.planner.openai_compatible:build_model_port"
 
 [project.scripts]
-cve-kgrag = "cve_kgrag.cli:main"
+vulnwitness = "vulnwitness.cli:main"
 
 [dependency-groups]
 dev = [
@@ -63,25 +63,25 @@ dev = [
     "jsonschema>=4.23",
     "types-pyyaml>=6.0.12",
     # The MCP server and its tests run in the default lane.
-    "cve-kgrag[mcp]",
+    "vulnwitness[mcp]",
     # The importer and its tests run in the default lane.
-    "cve-kgrag[migration]",
+    "vulnwitness[migration]",
     # The HTTP tests drive the servers through its in-process transport.
     "httpx2>=2.10,<3",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/cve_kgrag"]
+packages = ["src/vulnwitness"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/src/cve_kgrag", "/README.md", "/LICENSE", "/pyproject.toml"]
+include = ["/src/vulnwitness", "/README.md", "/LICENSE", "/pyproject.toml"]
 
 [tool.pytest.ini_options]
 # The repository root is on the path so tests import `tests.support`.
 pythonpath = ["."]
 testpaths = ["tests/unit", "tests/contract", "tests/integration"]
 addopts = ["-p", "no:cacheprovider", "--strict-markers"]
-# tests/live is outside testpaths; its tests also need CVE_KGRAG_LIVE_TESTS=1.
+# tests/live is outside testpaths; its tests also need VULNWITNESS_LIVE_TESTS=1.
 markers = ["live: calls a real model endpoint; opt-in only (tests/live, ADR 0005)"]
 
 [tool.ruff]
@@ -92,7 +92,7 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.mypy]
-files = ["src/cve_kgrag"]
+files = ["src/vulnwitness"]
 strict = true
 plugins = ["pydantic.mypy"]
 

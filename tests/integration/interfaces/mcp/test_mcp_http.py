@@ -16,17 +16,6 @@ from mcp.shared.exceptions import MCPError
 from mcp.types import TextContent
 from starlette.types import Receive, Scope, Send
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.http_rejection import HttpRejection, HttpRejectionCode, build_http_rejection
-from cve_kgrag.domain.tool_contracts import ToolFailure, ToolFailureCode
-from cve_kgrag.interfaces.http.guard import DEFAULT_BODY_CAP_BYTES, HttpGuard
-from cve_kgrag.interfaces.http.serving import (
-    find_graceful_shutdown_seconds,
-    find_request_deadline_seconds,
-)
-from cve_kgrag.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
-from cve_kgrag.interfaces.mcp.http_runner import build_mcp_http_app
-from cve_kgrag.interfaces.mcp.sdk_answers import SdkAnswersRestated
 from tests.support.asgi import (
     AUTHORIZATION,
     HTTP_HOST,
@@ -54,6 +43,17 @@ from tests.support.toolbox import (
     build_test_toolbox,
     list_affectedness_capabilities,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.http_rejection import HttpRejection, HttpRejectionCode, build_http_rejection
+from vulnwitness.domain.tool_contracts import ToolFailure, ToolFailureCode
+from vulnwitness.interfaces.http.guard import DEFAULT_BODY_CAP_BYTES, HttpGuard
+from vulnwitness.interfaces.http.serving import (
+    find_graceful_shutdown_seconds,
+    find_request_deadline_seconds,
+)
+from vulnwitness.interfaces.knowledge_tools import KnowledgeToolName, ToolLimits
+from vulnwitness.interfaces.mcp.http_runner import build_mcp_http_app
+from vulnwitness.interfaces.mcp.sdk_answers import SdkAnswersRestated
 
 pytestmark = pytest.mark.anyio
 
@@ -435,11 +435,11 @@ def send_raw_requests(host: str, port: int, raw_requests: list[bytes]) -> None:
 
 @pytest.fixture(params=["127.0.0.1", "::1"])
 def served_mcp_http(request: pytest.FixtureRequest) -> Iterator[ServedHttp]:
-    """``cve-kgrag mcp --http`` on each loopback host the settings accept."""
-    yield from start_served_http(["mcp", "--http"], "CVE_KGRAG_MCP_HTTP_PORT", request.param)
+    """``vulnwitness mcp --http`` on each loopback host the settings accept."""
+    yield from start_served_http(["mcp", "--http"], "VULNWITNESS_MCP_HTTP_PORT", request.param)
 
 
-async def test_cve_kgrag_mcp_http_serves_the_tools_announces_ready_and_stops_on_interrupt(
+async def test_vulnwitness_mcp_http_serves_the_tools_announces_ready_and_stops_on_interrupt(
     served_mcp_http: ServedHttp,
 ) -> None:
     async with (
@@ -465,11 +465,11 @@ async def test_cve_kgrag_mcp_http_serves_the_tools_announces_ready_and_stops_on_
     assert oversized_answer.status_code == 413
     assert served_mcp_http.process.returncode == 0
     assert stdout == b""
-    assert stderr.decode() == f"cve-kgrag mcp --http: ready on {served_mcp_http.url}\n"
+    assert stderr.decode() == f"vulnwitness mcp --http: ready on {served_mcp_http.url}\n"
 
 
-def test_cve_kgrag_mcp_http_on_a_port_in_use_exits_one_saying_why() -> None:
-    server_process = run_on_a_port_in_use(["mcp", "--http"], "CVE_KGRAG_MCP_HTTP_PORT")
+def test_vulnwitness_mcp_http_on_a_port_in_use_exits_one_saying_why() -> None:
+    server_process = run_on_a_port_in_use(["mcp", "--http"], "VULNWITNESS_MCP_HTTP_PORT")
 
     assert server_process.returncode == 1
     assert server_process.stdout == b""

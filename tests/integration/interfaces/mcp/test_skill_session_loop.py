@@ -9,13 +9,13 @@ import pytest
 import yaml
 from mcp import StdioServerParameters
 
-from cve_kgrag.cli import main
-from cve_kgrag.domain.product_query import ProductQueryResponse
-from cve_kgrag.domain.search import SearchResponse
-from cve_kgrag.domain.session_record import SessionCall, SessionCheckReport
 from tests.support.paths import REPOSITORY_ROOT
 from tests.support.session_files import populate_product_findings
 from tests.support.stdio_client import observe_stdio_client, read_until_notice
+from vulnwitness.cli import main
+from vulnwitness.domain.product_query import ProductQueryResponse
+from vulnwitness.domain.search import SearchResponse
+from vulnwitness.domain.session_record import SessionCall, SessionCheckReport
 
 
 @pytest.mark.anyio
@@ -26,14 +26,14 @@ async def test_mcp_product_and_lookup_findings_pass_and_a_broken_citation_fails(
     directory = tmp_path / "review"
     environment: dict[str, str] = {}
     for name, value in os.environ.items():
-        if not name.startswith("CVE_KGRAG_"):
+        if not name.startswith("VULNWITNESS_"):
             environment[name] = value
     server = StdioServerParameters(
-        command=str(Path(sys.executable).parent / "cve-kgrag"),
+        command=str(Path(sys.executable).parent / "vulnwitness"),
         args=["mcp", "--session", str(directory)],
         env=environment,
     )
-    template = REPOSITORY_ROOT / "skills/cve-kgrag-investigation/templates/findings.yaml"
+    template = REPOSITORY_ROOT / "skills/vulnwitness-investigation/templates/findings.yaml"
 
     # Act
     async with observe_stdio_client(server) as (client, stderr):

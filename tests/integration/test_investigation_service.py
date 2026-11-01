@@ -8,41 +8,6 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from cve_kgrag.adapters.fixture.fight_fixture import default_fight_fixture_dir
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle, default_fixture_dir
-from cve_kgrag.application.investigation_policy import describe_deterministic_planner
-from cve_kgrag.composition import load_packaged_fight_source
-from cve_kgrag.domain.affectedness import AffectednessDetail, AffectednessFailure
-from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.hashing import canonical_sha256, sha256_hex
-from cve_kgrag.domain.investigation import (
-    DecisionBasis,
-    InvestigationWarning,
-    InvestigationWarningCode,
-    KnowledgeEvidenceSet,
-    PlannerOutcome,
-    SourceCapabilityState,
-    StepAdmission,
-    StepReason,
-    StopReason,
-)
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.planning import QueryIntent
-from cve_kgrag.domain.search import (
-    RetrievalOutcome,
-    SearchWarning,
-    SearchWarningCode,
-    UnsupportedFilter,
-)
-from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus, SourceType
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.domain.topic_context import (
-    KnowledgeSource,
-    TopicContextWarning,
-    TopicContextWarningCode,
-)
-from cve_kgrag.domain.validation import index_anchors
 from tests.support.builders import build_bundle_with
 from tests.support.clocks import read_fixed_clock
 from tests.support.fakes import (
@@ -70,6 +35,41 @@ from tests.support.investigation_runs import (
     run_fight_direct_search_of_an_unindexed_word,
 )
 from tests.support.services import build_purl_free_structured_index
+from vulnwitness.adapters.fixture.fight_fixture import default_fight_fixture_dir
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle, default_fixture_dir
+from vulnwitness.application.investigation_policy import describe_deterministic_planner
+from vulnwitness.composition import load_packaged_fight_source
+from vulnwitness.domain.affectedness import AffectednessDetail, AffectednessFailure
+from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.hashing import canonical_sha256, sha256_hex
+from vulnwitness.domain.investigation import (
+    DecisionBasis,
+    InvestigationWarning,
+    InvestigationWarningCode,
+    KnowledgeEvidenceSet,
+    PlannerOutcome,
+    SourceCapabilityState,
+    StepAdmission,
+    StepReason,
+    StopReason,
+)
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.planning import QueryIntent
+from vulnwitness.domain.search import (
+    RetrievalOutcome,
+    SearchWarning,
+    SearchWarningCode,
+    UnsupportedFilter,
+)
+from vulnwitness.domain.taxonomy import BackendStatus, ResultStatus, SourceType
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.domain.topic_context import (
+    KnowledgeSource,
+    TopicContextWarning,
+    TopicContextWarningCode,
+)
+from vulnwitness.domain.validation import index_anchors
 
 OPEN5GS_CVE_ID = "CVE-9999-0101"
 BOTH_NAMED_IDS = ["CVE-9999-0003", "CVE-9999-0004"]

@@ -7,18 +7,18 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.session.check import SessionChecker, collect_response_anchors
-from cve_kgrag.adapters.session.recorder import SessionRecorder
-from cve_kgrag.application.search import SearchService
-from cve_kgrag.cli import main
-from cve_kgrag.composition import build_serving_data_plane, load_packaged_fixture
-from cve_kgrag.domain.product_query import ProductQueryRequest, ProductQueryResponse
-from cve_kgrag.domain.search import SearchResponse
-from cve_kgrag.domain.session_record import SessionCall, SessionCheckReport, SessionRecordingError
-from cve_kgrag.domain.tool_contracts import ToolFailureCode
-from cve_kgrag.interfaces.cli_session import encode_cli_answer
 from tests.support.clocks import read_fixed_clock
 from tests.support.session_files import write_findings
+from vulnwitness.adapters.session.check import SessionChecker, collect_response_anchors
+from vulnwitness.adapters.session.recorder import SessionRecorder
+from vulnwitness.application.search import SearchService
+from vulnwitness.cli import main
+from vulnwitness.composition import build_serving_data_plane, load_packaged_fixture
+from vulnwitness.domain.product_query import ProductQueryRequest, ProductQueryResponse
+from vulnwitness.domain.search import SearchResponse
+from vulnwitness.domain.session_record import SessionCall, SessionCheckReport, SessionRecordingError
+from vulnwitness.domain.tool_contracts import ToolFailureCode
+from vulnwitness.interfaces.cli_session import encode_cli_answer
 
 UNKNOWN_ANCHOR = "ev:" + "0" * 24
 PAGED_PRODUCT = ["product", "--vendor", "democorp", "--limit", "1"]
@@ -217,7 +217,7 @@ def test_invalid_recorded_product_options_are_refused_before_creating_a_session(
     # Assert
     streams = capsys.readouterr()
     assert exit_code == 2 and streams.out == ""
-    assert "cve-kgrag product:" in streams.err
+    assert "vulnwitness product:" in streams.err
     assert not directory.exists()
 
 
@@ -407,7 +407,7 @@ def test_symlinked_or_in_store_directory_is_refused_before_loading(
     with pytest.raises(SystemExit) as refused:
         main(
             ["lookup", "CVE-9999-0001", "--session", str(directory)],
-            environment={"CVE_KGRAG_STORE_ROOT": str(store)},
+            environment={"VULNWITNESS_STORE_ROOT": str(store)},
         )
     # Assert
     assert refused.value.code == 2

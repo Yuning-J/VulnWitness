@@ -16,22 +16,6 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.store.active_record import (
-    MAX_ACTIVE_BYTES,
-    ActiveRecordUnreadableError,
-    read_active_record,
-)
-from cve_kgrag.adapters.store.active_record_writer import OsActiveRecordFiles, hold_store_lock
-from cve_kgrag.adapters.store.corpus_store import verify_corpus_store
-from cve_kgrag.adapters.store.store_activation import StoreActivation
-from cve_kgrag.domain.search import SCHEMA_VERSION
-from cve_kgrag.domain.store_status import (
-    ActiveRecordState,
-    ActiveStoreCondition,
-    StoreCondition,
-    StoreOperationFailed,
-    StoreOperationFailure,
-)
 from tests.support.corpus_stores import (
     ROOT_BREAKERS,
     FailingActiveRecordFiles,
@@ -43,6 +27,22 @@ from tests.support.corpus_stores import (
     read_active_bytes,
     rewrite_manifest,
     tamper_with_records,
+)
+from vulnwitness.adapters.store.active_record import (
+    MAX_ACTIVE_BYTES,
+    ActiveRecordUnreadableError,
+    read_active_record,
+)
+from vulnwitness.adapters.store.active_record_writer import OsActiveRecordFiles, hold_store_lock
+from vulnwitness.adapters.store.corpus_store import verify_corpus_store
+from vulnwitness.adapters.store.store_activation import StoreActivation
+from vulnwitness.domain.search import SCHEMA_VERSION
+from vulnwitness.domain.store_status import (
+    ActiveRecordState,
+    ActiveStoreCondition,
+    StoreCondition,
+    StoreOperationFailed,
+    StoreOperationFailure,
 )
 
 

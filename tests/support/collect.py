@@ -3,8 +3,8 @@
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
-from cve_kgrag.domain.investigation import SourceCapability
-from cve_kgrag.domain.search import Candidate
+from vulnwitness.domain.investigation import SourceCapability
+from vulnwitness.domain.search import Candidate
 
 
 class HasCveId(Protocol):

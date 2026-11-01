@@ -194,7 +194,7 @@ A set sealed under an earlier contract version does not validate (ADR 0003 §2, 
 
 ## MCP tools
 
-`cve-kgrag mcp` serves eight read-only tools over stdio (ADR 0003 §6). Each tool's
+`vulnwitness mcp` serves eight read-only tools over stdio (ADR 0003 §6). Each tool's
 listed input and output schema is the committed snapshot of its contract, and every
 tool is annotated read-only, non-destructive, idempotent and closed-world. The server
 advertises tools only: no resources, prompts, completion or logging control.
@@ -246,14 +246,14 @@ An unknown tool name is a JSON-RPC `-32602` error with the message `unknown tool
 honours it answers a typed `affectedness_check` with failure `timeout`. A tool body
 that overruns its time limit is abandoned and the call fails `timed_out`.
 
-**Start-up.** `cve-kgrag mcp` serves the packaged synthetic fixture with the
+**Start-up.** `vulnwitness mcp` serves the packaged synthetic fixture with the
 deterministic planner, the disabled Trustify adapter and no semantic channel, and
 exits 0 when the client closes stdin. The runner loads through the
-`cve_kgrag.adapters` entry point `mcp_server`, before the fixture is read. Without the
+`vulnwitness.adapters` entry point `mcp_server`, before the fixture is read. Without the
 `mcp` extra, or with any other unusable runner (no entry point, more than one, or a
 load that fails with the SDK installed), the command writes nothing to stdout, prints
-`cve-kgrag mcp cannot start: <reason>` to stderr and exits 1. Without the extra the
-reason is `the 'mcp' extra is not installed: pip install 'cve-kgrag[mcp]'`; a load that
+`vulnwitness mcp cannot start: <reason>` to stderr and exits 1. Without the extra the
+reason is `the 'mcp' extra is not installed: pip install 'vulnwitness[mcp]'`; a load that
 fails with the SDK installed logs its traceback first.
 
 **`instructions`.** The server's instructions state the contract version, that source
@@ -302,7 +302,7 @@ is in `PLAN.md`, "Follow-up: verified Trustify adapter".
 
 ## Verifying a set
 
-`cve-kgrag verify FILE` checks an evidence set handed back
+`vulnwitness verify FILE` checks an evidence set handed back
 (`verify_evidence_set`, ADR 0003 §10): the validator, the decision-path audit and
 replay, in that order, against the packaged fixture. It reads at most 4 MiB (a larger
 file exits 2) and prints JSON with the verdict, at most 100 violations and the replay
@@ -318,7 +318,7 @@ differences. It exits 0 only for `verified`.
 
 The set is checked against the capabilities of the verifying deployment and the
 planners its settings configure, never the planner the set alone records (ADR 0004 §7).
-With no planner configured, `cve-kgrag verify` reports a model-planned set `invalid`.
+With no planner configured, `vulnwitness verify` reports a model-planned set `invalid`.
 
 One anchor is checked through the `get_evidence` tool: it serves the anchor the catalog
 holds under an evidence ID, the catalog every served anchor is checked against, and a
@@ -381,7 +381,7 @@ answer with the investigation service's.
   (`ModelReply`: its plan text, or its failure `detail`, one of the server's
   `ModelReplyFailureDetail` sentences) so that replay can re-read it.
   No M5 deployment runs a model planner, so no M5 response carries one, and, with no
-  planner configured, `cve-kgrag verify` reports a model-planned set `invalid`
+  planner configured, `vulnwitness verify` reports a model-planned set `invalid`
   (ADR 0004 §7). Its plan text is untrusted model output, and the tool descriptions
   say so (ADR 0004 §5).
 - **No product-to-purl mapping.** Affectedness is asked by versioned purl only, and no

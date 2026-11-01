@@ -8,9 +8,9 @@ import pytest
 from mcp import Client
 from mcp.server import Server
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.interfaces.mcp.server import build_knowledge_mcp_server
 from tests.support.toolbox import build_test_toolbox
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.interfaces.mcp.server import build_knowledge_mcp_server
 
 
 @pytest.fixture(params=["auto", "legacy"])

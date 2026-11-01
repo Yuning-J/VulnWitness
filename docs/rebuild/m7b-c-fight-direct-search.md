@@ -263,7 +263,7 @@ C1b changes need judging only, and C2 changes the published FiGHT order on the c
 
 ## 8. Evaluation and measurement plan
 
-Each stage is measured on its own, before the next is added, against the dev.29 run (B's "Measured" format). The stages are working-tree states of one package; their runs stay under `~/data/cve-kgrag/` and are not replayed later. Since a report's `source_revision` reads only `<commit>+dirty` for a working tree, each stage's run directory also keeps the stage's full diff against the base commit, new files included (`git add -N` on the new files, then `git diff --binary <base>`), and the environment settings the run used (no key), and the measured row names the base commit, the diff's SHA-256 and the run directory:
+Each stage is measured on its own, before the next is added, against the dev.29 run (B's "Measured" format). The stages are working-tree states of one package; their runs stay under `~/data/vulnwitness/` and are not replayed later. Since a report's `source_revision` reads only `<commit>+dirty` for a working tree, each stage's run directory also keeps the stage's full diff against the base commit, new files included (`git add -N` on the new files, then `git diff --binary <base>`), and the environment settings the run used (no key), and the measured row names the base commit, the diff's SHA-256 and the run directory:
 
 | Row | Contents |
 |---|---|
@@ -274,7 +274,7 @@ Each stage is measured on its own, before the next is added, against the dev.29 
 
 **Steps:**
 
-1. `cve-kgrag eval gold-sets --gold eval/gold/m7b_cases.yaml --check eval/gold/m7b_sets.json`.
+1. `vulnwitness eval gold-sets --gold eval/gold/m7b_cases.yaml --check eval/gold/m7b_sets.json`.
 2. A deterministic planner eval over the 13 baseline cases (2026-10-27 store, FiGHT 3.1.0, default budgets) for each row.
 3. **C1 against C1 + C1b, case by case**, beside the totals. Each row gives the need outcome, the stop and the uncovered words:
    - `sip ims signalling attacks` and `sip ims signaling attacks`: the verdict changes with spelling alone;
@@ -382,26 +382,26 @@ set or assertion was weakened. Each gold file states the order rule in a comment
 
 **Production**
 
-- `src/cve_kgrag/domain/planning.py`: tool, call, key, permit, sources, rejection code.
-- `src/cve_kgrag/domain/investigation.py`: `NeedOutcome.NOT_EVALUATED`, `Interpretation.fight_terms`, `fight_block`, `StepReason`, `POLICY_STEP_TOOL_AND_ROUND`, `FightBackendRequest` docstring.
-- `src/cve_kgrag/domain/search.py`: contract version.
-- `src/cve_kgrag/domain/threat_context.py`: `unindexed_terms`, `matched_terms` description.
-- `src/cve_kgrag/domain/topic_context.py`: warning code and order.
-- `src/cve_kgrag/domain/validation.py`: unresolved-response source and warning rules (`is_direct_fight_search`, `find_unindexed_term_violations`, `collect_matched_terms`).
-- `src/cve_kgrag/domain/investigation_validation.py`: backend request, interpretation invariant (`find_interpretation_fight_violations`), `find_fight_step_violations`, step topic-warning rules.
-- `src/cve_kgrag/domain/evidence_needs.py`: protocol-context judging; `not_evaluated` for every need kind but affectedness; `is_need_open` counts it open; one explanation rule for both sides (`filter_unexplained_terms`, `list_unexplained_unindexed_fight_terms`).
-- `src/cve_kgrag/domain/bm25.py` (new, C2).
-- `src/cve_kgrag/application/investigation_policy.py`: `list_kept_cve_ids`, `find_fight_block`, `list_fight_terms`, `interpret_request`, stop table, round 1, costs, version.
-- `src/cve_kgrag/application/plan_gate.py`.
-- `src/cve_kgrag/application/investigation_tools.py`: explicit branches, `build_fight_request`, `require_fight_terms`, `build_topic_execution`.
-- `src/cve_kgrag/application/topic_context.py`: `search_fight_directly`, extracted `_search_fight` and its `FightSearch`; `require_sent_terms` also checks `unindexed_terms`.
-- `src/cve_kgrag/application/investigate.py`: planning input.
-- `src/cve_kgrag/application/investigation_answer.py`: docstrings and comments only.
-- `src/cve_kgrag/application/decision_path_audit.py`: the `fight_direct_search` pre-check in `find_issued_request_violations` (§7) and docstrings.
-- `src/cve_kgrag/adapters/fight/pinned_yaml.py`: `unindexed_terms` (C1); BM25 order and `word_count`, with `list_term_keys`, `match_technique` and `TechniqueMatch` (C2).
-- `src/cve_kgrag/adapters/lexical/bm25_index.py`: imports the shared formula (C2).
-- `src/cve_kgrag/adapters/planner/openai_compatible.py`: instructions.
-- `src/cve_kgrag/interfaces/knowledge_tools.py`: the `search_fight` description (requires a query that resolves to a reviewed topic; the investigation searches FiGHT from free text on its own).
+- `src/vulnwitness/domain/planning.py`: tool, call, key, permit, sources, rejection code.
+- `src/vulnwitness/domain/investigation.py`: `NeedOutcome.NOT_EVALUATED`, `Interpretation.fight_terms`, `fight_block`, `StepReason`, `POLICY_STEP_TOOL_AND_ROUND`, `FightBackendRequest` docstring.
+- `src/vulnwitness/domain/search.py`: contract version.
+- `src/vulnwitness/domain/threat_context.py`: `unindexed_terms`, `matched_terms` description.
+- `src/vulnwitness/domain/topic_context.py`: warning code and order.
+- `src/vulnwitness/domain/validation.py`: unresolved-response source and warning rules (`is_direct_fight_search`, `find_unindexed_term_violations`, `collect_matched_terms`).
+- `src/vulnwitness/domain/investigation_validation.py`: backend request, interpretation invariant (`find_interpretation_fight_violations`), `find_fight_step_violations`, step topic-warning rules.
+- `src/vulnwitness/domain/evidence_needs.py`: protocol-context judging; `not_evaluated` for every need kind but affectedness; `is_need_open` counts it open; one explanation rule for both sides (`filter_unexplained_terms`, `list_unexplained_unindexed_fight_terms`).
+- `src/vulnwitness/domain/bm25.py` (new, C2).
+- `src/vulnwitness/application/investigation_policy.py`: `list_kept_cve_ids`, `find_fight_block`, `list_fight_terms`, `interpret_request`, stop table, round 1, costs, version.
+- `src/vulnwitness/application/plan_gate.py`.
+- `src/vulnwitness/application/investigation_tools.py`: explicit branches, `build_fight_request`, `require_fight_terms`, `build_topic_execution`.
+- `src/vulnwitness/application/topic_context.py`: `search_fight_directly`, extracted `_search_fight` and its `FightSearch`; `require_sent_terms` also checks `unindexed_terms`.
+- `src/vulnwitness/application/investigate.py`: planning input.
+- `src/vulnwitness/application/investigation_answer.py`: docstrings and comments only.
+- `src/vulnwitness/application/decision_path_audit.py`: the `fight_direct_search` pre-check in `find_issued_request_violations` (§7) and docstrings.
+- `src/vulnwitness/adapters/fight/pinned_yaml.py`: `unindexed_terms` (C1); BM25 order and `word_count`, with `list_term_keys`, `match_technique` and `TechniqueMatch` (C2).
+- `src/vulnwitness/adapters/lexical/bm25_index.py`: imports the shared formula (C2).
+- `src/vulnwitness/adapters/planner/openai_compatible.py`: instructions.
+- `src/vulnwitness/interfaces/knowledge_tools.py`: the `search_fight` description (requires a query that resolves to a reviewed topic; the investigation searches FiGHT from free text on its own).
 
 **Schemas and gold**
 

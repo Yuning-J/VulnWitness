@@ -2,9 +2,6 @@
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.investigation import InvestigationWarning
-from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
 from tests.support.builders import build_cve_record, build_threat_context_item
 from tests.support.investigation import reseal_evidence_set
 from tests.support.investigation_runs import (
@@ -14,6 +11,9 @@ from tests.support.investigation_runs import (
     run_gateway_version_question,
     run_open5gs_product_question,
 )
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.investigation import InvestigationWarning
+from vulnwitness.interfaces.investigation_summary import render_investigation_summary
 
 
 def test_pending_topic_summary_shows_unassessed_needs_candidates_and_protocol_context(
@@ -39,7 +39,7 @@ def test_pending_topic_summary_shows_unassessed_needs_candidates_and_protocol_co
     assert "[topic_pending_review]" in summary
     assert "Subject: 3gpp:5g-aka" in summary
     assert "Full evidence set: --format json" in summary
-    assert f"Example: cve-kgrag evidence {evidence_set.evidence[0].evidence_id}" in summary
+    assert f"Example: vulnwitness evidence {evidence_set.evidence[0].evidence_id}" in summary
 
 
 def test_free_text_summary_says_match_relevance_was_not_assessed(

@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.search import MAX_FILTER_VALUES, SearchFilters
+from vulnwitness.domain.search import MAX_FILTER_VALUES, SearchFilters
 
 
 def list_distinct_vendors(count: int) -> list[str]:

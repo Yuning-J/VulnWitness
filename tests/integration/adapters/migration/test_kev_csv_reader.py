@@ -13,11 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.migration.input_files import inspect_input_file
-from cve_kgrag.adapters.migration.kev_csv_reader import KevCatalog, read_kev_catalog
-from cve_kgrag.adapters.migration.migration_limits import MigrationLimits
-from cve_kgrag.domain.cve import MAX_CVE_ID_CHARS
-from cve_kgrag.domain.migration_report import MigrationFailed, MigrationFailureCode
 from tests.support.legacy_inputs import (
     KEV_COLUMNS,
     build_cve_id,
@@ -25,6 +20,11 @@ from tests.support.legacy_inputs import (
     encode_kev_csv,
     write_kev_csv,
 )
+from vulnwitness.adapters.migration.input_files import inspect_input_file
+from vulnwitness.adapters.migration.kev_csv_reader import KevCatalog, read_kev_catalog
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.domain.cve import MAX_CVE_ID_CHARS
+from vulnwitness.domain.migration_report import MigrationFailed, MigrationFailureCode
 
 DEFAULT_LIMITS = MigrationLimits()
 REQUIRED_COLUMNS = [

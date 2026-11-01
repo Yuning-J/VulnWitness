@@ -5,27 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.mitre.mapping_file import MitreSnapshotUnavailable, load_weakness_mapping
-from cve_kgrag.adapters.nvd.normalizer import SourceSnapshot
-from cve_kgrag.cli import main
-from cve_kgrag.composition import (
-    build_investigation_service,
-    build_nvd_normalizer,
-    build_search_service,
-    build_serving_data_plane,
-    load_packaged_source_registry,
-)
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.investigation import InvestigationRequest
-from cve_kgrag.domain.investigation_validation import validate_knowledge_evidence_set
-from cve_kgrag.domain.result_prefix import measure_response_bytes
-from cve_kgrag.domain.search import Candidate, SearchRequest
-from cve_kgrag.domain.topic_context import TopicContextRequest
-from cve_kgrag.domain.validation import EvidenceValidationError, validate_search_response
-from cve_kgrag.interfaces.investigation_summary import render_investigation_summary
-from cve_kgrag.settings import MitreSnapshotSettings, SettingsError, load_settings
 from tests.support.builders import build_bundle_with, build_cve_record
 from tests.support.clocks import SteppingClock, read_fixed_clock
 from tests.support.investigation import (
@@ -41,6 +20,27 @@ from tests.support.mitre_catalogues import (
     write_snippet_catalogues,
 )
 from tests.support.planners import DETERMINISTIC_VERIFIER
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.mitre.mapping_file import MitreSnapshotUnavailable, load_weakness_mapping
+from vulnwitness.adapters.nvd.normalizer import SourceSnapshot
+from vulnwitness.cli import main
+from vulnwitness.composition import (
+    build_investigation_service,
+    build_nvd_normalizer,
+    build_search_service,
+    build_serving_data_plane,
+    load_packaged_source_registry,
+)
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.investigation import InvestigationRequest
+from vulnwitness.domain.investigation_validation import validate_knowledge_evidence_set
+from vulnwitness.domain.result_prefix import measure_response_bytes
+from vulnwitness.domain.search import Candidate, SearchRequest
+from vulnwitness.domain.topic_context import TopicContextRequest
+from vulnwitness.domain.validation import EvidenceValidationError, validate_search_response
+from vulnwitness.interfaces.investigation_summary import render_investigation_summary
+from vulnwitness.settings import MitreSnapshotSettings, SettingsError, load_settings
 
 
 def test_packaged_memory_weakness_keeps_all_capec_terminal_paths_and_sources() -> None:
@@ -152,8 +152,8 @@ def test_lookup_command_preserves_a_capec_terminal_path(
     main(["mitre", "build", *arguments, "--out", str(snapshot_path)], environment={})
     digest = json.loads(capsys.readouterr().out)["sha256"]
     environment = {
-        "CVE_KGRAG_MITRE_SNAPSHOT_PATH": str(snapshot_path),
-        "CVE_KGRAG_MITRE_SNAPSHOT_SHA256": digest,
+        "VULNWITNESS_MITRE_SNAPSHOT_PATH": str(snapshot_path),
+        "VULNWITNESS_MITRE_SNAPSHOT_SHA256": digest,
     }
 
     # Act
@@ -291,8 +291,8 @@ def test_lookup_refuses_a_configured_snapshot_digest_mismatch(
     snapshot_path = tmp_path / "mapping.json"
     snapshot_path.write_text("{}")
     environment = {
-        "CVE_KGRAG_MITRE_SNAPSHOT_PATH": str(snapshot_path),
-        "CVE_KGRAG_MITRE_SNAPSHOT_SHA256": "0" * 64,
+        "VULNWITNESS_MITRE_SNAPSHOT_PATH": str(snapshot_path),
+        "VULNWITNESS_MITRE_SNAPSHOT_SHA256": "0" * 64,
     }
 
     # Act / Assert
@@ -304,10 +304,10 @@ def test_lookup_refuses_a_configured_snapshot_digest_mismatch(
 
 def test_snapshot_expected_hash_without_a_path_is_refused() -> None:
     # Arrange
-    environment = {"CVE_KGRAG_MITRE_SNAPSHOT_SHA256": "0" * 64}
+    environment = {"VULNWITNESS_MITRE_SNAPSHOT_SHA256": "0" * 64}
 
     # Act / Assert
-    with pytest.raises(SettingsError, match="CVE_KGRAG_MITRE_SNAPSHOT_PATH: required with"):
+    with pytest.raises(SettingsError, match="VULNWITNESS_MITRE_SNAPSHOT_PATH: required with"):
         load_settings(environment)
 
 
@@ -360,7 +360,7 @@ def test_investigation_candidates_omit_associations_and_text_points_to_lookup(
     for candidate in served_set["implementation_candidates"]:
         assert "weakness_associations" not in candidate["candidate"]
     assert summary.count("Weakness associations (derived catalogue context)") == 1
-    assert "cve-kgrag lookup <CVE-ID> for full paths, sources and omitted counts" in summary
+    assert "vulnwitness lookup <CVE-ID> for full paths, sources and omitted counts" in summary
 
 
 def test_associations_cannot_displace_candidates_from_a_small_context_budget(
@@ -529,8 +529,8 @@ def test_serving_commands_use_the_operator_pinned_mapping(
     main(["mitre", "build", *arguments, "--out", str(snapshot_path)], environment={})
     digest = json.loads(capsys.readouterr().out)["sha256"]
     environment = {
-        "CVE_KGRAG_MITRE_SNAPSHOT_PATH": str(snapshot_path),
-        "CVE_KGRAG_MITRE_SNAPSHOT_SHA256": digest,
+        "VULNWITNESS_MITRE_SNAPSHOT_PATH": str(snapshot_path),
+        "VULNWITNESS_MITRE_SNAPSHOT_SHA256": digest,
     }
     command_arguments = [command]
     if command == "lookup":
@@ -622,10 +622,10 @@ def test_operator_capabilities_record_computed_identity_and_comparison_status(
     snapshot_path = tmp_path / "mapping.json"
     assert main(["mitre", "build", *arguments, "--out", str(snapshot_path)], environment={}) == 0
     digest = json.loads(capsys.readouterr().out)["sha256"]
-    environment = {"CVE_KGRAG_MITRE_SNAPSHOT_PATH": str(snapshot_path)}
+    environment = {"VULNWITNESS_MITRE_SNAPSHOT_PATH": str(snapshot_path)}
     expected_integrity = "File identity recorded; no expected SHA-256 supplied."
     if has_expected_hash:
-        environment["CVE_KGRAG_MITRE_SNAPSHOT_SHA256"] = digest
+        environment["VULNWITNESS_MITRE_SNAPSHOT_SHA256"] = digest
         expected_integrity = "Compared with expected SHA-256."
 
     # Act

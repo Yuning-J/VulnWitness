@@ -2,7 +2,7 @@
 
 Schema version `2.0.0-dev.1` (pre-release until M7). Snapshots: `schemas/v2/`
 (`search_request`, `search_response`, `cve_record`, `evidence_anchor`, plus a
-`manifest.json` of SHA-256 hashes). Regenerate with `cve-kgrag schema export`;
+`manifest.json` of SHA-256 hashes). Regenerate with `vulnwitness schema export`;
 `tests/contract/test_schema_snapshots.py` fails on any drift.
 
 ## Where each invariant is enforced
@@ -35,7 +35,7 @@ when each anchor, CVE record and FiGHT technique equals the one the service's
 `EvidenceCatalog` holds under its ID; the service re-checks this before
 returning. A consumer holding a response checks one anchor by comparing it with
 what the `get_evidence` knowledge tool serves, the catalog's anchor under that ID, and
-`cve-kgrag verify` (`verify_evidence_set`) runs the validator, the decision-path audit
+`vulnwitness verify` (`verify_evidence_set`) runs the validator, the decision-path audit
 and replay on a knowledge evidence set handed back (ADR 0003 §10).
 
 ## Search behavior

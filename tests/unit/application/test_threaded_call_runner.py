@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from cve_kgrag.application.threaded_call_runner import (
+from vulnwitness.application.threaded_call_runner import (
     CallAborted,
     CallTimedOut,
     NoFreeWorker,

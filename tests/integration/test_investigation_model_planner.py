@@ -9,40 +9,6 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.adapter_discovery import FAILED_ADAPTER_REPLY, GuardedModelPort
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.application.deadline_checkpoint import ignore_checkpoint
-from cve_kgrag.application.investigate import PLANNER_CAP_REPLY, InvestigationService
-from cve_kgrag.application.planner_setup import ModelPlanning
-from cve_kgrag.application.trajectory_replay import ReplayCompleted, replay_evidence_set
-from cve_kgrag.domain.budget import BudgetBreach
-from cve_kgrag.domain.evidence_catalog import EvidenceCatalog
-from cve_kgrag.domain.investigation import (
-    DecisionBasis,
-    EvidenceNeedKind,
-    InvestigationRequest,
-    InvestigationWarningCode,
-    KnowledgeEvidenceSet,
-    NeedOutcome,
-    PlannerOutcome,
-    StepReason,
-    StopReason,
-    describe_planner_capability,
-)
-from cve_kgrag.domain.planning import (
-    ModelReply,
-    PlannerKind,
-    QueryIntent,
-    ToolCall,
-    ToolName,
-    compute_model_reply_sha256,
-)
-from cve_kgrag.domain.search import RetrievalOutcome
-from cve_kgrag.domain.taxonomy import BackendStatus, ResultStatus
-from cve_kgrag.domain.threat_context import KnownFightSnapshot
-from cve_kgrag.ports.planning import ModelPort
-from cve_kgrag.topics.registry import TopicRegistry
 from tests.support.clocks import (
     LATE_START_SECONDS,
     ONE_SECOND_RUN_REAL_SECONDS,
@@ -82,6 +48,40 @@ from tests.support.planners import (
     build_text_reply,
     plan_with,
 )
+from vulnwitness.adapter_discovery import FAILED_ADAPTER_REPLY, GuardedModelPort
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.application.deadline_checkpoint import ignore_checkpoint
+from vulnwitness.application.investigate import PLANNER_CAP_REPLY, InvestigationService
+from vulnwitness.application.planner_setup import ModelPlanning
+from vulnwitness.application.trajectory_replay import ReplayCompleted, replay_evidence_set
+from vulnwitness.domain.budget import BudgetBreach
+from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.investigation import (
+    DecisionBasis,
+    EvidenceNeedKind,
+    InvestigationRequest,
+    InvestigationWarningCode,
+    KnowledgeEvidenceSet,
+    NeedOutcome,
+    PlannerOutcome,
+    StepReason,
+    StopReason,
+    describe_planner_capability,
+)
+from vulnwitness.domain.planning import (
+    ModelReply,
+    PlannerKind,
+    QueryIntent,
+    ToolCall,
+    ToolName,
+    compute_model_reply_sha256,
+)
+from vulnwitness.domain.search import RetrievalOutcome
+from vulnwitness.domain.taxonomy import BackendStatus, ResultStatus
+from vulnwitness.domain.threat_context import KnownFightSnapshot
+from vulnwitness.ports.planning import ModelPort
+from vulnwitness.topics.registry import TopicRegistry
 
 PLANNER_KEY = "sk-test-planner-key-0123456789"
 SEARCH_AUSF_SUCI = {"tool": "cve_search", "query": "ausf suci"}

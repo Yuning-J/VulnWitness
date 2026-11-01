@@ -2,8 +2,11 @@
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import FixtureBundle
-from cve_kgrag.domain.investigation import (
+from tests.support.evaluation import run_deterministically, run_with_replies
+from tests.support.investigation import list_need_outcomes, list_step_reasons, list_step_tools
+from tests.support.planners import UNAVAILABLE_REPLY, build_plan_reply
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.domain.investigation import (
     DecisionBasis,
     EvidenceNeed,
     EvidenceNeedKind,
@@ -14,11 +17,8 @@ from cve_kgrag.domain.investigation import (
     StepReason,
     StopReason,
 )
-from cve_kgrag.domain.planning import CveSearchCall, ToolName
-from cve_kgrag.domain.taxonomy import ResultStatus
-from tests.support.evaluation import run_deterministically, run_with_replies
-from tests.support.investigation import list_need_outcomes, list_step_reasons, list_step_tools
-from tests.support.planners import UNAVAILABLE_REPLY, build_plan_reply
+from vulnwitness.domain.planning import CveSearchCall, ToolName
+from vulnwitness.domain.taxonomy import ResultStatus
 
 SEARCH_GATEWAY = {"tool": "cve_search", "query": "zzqx gateway"}
 TOPIC_5G_AKA = {"tool": "topic_context", "topic_id": "3gpp:5g-aka"}

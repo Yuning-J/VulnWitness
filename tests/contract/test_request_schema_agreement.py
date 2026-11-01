@@ -7,24 +7,24 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ValidationError
 
-from cve_kgrag.domain.budget import (
+from tests.support.paths import REPOSITORY_SCHEMA_DIR
+from vulnwitness.domain.budget import (
     MAX_CONTEXT_BYTES,
     MAX_ROUNDS,
     MAX_SOURCES,
     MAX_TOOL_CALLS,
     MAX_WALL_TIME_SECONDS,
 )
-from cve_kgrag.domain.investigation import InvestigationRequest
-from cve_kgrag.domain.planning import QueryPlan
-from cve_kgrag.domain.search import (
+from vulnwitness.domain.investigation import InvestigationRequest
+from vulnwitness.domain.planning import QueryPlan
+from vulnwitness.domain.search import (
     MAX_FILTER_VALUES,
     MAX_RESULTS_PER_CALL,
     SearchFilters,
     SearchRequest,
 )
-from cve_kgrag.domain.topic_context import TopicContextRequest
-from cve_kgrag.schema_snapshots import REQUEST_CONTRACTS
-from tests.support.paths import REPOSITORY_SCHEMA_DIR
+from vulnwitness.domain.topic_context import TopicContextRequest
+from vulnwitness.schema_snapshots import REQUEST_CONTRACTS
 
 REQUEST_SCHEMA_FILE = REPOSITORY_SCHEMA_DIR / "search_request.schema.json"
 TOPIC_REQUEST_SCHEMA_FILE = REPOSITORY_SCHEMA_DIR / "topic_context_request.schema.json"

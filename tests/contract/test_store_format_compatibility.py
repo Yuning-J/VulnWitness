@@ -11,14 +11,14 @@ regenerated with a later importer.
 import hashlib
 import json
 
-from cve_kgrag.adapters.store.corpus_store import load_corpus_store, verify_corpus_store
-from cve_kgrag.domain.corpus_store_manifest import STORE_FORMAT_SCHEMA_SHA256, CorpusStoreManifest
-from cve_kgrag.domain.cve import CveRecord
-from cve_kgrag.domain.evidence import EvidenceAnchor
-from cve_kgrag.domain.hashing import canonical_sha256
-from cve_kgrag.domain.served_dataset import ServedDataset, ServedDatasetKind
-from cve_kgrag.schema_snapshots import render_schema
 from tests.support.corpus_stores import COMPATIBILITY_STORE
+from vulnwitness.adapters.store.corpus_store import load_corpus_store, verify_corpus_store
+from vulnwitness.domain.corpus_store_manifest import STORE_FORMAT_SCHEMA_SHA256, CorpusStoreManifest
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.hashing import canonical_sha256
+from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
+from vulnwitness.schema_snapshots import render_schema
 
 PINNED_FILE_SHA256 = {
     "anchors.jsonl": "0ba19427011f5c654577952ad6636ee931bd52b984e8fa5b3e60e015b8e5fd10",

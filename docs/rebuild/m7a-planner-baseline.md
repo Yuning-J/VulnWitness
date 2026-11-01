@@ -28,13 +28,13 @@ autonomy today; only plans that are different, accepted and cheaper argue for ex
 
 ## The command
 
-`cve-kgrag eval planner --gold FILE --out DIR [--model-runs N]` is a reviewer and operator
+`vulnwitness eval planner --gold FILE --out DIR [--model-runs N]` is a reviewer and operator
 tool, served by neither the REST API nor MCP.
 
 - Each case runs once with the deterministic policy. With `--model-runs N` (1 to 20) it
   then runs N times with the model planner the settings enable. The default, 0, calls no
   endpoint.
-- Model runs need `CVE_KGRAG_PLANNER_ENABLED`: without it, `--model-runs` is a usage error
+- Model runs need `VULNWITNESS_PLANNER_ENABLED`: without it, `--model-runs` is a usage error
   (exit 2). An enabled planner that cannot plan (no key, no usable adapter) ends the
   command with its reason (exit 1). The evaluation never reports model runs it did not make.
 - The gold file must be an investigation gold file: a `trajectories` list whose rows hold

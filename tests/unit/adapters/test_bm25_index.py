@@ -2,10 +2,10 @@
 
 import pytest
 
-from cve_kgrag.adapters.lexical.bm25_index import Bm25LexicalIndex
-from cve_kgrag.domain.cve import CveRecord
 from tests.support.builders import build_cve_record
 from tests.support.collect import list_cve_ids
+from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
+from vulnwitness.domain.cve import CveRecord
 
 
 def build_record(

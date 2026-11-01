@@ -2,7 +2,7 @@
 
 import pytest
 
-from cve_kgrag.domain.bm25 import (
+from vulnwitness.domain.bm25 import (
     compute_inverse_document_frequency,
     compute_length_saturation,
     compute_term_weight,

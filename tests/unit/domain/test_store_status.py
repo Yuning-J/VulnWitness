@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from cve_kgrag.domain.search import SCHEMA_VERSION
-from cve_kgrag.domain.store_status import StoreStatus, is_store_name
+from vulnwitness.domain.search import SCHEMA_VERSION
+from vulnwitness.domain.store_status import StoreStatus, is_store_name
 
 IDENTITY = {
     "import_identity_sha256": "a" * 64,

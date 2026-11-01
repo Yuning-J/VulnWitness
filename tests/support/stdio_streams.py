@@ -6,7 +6,7 @@ from io import StringIO
 
 import anyio
 
-from cve_kgrag.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
 
 
 class ImmediateStdioInput(anyio.AsyncFile[str]):

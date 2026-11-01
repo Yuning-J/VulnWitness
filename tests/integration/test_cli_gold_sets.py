@@ -1,4 +1,4 @@
-"""``cve-kgrag eval gold-sets`` over a synthetic store under a root and the packaged FiGHT
+"""``vulnwitness eval gold-sets`` over a synthetic store under a root and the packaged FiGHT
 excerpt as the operator snapshot: it prints each case's sets, ``--check`` compares them
 with a recorded file, and settings, sources or labels it cannot use end the run with a
 closed reason."""
@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.store.corpus_store import verify_corpus_store
-from cve_kgrag.cli import main
 from tests.support.corpus_stores import import_store
 from tests.support.fight_excerpt import EXCERPT_BYTES, EXCERPT_SHA256
 from tests.support.gold_files import UNKNOWN_CORPUS_SHA256, build_case_row, encode_gold_file
+from vulnwitness.adapters.store.corpus_store import verify_corpus_store
+from vulnwitness.cli import main
 
 FULL_FIGHT_SHA256 = "59a9addbd75d8680091797d66d5b237d9d026512990c61a6f51692ca94d2a7a8"
 PROTOCOL_CASE = build_case_row(
@@ -47,11 +47,11 @@ def settings(tmp_path: Path, store_root: Path, request: pytest.FixtureRequest) -
     snapshot_path = tmp_path / "fight.yaml"
     snapshot_path.write_bytes(EXCERPT_BYTES)
     environment = {
-        "CVE_KGRAG_STORE_ROOT": str(store_root),
-        "CVE_KGRAG_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
+        "VULNWITNESS_STORE_ROOT": str(store_root),
+        "VULNWITNESS_FIGHT_SNAPSHOT_PATH": str(snapshot_path),
     }
     if request.param:
-        environment["CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
+        environment["VULNWITNESS_FIGHT_SNAPSHOT_SHA256"] = EXCERPT_SHA256
     assert main(["store", "activate", "first"], environment) == 0
     return environment
 
@@ -235,10 +235,10 @@ def test_gold_file_labelled_against_other_sources_fails(
 @pytest.mark.parametrize(
     ("removed_variables", "expected_variable"),
     [
-        (("CVE_KGRAG_STORE_ROOT",), "CVE_KGRAG_STORE_ROOT"),
+        (("VULNWITNESS_STORE_ROOT",), "VULNWITNESS_STORE_ROOT"),
         (
-            ("CVE_KGRAG_FIGHT_SNAPSHOT_PATH", "CVE_KGRAG_FIGHT_SNAPSHOT_SHA256"),
-            "CVE_KGRAG_FIGHT_SNAPSHOT_PATH",
+            ("VULNWITNESS_FIGHT_SNAPSHOT_PATH", "VULNWITNESS_FIGHT_SNAPSHOT_SHA256"),
+            "VULNWITNESS_FIGHT_SNAPSHOT_PATH",
         ),
     ],
     ids=["no_store_root", "no_fight_snapshot"],
@@ -278,7 +278,7 @@ def test_root_without_an_active_store_cannot_start(
 ) -> None:
     empty_root = tmp_path / "empty"
     empty_root.mkdir()
-    environment = {**settings, "CVE_KGRAG_STORE_ROOT": str(empty_root)}
+    environment = {**settings, "VULNWITNESS_STORE_ROOT": str(empty_root)}
     gold_path = write_gold_file(tmp_path, UNKNOWN_CORPUS_SHA256)
 
     exit_code = main(["eval", "gold-sets", "--gold", str(gold_path)], environment)

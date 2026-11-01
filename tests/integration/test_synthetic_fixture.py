@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from cve_kgrag.adapters.fixture.synthetic_fixture import (
+from vulnwitness.adapters.fixture.synthetic_fixture import (
     FixtureBundle,
     FixtureIntegrityError,
     default_fixture_dir,
     load_fixture_bundle,
 )
-from cve_kgrag.domain.hashing import sha256_hex
-from cve_kgrag.domain.taxonomy import SourceType, TrustLevel
+from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.taxonomy import SourceType, TrustLevel
 
 
 @pytest.fixture

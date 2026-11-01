@@ -25,24 +25,24 @@ from typing import Any
 
 import yaml
 
-from cve_kgrag.application.search import SearchService
-from cve_kgrag.cli import build_evidence_set_check
-from cve_kgrag.composition import (
+from vulnwitness.application.search import SearchService
+from vulnwitness.cli import build_evidence_set_check
+from vulnwitness.composition import (
     build_knowledge_toolbox,
     build_serving_data_plane,
     load_fight_source,
     load_served_corpus,
 )
-from cve_kgrag.domain.relations import Relation, record_relations
-from cve_kgrag.domain.search import SearchRequest
-from cve_kgrag.domain.taxonomy import BackendStatus, RetrievalChannel
-from cve_kgrag.interfaces.knowledge_tools import ToolLimits
-from cve_kgrag.ports.served_corpus import ServedCorpus
-from cve_kgrag.settings import load_settings
+from vulnwitness.domain.relations import Relation, record_relations
+from vulnwitness.domain.search import SearchRequest
+from vulnwitness.domain.taxonomy import BackendStatus, RetrievalChannel
+from vulnwitness.interfaces.knowledge_tools import ToolLimits
+from vulnwitness.ports.served_corpus import ServedCorpus
+from vulnwitness.settings import load_settings
 
 RSS_ALLOWANCE_BYTES = 1_073_741_824
 WATCHDOG_SECONDS = 60
-OUTPUT_ROOT = Path.home() / "data/cve-kgrag/runs/graph-expand"
+OUTPUT_ROOT = Path.home() / "data/vulnwitness/runs/graph-expand"
 RELATION_KINDS = ("cwe", "vendor", "product", "cpe", "purl")
 PASS_CRITERIA = {
     "typical": "All 10 finish within ToolLimits.time_limit_seconds with an OK graph outcome.",
@@ -235,7 +235,7 @@ def main(output_dir: Path, serving_baseline_bytes: int) -> None:
     if serving_baseline_bytes <= 0:
         raise SystemExit("serving baseline must be a positive byte count")
     if not output_dir.resolve().is_relative_to(OUTPUT_ROOT.resolve()):
-        raise SystemExit("output must be under ~/data/cve-kgrag/runs/graph-expand")
+        raise SystemExit("output must be under ~/data/vulnwitness/runs/graph-expand")
     output_dir.mkdir(parents=True, exist_ok=True)
     if (output_dir / "measurement.json").exists():
         raise SystemExit("measurement already exists; do not repeat this release check")

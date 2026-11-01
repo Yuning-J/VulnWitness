@@ -8,19 +8,19 @@ from typing import Any
 
 import pytest
 
-from cve_kgrag.evaluation.gold_cases import GoldFileError
-from cve_kgrag.evaluation.gold_rules import GoldRuleError, TechniqueSubject
-from cve_kgrag.evaluation.gold_sets import (
+from tests.support.builders import build_cve_record
+from tests.support.fight_excerpt import EXCERPT_BYTES
+from tests.support.gold_files import build_case_row, encode_gold_file, load_labelled_gold_file
+from vulnwitness.evaluation.gold_cases import GoldFileError
+from vulnwitness.evaluation.gold_rules import GoldRuleError, TechniqueSubject
+from vulnwitness.evaluation.gold_sets import (
     MAX_GOLD_SETS_FILE_BYTES,
     GoldSetCollector,
     format_gold_sets,
     read_recorded_sets,
     read_technique_subjects,
 )
-from cve_kgrag.evaluation.labelled_cases import GoldFile, SubjectKind
-from tests.support.builders import build_cve_record
-from tests.support.fight_excerpt import EXCERPT_BYTES
-from tests.support.gold_files import build_case_row, encode_gold_file, load_labelled_gold_file
+from vulnwitness.evaluation.labelled_cases import GoldFile, SubjectKind
 
 RECORD_TEXTS = {
     "CVE-9999-0001": "democorp gateway crashes on long input",

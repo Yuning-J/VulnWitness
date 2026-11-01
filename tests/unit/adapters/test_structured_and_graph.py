@@ -1,11 +1,11 @@
 """Structured constraints and canonical in-memory graph expansion."""
 
-from cve_kgrag.adapters.graph.in_memory_graph import InMemoryRelationGraph
-from cve_kgrag.adapters.structured.in_memory_filter import InMemoryStructuredIndex
-from cve_kgrag.domain.search import GraphPath, SearchFilters
-from cve_kgrag.domain.taxonomy import BackendStatus
 from tests.support.builders import build_cve_record
 from tests.support.collect import list_cve_ids
+from vulnwitness.adapters.graph.in_memory_graph import InMemoryRelationGraph
+from vulnwitness.adapters.structured.in_memory_filter import InMemoryStructuredIndex
+from vulnwitness.domain.search import GraphPath, SearchFilters
+from vulnwitness.domain.taxonomy import BackendStatus
 
 RECORDS = (
     build_cve_record(
