@@ -5,6 +5,7 @@ from datetime import UTC
 
 from pydantic import BaseModel
 
+from vulnwitness.application.investigation_report import build_investigation_report
 from vulnwitness.application.triage_workflow import triage_selection_key
 from vulnwitness.domain.cve import CveRecord, CvssMetric
 from vulnwitness.domain.cvss_ranking import rank_cvss_metric
@@ -557,6 +558,7 @@ def build_session_report(
     pages: list[tuple[int, ProductQueryResponse]] = []
     inventory: list[tuple[int, ProductVulnerability]] = []
     lookups: list[tuple[int, Candidate, dict[str, EvidenceAnchor]]] = []
+    investigations: list[tuple[int, KnowledgeEvidenceSet]] = []
     limits = [
         "Affectedness is unknown for every CVE: a version “hit” only "
         "matches an NVD CPE condition; configuration and environment "
@@ -575,6 +577,7 @@ def build_session_report(
             for candidate in answer.candidates:
                 lookups.append((call.sequence, candidate, collect_anchors(answer)))
         elif isinstance(answer, KnowledgeEvidenceSet):
+            investigations.append((call.sequence, answer))
             for need in answer.coverage.needs:
                 if need.outcome != NeedOutcome.FOUND:
                     limits.append(
@@ -683,12 +686,14 @@ def build_session_report(
         if vulnerability.nvd_version_note is not None:
             outcome = vulnerability.nvd_version_note.outcome
             outcomes[outcome] = outcomes.get(outcome, 0) + 1
-    facts = [
-        f"{basis_counts.get('product_field', 0)} of {len(inventory)} "
-        f"read entries match the NVD product field; "
-        f"{basis_counts.get('description_mention', 0)} "
-        f"only mention the product in their description."
-    ]
+    facts: list[str] = []
+    if pages:
+        facts.append(
+            f"{basis_counts.get('product_field', 0)} of {len(inventory)} "
+            f"read entries match the NVD product field; "
+            f"{basis_counts.get('description_mention', 0)} "
+            f"only mention the product in their description."
+        )
     if pages and pages[0][1].version is not None:
         facts.append(
             f"Version {pages[0][1].version} against NVD conditions: {outcomes.get('hit', 0)} "
@@ -705,11 +710,19 @@ def build_session_report(
             reaching += count
             techniques.update(distinct)
             omitted += associations.omitted_count
-    facts.append(
-        f"The {len(lookups)} CVE details returned {returned} catalogue "
-        f"paths; {reaching} paths reaching ATT&CK; {len(techniques)} "
-        f"distinct techniques; {omitted} paths omitted by the cap."
-    )
+    if lookups:
+        facts.append(
+            f"The {len(lookups)} CVE details returned {returned} catalogue "
+            f"paths; {reaching} paths reaching ATT&CK; {len(techniques)} "
+            f"distinct techniques; {omitted} paths omitted by the cap."
+        )
+    for sequence, investigation in investigations:
+        facts.append(
+            f"Call {sequence} investigation ({investigation.applied_scope}): "
+            f"{len(investigation.implementation_candidates)} implementation candidates, "
+            f"{len(investigation.protocol_context)} FiGHT techniques, "
+            f"status {investigation.status}"
+        )
     ranks: dict[str, int] = {}
     for rank, vulnerability in enumerate(
         sorted(vulnerabilities.values(), key=triage_selection_key), 1
@@ -750,27 +763,20 @@ def build_session_report(
     if triage is not None:
         total = str(pages[-1][1].total_available) if pages else "unknown"
         inventory_title = f"Read inventory · {len(inventory)} of {total}"
-    return SessionReport(
-        title,
-        session.dataset.served.kind == ServedDatasetKind.SYNTHETIC_FIXTURE,
-        check,
-        (
-            overview,
-            ReportSection(
-                "Key facts and limits",
-                sections=(
-                    ReportSection("What the records show", bullets=tuple(facts), layout="panel"),
-                    ReportSection(
-                        "What is not established", bullets=tuple(limits), layout="limits"
-                    ),
-                ),
-                layout="two",
-            ),
+    card_ids: set[str] = set()
+    for _, candidate, _ in lookups:
+        card_ids.add(candidate.record.cve_id)
+    record_sections: list[ReportSection] = []
+    if cards:
+        record_sections.append(
             ReportSection(
                 f"CVE details · {len(cards)} CVEs",
                 paragraphs=selection_paragraphs,
                 sections=tuple(cards),
-            ),
+            )
+        )
+    if rows:
+        record_sections.append(
             ReportSection(
                 inventory_title,
                 tables=(
@@ -788,7 +794,32 @@ def build_session_report(
                         tuple(card_links),
                     ),
                 ),
+            )
+        )
+    investigation_sections: list[ReportSection] = []
+    for sequence, investigation in investigations:
+        investigation_sections.append(build_investigation_report(investigation, sequence, card_ids))
+    if investigation_sections:
+        record_sections.append(
+            ReportSection("Investigations", sections=tuple(investigation_sections))
+        )
+    return SessionReport(
+        title,
+        session.dataset.served.kind == ServedDatasetKind.SYNTHETIC_FIXTURE,
+        check,
+        (
+            overview,
+            ReportSection(
+                "Key facts and limits",
+                sections=(
+                    ReportSection("What the records show", bullets=tuple(facts), layout="panel"),
+                    ReportSection(
+                        "What is not established", bullets=tuple(limits), layout="limits"
+                    ),
+                ),
+                layout="two",
             ),
+            *record_sections,
             build_execution(contents, triage),
             build_appendix(contents, triage_scope),
         ),

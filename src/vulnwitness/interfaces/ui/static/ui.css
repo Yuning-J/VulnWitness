@@ -207,6 +207,10 @@ th,td {
   padding:12px;
   border-bottom:1px solid var(--line);
 }
+/* Long source URLs sit in the last column; only they may break mid-token. */
+td:last-child {
+  overflow-wrap:anywhere;
+}
 th {
   color:var(--muted);
   font-size:11px;

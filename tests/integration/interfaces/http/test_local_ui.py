@@ -21,6 +21,7 @@ from tests.support.asgi import (
 from tests.support.ui_startup import DeferredUiDeployment
 from tests.support.workspaces import agent_note, build_test_workspace
 from vulnwitness.adapters.session.files import hold_session_lock
+from vulnwitness.domain.investigation import KnowledgeEvidenceSet
 from vulnwitness.domain.session_record import SessionRecord
 from vulnwitness.domain.tool_contracts import TOOL_FAILURE_MESSAGES, ToolFailureCode
 from vulnwitness.domain.workspace import AddFindingsRequest, RenderReportRequest
@@ -389,23 +390,117 @@ async def test_report_navigation_requires_launch_token_and_serves_fixed_html(
     token = HTTP_SECRET_TOKEN.get_secret_value()
 
     # Act
-    missing = await ui_client.post(target)
+    page = await ui_client.get(f"/investigations/{session_id}")
+    start_page = await ui_client.get("/")
+    missing = await ui_client.post(target, headers={"origin": SERVER_URL})
     wrong = await ui_client.post(target, data={"token": "wrong"})
     foreign = await ui_client.post(
         target, data={"token": token}, headers={"origin": "https://attacker.invalid"}
     )
-    report = await ui_client.post(target, data={"token": token}, headers={"origin": SERVER_URL})
+    null_origin = await ui_client.post(target, data={"token": token}, headers={"origin": "null"})
+    report = await ui_client.post(
+        target, data={"token": token}, headers={"origin": SERVER_URL, "authorization": ""}
+    )
     api_report = await ui_client.get(f"/ui-api/report/{session_id}")
     script = await ui_client.get("/ui.js")
 
     # Assert
     assert missing.status_code == wrong.status_code == 401
+    assert page.headers["referrer-policy"] == start_page.headers["referrer-policy"] == "same-origin"
     assert missing.json()["code"] == wrong.json()["code"] == "unauthorized"
-    assert foreign.status_code == 403
+    assert foreign.status_code == null_origin.status_code == 403
+    assert foreign.json()["code"] == null_origin.json()["code"] == "origin_not_allowed"
     assert report.status_code == 200
     assert report.content == api_report.content
-    assert report.headers["content-security-policy"].startswith("default-src 'none'")
+    assert report.headers["content-security-policy"] == (
+        "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'"
+    )
+    assert report.headers["referrer-policy"] == "no-referrer"
+    assert '<meta http-equiv="Content-Security-Policy"' in report.text
+    assert "default-src 'none'; style-src 'unsafe-inline'" in report.text
+    assert "<style>" in report.text and "<script" not in report.text
     assert "innerHTML" not in script.text
+
+
+async def test_topic_detail_api_exposes_the_shared_investigation_sections(
+    ui_client: httpx2.AsyncClient,
+) -> None:
+    # Arrange
+    started = await ui_client.post("/ui-api/start", json={"goal": "5G-AKA topic review"})
+    session_id = started.json()["session_id"]
+    recorded = await ui_client.post(
+        "/ui-api/investigate", json={"session_id": session_id, "query": "5G-AKA", "scope": "mixed"}
+    )
+    answer = KnowledgeEvidenceSet.model_validate(recorded.json())
+
+    # Act
+    view = await ui_client.get(f"/ui-api/view/{session_id}")
+    investigation = next(
+        section
+        for section in view.json()["report"]["sections"]
+        if section["title"] == "Investigations"
+    )["sections"][0]
+    sections = investigation["sections"]
+
+    # Assert
+    assert view.status_code == 200
+    titles = []
+    for section in sections:
+        titles.append(section["title"])
+    assert titles == [
+        "Status and needs",
+        "Implementation candidates",
+        "Protocol context (FiGHT)",
+        "Warnings",
+    ]
+    for candidate, row in zip(
+        answer.implementation_candidates, sections[1]["tables"][0]["rows"], strict=True
+    ):
+        assert row[0] == candidate.candidate.record.cve_id
+    for technique, row in zip(
+        answer.protocol_context, sections[2]["tables"][0]["rows"], strict=True
+    ):
+        assert row[0] == technique.technique_id and row[1] == technique.name
+        assert row[2] == ", ".join(technique.tactic_names)
+        assert row[3] == technique.status.value
+        assert row[4] == ", ".join(technique.matched_terms)
+        for evidence_id in technique.evidence_ids:
+            assert evidence_id in row[5]
+    for warning in answer.warnings:
+        assert any(
+            warning.code.value in bullet and warning.subject in bullet
+            for bullet in sections[3]["bullets"]
+        )
+
+
+async def test_topic_detail_omits_empty_inventory_and_shows_empty_candidates_as_text(
+    ui_client: httpx2.AsyncClient,
+) -> None:
+    # Arrange
+    started = await ui_client.post("/ui-api/start", json={"goal": "GTP topic review"})
+    session_id = started.json()["session_id"]
+    await ui_client.post(
+        "/ui-api/investigate", json={"session_id": session_id, "query": "GTP", "scope": "mixed"}
+    )
+
+    # Act
+    view = await ui_client.get(f"/ui-api/view/{session_id}")
+    script = await ui_client.get("/ui.js")
+
+    # Assert
+    assert view.status_code == 200
+    sections = view.json()["report"]["sections"]
+    assert sections[1]["sections"][0]["bullets"] == [
+        "Call 1 investigation (mixed): 0 implementation candidates, "
+        "4 FiGHT techniques, status partial"
+    ]
+    for section in sections:
+        assert not section["title"].startswith(("CVE details", "Read inventory"))
+    investigation = next(section for section in sections if section["title"] == "Investigations")
+    candidates = investigation["sections"][0]["sections"][1]
+    assert candidates["tables"] == []
+    assert candidates["paragraphs"][0]["text"] == "No implementation candidates were returned."
+    assert "Open saved JSON in Trajectory to inspect" not in script.text
 
 
 async def test_report_symlink_cannot_serve_an_unrelated_file(tmp_path: Path) -> None:

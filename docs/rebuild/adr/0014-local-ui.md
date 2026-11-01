@@ -23,6 +23,11 @@ freshness uses the workspace's format-specific status. Report reads accept an
 investigation ID only and read its fixed `report.html` artifact through workspace
 path validation. They accept neither filenames nor path parameters.
 
+Each recorded investigation contributes implementation candidates, separate FiGHT
+protocol threat context with sources, answer and step warnings, status and needs
+to the shared report model. HTML, Markdown and UI detail views render those same
+sections. Candidate links point to recorded lookup cards when available.
+
 ## HTTP surface amendments to ADR 0007
 
 The existing guard, exact raw-path routing, Host/Origin allowlist, bearer header,
@@ -39,6 +44,11 @@ These deliberate differences support a browser in one local process:
   form body instead. Host/Origin validation and constant-time token comparison
   still apply before any workspace access; neither cookies nor query-string
   tokens authorize reads. The separate API report read requires the bearer header.
+- UI pages use `Referrer-Policy: same-origin` so browser form POSTs to the report
+  route retain the page's real Origin. Cross-origin navigation sends no referrer;
+  external links retain `rel="noreferrer noopener"`. The guard refuses null and
+  foreign Origins. The report itself uses `no-referrer` and carries both a CSP
+  header and a saved-file CSP meta tag; its inline stylesheet needs no server.
 - The port is a CLI option; the host is fixed. There is no HTTP-token prerequisite
   in settings for this surface.
 - Pages and the authenticated list answer while a daemon thread loads the same

@@ -34,8 +34,15 @@ from vulnwitness.interfaces.report_markdown import render_markdown_report
             3,
             "time limit",
         ),
-        ("no matching synthetic product", TriageLimits(), None, (), 1, "0 CVEs"),
-        ("demo_gateway", TriageLimits(lookups=0), None, (), 0, "0 CVEs"),
+        ("no matching synthetic product", TriageLimits(), None, (), 1, "Inventory complete"),
+        (
+            "demo_gateway",
+            TriageLimits(lookups=0),
+            None,
+            (),
+            0,
+            "Selection is an order, not a risk ranking.",
+        ),
         (
             "demo_gateway",
             TriageLimits(),
@@ -85,6 +92,9 @@ def test_report_shows_recorded_scope_and_check_marks(
         assert "Inventory incomplete" in document
     if summary.deep_dive.lookups_completed == 0:
         assert '<article class="card"' not in document
+        assert "CVE details ·" not in document
+    if summary.inventory.items_seen == 0:
+        assert "Read inventory ·" not in document
     if report_format == "html":
         assert 'class="pill ok"' in document
         assert 'class="ok-mark">✓' in document

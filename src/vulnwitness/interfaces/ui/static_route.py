@@ -22,5 +22,5 @@ class StaticRoute:
         await Response(
             content,
             media_type=self.media_type,
-            headers={"Content-Security-Policy": UI_CSP, "Referrer-Policy": "no-referrer"},
+            headers={"Content-Security-Policy": UI_CSP, "Referrer-Policy": "same-origin"},
         )(scope, receive, send)

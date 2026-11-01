@@ -1,7 +1,8 @@
 """Plain-text product vulnerabilities using the same field formatting as investigations."""
 
+from vulnwitness.application.investigation_presentation import format_severity
 from vulnwitness.domain.product_query import PRODUCT_ORDER_DESCRIPTION, ProductQueryResponse
-from vulnwitness.interfaces.investigation_summary import format_paragraph, format_severity
+from vulnwitness.interfaces.investigation_summary import format_paragraph
 
 
 def render_product_query_summary(vulnerabilities: ProductQueryResponse) -> str:

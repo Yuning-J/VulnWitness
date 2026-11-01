@@ -14,8 +14,16 @@ from tests.support.report_sessions import (
     read_recorded_files,
     save_findings,
 )
+from tests.support.workspaces import build_test_workspace
 from vulnwitness.cli import main
 from vulnwitness.domain.weakness_associations import DERIVED_ASSOCIATION_NOTE
+from vulnwitness.domain.workspace import (
+    InvestigationRequest,
+    StartInvestigationRequest,
+    TriageProductRequest,
+)
+from vulnwitness.interfaces.report_html import render_html_report
+from vulnwitness.interfaces.report_markdown import escape_markdown, render_markdown_report
 
 
 @pytest.fixture
@@ -24,6 +32,81 @@ def report_session(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> Path:
     build_report_session(directory)
     capsys.readouterr()
     return directory
+
+
+@pytest.mark.parametrize(
+    "session_kind,detail_count,inventory_title,catalogue_fact",
+    (
+        (
+            "triage",
+            2,
+            "Read inventory · 2 of 2",
+            "The 2 CVE details returned 9 catalogue paths; 4 paths reaching ATT&CK; "
+            "4 distinct techniques; 0 paths omitted by the cap.",
+        ),
+        (
+            "manual-product",
+            1,
+            "Read inventory · 2 entries",
+            "The 1 CVE details returned 0 catalogue paths; 0 paths reaching ATT&CK; "
+            "0 distinct techniques; 0 paths omitted by the cap.",
+        ),
+        ("inventory-only", 0, "Read inventory · 2 entries", None),
+    ),
+)
+def test_product_reports_preserve_inventory_and_catalogue_facts(
+    tmp_path: Path,
+    session_kind: str,
+    detail_count: int,
+    inventory_title: str,
+    catalogue_fact: str | None,
+) -> None:
+    # Arrange
+    _, workspace = build_test_workspace(tmp_path / "workspace")
+    if session_kind == "triage":
+        started = workspace.triage(TriageProductRequest(product="demo_gateway", version="2.0"))
+    else:
+        started = workspace.start(StartInvestigationRequest(goal="Review product records"))
+        workspace.record(
+            started.session_id,
+            "query_product_vulnerabilities",
+            {"product": "demo_gateway", "version": "2.0"},
+        )
+        if detail_count:
+            workspace.record(started.session_id, "lookup_cve", {"cve_id": "CVE-9999-0001"})
+    expected_facts = (
+        "2 of 2 read entries match the NVD product field; "
+        "0 only mention the product in their description.",
+        "Version 2.0 against NVD conditions: 1 hit, 0 unknown, 1 no hit.",
+    )
+    if catalogue_fact is not None:
+        expected_facts += (catalogue_fact,)
+    request = InvestigationRequest(session_id=started.session_id)
+
+    # Act
+    model = workspace.report_model(request)
+    html = render_html_report(model)
+    markdown = render_markdown_report(model)
+    repeated = workspace.report_model(request)
+
+    # Assert
+    assert model == repeated
+    assert html == render_html_report(repeated)
+    assert markdown == render_markdown_report(repeated)
+    assert model.sections[1].sections[0].bullets == expected_facts
+    expected_titles = ["Overview", "Key facts and limits"]
+    if detail_count:
+        expected_titles.append(f"CVE details · {detail_count} CVEs")
+    expected_titles.extend((inventory_title, "Execution and checks", "Technical appendix"))
+    titles = []
+    for section in model.sections:
+        titles.append(section.title)
+    assert titles == expected_titles
+    for fact in expected_facts:
+        assert escape(fact) in html
+        assert escape_markdown(fact) in markdown
+    if not detail_count:
+        assert "CVE details returned" not in html and "CVE details returned" not in markdown
 
 
 @pytest.mark.parametrize("report_format", ("md", "html"))

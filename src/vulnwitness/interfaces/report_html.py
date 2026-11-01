@@ -20,7 +20,10 @@ def render_html_table(table: ReportTable) -> str:
         for cell in row:
             text = escape(cell)
             if cell in links:
-                text = f'<a href="{escape(links[cell], quote=True)}">{text}</a>'
+                text = (
+                    f'<a href="{escape(links[cell], quote=True)}" '
+                    f'rel="noreferrer noopener">{text}</a>'
+                )
             mark = (
                 ' class="ok-mark"'
                 if cell == "✓"
@@ -84,7 +87,10 @@ def render_html_section(section: ReportSection, level: int) -> str:
         for chip in section.chips:
             fragments.append(f'<span class="chip">{escape(chip)}</span>')
     for link in section.links:
-        fragments.append(f'<a href="{escape(link.target, quote=True)}">{escape(link.text)}</a>')
+        fragments.append(
+            f'<a href="{escape(link.target, quote=True)}" '
+            f'rel="noreferrer noopener">{escape(link.text)}</a>'
+        )
     for paragraph in () if section.stats else section.paragraphs:
         attributes = ' class="warning"' if paragraph.warning else ""
         fragments.append(f"<p{attributes}>{escape(paragraph.text)}</p>")

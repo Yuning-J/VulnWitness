@@ -1,7 +1,8 @@
 """Ranked search matches and channel outcomes without relevance assertions."""
 
+from vulnwitness.application.investigation_presentation import format_severity
 from vulnwitness.domain.search import SearchResponse
-from vulnwitness.interfaces.investigation_summary import format_paragraph, format_severity
+from vulnwitness.interfaces.investigation_summary import format_paragraph
 from vulnwitness.interfaces.record_summary import format_published, summarize_description
 
 

@@ -116,7 +116,18 @@ function renderSection(section, level = 3, showTitle = true) {
     container.append(bullets);
   }
   if (section.verbatim !== null) container.append(element("pre", section.verbatim));
-  for (const table of section.tables) appendTable(container, table.headings, table.rows);
+  for (const table of section.tables) {
+    const rows = [];
+    for (const row of table.rows) {
+      const cells = [];
+      for (const cell of row) {
+        const link = table.links.find(link => link.text === cell);
+        cells.push(link ? safeLink(link) : cell);
+      }
+      rows.push(cells);
+    }
+    appendTable(container, table.headings, rows);
+  }
   const childHost = section.layout === "two" ? element("div", undefined, "two") : container;
   for (const child of section.sections) childHost.append(renderSection(child, level + 1));
   if (childHost !== container) container.append(childHost);
@@ -232,7 +243,6 @@ async function loadDetail() {
     for (const call of snapshot.calls) {
       outcomes.append(element("p", `Call ${call.sequence} · ${call.command} · ${call.outcome}`));
     }
-    outcomes.append(element("p", "Open saved JSON in Trajectory to inspect the full recorded evidence and sources.", "muted"));
     document.getElementById("overview-content").append(outcomes);
   }
   if (snapshot.triage) {
@@ -240,8 +250,13 @@ async function loadDetail() {
     scope.append(element("summary", "Inventory and deep-dive scope"), element("pre", JSON.stringify(snapshot.triage, null, 2)));
     document.getElementById("overview-content").append(scope);
   }
-  document.getElementById("records-content").replaceChildren(renderSection(sections[2]), renderSection(sections[3]), renderSection(sections[5]));
-  document.getElementById("check-content").replaceChildren(renderSection(sections[4].sections[1]));
+  const records = document.getElementById("records-content");
+  records.replaceChildren();
+  for (const section of sections.slice(2)) {
+    if (section.title !== "Execution and checks") records.append(renderSection(section));
+  }
+  const execution = sections.find(section => section.title === "Execution and checks");
+  document.getElementById("check-content").replaceChildren(renderSection(execution.sections[1]));
   const rows = [];
   for (const call of snapshot.calls) {
     const button = element("button", "Open saved JSON", "secondary");

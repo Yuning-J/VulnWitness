@@ -2,9 +2,9 @@
 
 from textwrap import fill
 
+from vulnwitness.application.investigation_presentation import format_severity
 from vulnwitness.domain.search import SearchResponse
 from vulnwitness.domain.weakness_associations import WeaknessAssociationPath
-from vulnwitness.interfaces.investigation_summary import format_severity
 from vulnwitness.interfaces.record_summary import format_published, summarize_description
 
 MISSING_LINK_REASONS = {
