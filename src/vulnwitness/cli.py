@@ -200,6 +200,7 @@ from vulnwitness.interfaces.cli_session import (
     SessionCli,
     build_simple_session_request,
 )
+from vulnwitness.interfaces.cli_triage import add_triage_arguments
 from vulnwitness.interfaces.investigation_summary import render_investigation_summary
 from vulnwitness.interfaces.knowledge_toolbox import (
     UNSUPPORTED_FILTER_ERROR,
@@ -233,6 +234,7 @@ from vulnwitness.settings import (
     find_section_variable,
     load_settings,
 )
+from vulnwitness.triage_composition import preflight_triage, run_triage
 
 DEMO_QUERIES = (
     "CVE-9999-0003",
@@ -644,6 +646,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    add_triage_arguments(commands.add_parser("triage", help="run bounded product triage"))
     session_parser = commands.add_parser("session", help="check an investigation session")
     session_commands = session_parser.add_subparsers(dest="session_command", required=True)
     session_check_parser = session_commands.add_parser(
@@ -1758,6 +1761,22 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
             0
             if report.record.consistent and report.citations.resolved and report.claims.verified
             else 1
+        )
+    if arguments.command == "triage":
+        try:
+            preflight_triage(arguments, settings.store_root)
+        except (OSError, ValueError) as error:
+            print(f"vulnwitness triage: {error}", file=sys.stderr)
+            return 2
+        data_plane = load_data_plane_or_exit("triage", settings)
+        deployment = build_investigation_deployment(data_plane)
+        return run_triage(
+            arguments,
+            data_plane,
+            settings.store_root,
+            describe_service_capabilities(
+                deployment, discover_planner_setup(settings.model_planner)
+            ),
         )
     session_directory = getattr(arguments, "session", None)
     if session_directory is not None:

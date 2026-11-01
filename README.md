@@ -41,6 +41,18 @@ vulnwitness investigate 5G-AKA --scope mixed --format text
 
 `investigate` exits 1 when needs remain unmet, including this pending-card example.
 
+## One-command product triage
+
+```sh
+vulnwitness triage --vendor democorp --version 2.0 --session /data/vulnwitness/triage
+```
+
+Records capabilities, product pages and selected CVE lookups, writes unconfirmed structured
+claims to `findings.yaml`, and runs the session check. `triage.json` records inventory and
+deep-dive scopes separately; `--format json` prints that artifact. Selection takes the first
+N by the stated order. Use a new or empty directory for each run. See the
+[triage runbook](docs/runbook.md#one-command-product-triage) for caps and selection details.
+
 ## Real data
 
 Create a store root outside the repository, then fetch, import and activate:
@@ -73,7 +85,8 @@ The [runbook](docs/runbook.md) covers local-feed reuse, sizing and recovery.
 - REST: `curl -H "Authorization: Bearer $VULNWITNESS_HTTP_TOKEN" http://127.0.0.1:8766/api/v2/capabilities`.
 - MCP: `vulnwitness mcp` (stdio), or `vulnwitness mcp --http` (authenticated `/mcp` on port 8765).
 
-Record data calls with `--session DIR` and JSON output; `--format text` is refused.
+Record individual data calls with `--session DIR` and JSON output; `--format text` is refused.
+The `triage` workflow records JSON calls internally and defaults to a text summary.
 Product traversals and exports record each page as a separate call, subject to the
 session call limit. Export files are outside the session record. See
 [recording and checking sessions](docs/runbook.md#record-and-check-a-session).

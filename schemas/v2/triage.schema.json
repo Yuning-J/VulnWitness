@@ -1,0 +1,261 @@
+{
+  "$defs": {
+    "ToolFailureCode": {
+      "enum": [
+        "session_call_limit",
+        "session_dataset_mismatch",
+        "session_recording_failed",
+        "invalid_arguments",
+        "invalid_cursor",
+        "arguments_too_large",
+        "unknown_evidence_id",
+        "server_busy",
+        "data_loading",
+        "timed_out",
+        "response_too_large",
+        "integrity_check_failed",
+        "internal_error",
+        "filter_unsupported"
+      ],
+      "title": "ToolFailureCode",
+      "type": "string"
+    },
+    "TriageDeepDive": {
+      "additionalProperties": false,
+      "properties": {
+        "looked_up_ids": {
+          "items": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Looked Up Ids",
+          "type": "array"
+        },
+        "lookup_calls": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Lookup Calls",
+          "type": "array"
+        },
+        "lookups_completed": {
+          "minimum": 0,
+          "title": "Lookups Completed",
+          "type": "integer"
+        },
+        "selected_ids": {
+          "items": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Selected Ids",
+          "type": "array"
+        },
+        "selection_mode": {
+          "enum": [
+            "first N by the stated order",
+            "user-chosen IDs"
+          ],
+          "title": "Selection Mode",
+          "type": "string"
+        },
+        "selection_rule": {
+          "const": "product_field before description_mention; with version, hit before unknown before no_hit; newest published first (missing dates last); CVE ID ascending",
+          "default": "product_field before description_mention; with version, hit before unknown before no_hit; newest published first (missing dates last); CVE ID ascending",
+          "title": "Selection Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selection_rule",
+        "selection_mode",
+        "selected_ids",
+        "looked_up_ids",
+        "lookups_completed",
+        "lookup_calls"
+      ],
+      "title": "TriageDeepDive",
+      "type": "object"
+    },
+    "TriageInventory": {
+      "additionalProperties": false,
+      "properties": {
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "cve_ids": {
+          "items": {
+            "maxLength": 32,
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Cve Ids",
+          "type": "array"
+        },
+        "items_seen": {
+          "minimum": 0,
+          "title": "Items Seen",
+          "type": "integer"
+        },
+        "page_calls": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Page Calls",
+          "type": "array"
+        },
+        "pages_read": {
+          "minimum": 0,
+          "title": "Pages Read",
+          "type": "integer"
+        },
+        "total_available": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Total Available"
+        }
+      },
+      "required": [
+        "pages_read",
+        "items_seen",
+        "total_available",
+        "complete",
+        "page_calls",
+        "cve_ids"
+      ],
+      "title": "TriageInventory",
+      "type": "object"
+    },
+    "TriageLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "call_limit": {
+          "default": 100,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call Limit",
+          "type": "integer"
+        },
+        "lookups": {
+          "default": 5,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Lookups",
+          "type": "integer"
+        },
+        "max_pages": {
+          "default": 20,
+          "minimum": 1,
+          "title": "Max Pages",
+          "type": "integer"
+        },
+        "time_limit": {
+          "default": 120,
+          "exclusiveMinimum": 0,
+          "title": "Time Limit",
+          "type": "number"
+        }
+      },
+      "required": [
+        "max_pages",
+        "lookups",
+        "time_limit",
+        "call_limit"
+      ],
+      "title": "TriageLimits",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "caps_hit": {
+      "items": {
+        "enum": [
+          "max_pages",
+          "lookups",
+          "time_limit"
+        ],
+        "type": "string"
+      },
+      "title": "Caps Hit",
+      "type": "array"
+    },
+    "deep_dive": {
+      "$ref": "#/$defs/TriageDeepDive"
+    },
+    "failure_code": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ToolFailureCode"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "inventory": {
+      "$ref": "#/$defs/TriageInventory"
+    },
+    "limits": {
+      "$ref": "#/$defs/TriageLimits"
+    },
+    "planned_call_count": {
+      "minimum": 1,
+      "title": "Planned Call Count",
+      "type": "integer"
+    },
+    "remaining_steps": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Remaining Steps",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.50",
+      "default": "2.0.0-dev.50",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "stop_reason": {
+      "enum": [
+        "complete",
+        "no_match",
+        "max_pages",
+        "time_limit",
+        "call_failed",
+        "recording_failed",
+        "invalid_selection",
+        "lookup_claim_unavailable",
+        "check_failed"
+      ],
+      "title": "Stop Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "planned_call_count",
+    "limits",
+    "inventory",
+    "deep_dive",
+    "stop_reason",
+    "caps_hit",
+    "failure_code",
+    "remaining_steps"
+  ],
+  "title": "TriageSummary",
+  "type": "object"
+}

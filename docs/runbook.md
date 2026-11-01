@@ -211,6 +211,50 @@ Non-regular, unreadable, oversized (over 32 MiB), invalid or mismatched files fa
 `mitre_snapshot_*`, never fallback. Restart after changing files/settings. See
 [association limits](architecture.md#weakness-associations) and [bounded answers](architecture.md#bounded-investigation).
 
+## One-command product triage
+
+```sh
+vulnwitness triage --vendor democorp --product demo_gateway --version 2.0 \
+  --session /data/vulnwitness/triage --max-pages 20 --lookups 5 --time-limit 120
+```
+
+Supply vendor, product or both. Version is optional and is passed unchanged on every page.
+The workflow records capabilities, follows product cursors and looks up selected CVEs using
+the existing services. It writes `findings.yaml` with deterministic, unconfirmed workflow
+claims for every inventoried CVE, plus version notes and returned lookup associations or
+record facts. It then runs the ordinary session checker. It writes no narrative findings.
+
+Defaults are 20 pages, 5 lookups (maximum 10), 120 seconds and 10 CVEs per page (`--limit`,
+maximum 20). Before recording any call, the workflow reserves the worst-case call count:
+`1 + max-pages + lookups`, or the number of `--select` IDs instead of `lookups`. It refuses
+with exit 2 if that count exceeds `--session-call-limit` (default 100), even if the actual
+inventory might fit. Reduce the caps to use a smaller session limit. Time is checked between
+synchronous calls: an admitted call finishes and is recorded before the next deadline check.
+
+Selection takes the first N by the stated order across the pages actually read:
+`product_field` before `description_mention`; with a version, `hit`, `unknown`, then `no_hit`;
+newest published first, with missing dates last; then CVE ID ascending. This is a traversal
+and selection rule, with no severity or danger judgement. Repeat `--select CVE-…` to override
+it in your supplied order. IDs must be unique, be in the read inventory and fit `--lookups`.
+An ID on an unread page cannot be selected. `--lookups 0` records only the inventory.
+
+The stdout summary and `triage.json` separately report inventory scope (pages, items,
+`total_available`, traversal completion) and deep-dive scope (selected and looked-up IDs).
+The artifact contains bookkeeping facts, caps hit and remaining planned steps, with no
+vulnerability conclusions. `--format json` prints its exact JSON document. The summary
+also reports the layered session check; rerun `vulnwitness session check DIR` for details.
+Finished traversal describes only the served inventory, without establishing corpus
+completeness, source support or deployed applicability.
+
+The page cap leaves the inventory unfinished, permits the selected lookups within the
+remaining time, and exits 2. A service failure or time limit preserves completed calls,
+writes findings from those calls and lists unexecuted steps; both exit 2. A failed session
+check also exits 2. If a lookup returns no catalogue paths or claimable record fields, the
+workflow reports `lookup_claim_unavailable` and exits 2 without inventing a claim.
+Complete runs with passing checks exit 0; an empty matching inventory
+exits 1. Every invocation requires a new or empty session directory; there is no resume or
+append. A non-empty directory is refused with exit 2 without modifying its contents.
+
 ## Record and check a session
 
 To share any CLI, MCP or triage session, run `vulnwitness report DIR --format html

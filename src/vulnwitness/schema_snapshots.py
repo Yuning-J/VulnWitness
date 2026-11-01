@@ -42,6 +42,7 @@ from vulnwitness.domain.tool_contracts import (
 )
 from vulnwitness.domain.topic import ProtocolTopic
 from vulnwitness.domain.topic_context import TopicContextRequest, TopicContextResponse
+from vulnwitness.domain.triage import TriageSummary
 
 MANIFEST_FILE = "manifest.json"
 # The evidence-set schema relies on ``prefixItems``, which earlier drafts read differently.
@@ -66,6 +67,7 @@ REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
     "affectedness_request": AffectednessRequest,
 }
 RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
+    "triage": TriageSummary,
     "session_record": SessionRecord,
     "session_call": SessionCall,
     "session_response": SessionResponse,
