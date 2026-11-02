@@ -2,7 +2,7 @@
   "name": "vulnwitness",
   "version": "2.0.0.dev0",
   "description": "Recorded vulnerability investigations with layered checks and reports.",
-  "homepage": "https://github.com/Yuning-J/vulnwitness",
+  "homepage": "https://github.com/Yuning-J/VulnWitness",
   "license": "MIT",
   "author": {
     "name": "Yuning Jiang",

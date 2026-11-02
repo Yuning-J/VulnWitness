@@ -124,3 +124,5 @@ servers, sizing and recovery.
 
 Pre-release contracts: [schema manifest](schemas/v2/manifest.json).
 Code: [MIT](LICENSE); third-party data: [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md).
+
+Earlier knowledge-graph + RAG prototype: [CVE-KGRAG](https://github.com/Yuning-J/CVE-KGRAG).

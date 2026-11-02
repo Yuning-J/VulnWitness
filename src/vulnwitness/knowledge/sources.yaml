@@ -82,8 +82,8 @@ sources:
     local_storage_policy: reference_only
     terms_verified_on: null
   - name: vulnwitness-synthetic-fixture
-    official_url: "https://github.com/Yuning-J/vulnwitness"
-    terms_or_license_url: "https://github.com/Yuning-J/vulnwitness/blob/main/LICENSE"
+    official_url: "https://github.com/Yuning-J/VulnWitness"
+    terms_or_license_url: "https://github.com/Yuning-J/VulnWitness/blob/main/LICENSE"
     version_strategy: "Fixture manifest version and per-file SHA-256."
     attribution: null
     redistribution_allowed: allowed
