@@ -153,16 +153,16 @@ both `protocol_context_only` and `mixed` (`excluded_term`), `5Géaka threats`
 
 **Measured on the 13 baseline cases.** Deterministic runs over the 2026-10-27 store and
 FiGHT 3.1.0 with default budgets, `gold-sets --check` passed before each. The dev.29 row
-is a clean checkout of c1b5b8a; each stage row is a working tree on that commit, whose
+is a clean checkout of 2258432; each stage row is a working tree on that commit, whose
 diff (new files included), its SHA-256 and the run settings stay with the run under
 `~/data/cve-kgrag/`. The holdout cases ran with the others and were not read.
 
 | Row | Code | Diff SHA-256 | Run (under `runs/c-stages/`) |
 |---|---|---|---|
-| dev.29 | c1b5b8a, clean | — | `dev29/planner-93_xb68r` |
-| C1 | c1b5b8a + diff | `f14e17b2edd9d214625851d7010b9a6facc9c0586857b7d1f3db1dda757c0eaa` | `c1/planner-sc82a8yi` |
-| C1 + C1b | c1b5b8a + diff | `92f33035c1f60c35c7c131d9de75ab7f96e4618d05c7753113b97471ccbcaf69` | `c1b/planner-h9mrj05n` |
-| C1 + C1b + C2 | c1b5b8a + diff | `bb4a86324674aa0a488ca75b65a15cceefe88ea956cf106397a30dd528c70bfe` | `c2/planner-zxfwa9np` |
+| dev.29 | 2258432, clean | — | `dev29/planner-93_xb68r` |
+| C1 | 2258432 + diff | `f14e17b2edd9d214625851d7010b9a6facc9c0586857b7d1f3db1dda757c0eaa` | `c1/planner-sc82a8yi` |
+| C1 + C1b | 2258432 + diff | `92f33035c1f60c35c7c131d9de75ab7f96e4618d05c7753113b97471ccbcaf69` | `c1b/planner-h9mrj05n` |
+| C1 + C1b + C2 | 2258432 + diff | `bb4a86324674aa0a488ca75b65a15cceefe88ea956cf106397a30dd528c70bfe` | `c2/planner-zxfwa9np` |
 
 | Figure | dev.29 | C1 | C1 + C1b | C1 + C1b + C2 |
 |---|---|---|---|---|
@@ -292,7 +292,7 @@ guard. The gold row `5Géaka` in `eval/gold/m3_topic_queries.yaml` now expects
 `excluded: [aka]`.
 
 **Rejected options**, measured on store `nvd-2026-10-27` and FiGHT 3.1.0 with the options
-applied in memory to 09cb28b, deterministic runs with default budgets:
+applied in memory to b6173f4, deterministic runs with default budgets:
 
 - **A, strip each term the registry reads alone:** `eap` still leaks from `EAP-AKAʼ`, the
   strip gives no warning, the interpretations of 2 baseline cases change
@@ -346,7 +346,7 @@ word the CVE search sends is reported:
   Invisible characters can therefore change what an exclusion covers.
 - Ordinary accented words still fragment on the CVE side (`café` searches `caf`).
 
-**Measured** against a clean dev.30 run of 09cb28b (store `nvd-2026-10-27`, FiGHT 3.1.0,
+**Measured** against a clean dev.30 run of b6173f4 (store `nvd-2026-10-27`, FiGHT 3.1.0,
 default budgets, `gold-sets --check` passed). The fix's working-tree diff has SHA-256
 `9008e3c1a1e1c3dd8f5b59746f4c2a1015f40da47d444c906d520bf6197cee3b`; runs under
 `runs/d2-stages/` (`dev30/planner-c_p2xx4e`, `d2/planner-h2_u8st4`).
@@ -403,11 +403,11 @@ was discarded whole.
 **Measured** (deterministic `eval planner` on 2026-10-30 at contracts `2.0.0-dev.34`,
 policy `m7b.4`, store `nvd-2026-10-27`, FiGHT 3.1.0; baseline split only, no holdout case
 or subject read). The table and the baseline-case bullets are this run; every baseline
-answer and step sequence is identical to 0395d5b's. The acceptance-question and
-topic-first bullets come from applying both parts in memory to 0395d5b and were not
+answer and step sequence is identical to 650f848's. The acceptance-question and
+topic-first bullets come from applying both parts in memory to 650f848 and were not
 re-run:
 
-| Figure | 0395d5b | Package 2 |
+| Figure | 650f848 | Package 2 |
 |---|---|---|
 | judged (sufficient / partial / insufficient) | 5/6/2 | 5/6/2 |
 | `wrong_stop` | 4/13 | 2/13 |
@@ -469,12 +469,12 @@ with their answers unchanged).
 
 After the agreed packages (D, A1, A2, B, the round-1 skip, C and its mixed-script
 follow-up), the four holdout cases were evaluated once: a deterministic run of all 17
-cases at b4eaade (contracts `2.0.0-dev.31`, policy `m7b.3`), store `nvd-2026-10-27`,
+cases at 4174484 (contracts `2.0.0-dev.31`, policy `m7b.3`), store `nvd-2026-10-27`,
 FiGHT 3.1.0, default budgets, `gold-sets --check` passed first. The four requests count
 as seen (above); their labels were read only for this evaluation, and nothing is tuned
-on it. The first model run's deterministic baseline (ef494d7) is the comparison.
+on it. The first model run's deterministic baseline (806a99e) is the comparison.
 
-| Case | Label | First run (ef494d7): stop, judged | Now (b4eaade): stop, judged | Run judgement now |
+| Case | Label | First run (806a99e): stop, judged | Now (4174484): stop, judged | Run judgement now |
 |---|---|---|---|---|
 | `asterisk-pjsip` | sufficient | `sufficient`, sufficient | `sufficient`, sufficient | — |
 | `rejected-cve-id` | insufficient | `no_evidence`, insufficient | `no_evidence`, insufficient | — |
