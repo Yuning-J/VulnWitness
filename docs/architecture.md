@@ -193,8 +193,15 @@ replay: keep the original program, settings, snapshots and evidence sets.
 
 ## Interfaces
 
-CLI, REST and MCP share services; [REST setup](runbook.md#rest-and-mcp) covers routes/authentication. MCP has nine bounded read-only tools:
-`get_knowledge_capabilities`, `resolve_telecom_concept`, `lookup_cve`,
-`search_vulnerabilities`, `query_product_vulnerabilities`, `search_fight`,
-`check_affectedness`, `get_evidence`, `investigate_telecom_topic`.
-`verify_evidence_set` is available through CLI/REST, without a tenth MCP tool.
+CLI, REST and MCP share services; [REST setup](runbook.md#rest-and-mcp) covers routes/authentication.
+By default MCP has ten bounded read-only tools: `get_knowledge_capabilities`,
+`resolve_telecom_concept`, `lookup_cve`, `search_vulnerabilities`,
+`query_product_vulnerabilities`, `search_fight`, `check_affectedness`, `get_evidence`,
+`investigate_telecom_topic` and `wait_for_data`. `verify_evidence_set` is available through
+CLI/REST only.
+With `--workspace`, MCP has 18 tools and writes to the workspace. It adds
+`start_investigation`, `triage_product`, `get_investigation`, `read_call`, `add_findings`,
+`check_investigation`, `render_report` and `list_investigations`. The nine knowledge tools
+take an optional `session_id` that records the call in that investigation;
+`start_investigation` and `triage_product` create investigations, `add_findings` writes
+findings and `render_report` writes report files.

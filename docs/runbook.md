@@ -543,7 +543,7 @@ Loading the direct MCP snippet instead of the plugin also omits them.
 
 ## Local browser UI
 
-Install with `pip install 'vulnwitness[api]'`, then run:
+Install from a checkout with `uv sync --locked` ([Install](#install)), then run:
 
 ```sh
 vulnwitness ui --workspace ~/.vulnwitness/workspace --port 8767
