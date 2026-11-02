@@ -368,6 +368,8 @@ KEV enrichment runs after §5, on the final NVD records only.
   store written from `2.0.0-dev.26` on. Before an operator downgrades the program, they
   use the newer program to activate a store the earlier release can read; the runbook
   says so.
+  `28e5b4d` is the source commit from before the history cleanup; the corresponding
+  cleaned code is `e029e97`.
 - Two tests guard format 1 (ADR 0009 §15). A format-1 store written by the
   `2.0.0-dev.25` importer is committed under `tests/` and never regenerated; a test
   verifies and loads it in full, so it is the backward-compatibility proof for what it

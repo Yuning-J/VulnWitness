@@ -727,6 +727,8 @@ Decisions: ADR 0009, which amends ADR 0003, 0004, 0006 and 0008. Operator steps:
   `28e5b4d`, is committed with every file's SHA-256 pinned outside it
   (`tests/contract/data/corpus_store_format1_28e5b4d/`); a pinned digest of the
   manifest, record and anchor schemas raises the alarm on any change to them.
+  `28e5b4d` is the source commit from before the history cleanup; the corresponding
+  cleaned code is `e029e97`.
 - **Scale.** `scripts/operator/serving_scale.sh` is an operator lane using 250,000
   synthetic records; detailed measurements stay in the operator's external run
   directory under `~/data/vulnwitness/runs/`.

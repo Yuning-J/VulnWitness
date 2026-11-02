@@ -1,7 +1,7 @@
 # C: FiGHT protocol threat context from the question's own words
 
 Status: settled by the owner on 2026-10-29 (§10); implementation follows it.
-Baseline: commit c1b5b8a, contracts `2.0.0-dev.29`, policy `m7b.1`.
+Baseline: commit 2258432, contracts `2.0.0-dev.29`, policy `m7b.1`.
 
 ## 1. Problem
 

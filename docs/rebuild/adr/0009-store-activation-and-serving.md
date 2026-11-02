@@ -613,6 +613,8 @@ Two guards protect format 1:
   produce, a KEV entry included, and nothing that importer could not write; it records
   no local path. The test runs `verify_corpus_store` and `load_corpus_store` in full and
   checks the records and evidence IDs.
+  `28e5b4d` is the source commit from before the history cleanup; the corresponding
+  cleaned code is `e029e97`.
 - The schema alarm: `STORE_FORMAT_VERSION` sits beside a pinned SHA-256 of the
   canonical published schemas of `CorpusStoreManifest`, `CveRecord` and
   `EvidenceAnchor`. A test fails when it differs, a change to a field description

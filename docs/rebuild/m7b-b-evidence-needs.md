@@ -1,7 +1,7 @@
 # Work package B: evidence needs decide when an investigation stops
 
 Status: rules settled by the owner on 2026-10-29; implementation follows them. Baseline:
-commit 67524ad, contracts `2.0.0-dev.27`.
+commit 06427e3, contracts `2.0.0-dev.27`.
 
 ## Problem
 
