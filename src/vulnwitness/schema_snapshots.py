@@ -11,6 +11,7 @@ from vulnwitness.domain.affectedness import AffectednessCheck, AffectednessReque
 from vulnwitness.domain.cnvd import PendingCnvdEntry
 from vulnwitness.domain.corpus_store_manifest import CorpusStoreManifest
 from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.cve_lookup import CveLookupResponse
 from vulnwitness.domain.data_readiness import WaitForDataRequest, WaitForDataResponse
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.evidence_set_verification_report import VerificationReport
@@ -81,6 +82,7 @@ RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
     "session_check_report": SessionCheckReport,
     "product_query_response": ProductQueryResponse,
     "search_response": SearchResponse,
+    "cve_lookup_response": CveLookupResponse,
     "topic_context_response": TopicContextResponse,
     "knowledge_evidence_set": KnowledgeEvidenceSet,
     "cve_record": CveRecord,

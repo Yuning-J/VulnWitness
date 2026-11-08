@@ -3,10 +3,19 @@
   "additionalProperties": false,
   "properties": {
     "cve_id": {
-      "maxLength": 32,
-      "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
-      "title": "Cve Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "type": "string"
+        },
+        {
+          "pattern": "^CNVD-[0-9]{4}-[0-9]{4,6}$(?!\\n)",
+          "type": "string"
+        }
+      ],
+      "description": "An exact CVE ID or CNVD ID; CNVD IDs resolve to their associated CVE.",
+      "title": "Cve Id"
     }
   },
   "required": [

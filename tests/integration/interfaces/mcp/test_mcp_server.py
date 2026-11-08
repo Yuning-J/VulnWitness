@@ -75,6 +75,9 @@ class RaisingToolbox:
     def call(self, tool_name: KnowledgeToolName, arguments: object) -> None:
         raise RuntimeError(SECRET_ERROR_TEXT)
 
+    def describe_cnvd_attribution(self) -> str | None:
+        return None
+
     def describe_served_dataset(self) -> ServedDataset:
         return ServedDataset(
             kind=ServedDatasetKind.SYNTHETIC_FIXTURE, cve_search_version="raising-toolbox"

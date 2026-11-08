@@ -14,6 +14,7 @@ from tests.support.legacy_inputs import (
     build_migration_dependencies,
     build_v2_entry,
     build_v2_feed,
+    run_test_migration,
     write_inputs_manifest,
     write_plain_feed,
 )
@@ -21,7 +22,9 @@ from vulnwitness.adapters.migration.cnvd_types import CNVD_COLUMNS
 from vulnwitness.adapters.migration.input_files import inspect_input_file
 from vulnwitness.adapters.migration.legacy_migration import MigrationDependencies
 from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.adapters.store.corpus_store import CorpusStore, load_corpus_store
 from vulnwitness.domain.cnvd_snapshot import CnvdSnapshot, CnvdSnapshotCatalog, CnvdSnapshotFile
+from vulnwitness.domain.migration_report import MigrationOutcome
 
 TEST_REVISION = "a" * 40
 
@@ -97,7 +100,14 @@ class CnvdScenario:
     rows: tuple[dict[str, Any], ...]
 
 
-def build_cnvd_scenario(directory: Path) -> CnvdScenario:
+def build_cnvd_scenario(
+    directory: Path,
+    *,
+    nvd_status: str = "Analyzed",
+    metrics: dict[str, Any] | None = None,
+    extra_nvd_entries: tuple[dict[str, Any], ...] = (),
+    retain_cnvd: bool = True,
+) -> CnvdScenario:
     """One merged CVE with two entries, all pending outcomes and both unstored outcomes."""
     inputs_dir = directory / "inputs"
     inputs_dir.mkdir()
@@ -107,9 +117,10 @@ def build_cnvd_scenario(directory: Path) -> CnvdScenario:
         inputs_dir / "nvdcve-2.0-9999.json",
         build_v2_feed(
             [
-                build_v2_entry(1),
+                build_v2_entry(1, status=nvd_status, metrics=metrics or {}),
                 build_v2_entry(2, status="Rejected"),
                 build_v2_entry(3),
+                *extra_nvd_entries,
             ]
         ),
     )
@@ -126,6 +137,11 @@ def build_cnvd_scenario(directory: Path) -> CnvdScenario:
         build_cnvd_row(5, cve_id=""),
         build_cnvd_row(6, cve_id="CVE-9999-0001\n"),
     )
+    if not retain_cnvd:
+        unlinked_rows = []
+        for row in rows:
+            unlinked_rows.append({**row, "cve_id": ""})
+        rows = tuple(unlinked_rows)
     train = write_cnvd_file(inputs_dir, "train.parquet", list(rows[:3]))
     test = write_cnvd_file(inputs_dir, "test.parquet", list(rows[3:]))
     manifest = write_inputs_manifest(
@@ -143,3 +159,45 @@ def build_cnvd_scenario(directory: Path) -> CnvdScenario:
         build_cnvd_dependencies(build_test_catalog([train, test], [3, 4])),
         rows,
     )
+
+
+def import_cnvd_lookup_corpus(
+    directory: Path,
+    *,
+    nvd_status: str = "Analyzed",
+    with_metrics: bool = True,
+    retain_cnvd: bool = True,
+) -> CorpusStore:
+    """A served corpus with disagree/agree merged entries, every pending state and a
+    record without CNVD. Only synthetic inputs are written to the temporary directory.
+    """
+    metrics = {}
+    if with_metrics:
+        metrics = {
+            "cvssMetricV31": [
+                {
+                    "source": "nvd@nist.gov",
+                    "type": "Primary",
+                    "cvssData": {
+                        "version": "3.1",
+                        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L",
+                        "baseScore": 5.3,
+                        "baseSeverity": "MEDIUM",
+                    },
+                }
+            ]
+        }
+    scenario = build_cnvd_scenario(
+        directory,
+        nvd_status=nvd_status,
+        metrics=metrics,
+        extra_nvd_entries=(build_v2_entry(8),),
+        retain_cnvd=retain_cnvd,
+    )
+    report = run_test_migration(
+        scenario.manifest,
+        scenario.target,
+        dependencies=scenario.dependencies,
+    )
+    assert report.outcome is MigrationOutcome.IMPORTED, report.failure
+    return load_corpus_store(scenario.target)

@@ -12,6 +12,13 @@ from pathlib import Path
 import pytest
 
 from tests.support.clocks import SteppingClock
+from tests.support.cnvd_inputs import import_cnvd_lookup_corpus
+from tests.support.cnvd_serving import (
+    CNVD_LOOKUP_CASE_IDS,
+    CNVD_LOOKUP_CASES,
+    assert_cnvd_lookup,
+    cnvd_attribution,
+)
 from tests.support.collect import find_capability
 from tests.support.corpus_stores import import_store
 from tests.support.evaluation import SMALL_GOLD_ROWS, write_gold_file
@@ -26,6 +33,7 @@ from tests.support.legacy_inputs import (
 from vulnwitness.adapter_discovery import InterfaceUnavailable
 from vulnwitness.adapters.store.corpus_store import load_corpus_store
 from vulnwitness.cli import load_search_service_or_exit, main, run_mcp_server
+from vulnwitness.domain.cve_lookup import CNVD_NOT_FOUND_STATEMENT, CveLookupResponse
 from vulnwitness.domain.investigation import (
     KnowledgeEvidenceSet,
     SourceCapability,
@@ -860,3 +868,78 @@ def test_migrate_with_a_store_root_that_loops_prints_its_report(
     report = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert report["outcome"] == "dry_run"
+
+
+@pytest.mark.parametrize(
+    "identifier,cve_id,severities,nvd_state,is_pending",
+    CNVD_LOOKUP_CASES,
+    ids=CNVD_LOOKUP_CASE_IDS,
+)
+def test_cli_lookup_json_serves_cnvd_comparisons(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    identifier: str,
+    cve_id: str,
+    severities: list[str],
+    nvd_state: str,
+    is_pending: bool,
+) -> None:
+    corpus = import_cnvd_lookup_corpus(tmp_path)
+    settings = {"VULNWITNESS_STORE_ROOT": str(tmp_path / "stores")}
+    assert main(["store", "activate", corpus.store_name], settings) == 0
+    capsys.readouterr()
+
+    exit_code = main(["lookup", identifier], settings)
+    lookup = CveLookupResponse.model_validate_json(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert lookup.result_sha256 == lookup.compute_result_sha256()
+    assert_cnvd_lookup(lookup.model_dump(mode="json"), cve_id, severities, nvd_state, is_pending)
+
+
+@pytest.mark.parametrize(
+    "identifier", ["CVE-9999-0001", "CNVD-9999-00004"], ids=["merged", "pending"]
+)
+def test_cli_lookup_text_labels_source_statements_and_project_comparison(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    identifier: str,
+) -> None:
+    corpus = import_cnvd_lookup_corpus(tmp_path)
+    settings = {"VULNWITNESS_STORE_ROOT": str(tmp_path / "stores")}
+    assert main(["store", "activate", corpus.store_name], settings) == 0
+    capsys.readouterr()
+
+    exit_code = main(["lookup", identifier, "--format", "text"], settings)
+    text = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "NVD:" in text and " | CNVD CNVD-9999-" in text
+    assert "cnvd_severity_vs_nvd_primary_cvss3" in text
+    assert "VulnWitness's comparison, not a statement by NVD or CNVD" in text
+    assert cnvd_attribution() in " ".join(text.split())
+    if identifier.startswith("CVE-"):
+        assert "CVSS 3.1 MEDIUM | CNVD CNVD-9999-00007: 低" in text
+        assert "comparison: disagree" in text
+    else:
+        assert "not_in_nvd_snapshot" in text
+        assert "not_comparable" in text
+
+
+@pytest.mark.parametrize("output_format", ["json", "text"])
+def test_cli_unknown_cnvd_explains_import_limit_without_attribution(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    output_format: str,
+) -> None:
+    corpus = import_cnvd_lookup_corpus(tmp_path)
+    settings = {"VULNWITNESS_STORE_ROOT": str(tmp_path / "stores")}
+    assert main(["store", "activate", corpus.store_name], settings) == 0
+    capsys.readouterr()
+
+    exit_code = main(["lookup", "CNVD-9999-99999", "--format", output_format], settings)
+    text = capsys.readouterr().out
+
+    assert exit_code == 1
+    assert CNVD_NOT_FOUND_STATEMENT in text
+    assert "CNVD entries from CIRCL" not in text

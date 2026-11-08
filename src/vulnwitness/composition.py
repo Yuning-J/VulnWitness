@@ -198,6 +198,8 @@ def build_search_service(
         graph_retriever=InMemoryRelationGraph(repository.list_cves()),
         semantic_retriever=semantic_retriever,
         weakness_mapping=weakness_mapping,
+        cnvd_index=served_corpus.cnvd_index,
+        cnvd_attribution=load_packaged_source_registry().find_source("circl-cnvd").attribution,
     )
 
 

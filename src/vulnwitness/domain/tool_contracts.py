@@ -3,12 +3,13 @@ the lookup tools, the wrappers that give a bare record a ``schema_version``, and
 failure every tool answers with when it cannot answer."""
 
 from enum import StrEnum
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import ConfigDict, Field, StrictBool, model_validator
 
+from vulnwitness.domain.cnvd import CnvdCapability
 from vulnwitness.domain.contract_model import ContractModel, describe_fixed_messages
-from vulnwitness.domain.cve import CveId
+from vulnwitness.domain.cve import CNVD_ID_PATTERN, CveId
 from vulnwitness.domain.evidence import EvidenceAnchor, EvidenceId
 from vulnwitness.domain.investigation import (
     CAPABILITY_ORDER_DESCRIPTION,
@@ -46,6 +47,7 @@ class KnowledgeCapabilities(ContractModel):
         json_schema_extra=pin_capability_order,
     )
     weakness_associations: WeaknessSnapshotCapability | None = None
+    cnvd: CnvdCapability = CnvdCapability(imported=False)
     purl_filter_available: StrictBool = Field(
         description=(
             "Whether a search or investigation may filter by package URL (filters.purls): "
@@ -74,7 +76,9 @@ class ConceptResolution(ContractModel):
 
 
 class CveLookupRequest(ContractModel):
-    cve_id: CveId
+    cve_id: CveId | Annotated[str, Field(pattern=CNVD_ID_PATTERN)] = Field(
+        description="An exact CVE ID or CNVD ID; CNVD IDs resolve to their associated CVE."
+    )
 
 
 class FightSearchRequest(ContractModel):

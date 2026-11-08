@@ -4,6 +4,7 @@ from pydantic import BaseModel, RootModel
 
 from vulnwitness.domain.affectedness import AffectednessCheck, AffectednessRequest
 from vulnwitness.domain.contract_model import ContractModel
+from vulnwitness.domain.cve_lookup import CveLookupResponse
 from vulnwitness.domain.evidence_set_verification_report import VerificationReport
 from vulnwitness.domain.investigation import KnowledgeEvidenceSet
 from vulnwitness.domain.product_query import ProductQueryResponse
@@ -31,7 +32,8 @@ class SessionAffectednessResponse(RootModel[tuple[AffectednessCheck, ...]]):
 
 class SessionResponse(
     RootModel[
-        SearchResponse
+        CveLookupResponse
+        | SearchResponse
         | ProductQueryResponse
         | TopicContextResponse
         | KnowledgeEvidenceSet
@@ -49,6 +51,7 @@ class SessionResponse(
 
 SESSION_RESPONSE_MODELS: dict[str, type[BaseModel]] = {
     "SearchResponse": SearchResponse,
+    "CveLookupResponse": CveLookupResponse,
     "ProductQueryResponse": ProductQueryResponse,
     "TopicContextResponse": TopicContextResponse,
     "KnowledgeEvidenceSet": KnowledgeEvidenceSet,

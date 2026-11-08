@@ -20,6 +20,7 @@ served. Format 1 holds records and anchors; format 2 also holds pending CNVD ent
 import hashlib
 import json
 import os
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +38,7 @@ from vulnwitness.domain.cnvd import (
 from vulnwitness.domain.corpus_store_manifest import (
     CorpusStoreManifest,
     StoreFile,
+    StoreSource,
     derive_corpus_content_sha256,
     name_corpus_store_version,
 )
@@ -310,6 +312,7 @@ def verify_store_files(
     """Verify every content file, passing its models to the supplied callbacks."""
     parsed_manifest = read_store_manifest(store_dir)
     manifest = parsed_manifest.manifest
+    read_cnvd_revision(manifest)
     check_store_entries(store_dir, manifest)
     anchors_file = find_store_file(manifest, ANCHORS_FILE)
     records_file = find_store_file(manifest, RECORDS_FILE)
@@ -445,6 +448,29 @@ def verify_corpus_store(store_dir: Path) -> VerifiedStore:
     return verify_store_files(store_dir, ignore_model, ignore_model)
 
 
+def read_cnvd_revision(manifest: CorpusStoreManifest) -> str | None:
+    """Read the import pin from the fixed upstream URL, including an empty CNVD import.
+
+    Reject malformed or mixed revisions at the store boundary; manifest text never
+    supplies the attribution or instructions.
+    """
+    if manifest.store_format_version == 1:
+        return None
+    revision = None
+    for store_input in manifest.inputs:
+        if store_input.source is not StoreSource.CIRCL_CNVD:
+            continue
+        url_match = re.fullmatch(
+            r"https://huggingface\.co/datasets/CIRCL/Vulnerability-CNVD/resolve/"
+            r"([0-9a-f]{40})/data/[A-Za-z0-9._-]+\.parquet",
+            store_input.source_uri,
+        )
+        if url_match is None or (revision is not None and revision != url_match[1]):
+            raise CorpusStoreIntegrityError("CNVD inputs must name one pinned upstream revision")
+        revision = url_match[1]
+    return revision
+
+
 def load_corpus_store(store_dir: Path) -> CorpusStore:
     """The store at ``store_dir``, verified; raises as ``verify_corpus_store`` does."""
     anchors: list[EvidenceAnchor] = []
@@ -460,5 +486,7 @@ def load_corpus_store(store_dir: Path) -> CorpusStore:
         corpus_content_sha256=verified_store.corpus_content_sha256,
         records=tuple(records),
         evidence=tuple(anchors),
-        cnvd_index=build_cnvd_index(records, pending_entries),
+        cnvd_index=build_cnvd_index(
+            records, pending_entries, read_cnvd_revision(verified_store.manifest)
+        ),
     )

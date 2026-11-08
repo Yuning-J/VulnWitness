@@ -3,8 +3,11 @@
 from collections.abc import Set
 
 from vulnwitness.application.channel_log import ChannelLog
+from vulnwitness.application.cve_lookup import build_cve_lookup
 from vulnwitness.application.fusion import FusedCandidate, fuse_channel_results
+from vulnwitness.domain.cnvd import CnvdCapability, CnvdIndex
 from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.cve_lookup import CveLookupResponse
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.evidence_catalog import EvidenceCatalog
 from vulnwitness.domain.hashing import UNSEALED_SHA256
@@ -83,7 +86,11 @@ class SearchService:
         graph_retriever: GraphRetriever,
         semantic_retriever: SemanticRetriever | SemanticUnavailableDetail | None = None,
         weakness_mapping: WeaknessMapping | None = None,
+        cnvd_index: CnvdIndex | None = None,
+        cnvd_attribution: str | None = None,
     ) -> None:
+        self._cnvd_index = cnvd_index or CnvdIndex()
+        self._cnvd_attribution = cnvd_attribution
         self._weakness_mapping = weakness_mapping
         self._cve_repository = cve_repository
         self._evidence_catalog = evidence_catalog
@@ -96,9 +103,33 @@ class SearchService:
         """The mapping served by lookup, separately from retrieval capabilities."""
         return None if self._weakness_mapping is None else self._weakness_mapping.describe()
 
-    def lookup(self, cve_id: str) -> SearchResponse:
-        """Look up one CVE with full, snapshot-validated catalogue association paths."""
-        search_response = self.search(SearchRequest(query=cve_id, limit=1))
+    def describe_cnvd(self) -> CnvdCapability:
+        """Whether the store imported CNVD, including imports with no retained entries."""
+        revision = self._cnvd_index.imported_revision
+        return CnvdCapability(imported=revision is not None, revision=revision)
+
+    def describe_cnvd_attribution(self) -> str | None:
+        """Registry credit for instructions exactly when the corpus holds CNVD entries."""
+        if self._cnvd_index.cve_id_by_cnvd_id:
+            return self._cnvd_attribution
+        return None
+
+    def lookup(self, cve_id: str) -> CveLookupResponse:
+        """Look up a boundary-validated CVE or CNVD ID with source comparisons and paths."""
+        identifier = cve_id
+        if identifier.startswith("CNVD-"):
+            cve_id = self._cnvd_index.cve_id_by_cnvd_id.get(identifier, "")
+        if cve_id:
+            search_response = self.search(SearchRequest(query=cve_id, limit=1))
+        else:
+            channel_log = ChannelLog()
+            channel_log.record(RetrievalChannel.EXACT_ID, RetrievalOutcome(status=BackendStatus.OK))
+            search_response = self._seal(
+                SearchRequest(query=identifier, limit=1),
+                normalize_query(identifier),
+                channel_log,
+                (),
+            )
         candidates: list[Candidate] = []
         for candidate in search_response.candidates:
             candidates.append(
@@ -113,7 +144,14 @@ class SearchService:
         draft = search_response.model_copy(update={"candidates": tuple(candidates)})
         response = draft.model_copy(update={"result_sha256": draft.compute_result_sha256()})
         validate_search_response(response, self._evidence_catalog)
-        return response
+        return build_cve_lookup(
+            response,
+            identifier,
+            cve_id,
+            self._cnvd_index,
+            self._evidence_catalog,
+            self._cnvd_attribution,
+        )
 
     def has_semantic_channel(self) -> bool:
         """Whether a semantic retriever is wired; it may still report a search failed."""

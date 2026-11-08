@@ -178,4 +178,4 @@ def test_every_store_that_verifies_also_builds_the_serving_deployment(
     for record in corpus_store.records:
         lookup = deployment.search_service.lookup(record.cve_id)
         assert lookup.status is ResultStatus.OK
-        assert lookup.candidates[0].record == record
+        assert lookup.candidates[0].record.to_source_record() == record

@@ -127,7 +127,7 @@ from vulnwitness.distribution import read_installed_version
 from vulnwitness.domain.affectedness import AffectednessRequest, ApplicabilityStatus
 from vulnwitness.domain.contract_model import ContractModel, list_validation_problems
 from vulnwitness.domain.corpus_store_manifest import name_corpus_store_version
-from vulnwitness.domain.cve import CVE_ID_PATTERN
+from vulnwitness.domain.cve import CNVD_ID_PATTERN, CVE_ID_PATTERN
 from vulnwitness.domain.evidence_set_verification_report import (
     VerificationReport,
     VerificationVerdict,
@@ -348,6 +348,15 @@ def parse_cve_id(text: str) -> str:
     return cve_id
 
 
+def parse_lookup_id(text: str) -> str:
+    identifier = text.strip().upper()
+    if not re.fullmatch(CVE_ID_PATTERN, identifier) and not re.fullmatch(
+        CNVD_ID_PATTERN, identifier
+    ):
+        raise argparse.ArgumentTypeError(f"not a CVE or CNVD ID: {text!r}")
+    return identifier
+
+
 def parse_store_name(text: str) -> str:
     if not is_store_name(text):
         raise argparse.ArgumentTypeError(
@@ -431,8 +440,8 @@ def build_parser() -> argparse.ArgumentParser:
             help="investigation budget; defaults to the cap the contract allows",
         )
 
-    lookup_parser = commands.add_parser("lookup", help="exact CVE-ID lookup; JSON or text")
-    lookup_parser.add_argument("cve_id", type=parse_cve_id)
+    lookup_parser = commands.add_parser("lookup", help="exact CVE or CNVD ID lookup; JSON or text")
+    lookup_parser.add_argument("cve_id", type=parse_lookup_id)
     lookup_parser.add_argument("--format", choices=("json", "text"), default="json")
 
     product_parser = commands.add_parser(

@@ -3,6 +3,7 @@
 from textwrap import fill
 
 from vulnwitness.application.investigation_presentation import format_severity
+from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse
 from vulnwitness.domain.search import SearchResponse
 from vulnwitness.domain.weakness_associations import WeaknessAssociationPath
 from vulnwitness.interfaces.record_summary import format_published, summarize_description
@@ -55,11 +56,14 @@ def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
                 fill(f"CWEs: {', '.join(record.cwe_ids) or 'unknown'}", width=width),
                 fill(f"Products: {', '.join(products) or 'unknown'}", width=width),
                 f"KEV: {kev}",
-                fill(summarize_description(record), width=width),
+                fill("NVD: " + summarize_description(record), width=width),
                 "",
-                "Weakness paths (catalogue associations):",
             )
         )
+        for entry in record.cnvd:
+            if isinstance(entry, ComparedCnvdEntry):
+                lines.extend(render_cnvd_comparison(entry, width))
+        lines.extend(("", "Weakness paths (catalogue associations):"))
         associations = candidate.weakness_associations
         if associations is None:
             lines.append("Not supplied.")
@@ -79,8 +83,19 @@ def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
         if not associations.missing_links:
             lines.append("None recorded.")
         lines.extend(("", fill(associations.note, width=width)))
+    if isinstance(lookup, CveLookupResponse):
+        for pending in lookup.pending_cnvd:
+            lines.extend(("", pending.cve_id))
+            lines.extend(render_cnvd_comparison(pending, width))
+        if lookup.cnvd_attribution is not None:
+            lines.extend(("", fill(lookup.cnvd_attribution, width=width)))
+        if lookup.not_found_statement is not None:
+            lines.append(lookup.not_found_statement)
     if not lookup.candidates:
-        lines.append("No matching CVE returned.")
+        if isinstance(lookup, CveLookupResponse) and lookup.pending_cnvd:
+            lines.append("No servable NVD record; pending CNVD entries shown above.")
+        else:
+            lines.append("No matching CVE returned.")
     for warning in lookup.warnings:
         lines.append(fill(f"Warning [{warning.code}]: {warning.subject}", width=width))
     lines.extend(("", "Source anchors:"))
@@ -89,3 +104,20 @@ def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
     if not lookup.evidence:
         lines.append("None recorded.")
     return "\n".join(lines)
+
+
+def render_cnvd_comparison(entry: ComparedCnvdEntry, width: int) -> list[str]:
+    """Keep the two source grades on one line and label the project's comparison."""
+    comparison = entry.source_comparison
+    nvd_grade = comparison.nvd_raw_severity
+    nvd_statement = "no primary CVSS v3 severity"
+    if nvd_grade is not None:
+        nvd_statement = f"CVSS {nvd_grade.cvss_version} {nvd_grade.base_severity or 'unknown'}"
+    return [
+        f"NVD: {nvd_statement} | CNVD {entry.cnvd_id}: {comparison.cnvd_raw_severity}",
+        f"NVD state: {comparison.nvd_state}",
+        fill(f"CNVD title: {entry.title}", width=width),
+        fill(f"CNVD description: {entry.description}", width=width),
+        f"VulnWitness severity comparison: {comparison.severity} [{comparison.rule}]",
+        fill(comparison.statement, width=width),
+    ]

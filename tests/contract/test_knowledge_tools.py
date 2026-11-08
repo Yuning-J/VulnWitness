@@ -219,7 +219,11 @@ def test_every_tool_answering_with_cve_records_says_their_affected_entries_are_n
     unstated_tool_names: list[str] = []
     for tool_spec in KNOWLEDGE_TOOL_SPECS:
         response_schema = json.loads(render_schema(tool_spec.response_model, "serialization"))
-        if "CveRecord" not in response_schema.get("$defs", {}):
+        carries_cve_records = any(
+            object_schema.get("properties", {}).get("record_kind", {}).get("const") == "cve"
+            for object_schema in list_object_schemas(response_schema)
+        )
+        if not carries_cve_records:
             continue
         record_tool_names.append(tool_spec.name.value)
         if PUBLISHER_AFFECTED_STATEMENT not in tool_spec.description:

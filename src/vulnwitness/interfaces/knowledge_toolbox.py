@@ -78,6 +78,7 @@ def describe_knowledge_capabilities(
         tools=tuple(tool_names),
         source_capabilities=source_capabilities,
         weakness_associations=deployment.search_service.describe_weakness_snapshot(),
+        cnvd=deployment.search_service.describe_cnvd(),
         purl_filter_available=deployment.search_service.serves_purl_filter(),
     )
 
@@ -157,6 +158,9 @@ class KnowledgeToolbox:
     def deployment(self) -> InvestigationDeployment:
         """The deployment the tools run against."""
         return self._deployment
+
+    def describe_cnvd_attribution(self) -> str | None:
+        return self._deployment.search_service.describe_cnvd_attribution()
 
     def describe_served_dataset(self) -> ServedDataset:
         """The dataset the tools serve CVE records and evidence from."""

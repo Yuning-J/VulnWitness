@@ -43,6 +43,58 @@
       "title": "CatalogueSource",
       "type": "object"
     },
+    "CnvdCapability": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "revision": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "imported": {
+            "const": true
+          }
+        }
+      },
+      "properties": {
+        "imported": {
+          "title": "Imported",
+          "type": "boolean"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{40}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        }
+      },
+      "required": [
+        "imported",
+        "revision"
+      ],
+      "then": {
+        "properties": {
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      },
+      "title": "CnvdCapability",
+      "type": "object"
+    },
     "FightUnavailableDetail": {
       "description": "The server's sentence for an unavailable ``mitre_fight`` capability.",
       "enum": [
@@ -626,6 +678,13 @@
   "additionalProperties": false,
   "description": "What the deployment serves, in the shape every evidence set reports it, and which\nsearch filters its dataset can execute.",
   "properties": {
+    "cnvd": {
+      "$ref": "#/$defs/CnvdCapability",
+      "default": {
+        "imported": false,
+        "revision": null
+      }
+    },
     "purl_filter_available": {
       "description": "Whether a search or investigation may filter by package URL (filters.purls): only a dataset whose records name package URLs can execute it, and an NVD import names none. Without it, a request with a purls filter is refused (filter_unsupported) instead of answered as if nothing matched.",
       "title": "Purl Filter Available",
@@ -744,6 +803,7 @@
     "tools",
     "source_capabilities",
     "weakness_associations",
+    "cnvd",
     "purl_filter_available"
   ],
   "title": "KnowledgeCapabilities",

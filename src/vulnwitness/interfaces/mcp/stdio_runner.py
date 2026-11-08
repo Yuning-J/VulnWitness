@@ -102,6 +102,9 @@ class StdioServer:
             return
         if self._stdin_closed.is_set():
             return
+        cnvd_attribution = deployment_or_exit.toolbox.describe_cnvd_attribution()
+        if cnvd_attribution is not None:
+            self._server.instructions = f"{self._server.instructions} {cnvd_attribution}"
         self._handlers.publish_deployment(deployment_or_exit)
         print(
             "vulnwitness mcp: "

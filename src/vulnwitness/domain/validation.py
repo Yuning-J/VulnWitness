@@ -38,6 +38,7 @@ import re
 from collections.abc import Collection, Iterable, Mapping, Sequence
 
 from vulnwitness.domain.cve import CVE_ID_PATTERN, CveRecord
+from vulnwitness.domain.cve_lookup import CveLookupResponse, LookupCveRecord
 from vulnwitness.domain.evidence import Claim, EvidenceAnchor, derive_evidence_id
 from vulnwitness.domain.evidence_catalog import EvidenceCatalog
 from vulnwitness.domain.search import (
@@ -47,6 +48,7 @@ from vulnwitness.domain.search import (
     SearchWarning,
     SearchWarningCode,
 )
+from vulnwitness.domain.source_comparison import compare_cnvd_severity
 from vulnwitness.domain.taxonomy import (
     AssertionKind,
     BackendStatus,
@@ -163,6 +165,11 @@ def find_uncatalogued_record_violations(
     """Each CVE record equals, field for field, the one the service's catalog holds."""
     violations: list[str] = []
     for record in records:
+        if isinstance(record, LookupCveRecord):
+            for entry in record.cnvd:
+                if entry.source_comparison != compare_cnvd_severity(entry, record):
+                    violations.append(f"{entry.cnvd_id}: source comparison differs from the rule")
+            record = record.to_source_record()
         catalogued_record = evidence_catalog.get_cve(record.cve_id)
         if catalogued_record is None:
             violations.append(f"{record.cve_id}: not a record this service's sources hold")
@@ -360,8 +367,24 @@ def validate_search_response(response: SearchResponse, evidence_catalog: Evidenc
         outcome.status is not BackendStatus.OK for outcome in response.channel_outcomes
     )
     violations.extend(
-        find_status_violations(response.status, bool(response.candidates), has_backend_failure)
+        find_status_violations(
+            response.status,
+            bool(response.candidates)
+            or (isinstance(response, CveLookupResponse) and bool(response.pending_cnvd)),
+            has_backend_failure,
+        )
     )
+    if isinstance(response, CveLookupResponse):
+        anchors_by_id = index_anchors(response.evidence)
+        has_cnvd = any(candidate.record.cnvd for candidate in response.candidates)
+        for pending in response.pending_cnvd:
+            has_cnvd = True
+            if pending.evidence_id not in anchors_by_id:
+                violations.append(f"{pending.cnvd_id}: pending entry cites absent evidence")
+            if pending.source_comparison != compare_cnvd_severity(pending, None, pending.outcome):
+                violations.append(f"{pending.cnvd_id}: source comparison differs from the rule")
+        if has_cnvd != (response.cnvd_attribution is not None):
+            violations.append("CNVD attribution is required exactly when CNVD content is served")
     violations.extend(find_result_limit_violations(response.warnings, len(response.candidates)))
     if response.result_sha256 != response.compute_result_sha256():
         violations.append("result_sha256 does not match the response content")

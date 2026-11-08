@@ -359,16 +359,22 @@ def build_knowledge_mcp_server(
     handlers = KnowledgeToolHandlers(
         toolbox, build_mcp_tools(KNOWLEDGE_TOOL_SPECS, workspace is not None), recorder, workspace
     )
-    return build_mcp_server(handlers, toolbox.describe_served_dataset().kind)
+    return build_mcp_server(
+        handlers, toolbox.describe_served_dataset().kind, toolbox.describe_cnvd_attribution()
+    )
 
 
 def build_mcp_server(
-    handlers: KnowledgeToolHandlers, dataset_kind: ServedDatasetKind
+    handlers: KnowledgeToolHandlers,
+    dataset_kind: ServedDatasetKind,
+    cnvd_attribution: str | None = None,
 ) -> Server[LifespanState]:
     """Build the static protocol surface independently of toolbox availability."""
     resources = handlers.resources
     prompts = None
     instructions = SERVER_INSTRUCTIONS[dataset_kind]
+    if cnvd_attribution is not None:
+        instructions += " " + cnvd_attribution
     if resources is not None:
         prompts = WorkspacePromptHandlers()
         instructions += (

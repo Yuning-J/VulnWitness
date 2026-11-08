@@ -2,7 +2,9 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Self
+
+from pydantic import ConfigDict, Field, model_validator
 
 from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CnvdEntry, CveId, CveRecord
@@ -29,10 +31,32 @@ class CnvdIndex:
     pending_by_cve_id: dict[str, tuple[PendingCnvdEntry, ...]] = field(default_factory=dict)
     pending_by_cnvd_id: dict[str, PendingCnvdEntry] = field(default_factory=dict)
     cve_id_by_cnvd_id: dict[str, str] = field(default_factory=dict)
+    imported_revision: str | None = None
+
+
+class CnvdCapability(ContractModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "if": {"properties": {"imported": {"const": True}}},
+            "then": {"required": ["revision"], "properties": {"revision": {"type": "string"}}},
+            "else": {"properties": {"revision": {"type": "null"}}},
+        }
+    )
+
+    imported: bool
+    revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+
+    @model_validator(mode="after")
+    def check_import_revision(self) -> Self:
+        if self.imported != (self.revision is not None):
+            raise ValueError("an imported CNVD source names its pinned revision, and only it does")
+        return self
 
 
 def build_cnvd_index(
-    records: Sequence[CveRecord], pending_entries: Sequence[PendingCnvdEntry]
+    records: Sequence[CveRecord],
+    pending_entries: Sequence[PendingCnvdEntry],
+    imported_revision: str | None = None,
 ) -> CnvdIndex:
     """Index entries already validated at the corpus loading boundary."""
     pending_groups: dict[str, list[PendingCnvdEntry]] = {}
@@ -48,7 +72,7 @@ def build_cnvd_index(
     pending_by_cve_id: dict[str, tuple[PendingCnvdEntry, ...]] = {}
     for cve_id, entries in pending_groups.items():
         pending_by_cve_id[cve_id] = tuple(entries)
-    return CnvdIndex(pending_by_cve_id, pending_by_cnvd_id, cve_id_by_cnvd_id)
+    return CnvdIndex(pending_by_cve_id, pending_by_cnvd_id, cve_id_by_cnvd_id, imported_revision)
 
 
 def cnvd_source_row(entry: CnvdEntry, cve_id: str) -> dict[str, str]:

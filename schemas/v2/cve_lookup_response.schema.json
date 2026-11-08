@@ -1,0 +1,1795 @@
+{
+  "$defs": {
+    "AffectedProduct": {
+      "additionalProperties": false,
+      "properties": {
+        "cpe": {
+          "anyOf": [
+            {
+              "pattern": "^cpe:2\\.3:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpe"
+        },
+        "product": {
+          "minLength": 1,
+          "title": "Product",
+          "type": "string"
+        },
+        "purl": {
+          "anyOf": [
+            {
+              "pattern": "^pkg:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Purl"
+        },
+        "status": {
+          "enum": [
+            "affected",
+            "unaffected",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "vendor": {
+          "minLength": 1,
+          "title": "Vendor",
+          "type": "string"
+        },
+        "version_ranges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VersionRange"
+          },
+          "title": "Version Ranges",
+          "type": "array"
+        }
+      },
+      "required": [
+        "vendor",
+        "product",
+        "cpe",
+        "purl",
+        "status",
+        "version_ranges"
+      ],
+      "title": "AffectedProduct",
+      "type": "object"
+    },
+    "AssertionKind": {
+      "description": "Whether a source states a fact directly or this service derived it.",
+      "enum": [
+        "asserted",
+        "inferred"
+      ],
+      "title": "AssertionKind",
+      "type": "string"
+    },
+    "AssociationHop": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "from_id": {
+          "title": "From Id",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "nvd_cwe",
+            "cwe_child_of",
+            "cwe_related_attack_pattern",
+            "capec_child_of",
+            "capec_attack_taxonomy_mapping"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "NVD record",
+            "CWE catalogue",
+            "CAPEC catalogue"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Sha256"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        },
+        "to_id": {
+          "title": "To Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_id",
+        "to_id",
+        "relation",
+        "source",
+        "source_version",
+        "source_sha256",
+        "evidence_ids"
+      ],
+      "title": "AssociationHop",
+      "type": "object"
+    },
+    "AttackTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "technique",
+            "subtechnique"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parent_technique_id": {
+          "anyOf": [
+            {
+              "pattern": "^T[0-9]{4}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Parent is an ATT&CK technique, never a tactic.",
+          "title": "Parent Technique Id"
+        },
+        "tactics": {
+          "description": "ATT&CK tactic names from this object's mitre-attack kill_chain_phases.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Tactics",
+          "type": "array"
+        },
+        "technique_id": {
+          "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$(?!\\n)",
+          "title": "Technique Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "technique_id",
+        "name",
+        "kind",
+        "parent_technique_id",
+        "tactics"
+      ],
+      "title": "AttackTechnique",
+      "type": "object"
+    },
+    "BackendFailureDetail": {
+      "description": "The server's sentence for each ``BackendFailure``.",
+      "enum": [
+        "The backend is not configured.",
+        "The backend's adapter cannot be loaded.",
+        "The backend could not be reached.",
+        "The backend failed while searching.",
+        "The backend's index holds no entries for the searched records.",
+        "The backend cannot apply the search's filters before its limit.",
+        "The backend returned nothing and does not report its own errors.",
+        "The backend's collection is not bound to the served dataset."
+      ],
+      "title": "BackendFailureDetail",
+      "type": "string"
+    },
+    "BackendStatus": {
+      "description": "Typed outcome of one retrieval backend invocation.",
+      "enum": [
+        "ok",
+        "unavailable",
+        "incomplete_index",
+        "error"
+      ],
+      "title": "BackendStatus",
+      "type": "string"
+    },
+    "CatalogueSource": {
+      "additionalProperties": false,
+      "properties": {
+        "catalogue": {
+          "enum": [
+            "CWE",
+            "CAPEC",
+            "ATT&CK Enterprise"
+          ],
+          "title": "Catalogue",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalogue",
+        "version",
+        "sha256"
+      ],
+      "title": "CatalogueSource",
+      "type": "object"
+    },
+    "ChannelHit": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/RetrievalChannel"
+        },
+        "channel_rank": {
+          "minimum": 1,
+          "title": "Channel Rank",
+          "type": "integer"
+        },
+        "graph_paths": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GraphPath"
+          },
+          "title": "Graph Paths",
+          "type": "array"
+        },
+        "matched_fields": {
+          "items": {
+            "$ref": "#/$defs/MatchedField"
+          },
+          "title": "Matched Fields",
+          "type": "array"
+        },
+        "matched_terms": {
+          "description": "Terms the server can vouch for: the caller's query terms (lexical) or filter values (structured), relation values both records carry (graph), or the requested CVE ID; none for the semantic channel.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Matched Terms",
+          "type": "array"
+        },
+        "raw_score": {
+          "description": "The channel's own score; scales differ by channel.",
+          "minimum": 0.0,
+          "title": "Raw Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "channel",
+        "channel_rank",
+        "raw_score",
+        "matched_fields",
+        "matched_terms",
+        "graph_paths"
+      ],
+      "title": "ChannelHit",
+      "type": "object"
+    },
+    "ChannelOutcome": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "detail": {
+            "not": {
+              "type": "null"
+            }
+          }
+        },
+        "required": [
+          "detail"
+        ]
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ok"
+          }
+        }
+      },
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/RetrievalChannel"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackendFailureDetail"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The server's sentence for why the channel failed; null when it answered."
+        },
+        "status": {
+          "$ref": "#/$defs/BackendStatus"
+        }
+      },
+      "required": [
+        "channel",
+        "status",
+        "detail"
+      ],
+      "then": {
+        "properties": {
+          "detail": {
+            "type": "null"
+          }
+        }
+      },
+      "title": "ChannelOutcome",
+      "type": "object"
+    },
+    "ComparedCnvdEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "cnvd_id": {
+          "pattern": "^CNVD-[0-9]{4}-[0-9]{4,6}$(?!\\n)",
+          "title": "Cnvd Id",
+          "type": "string"
+        },
+        "description": {
+          "description": "CNVD's Chinese description; untrusted source text.",
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "evidence_id": {
+          "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "severity": {
+          "description": "CNVD's severity: high for 高, medium for 中, low for 低.",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "source_comparison": {
+          "$ref": "#/$defs/SourceComparison"
+        },
+        "title": {
+          "description": "CNVD's Chinese title; untrusted source text.",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cnvd_id",
+        "title",
+        "description",
+        "severity",
+        "evidence_id",
+        "source_comparison"
+      ],
+      "title": "ComparedCnvdEntry",
+      "type": "object"
+    },
+    "ComparedNvdSeverity": {
+      "additionalProperties": false,
+      "properties": {
+        "base_severity": {
+          "anyOf": [
+            {
+              "enum": [
+                "NONE",
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "CRITICAL"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Base Severity"
+        },
+        "cvss_version": {
+          "enum": [
+            "3.1",
+            "3.0"
+          ],
+          "title": "Cvss Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_severity",
+        "cvss_version"
+      ],
+      "title": "ComparedNvdSeverity",
+      "type": "object"
+    },
+    "CvssMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "base_score": {
+          "maximum": 10.0,
+          "minimum": 0.0,
+          "title": "Base Score",
+          "type": "number"
+        },
+        "base_severity": {
+          "anyOf": [
+            {
+              "enum": [
+                "NONE",
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "CRITICAL"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Severity"
+        },
+        "scorer": {
+          "description": "Organization that produced this score.",
+          "minLength": 1,
+          "title": "Scorer",
+          "type": "string"
+        },
+        "scorer_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "primary",
+                "secondary"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer Type"
+        },
+        "vector_string": {
+          "minLength": 1,
+          "title": "Vector String",
+          "type": "string"
+        },
+        "version": {
+          "enum": [
+            "2.0",
+            "3.0",
+            "3.1",
+            "4.0"
+          ],
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "vector_string",
+        "base_score",
+        "base_severity",
+        "scorer",
+        "scorer_type"
+      ],
+      "title": "CvssMetric",
+      "type": "object"
+    },
+    "EvidenceAnchor": {
+      "additionalProperties": false,
+      "description": "A pointer to one source record, precise enough to re-fetch and re-hash it.",
+      "else": {
+        "properties": {
+          "inference_method": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "assertion_kind": {
+            "const": "inferred"
+          }
+        }
+      },
+      "properties": {
+        "assertion_kind": {
+          "$ref": "#/$defs/AssertionKind"
+        },
+        "authoritative_record_id": {
+          "description": "Identifier of the record in its source of record, e.g. a CVE ID.",
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Authoritative Record Id",
+          "type": "string"
+        },
+        "content_sha256": {
+          "description": "SHA-256 of the canonical JSON of the source record this anchor points at.",
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "evidence_id": {
+          "description": "'ev:' and the first 24 hex digits of the SHA-256 of the canonical JSON of every other anchor field; it changes when any provenance field changes. The server re-derives it and rejects a mismatch. An integrity check, not proof of origin: a holder can recompute it.",
+          "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bounded excerpt, present only when the source's terms permit redistribution.",
+          "title": "Excerpt"
+        },
+        "inference_method": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How an inferred anchor was derived; required iff inferred.",
+          "title": "Inference Method"
+        },
+        "license_or_terms_ref": {
+          "minLength": 1,
+          "title": "License Or Terms Ref",
+          "type": "string"
+        },
+        "locator": {
+          "description": "Field path or JSON pointer inside the source.",
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/KnowledgeScope"
+        },
+        "source_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source Name",
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/SourceType"
+        },
+        "source_uri": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Source Uri",
+          "type": "string"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Release, commit, ETag or snapshot identifier, when the source exposes one.",
+          "title": "Source Version"
+        },
+        "trust_level": {
+          "$ref": "#/$defs/TrustLevel"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "source_name",
+        "source_type",
+        "authoritative_record_id",
+        "source_uri",
+        "source_version",
+        "retrieved_at",
+        "content_sha256",
+        "locator",
+        "excerpt",
+        "scope",
+        "assertion_kind",
+        "inference_method",
+        "license_or_terms_ref",
+        "trust_level"
+      ],
+      "then": {
+        "properties": {
+          "inference_method": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "inference_method"
+        ]
+      },
+      "title": "EvidenceAnchor",
+      "type": "object"
+    },
+    "GraphPath": {
+      "additionalProperties": false,
+      "description": "One asserted relation a graph hit shares with the seed record it was reached from.",
+      "properties": {
+        "relation": {
+          "enum": [
+            "cwe",
+            "vendor",
+            "product",
+            "cpe",
+            "purl"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "seed_cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Seed Cve Id",
+          "type": "string"
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seed_cve_id",
+        "relation",
+        "value"
+      ],
+      "title": "GraphPath",
+      "type": "object"
+    },
+    "KevEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "date_added": {
+          "format": "date",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+          "title": "Date Added",
+          "type": "string"
+        },
+        "due_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Due Date"
+        },
+        "known_ransomware_campaign_use": {
+          "anyOf": [
+            {
+              "enum": [
+                "known",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA's own Known/Unknown assessment; null when the consulted source does not carry it.",
+          "title": "Known Ransomware Campaign Use"
+        }
+      },
+      "required": [
+        "date_added",
+        "due_date",
+        "known_ransomware_campaign_use"
+      ],
+      "title": "KevEntry",
+      "type": "object"
+    },
+    "KnowledgeScope": {
+      "description": "What kind of knowledge a record, evidence anchor or claim represents.",
+      "enum": [
+        "formal_protocol_finding",
+        "protocol_threat_context",
+        "implementation_vulnerability",
+        "unknown"
+      ],
+      "title": "KnowledgeScope",
+      "type": "string"
+    },
+    "LocalizedText": {
+      "additionalProperties": false,
+      "properties": {
+        "lang": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$(?!\\n)",
+          "title": "Lang",
+          "type": "string"
+        },
+        "source": {
+          "description": "Who authored this text, e.g. a CNA.",
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "lang",
+        "value",
+        "source"
+      ],
+      "title": "LocalizedText",
+      "type": "object"
+    },
+    "LookupCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_hits": {
+          "items": {
+            "$ref": "#/$defs/ChannelHit"
+          },
+          "minItems": 1,
+          "title": "Channel Hits",
+          "type": "array"
+        },
+        "missing_fields": {
+          "description": "Record fields no source supplied; unknown, not evidence of low risk.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Fields",
+          "type": "array"
+        },
+        "rank": {
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "record": {
+          "$ref": "#/$defs/LookupCveRecord"
+        },
+        "relevance_score": {
+          "description": "Reciprocal-rank-fusion score over the exact-ID, lexical, semantic and graph hits. Measures relevance to the query only — not severity, exploitability or confidence. Structured hits record why the candidate satisfied the filters and add no score.",
+          "minimum": 0.0,
+          "title": "Relevance Score",
+          "type": "number"
+        },
+        "scope_assessment": {
+          "$ref": "#/$defs/ScopeAssessment"
+        },
+        "weakness_associations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WeaknessAssociations"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Full catalogue-derived paths on single-CVE lookup only; omitted from search, topic and investigation candidates, including excluded candidates. Separate from retrieval evidence and FiGHT protocol context."
+        }
+      },
+      "required": [
+        "rank",
+        "record",
+        "relevance_score",
+        "channel_hits",
+        "scope_assessment",
+        "missing_fields"
+      ],
+      "title": "LookupCandidate",
+      "type": "object"
+    },
+    "LookupCveRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "affected": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AffectedProduct"
+          },
+          "title": "Affected",
+          "type": "array"
+        },
+        "cnvd": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ComparedCnvdEntry"
+          },
+          "title": "Cnvd",
+          "type": "array"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "cvss": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CvssMetric"
+          },
+          "title": "Cvss",
+          "type": "array"
+        },
+        "cwe_ids": {
+          "default": [],
+          "items": {
+            "maxLength": 16,
+            "pattern": "^CWE-[0-9]+$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Cwe Ids",
+          "type": "array"
+        },
+        "descriptions": {
+          "items": {
+            "$ref": "#/$defs/LocalizedText"
+          },
+          "minItems": 1,
+          "title": "Descriptions",
+          "type": "array"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "formal_seed_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Formal Seed Eligible",
+          "type": "boolean"
+        },
+        "kev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KevEntry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA KEV entry, when a consulted source lists one."
+        },
+        "last_modified": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Modified"
+        },
+        "nvd_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "NVD 2.0 vulnStatus verbatim, untrusted source text; null for NVD 1.1 and synthetic data.",
+          "title": "Nvd Status"
+        },
+        "protocol_design_claim": {
+          "const": "not_established",
+          "default": "not_established",
+          "title": "Protocol Design Claim",
+          "type": "string"
+        },
+        "published": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published"
+        },
+        "record_kind": {
+          "const": "cve",
+          "default": "cve",
+          "title": "Record Kind",
+          "type": "string"
+        },
+        "references": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "title": "References",
+          "type": "array"
+        },
+        "vulnerability_origin": {
+          "$ref": "#/$defs/VulnerabilityOrigin",
+          "default": "unknown"
+        }
+      },
+      "required": [
+        "record_kind",
+        "cve_id",
+        "descriptions",
+        "published",
+        "last_modified",
+        "cvss",
+        "cwe_ids",
+        "affected",
+        "references",
+        "kev",
+        "nvd_status",
+        "cnvd",
+        "vulnerability_origin",
+        "protocol_design_claim",
+        "formal_seed_eligible",
+        "evidence_ids"
+      ],
+      "title": "LookupCveRecord",
+      "type": "object"
+    },
+    "MatchedField": {
+      "description": "A field a retrieval channel matched a record in, so no channel can name anything\nelse: the lexical index's fields, the structured filter's fields, the semantic\nembedding, the graph's relations and the exact CVE ID.",
+      "enum": [
+        "cve_id",
+        "description",
+        "vendor",
+        "product",
+        "cwe_ids",
+        "affected.vendor",
+        "affected.product",
+        "affected.purl",
+        "cvss.base_severity",
+        "vulnerability_origin",
+        "published.year",
+        "kev",
+        "semantic.embedding",
+        "relation.cwe",
+        "relation.vendor",
+        "relation.product",
+        "relation.cpe",
+        "relation.purl"
+      ],
+      "title": "MatchedField",
+      "type": "string"
+    },
+    "MissingAssociationLink": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "enum": [
+            "no_specific_cwe",
+            "cwe_not_in_snapshot",
+            "no_related_attack_pattern",
+            "capec_not_in_snapshot",
+            "capec_parent_unavailable",
+            "attack_technique_unavailable"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "reason"
+      ],
+      "title": "MissingAssociationLink",
+      "type": "object"
+    },
+    "PendingCnvdLookup": {
+      "additionalProperties": false,
+      "properties": {
+        "cnvd_id": {
+          "pattern": "^CNVD-[0-9]{4}-[0-9]{4,6}$(?!\\n)",
+          "title": "Cnvd Id",
+          "type": "string"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "description": {
+          "description": "CNVD's Chinese description; untrusted source text.",
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "evidence_id": {
+          "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "cnvd_without_nvd_record",
+            "cnvd_for_rejected_nvd_record",
+            "cnvd_for_excluded_nvd_record"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "severity": {
+          "description": "CNVD's severity: high for 高, medium for 中, low for 低.",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "source_comparison": {
+          "$ref": "#/$defs/SourceComparison"
+        },
+        "title": {
+          "description": "CNVD's Chinese title; untrusted source text.",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cnvd_id",
+        "title",
+        "description",
+        "severity",
+        "evidence_id",
+        "source_comparison",
+        "cve_id",
+        "outcome"
+      ],
+      "title": "PendingCnvdLookup",
+      "type": "object"
+    },
+    "Reference": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "url": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "source",
+        "tags"
+      ],
+      "title": "Reference",
+      "type": "object"
+    },
+    "ResultStatus": {
+      "description": "Outcome of a request. An unavailable backend is never reported as ``no_match``.",
+      "enum": [
+        "ok",
+        "no_match",
+        "partial",
+        "incomplete_index",
+        "source_unavailable",
+        "backend_error",
+        "policy_blocked"
+      ],
+      "title": "ResultStatus",
+      "type": "string"
+    },
+    "RetrievalChannel": {
+      "description": "Retrieval channels whose scores and reasons stay inspectable per candidate.",
+      "enum": [
+        "exact_id",
+        "lexical",
+        "structured",
+        "graph",
+        "semantic"
+      ],
+      "title": "RetrievalChannel",
+      "type": "string"
+    },
+    "ScopeAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "description": "Why the candidate carries this scope.",
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/KnowledgeScope"
+        }
+      },
+      "required": [
+        "scope",
+        "basis"
+      ],
+      "title": "ScopeAssessment",
+      "type": "object"
+    },
+    "SearchWarning": {
+      "additionalProperties": false,
+      "description": "What a search could not do or may have left out. ``result_limit_reached``: the\nresponse lists as many candidates as the request's limit, its subject, and its\nchannels matched more, or one that cuts its own top-k (lexical, semantic or graph)\nreturned that many, so more matches may exist; it never counts them.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/SearchWarningCode"
+        },
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "subject"
+      ],
+      "title": "SearchWarning",
+      "type": "object"
+    },
+    "SearchWarningCode": {
+      "enum": [
+        "unknown_cve_id",
+        "excluded_by_filters",
+        "no_searchable_terms",
+        "term_not_indexed",
+        "backend_unavailable",
+        "backend_incomplete",
+        "backend_error",
+        "result_limit_reached"
+      ],
+      "title": "SearchWarningCode",
+      "type": "string"
+    },
+    "SourceComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "cnvd_raw_severity": {
+          "enum": [
+            "高",
+            "中",
+            "低"
+          ],
+          "title": "Cnvd Raw Severity",
+          "type": "string"
+        },
+        "nvd_raw_severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComparedNvdSeverity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nvd_state": {
+          "enum": [
+            "analysed",
+            "awaiting_analysis",
+            "deferred",
+            "status_unknown",
+            "not_in_nvd_snapshot",
+            "rejected_by_nvd",
+            "excluded_by_import"
+          ],
+          "title": "Nvd State",
+          "type": "string"
+        },
+        "rule": {
+          "const": "cnvd_severity_vs_nvd_primary_cvss3",
+          "default": "cnvd_severity_vs_nvd_primary_cvss3",
+          "title": "Rule",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "agree",
+            "disagree",
+            "not_comparable"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "statement": {
+          "const": "This is VulnWitness's comparison, not a statement by NVD or CNVD. CNVD's grading criteria are unverified; the severity mapping is VulnWitness's choice.",
+          "default": "This is VulnWitness's comparison, not a statement by NVD or CNVD. CNVD's grading criteria are unverified; the severity mapping is VulnWitness's choice.",
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nvd_state",
+        "severity",
+        "rule",
+        "cnvd_raw_severity",
+        "nvd_raw_severity",
+        "statement"
+      ],
+      "title": "SourceComparison",
+      "type": "object"
+    },
+    "SourceType": {
+      "description": "Kind of source an evidence anchor points into. Values are added with their adapters.",
+      "enum": [
+        "synthetic_fixture",
+        "nvd_api_2",
+        "nvd_json_11",
+        "cisa_kev",
+        "circl_cnvd_parquet",
+        "mitre_fight_yaml"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    },
+    "TrustLevel": {
+      "description": "How far a consumer may rely on an evidence anchor's source.",
+      "enum": [
+        "authoritative",
+        "secondary",
+        "derived",
+        "synthetic"
+      ],
+      "title": "TrustLevel",
+      "type": "string"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "One affected version or bounded range; at least one bound or ``exact`` is set.",
+      "oneOf": [
+        {
+          "properties": {
+            "end_excluding": {
+              "type": "null"
+            },
+            "end_including": {
+              "type": "null"
+            },
+            "exact": {
+              "type": "string"
+            },
+            "start_excluding": {
+              "type": "null"
+            },
+            "start_including": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "exact"
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "properties": {
+                "start_including": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start_including"
+              ]
+            },
+            {
+              "properties": {
+                "start_excluding": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start_excluding"
+              ]
+            },
+            {
+              "properties": {
+                "end_including": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "end_including"
+              ]
+            },
+            {
+              "properties": {
+                "end_excluding": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "end_excluding"
+              ]
+            }
+          ],
+          "properties": {
+            "exact": {
+              "type": "null"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "end_excluding": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Excluding"
+        },
+        "end_including": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Including"
+        },
+        "exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exact"
+        },
+        "start_excluding": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Excluding"
+        },
+        "start_including": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Including"
+        }
+      },
+      "required": [
+        "exact",
+        "start_including",
+        "start_excluding",
+        "end_including",
+        "end_excluding"
+      ],
+      "title": "VersionRange",
+      "type": "object"
+    },
+    "VulnerabilityOrigin": {
+      "description": "Where a CVE's defect lives. A CVE never describes a protocol-design flaw here.",
+      "enum": [
+        "implementation",
+        "configuration",
+        "dependency",
+        "unknown"
+      ],
+      "title": "VulnerabilityOrigin",
+      "type": "string"
+    },
+    "WeaknessAssociationPath": {
+      "additionalProperties": false,
+      "properties": {
+        "capec_id": {
+          "pattern": "^CAPEC-[0-9]+$(?!\\n)",
+          "title": "Capec Id",
+          "type": "string"
+        },
+        "cwe_id": {
+          "pattern": "^CWE-[0-9]+$(?!\\n)",
+          "title": "Cwe Id",
+          "type": "string"
+        },
+        "derived": {
+          "const": true,
+          "default": true,
+          "title": "Derived",
+          "type": "boolean"
+        },
+        "hops": {
+          "items": {
+            "$ref": "#/$defs/AssociationHop"
+          },
+          "title": "Hops",
+          "type": "array"
+        },
+        "inherited_from": {
+          "anyOf": [
+            {
+              "pattern": "^CAPEC-[0-9]+$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inherited From"
+        },
+        "inherited_from_cwe": {
+          "anyOf": [
+            {
+              "pattern": "^CWE-[0-9]+$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Linked CWE ancestor used for hierarchy inference, not a direct catalogue link.",
+          "title": "Inherited From Cwe"
+        },
+        "technique": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttackTechnique"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "technique_source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogueSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "terminal_reason": {
+          "anyOf": [
+            {
+              "const": "no_attack_mapping",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "No usable ATT&CK mapping in the loaded catalogue snapshot.",
+          "title": "Terminal Reason"
+        }
+      },
+      "required": [
+        "cwe_id",
+        "capec_id",
+        "technique",
+        "technique_source",
+        "terminal_reason",
+        "inherited_from",
+        "inherited_from_cwe",
+        "hops",
+        "derived"
+      ],
+      "title": "WeaknessAssociationPath",
+      "type": "object"
+    },
+    "WeaknessAssociations": {
+      "additionalProperties": false,
+      "properties": {
+        "missing_links": {
+          "items": {
+            "$ref": "#/$defs/MissingAssociationLink"
+          },
+          "title": "Missing Links",
+          "type": "array"
+        },
+        "note": {
+          "const": "This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited. CWE inheritance is an inference along the CWE hierarchy, not a catalogue link from the original CWE to CAPEC.",
+          "default": "This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited. CWE inheritance is an inference along the CWE hierarchy, not a catalogue link from the original CWE to CAPEC.",
+          "title": "Note",
+          "type": "string"
+        },
+        "omitted_count": {
+          "minimum": 0,
+          "title": "Omitted Count",
+          "type": "integer"
+        },
+        "ordering": {
+          "const": "direct_then_capec_inherited_then_cwe_inherited_then_capec_terminal_then_id_not_importance",
+          "default": "direct_then_capec_inherited_then_cwe_inherited_then_capec_terminal_then_id_not_importance",
+          "title": "Ordering",
+          "type": "string"
+        },
+        "paths": {
+          "items": {
+            "$ref": "#/$defs/WeaknessAssociationPath"
+          },
+          "maxItems": 20,
+          "title": "Paths",
+          "type": "array"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "paths",
+        "omitted_count",
+        "missing_links",
+        "note",
+        "snapshot_sha256",
+        "ordering"
+      ],
+      "title": "WeaknessAssociations",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/LookupCandidate"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "channel_outcomes": {
+      "items": {
+        "$ref": "#/$defs/ChannelOutcome"
+      },
+      "title": "Channel Outcomes",
+      "type": "array"
+    },
+    "channels_executed": {
+      "items": {
+        "$ref": "#/$defs/RetrievalChannel"
+      },
+      "title": "Channels Executed",
+      "type": "array"
+    },
+    "cnvd_attribution": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Source registry attribution, present exactly with CNVD content.",
+      "title": "Cnvd Attribution"
+    },
+    "evidence": {
+      "description": "Every anchor the candidates cite, ordered by evidence_id.",
+      "items": {
+        "$ref": "#/$defs/EvidenceAnchor"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "normalized_query": {
+      "title": "Normalized Query",
+      "type": "string"
+    },
+    "not_found_statement": {
+      "anyOf": [
+        {
+          "const": "The import keeps no CNVD entry without a CVE ID.",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Not Found Statement"
+    },
+    "pending_cnvd": {
+      "default": [],
+      "description": "Pending CNVD entries; Chinese source text is untrusted data.",
+      "items": {
+        "$ref": "#/$defs/PendingCnvdLookup"
+      },
+      "title": "Pending Cnvd",
+      "type": "array"
+    },
+    "query": {
+      "title": "Query",
+      "type": "string"
+    },
+    "result_sha256": {
+      "description": "SHA-256 of the canonical JSON of this response without this field; the server recomputes it and rejects a mismatch.",
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Result Sha256",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.54",
+      "default": "2.0.0-dev.54",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ResultStatus"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/SearchWarning"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "query",
+    "normalized_query",
+    "status",
+    "channels_executed",
+    "channel_outcomes",
+    "candidates",
+    "evidence",
+    "warnings",
+    "result_sha256"
+  ],
+  "title": "CveLookupResponse",
+  "type": "object"
+}

@@ -3,7 +3,7 @@ Loaded only through the ``api_server`` entry point of the ``vulnwitness.adapters
 
 Every route but ``/health`` requires the token, and every route is one toolbox call or
 one verification: ``POST /api/v2/search``, ``POST /api/v2/product``, ``POST /api/v2/investigate``,
-``GET /api/v2/evidence/{evidence_id}``, ``GET /api/v2/capabilities`` and
+``POST /api/v2/lookup``, ``GET /api/v2/evidence/{evidence_id}``, ``GET /api/v2/capabilities`` and
 ``POST /api/v2/verify``.
 """
 
@@ -45,6 +45,10 @@ def build_api_app(
     """The guarded REST API over ``toolbox`` and ``check_evidence_set`` for a server on
     ``host`` and ``port``; its request deadline is ``find_request_deadline_seconds``."""
     routes = {
+        f"{API_PREFIX}/lookup": GuardedRoute(
+            methods=POST_ONLY,
+            app=ToolRoute(toolbox, KnowledgeToolName.LOOKUP_CVE, read_body_arguments),
+        ),
         f"{API_PREFIX}/search": GuardedRoute(
             methods=POST_ONLY,
             app=ToolRoute(toolbox, KnowledgeToolName.SEARCH_VULNERABILITIES, read_body_arguments),

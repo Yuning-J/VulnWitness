@@ -6,7 +6,7 @@ from typing import Any
 import yaml
 
 from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
-from vulnwitness.domain.cve import AffectedProduct, CveRecord
+from vulnwitness.domain.cve import AffectedProduct, CnvdEntry, CveRecord, CvssMetric
 from vulnwitness.domain.evidence import (
     UNSEALED_EVIDENCE_ID,
     Claim,
@@ -233,3 +233,28 @@ def build_recorded_step(**overrides: Any) -> ToolStep:
     }
     fields.update(overrides)
     return ToolStep.model_validate(fields)
+
+
+def build_cnvd_entry(**overrides: Any) -> CnvdEntry:
+    fields: dict[str, Any] = {
+        "cnvd_id": "CNVD-9999-00001",
+        "title": "SYNTHETIC: 标题",
+        "description": "SYNTHETIC: 描述",
+        "severity": "medium",
+        "evidence_id": build_anchor().evidence_id,
+    }
+    fields.update(overrides)
+    return CnvdEntry.model_validate(fields)
+
+
+def build_cvss_metric(**overrides: Any) -> CvssMetric:
+    fields: dict[str, Any] = {
+        "version": "3.1",
+        "vector_string": "SYNTHETIC",
+        "base_score": 5.3,
+        "base_severity": "MEDIUM",
+        "scorer": "nvd@nist.gov",
+        "scorer_type": "primary",
+    }
+    fields.update(overrides)
+    return CvssMetric.model_validate(fields)
