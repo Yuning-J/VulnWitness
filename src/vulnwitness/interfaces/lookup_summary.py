@@ -89,6 +89,8 @@ def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
             lines.extend(render_cnvd_comparison(pending, width))
         if lookup.cnvd_attribution is not None:
             lines.extend(("", fill(lookup.cnvd_attribution, width=width)))
+        if lookup.cnvd_language is not None:
+            lines.append(f"CNVD language: {lookup.cnvd_language}")
         if lookup.not_found_statement is not None:
             lines.append(lookup.not_found_statement)
     if not lookup.candidates:
@@ -110,14 +112,17 @@ def render_cnvd_comparison(entry: ComparedCnvdEntry, width: int) -> list[str]:
     """Keep the two source grades on one line and label the project's comparison."""
     comparison = entry.source_comparison
     nvd_grade = comparison.nvd_raw_severity
-    nvd_statement = "no primary CVSS v3 severity"
+    nvd_statement = "no severity from NVD's own CVSS v3 metric"
     if nvd_grade is not None:
         nvd_statement = f"CVSS {nvd_grade.cvss_version} {nvd_grade.base_severity or 'unknown'}"
+    reason = ""
+    if comparison.not_compared_reason is not None:
+        reason = f" ({comparison.not_compared_reason})"
     return [
         f"NVD: {nvd_statement} | CNVD {entry.cnvd_id}: {comparison.cnvd_raw_severity}",
         f"NVD state: {comparison.nvd_state}",
         fill(f"CNVD title: {entry.title}", width=width),
         fill(f"CNVD description: {entry.description}", width=width),
-        f"VulnWitness severity comparison: {comparison.severity} [{comparison.rule}]",
+        f"VulnWitness grade comparison: {comparison.grade_relative}{reason} [{comparison.rule}]",
         fill(comparison.statement, width=width),
     ]

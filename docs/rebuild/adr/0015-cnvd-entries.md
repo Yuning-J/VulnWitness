@@ -10,7 +10,7 @@ Vulnerability analysis and prioritisation (VAP) work watches US and Chinese sour
 by side: NVD and the two Chinese national databases, CNVD (run by CNCERT) and CNNVD (run
 by CNITSEC). VulnWitness serves NVD records with CISA KEV joined by CVE ID. The need is
 one CVE with each source's statement shown side by side, each with its own provenance,
-and a disagreement flagged by a stated rule.
+and grades compared under a stated mapping.
 
 Access, checked on 2026-11-08:
 
@@ -99,7 +99,7 @@ entry joins on the first import whose NVD input holds a servable record for its 
 ### 4. Record and store shape
 
 - `CveRecord.cnvd`: a tuple of `CnvdEntry`, ordered by CNVD ID; empty when no consulted
-  source lists one. A `CnvdEntry` holds `cnvd_id`, `title`, `description` (Chinese
+  source lists one. A `CnvdEntry` holds `cnvd_id`, `title`, `description` (plain strings of
   text, untrusted like every source description), `severity` (`high`, `medium` or `low`
   for 高, 中, 低) and `evidence_id`.
 - **Anchor.** Each entry has its own anchor:
@@ -118,7 +118,13 @@ entry joins on the first import whose NVD input holds a servable record for its 
   knowledge capabilities say CNVD was not imported. The contract version moves to the
   next development version.
 
-### 5. The comparison rule
+### 5. Authority verdicts and the comparison rule
+
+VulnWitness keeps each authority's verdict and provenance. The assessing body and the
+channel that delivers its assessment are named separately: an NVD record can carry
+scores assessed by a CNA. There is no shared ground truth between authorities, and
+agreement rate is not a quality signal. Record and score gaps, and another authority
+grading higher under a named mapping, are useful signals.
 
 The comparison is computed when an entry is served, from stored fields, and is never
 stored. Each served CNVD entry carries a `source_comparison` with two parts.
@@ -132,24 +138,49 @@ stored. Each served CNVD entry carries a `source_comparison` with two parts.
   verbatim);
 - for pending entries: `not_in_nvd_snapshot`, `rejected_by_nvd` or `excluded_by_import`.
 
-**`severity`**: `agree`, `disagree` or `not_comparable`, under the rule
-`cnvd_severity_vs_nvd_primary_cvss3`.
+**`grade_relative`**: CNVD's grade relative to NVD's own CVSS v3 severity, under the
+single named built-in rule `cnvd_grade_vs_nvd_own_cvss3`. Git versions the rule's
+content; it has no separate version field.
 
-- 高 matches HIGH or CRITICAL, 中 matches MEDIUM, and 低 matches LOW.
-- The rule compares against the record's primary-scorer CVSS v3.1 metric, or else its
-  primary v3.0 metric.
-- No such metric, or one without a base severity or with NONE, gives `not_comparable`.
-- CVSS v2, v4 and secondary (CNA) scores are not compared.
+- The order is low < medium < high: 低 maps to LOW, 中 to MEDIUM, and 高 to HIGH or
+  CRITICAL. The outcomes are `higher`, `same` and `lower`.
+- The compared metric is NVD's own, stored with scorer `nvd@nist.gov`: CVSS v3.1,
+  otherwise v3.0, whatever its `scorer_type`. A CNA's score never participates, even
+  when NVD lists it as primary. CVSS v2 and v4 do not participate.
+- `not_compared_reason` appears exactly with `not_compared`: `no_nvd_record` means
+  there is no servable NVD record; `no_nvd_cvss3_metric` means the record has neither
+  NVD's own v3.1 nor its v3.0 metric; `no_usable_base_severity` means the selected
+  metric's severity is missing or NONE. An unusable v3.1 does not fall back to v3.0.
 
-The response names the rule, says it is VulnWitness's comparison rather than a statement
-by NVD or CNVD, and shows both raw values beside it. CNVD's grading criteria were not
-found, so the mapping is this project's choice.
+The response names the rule and preserves both raw grades, with the compared metric's
+exact stored `scorer`, `scorer_type` and `cvss_version` beside its base severity. Its
+fixed statement identifies this as VulnWitness's mapping between two grading schemes,
+not a judgement that either source is right. CNVD's grading criteria are unverified.
+CVSS measures severity, not risk.
+
+Source publication date, VulnWitness's first observation and retrieval time are distinct.
+Only retrieval time exists for CNVD today; publication date and first observation are
+later work.
+
+Language is a source declaration per revision. The snapshot catalog optionally records
+the language declared by that revision's dataset card, `zh` for the pinned revision.
+Exact lookups serve it as `cnvd_language` beside the attribution when CNVD content is
+present. A revision without a declaration has no language; the source name implies none.
+Titles and descriptions stay plain strings. Per-field multilingual text, which requires
+`LocalizedText` in the store and a store-format change, waits for a real need. The core
+flow calls no translation service. Language takes no part in grading comparison or
+priority.
+
+Obligations attach to specific authorities. Priority and compliance judgements belong
+to a separately defined policy and are not made here. Unknown is never read as safe or
+compliant.
 
 ### 6. Surfaces
 
 - Exact CVE lookup on the CLI, REST and MCP returns `cnvd`, each entry with its
-  comparison. A CVE with no NVD record but pending CNVD entries returns those entries
-  with their NVD state, not a bare not-found.
+  `grade_relative` comparison and any `not_compared_reason`. A CVE with no NVD record
+  but pending CNVD entries returns those entries with their NVD state, not a bare
+  not-found.
 - Lookup by CNVD ID resolves to its CVE's record or its pending entry. The import keeps
   no CNVD entry without a CVE ID, and the not-found answer says so.
 - Search, product queries, graph expansion and investigation planning are unchanged.
@@ -159,6 +190,9 @@ found, so the mapping is this project's choice.
   and the attribution.
 
 ### 7. Attribution and terms
+
+Exact lookups carry the revision’s declared `cnvd_language` beside the attribution,
+when the catalog supplies one.
 
 Wherever CNVD content is shown (CLI, REST, MCP, reports, UI), it carries:
 

@@ -27,6 +27,7 @@ from vulnwitness.domain.cnvd_snapshot import CnvdSnapshot, CnvdSnapshotCatalog, 
 from vulnwitness.domain.migration_report import MigrationOutcome
 
 TEST_REVISION = "a" * 40
+LOOKUP_REVISION = "986160c9b1c910049f64a166ab4056de191f6de7"
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,7 @@ def build_cnvd_scenario(
     metrics: dict[str, Any] | None = None,
     extra_nvd_entries: tuple[dict[str, Any], ...] = (),
     retain_cnvd: bool = True,
+    revision: str = TEST_REVISION,
 ) -> CnvdScenario:
     """One merged CVE with two entries, all pending outcomes and both unstored outcomes."""
     inputs_dir = directory / "inputs"
@@ -156,7 +158,7 @@ def build_cnvd_scenario(
     return CnvdScenario(
         manifest,
         stores_dir / "cnvd",
-        build_cnvd_dependencies(build_test_catalog([train, test], [3, 4])),
+        build_cnvd_dependencies(build_test_catalog([train, test], [3, 4], revision=revision)),
         rows,
     )
 
@@ -167,8 +169,9 @@ def import_cnvd_lookup_corpus(
     nvd_status: str = "Analyzed",
     with_metrics: bool = True,
     retain_cnvd: bool = True,
+    revision: str = LOOKUP_REVISION,
 ) -> CorpusStore:
-    """A served corpus with disagree/agree merged entries, every pending state and a
+    """A served corpus with same/lower merged entries, every pending state and a
     record without CNVD. Only synthetic inputs are written to the temporary directory.
     """
     metrics = {}
@@ -193,6 +196,7 @@ def import_cnvd_lookup_corpus(
         metrics=metrics,
         extra_nvd_entries=(build_v2_entry(8),),
         retain_cnvd=retain_cnvd,
+        revision=revision,
     )
     report = run_test_migration(
         scenario.manifest,

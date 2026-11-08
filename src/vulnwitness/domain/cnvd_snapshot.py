@@ -16,6 +16,9 @@ class CnvdSnapshotFile(ContractModel):
 
 class CnvdSnapshot(ContractModel):
     revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    language: str | None = Field(
+        default=None, min_length=1, description="Language declared by this revision's dataset card."
+    )
     files: tuple[CnvdSnapshotFile, ...] = Field(min_length=1)
 
     @model_validator(mode="after")

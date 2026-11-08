@@ -383,6 +383,8 @@ def validate_search_response(response: SearchResponse, evidence_catalog: Evidenc
                 violations.append(f"{pending.cnvd_id}: pending entry cites absent evidence")
             if pending.source_comparison != compare_cnvd_severity(pending, None, pending.outcome):
                 violations.append(f"{pending.cnvd_id}: source comparison differs from the rule")
+        if not has_cnvd and response.cnvd_language is not None:
+            violations.append("CNVD language requires CNVD content")
         if has_cnvd != (response.cnvd_attribution is not None):
             violations.append("CNVD attribution is required exactly when CNVD content is served")
     violations.extend(find_result_limit_violations(response.warnings, len(response.candidates)))

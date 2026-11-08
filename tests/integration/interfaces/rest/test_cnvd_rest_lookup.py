@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from tests.support.asgi import open_app_client
-from tests.support.cnvd_inputs import TEST_REVISION
+from tests.support.cnvd_inputs import LOOKUP_REVISION
 from tests.support.cnvd_serving import (
     CNVD_LOOKUP_CASE_IDS,
     CNVD_LOOKUP_CASES,
@@ -13,6 +13,7 @@ from tests.support.cnvd_serving import (
     assert_cnvd_lookup,
     build_cnvd_capability_toolbox,
     build_cnvd_serving_toolbox,
+    build_serving_cnvd_catalog,
 )
 from tests.support.rest_api import build_test_api
 from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
@@ -63,10 +64,10 @@ async def test_lookup_classifies_nvd_status(
         answer = await client.post("/api/v2/lookup", json={"cve_id": "CVE-9999-0001"})
 
     assert answer.status_code == 200
-    assert_cnvd_lookup(answer.json(), "CVE-9999-0001", ["agree", "disagree"], expected, False)
+    assert_cnvd_lookup(answer.json(), "CVE-9999-0001", ["same", "lower"], expected, False)
 
 
-async def test_lookup_without_primary_cvss_is_not_comparable(
+async def test_lookup_without_nvd_cvss3_is_not_compared(
     tmp_path: Path,
     fixture_bundle: FixtureBundle,
 ) -> None:
@@ -76,7 +77,7 @@ async def test_lookup_without_primary_cvss_is_not_comparable(
         answer = await client.post("/api/v2/lookup", json={"cve_id": "CVE-9999-0001"})
 
     assert_cnvd_lookup(
-        answer.json(), "CVE-9999-0001", ["not_comparable", "not_comparable"], "analysed", False
+        answer.json(), "CVE-9999-0001", ["not_compared", "not_compared"], "analysed", False
     )
 
 
@@ -97,6 +98,8 @@ async def test_lookup_without_cnvd_content_omits_cnvd_attribution(
 
     assert answer.status_code == 200
     assert "cnvd_attribution" not in answer.json()
+    assert "cnvd_language" not in answer.json()
+    assert "source_comparison" not in answer.text
     if identifier.startswith("CNVD-"):
         assert answer.json()["not_found_statement"] == CNVD_NOT_FOUND_STATEMENT
         assert answer.json()["status"] == "no_match"
@@ -147,5 +150,26 @@ async def test_capabilities_report_cnvd_import_and_revision(
     assert answer.status_code == 200
     assert answer.json()["cnvd"] == {
         "imported": has_cnvd,
-        "revision": TEST_REVISION if has_cnvd else None,
+        "revision": LOOKUP_REVISION if has_cnvd else None,
     }
+
+
+@pytest.mark.parametrize("language", ["zh-Hans", None], ids=["declared", "undeclared"])
+async def test_lookup_uses_only_served_revisions_language(
+    tmp_path: Path, fixture_bundle: FixtureBundle, language: str | None
+) -> None:
+    toolbox = build_cnvd_serving_toolbox(
+        tmp_path, cnvd_catalog=build_serving_cnvd_catalog(language)
+    )
+
+    async with open_app_client(build_test_api(fixture_bundle, toolbox=toolbox)) as client:
+        answer = await client.post("/api/v2/lookup", json={"cve_id": "CVE-9999-0001"})
+
+    assert answer.status_code == 200
+    assert answer.json().get("cnvd_language") == language
+    assert ("cnvd_language" in answer.json()) == (language is not None)
+    assert answer.json()["cnvd_attribution"]
+    assert (
+        answer.json()["candidates"][0]["record"]["cnvd"][0]["source_comparison"]["grade_relative"]
+        == "same"
+    )

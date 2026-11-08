@@ -915,15 +915,16 @@ def test_cli_lookup_text_labels_source_statements_and_project_comparison(
 
     assert exit_code == 0
     assert "NVD:" in text and " | CNVD CNVD-9999-" in text
-    assert "cnvd_severity_vs_nvd_primary_cvss3" in text
-    assert "VulnWitness's comparison, not a statement by NVD or CNVD" in text
+    assert "cnvd_grade_vs_nvd_own_cvss3" in text
+    assert "VulnWitness's mapping between two grading schemes" in text
     assert cnvd_attribution() in " ".join(text.split())
+    assert text.count("CNVD language: zh") == 1
     if identifier.startswith("CVE-"):
         assert "CVSS 3.1 MEDIUM | CNVD CNVD-9999-00007: 低" in text
-        assert "comparison: disagree" in text
+        assert "comparison: lower" in text
     else:
         assert "not_in_nvd_snapshot" in text
-        assert "not_comparable" in text
+        assert "not_compared" in text
 
 
 @pytest.mark.parametrize("output_format", ["json", "text"])
@@ -943,3 +944,50 @@ def test_cli_unknown_cnvd_explains_import_limit_without_attribution(
     assert exit_code == 1
     assert CNVD_NOT_FOUND_STATEMENT in text
     assert "CNVD entries from CIRCL" not in text
+    assert "cnvd_language" not in text
+    assert "source_comparison" not in text
+
+
+@pytest.mark.parametrize(
+    "revision,expected_language",
+    [("986160c9b1c910049f64a166ab4056de191f6de7", "zh"), ("a" * 40, None)],
+    ids=["catalogued-declaration", "no-catalogued-declaration"],
+)
+def test_cli_lookup_language_requires_revision_declaration(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    revision: str,
+    expected_language: str | None,
+) -> None:
+    corpus = import_cnvd_lookup_corpus(tmp_path, revision=revision)
+    settings = {"VULNWITNESS_STORE_ROOT": str(tmp_path / "stores")}
+    assert main(["store", "activate", corpus.store_name], settings) == 0
+    capsys.readouterr()
+
+    exit_code = main(["lookup", "CVE-9999-0001"], settings)
+    lookup = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert lookup.get("cnvd_language") == expected_language
+    assert ("cnvd_language" in lookup) == (expected_language is not None)
+    assert lookup["cnvd_attribution"]
+
+
+@pytest.mark.parametrize("identifier", ["CVE-9999-0008", "CVE-9999-9999"])
+def test_cli_lookup_without_cnvd_omits_language_and_comparison(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    identifier: str,
+) -> None:
+    corpus = import_cnvd_lookup_corpus(tmp_path)
+    settings = {"VULNWITNESS_STORE_ROOT": str(tmp_path / "stores")}
+    assert main(["store", "activate", corpus.store_name], settings) == 0
+    capsys.readouterr()
+
+    main(["lookup", identifier], settings)
+    text = capsys.readouterr().out
+    lookup = json.loads(text)
+
+    assert "cnvd_language" not in lookup
+    assert "cnvd_attribution" not in lookup
+    assert "source_comparison" not in text

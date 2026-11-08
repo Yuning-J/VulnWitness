@@ -88,9 +88,11 @@ class SearchService:
         weakness_mapping: WeaknessMapping | None = None,
         cnvd_index: CnvdIndex | None = None,
         cnvd_attribution: str | None = None,
+        cnvd_language: str | None = None,
     ) -> None:
         self._cnvd_index = cnvd_index or CnvdIndex()
         self._cnvd_attribution = cnvd_attribution
+        self._cnvd_language = cnvd_language
         self._weakness_mapping = weakness_mapping
         self._cve_repository = cve_repository
         self._evidence_catalog = evidence_catalog
@@ -151,6 +153,7 @@ class SearchService:
             self._cnvd_index,
             self._evidence_catalog,
             self._cnvd_attribution,
+            self._cnvd_language,
         )
 
     def has_semantic_channel(self) -> bool:

@@ -34,7 +34,7 @@ def test_lookup_comparisons_validate_without_changing_stored_content(
 
 
 @pytest.mark.parametrize("is_pending", [False, True], ids=["merged", "pending"])
-def test_lookup_validator_rejects_a_comparison_that_disagrees_with_the_rule(
+def test_lookup_validator_rejects_a_comparison_that_differs_from_the_rule(
     tmp_path: Path,
     is_pending: bool,
 ) -> None:
@@ -46,7 +46,7 @@ def test_lookup_validator_rejects_a_comparison_that_disagrees_with_the_rule(
         forged_entry = entry.model_copy(
             update={
                 "source_comparison": entry.source_comparison.model_copy(
-                    update={"severity": "disagree"}
+                    update={"grade_relative": "higher"}
                 ),
             }
         )
@@ -57,7 +57,7 @@ def test_lookup_validator_rejects_a_comparison_that_disagrees_with_the_rule(
         forged_entry = entry.model_copy(
             update={
                 "source_comparison": entry.source_comparison.model_copy(
-                    update={"severity": "disagree"}
+                    update={"grade_relative": "higher"}
                 ),
             }
         )

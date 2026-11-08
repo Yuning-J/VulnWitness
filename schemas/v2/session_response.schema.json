@@ -85,8 +85,8 @@
           "$ref": "#/$defs/AffectednessRequest"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         }
@@ -829,11 +829,33 @@
           ],
           "title": "Cvss Version",
           "type": "string"
+        },
+        "scorer": {
+          "minLength": 1,
+          "title": "Scorer",
+          "type": "string"
+        },
+        "scorer_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "primary",
+                "secondary"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scorer Type"
         }
       },
       "required": [
         "base_severity",
-        "cvss_version"
+        "cvss_version",
+        "scorer",
+        "scorer_type"
       ],
       "title": "ComparedNvdSeverity",
       "type": "object"
@@ -845,8 +867,8 @@
           "$ref": "#/$defs/TopicResolution"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         }
@@ -1008,6 +1030,20 @@
           "description": "Source registry attribution, present exactly with CNVD content.",
           "title": "Cnvd Attribution"
         },
+        "cnvd_language": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Language declared by the served CNVD revision, only with CNVD content.",
+          "title": "Cnvd Language"
+        },
         "evidence": {
           "description": "Every anchor the candidates cite, ordered by evidence_id.",
           "items": {
@@ -1053,8 +1089,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         },
@@ -1580,8 +1616,8 @@
           "$ref": "#/$defs/EvidenceAnchor"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         }
@@ -2237,8 +2273,8 @@
           "type": "boolean"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         },
@@ -2637,8 +2673,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         },
@@ -3887,8 +3923,8 @@
           "title": "Product"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         },
@@ -4979,8 +5015,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         },
@@ -5494,6 +5530,20 @@
     },
     "SourceComparison": {
       "additionalProperties": false,
+      "else": {
+        "not": {
+          "required": [
+            "not_compared_reason"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "grade_relative": {
+            "const": "not_compared"
+          }
+        }
+      },
       "properties": {
         "cnvd_raw_severity": {
           "enum": [
@@ -5503,6 +5553,33 @@
           ],
           "title": "Cnvd Raw Severity",
           "type": "string"
+        },
+        "grade_relative": {
+          "enum": [
+            "higher",
+            "same",
+            "lower",
+            "not_compared"
+          ],
+          "title": "Grade Relative",
+          "type": "string"
+        },
+        "not_compared_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "no_nvd_record",
+                "no_nvd_cvss3_metric",
+                "no_usable_base_severity"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Compared Reason"
         },
         "nvd_raw_severity": {
           "anyOf": [
@@ -5528,35 +5605,36 @@
           "type": "string"
         },
         "rule": {
-          "const": "cnvd_severity_vs_nvd_primary_cvss3",
-          "default": "cnvd_severity_vs_nvd_primary_cvss3",
+          "const": "cnvd_grade_vs_nvd_own_cvss3",
+          "default": "cnvd_grade_vs_nvd_own_cvss3",
           "title": "Rule",
           "type": "string"
         },
-        "severity": {
-          "enum": [
-            "agree",
-            "disagree",
-            "not_comparable"
-          ],
-          "title": "Severity",
-          "type": "string"
-        },
         "statement": {
-          "const": "This is VulnWitness's comparison, not a statement by NVD or CNVD. CNVD's grading criteria are unverified; the severity mapping is VulnWitness's choice.",
-          "default": "This is VulnWitness's comparison, not a statement by NVD or CNVD. CNVD's grading criteria are unverified; the severity mapping is VulnWitness's choice.",
+          "const": "This is VulnWitness's mapping between two grading schemes, not a judgement that either source is right. CNVD's grading criteria are unverified. CVSS measures severity, not risk.",
+          "default": "This is VulnWitness's mapping between two grading schemes, not a judgement that either source is right. CNVD's grading criteria are unverified. CVSS measures severity, not risk.",
           "title": "Statement",
           "type": "string"
         }
       },
       "required": [
         "nvd_state",
-        "severity",
+        "grade_relative",
         "rule",
         "cnvd_raw_severity",
         "nvd_raw_severity",
         "statement"
       ],
+      "then": {
+        "properties": {
+          "not_compared_reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "not_compared_reason"
+        ]
+      },
       "title": "SourceComparison",
       "type": "object"
     },
@@ -6444,8 +6522,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         },
@@ -6907,8 +6985,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.54",
-          "default": "2.0.0-dev.54",
+          "const": "2.0.0-dev.55",
+          "default": "2.0.0-dev.55",
           "title": "Schema Version",
           "type": "string"
         },

@@ -367,6 +367,7 @@ def test_packaged_catalog_pins_both_reviewed_files() -> None:
     assert len(catalog.snapshots) == 1
     snapshot = catalog.snapshots[0]
     assert snapshot.revision == "986160c9b1c910049f64a166ab4056de191f6de7"
+    assert snapshot.language == "zh"
     assert snapshot.files == (
         CnvdSnapshotFile(
             upstream_path="data/train-00000-of-00001.parquet",

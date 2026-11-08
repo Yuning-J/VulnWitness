@@ -31,6 +31,10 @@ from vulnwitness.adapters.graph.in_memory_graph import InMemoryRelationGraph
 from vulnwitness.adapters.lexical.bm25_index import Bm25LexicalIndex
 from vulnwitness.adapters.memory.in_memory_evidence_catalog import InMemoryEvidenceCatalog
 from vulnwitness.adapters.memory.in_memory_repository import InMemoryKnowledgeRepository
+from vulnwitness.adapters.migration.cnvd_snapshot_catalog import (
+    default_cnvd_snapshot_catalog_file,
+    load_cnvd_snapshot_catalog,
+)
 from vulnwitness.adapters.mitre.mapping_file import load_weakness_mapping
 from vulnwitness.adapters.nvd.normalizer import NvdNormalizer, SourceTerms
 from vulnwitness.adapters.provenance.source_registry import (
@@ -60,6 +64,7 @@ from vulnwitness.application.serving_data_plane import ServingDataPlane
 from vulnwitness.application.threaded_call_runner import ThreadedCallRunner
 from vulnwitness.application.topic_context import TopicContextService
 from vulnwitness.domain.affectedness import AFFECTEDNESS_DETAILS, AffectednessFailure
+from vulnwitness.domain.cnvd_snapshot import CnvdSnapshotCatalog
 from vulnwitness.domain.corpus_store_manifest import StoreSource
 from vulnwitness.domain.evidence_catalog import EvidenceCatalog
 from vulnwitness.domain.hashing import sha256_hex
@@ -169,6 +174,7 @@ def build_search_service(
     semantic_settings: SemanticSettings | None = None,
     list_adapters: Callable[[], Iterable[AdapterEntryPoint]] = list_installed_adapters,
     weakness_mapping: WeaknessMapping | None = None,
+    cnvd_catalog: CnvdSnapshotCatalog | None = None,
 ) -> SearchService:
     """The search channels over ``served_corpus``, with the semantic channel
     ``semantic_settings`` enable (none without them), found among the adapters
@@ -188,6 +194,13 @@ def build_search_service(
             semantic_retriever = SemanticUnavailableDetail.COLLECTION_NOT_BOUND
         else:
             semantic_retriever = discover_semantic_retriever(semantic_settings, list_adapters)
+    cnvd_language = None
+    if cnvd_catalog is None:
+        cnvd_catalog = load_cnvd_snapshot_catalog(default_cnvd_snapshot_catalog_file())
+    for snapshot in cnvd_catalog.snapshots:
+        if snapshot.revision == served_corpus.cnvd_index.imported_revision:
+            cnvd_language = snapshot.language
+            break
     return SearchService(
         cve_repository=repository,
         evidence_catalog=InMemoryEvidenceCatalog(
@@ -199,6 +212,7 @@ def build_search_service(
         semantic_retriever=semantic_retriever,
         weakness_mapping=weakness_mapping,
         cnvd_index=served_corpus.cnvd_index,
+        cnvd_language=cnvd_language,
         cnvd_attribution=load_packaged_source_registry().find_source("circl-cnvd").attribution,
     )
 

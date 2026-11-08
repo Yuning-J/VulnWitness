@@ -672,9 +672,7 @@ async def test_cnvd_lookup_details_and_export_share_recorded_comparisons(tmp_pat
     assert paired_sources["sections"][0]["title"] == "NVD"
     cnvd_entries = paired_sources["sections"][1]["sections"]
     assert cnvd_entries[0]["paragraphs"][0]["text"] == CNVD_REPORT_TITLE
-    assert cnvd_entries[1]["badges"] == [
-        {"text": "≠ disagree", "tone": "neutral", "severity": None}
-    ]
+    assert cnvd_entries[1]["badges"] == [{"text": "lower", "tone": "neutral", "severity": None}]
     description = cnvd_entries[0]["sections"][0]
     assert description["folded"] is True
     assert description["verbatim"] == CNVD_REPORT_DESCRIPTION

@@ -7,13 +7,13 @@ from vulnwitness.domain.session_report import ReportBadge, ReportParagraph, Repo
 from vulnwitness.domain.source_comparison import SourceComparison
 
 
-def explain_not_comparable(comparison: SourceComparison) -> str:
+def explain_not_compared(comparison: SourceComparison) -> str:
     """Describe the missing comparison input without rerunning the severity rule."""
     if comparison.nvd_state in {"not_in_nvd_snapshot", "rejected_by_nvd", "excluded_by_import"}:
         return "NVD's snapshot has no servable record."
     if comparison.nvd_raw_severity is None:
-        return "No primary CVSS v3.1 or v3.0 metric was recorded by NVD."
-    return "NVD's primary CVSS v3 severity is missing or NONE."
+        return "NVD's own CVSS v3.1 or v3.0 metric is not recorded."
+    return "NVD's own CVSS v3 severity is missing or NONE."
 
 
 def build_cnvd_entries(entries: Sequence[ComparedCnvdEntry], sequence: int) -> ReportSection:
@@ -26,7 +26,7 @@ def build_cnvd_entries(entries: Sequence[ComparedCnvdEntry], sequence: int) -> R
             "not recorded"
             if nvd_severity is None
             else f"{nvd_severity.base_severity or 'not recorded'} "
-            f"· primary CVSS {nvd_severity.cvss_version}"
+            f"· NVD's own CVSS {nvd_severity.cvss_version}"
         )
         paragraphs = [
             ReportParagraph(entry.title),
@@ -37,17 +37,13 @@ def build_cnvd_entries(entries: Sequence[ComparedCnvdEntry], sequence: int) -> R
             ReportParagraph(comparison.statement),
             ReportParagraph(f"Evidence: {entry.evidence_id} · call {sequence}"),
         ]
-        if comparison.severity == "not_comparable":
-            paragraphs.append(ReportParagraph(explain_not_comparable(comparison)))
+        if comparison.grade_relative == "not_compared":
+            paragraphs.append(ReportParagraph(explain_not_compared(comparison)))
         sections.append(
             ReportSection(
                 entry.cnvd_id,
                 paragraphs=tuple(paragraphs),
-                badges=(
-                    ReportBadge(
-                        "≠ disagree" if comparison.severity == "disagree" else comparison.severity
-                    ),
-                ),
+                badges=(ReportBadge(comparison.grade_relative),),
                 sections=(
                     ReportSection(
                         "Full recorded CNVD description · untrusted text",
@@ -113,7 +109,7 @@ def build_cnvd_facts(lookups: Sequence[CveLookupResponse]) -> tuple[str, ...]:
         for cve_id, entry in entries:
             listed.add(cve_id)
             comparison = entry.source_comparison
-            if comparison.severity == "disagree":
+            if comparison.grade_relative in {"higher", "lower"}:
                 disagreements.add(cve_id)
             if comparison.nvd_state in {
                 "awaiting_analysis",
@@ -129,7 +125,7 @@ def build_cnvd_facts(lookups: Sequence[CveLookupResponse]) -> tuple[str, ...]:
     unanalysed_noun = "CVE" if len(unanalysed) == 1 else "CVEs"
     return (
         f"CNVD severity disagrees with NVD for {len(disagreements)} {disagreement_noun} under "
-        "cnvd_severity_vs_nvd_primary_cvss3 (VulnWitness's comparison).",
+        "cnvd_grade_vs_nvd_own_cvss3 (VulnWitness's comparison).",
         f"CNVD lists {len(unanalysed)} {unanalysed_noun} whose NVD state is "
         "awaiting_analysis or deferred, "
         "or whose NVD snapshot has no servable record. Counts describe recorded lookups "

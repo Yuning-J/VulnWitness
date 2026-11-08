@@ -52,16 +52,16 @@ def test_cnvd_cards_show_each_source_comparison_and_fold_escaped_descriptions(
     assert literal(CNVD_REPORT_TITLE) in document
     assert "<img " not in document
     assert literal(COMPARISON_STATEMENT) in document
-    assert literal("Rule: cnvd_severity_vs_nvd_primary_cvss3") in document
-    assert "≠ disagree" in document
+    assert literal("Rule: cnvd_grade_vs_nvd_own_cvss3") in document
+    assert "lower" in document
     assert "CNVD severity: 高" in document
     assert "CNVD severity: 中" in document
     assert "CNVD severity: 低" in document
     assert literal("NVD state: awaiting_analysis") in document
     assert literal("NVD state: deferred") in document
-    assert literal("NVD severity used for comparison: MEDIUM · primary CVSS 3.1") in document
-    assert "No primary CVSS v3.1 or v3.0 metric was recorded by NVD." in document
-    assert literal("NVD's primary CVSS v3 severity is missing or NONE.") in document
+    assert literal("NVD severity used for comparison: MEDIUM · NVD's own CVSS 3.1") in document
+    assert literal("NVD's own CVSS v3.1 or v3.0 metric is not recorded.") in document
+    assert literal("NVD's own CVSS v3 severity is missing or NONE.") in document
     cards = report.sections[2].sections
     card_titles = []
     for card in cards:
@@ -74,7 +74,7 @@ def test_cnvd_cards_show_each_source_comparison_and_fold_escaped_descriptions(
     assert entry_titles == ["CNVD-9999-00001", "CNVD-9999-00002"]
     if report_format == "html":
         assert "<script>" not in document
-        assert '<span class="pill neutral">≠ disagree</span>' in document
+        assert '<span class="pill neutral">lower</span>' in document
         folded = document.split(
             "<summary>Full recorded CNVD description · untrusted text</summary>"
         )[1].split("</details>")[0]
@@ -145,7 +145,7 @@ def test_pending_only_lookup_has_its_own_card_with_nvd_state(
     assert report.sections[2].sections[0].title == cve_id
     assert literal("NVD's snapshot has no servable record.") in document
     assert literal(f"NVD state: {state}") in document
-    assert literal("not_comparable") in document
+    assert literal("not_compared") in document
     assert "CNVD lists 1 CVE whose NVD state" in document
     assert "CIRCL/Vulnerability-CNVD" in document
 
@@ -153,7 +153,7 @@ def test_pending_only_lookup_has_its_own_card_with_nvd_state(
 def test_comparison_is_read_from_the_recording_instead_of_recomputed(cnvd_session: Path) -> None:
     # Arrange
     lookup = read_document(cnvd_session, 1)
-    lookup["candidates"][0]["record"]["cnvd"][0]["source_comparison"]["severity"] = "agree"
+    lookup["candidates"][0]["record"]["cnvd"][0]["source_comparison"]["grade_relative"] = "same"
     (cnvd_session / "responses/0001.json").write_text(json.dumps(lookup))
 
     # Act
@@ -163,7 +163,7 @@ def test_comparison_is_read_from_the_recording_instead_of_recomputed(cnvd_sessio
     # Assert
     assert "CNVD severity disagrees with NVD for 1 CVE under" in document
     assert (
-        report.sections[2].sections[0].sections[0].sections[1].sections[0].badges[0].text == "agree"
+        report.sections[2].sections[0].sections[0].sections[1].sections[0].badges[0].text == "same"
     )
 
 

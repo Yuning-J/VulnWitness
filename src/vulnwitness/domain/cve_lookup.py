@@ -49,6 +49,12 @@ class CveLookupResponse(SearchResponse):
         exclude_if=not_,
         description="Source registry attribution, present exactly with CNVD content.",
     )
+    cnvd_language: str | None = Field(
+        default=None,
+        exclude_if=not_,
+        min_length=1,
+        description="Language declared by the served CNVD revision, only with CNVD content.",
+    )
     not_found_statement: Literal["The import keeps no CNVD entry without a CVE ID."] | None = Field(
         default=None,
         exclude_if=not_,

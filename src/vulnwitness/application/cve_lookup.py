@@ -27,6 +27,7 @@ def build_cve_lookup(
     cnvd_index: CnvdIndex,
     evidence_catalog: EvidenceCatalog,
     cnvd_attribution: str | None,
+    cnvd_language: str | None,
 ) -> CveLookupResponse:
     """Add source comparisons and pending entries to an already validated exact search.
 
@@ -105,6 +106,7 @@ def build_cve_lookup(
             "warnings": tuple(warnings),
             "status": ResultStatus.OK if pending_lookups else search.status,
             "cnvd_attribution": cnvd_attribution if carries_cnvd else None,
+            "cnvd_language": cnvd_language if carries_cnvd else None,
             "not_found_statement": (
                 CNVD_NOT_FOUND_STATEMENT
                 if identifier.startswith("CNVD-") and not candidates and not pending_lookups

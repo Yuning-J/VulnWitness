@@ -1,6 +1,7 @@
 # Reviewed complete CIRCL/Vulnerability-CNVD revisions (ADR 0015 §2).
 snapshots:
   - revision: "986160c9b1c910049f64a166ab4056de191f6de7"
+    language: "zh"
     files:
       - upstream_path: "data/train-00000-of-00001.parquet"
         sha256: "43ba97f36b023f0155b008f5591a9c390e245937c8747f7feaefae843d06c035"
