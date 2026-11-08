@@ -22,6 +22,12 @@ fixture fallback. NVD supplies descriptions, weaknesses, product entries and ret
 CPE conditions; CISA KEV joins by CVE ID with separate evidence. Imports retain
 source URLs, acquisition times and input identity, without inferring absent products.
 Store activation and snapshot changes require service restart.
+CNVD entries from the pinned CIRCL dataset join by CVE ID with their own evidence anchors;
+NVD's fields stay separate. Entries with a well-formed CVE ID but no servable NVD record
+remain pending beside the records. Records retain NVD's `nvd_status` verbatim (null when
+unavailable); the NVD-state and severity comparison is computed when served under the
+named VulnWitness rule `cnvd_severity_vs_nvd_primary_cvss3`, with both raw values and source
+attribution ([ADR 0015](rebuild/adr/0015-cnvd-entries.md)).
 FiGHT files must match a reviewed catalog; optional expected SHA-256 adds a pin.
 MITRE mapping files have no reviewed catalog: their computed identity alone proves
 neither authenticity nor unchanged bytes. A configured invalid snapshot fails startup,

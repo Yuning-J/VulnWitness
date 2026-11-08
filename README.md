@@ -90,6 +90,12 @@ been established. Initial setup involves a substantial download and several GB o
 The [runbook](docs/runbook.md) covers fetching, local-feed reuse, FiGHT and MITRE snapshots,
 servers, sizing and recovery.
 
+Lookups show CNVD's statement beside NVD's using the default pinned CIRCL/Vulnerability-CNVD
+dataset, with CIRCL attribution, its declared CC BY 4.0 licence and VulnWitness's normalisation
+notice; the relation to CNVD's own terms is unverified. The named VulnWitness comparison
+reports NVD state and mapped severity agreement, without establishing equivalent grading
+criteria or which source is correct ([ADR 0015](docs/rebuild/adr/0015-cnvd-entries.md)).
+
 ## Reference
 
 - `vulnwitness lookup CVE-9999-0001 --format text`: exact record and weakness paths.

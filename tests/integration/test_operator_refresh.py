@@ -3,12 +3,20 @@
 import gzip
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
+from tests.support.cnvd_inputs import (
+    TEST_REVISION,
+    build_cnvd_row,
+    build_test_catalog,
+    write_cnvd_file,
+)
 from tests.support.corpus_stores import import_store, read_active_bytes
 from tests.support.legacy_inputs import (
     build_declaration,
@@ -57,13 +65,25 @@ def input_manifest(tmp_path: Path) -> Path:
 
 
 def run_refresh(
-    store_root: Path, arguments: list[str], *, executable_dir: Path | None = None
+    store_root: Path,
+    arguments: list[str],
+    *,
+    executable_dir: Path | None = None,
+    refresh_script: Path = REFRESH_SCRIPT,
 ) -> subprocess.CompletedProcess[str]:
-    environment = {"PATH": os.defpath, "VULNWITNESS_STORE_ROOT": str(store_root)}
+    uv = shutil.which("uv")
+    assert uv is not None
+    environment = {
+        "PATH": f"{Path(uv).parent}:{os.defpath}",
+        "PYTHONPATH": str(refresh_script.parents[2] / "src"),
+        "UV_CACHE_DIR": str(store_root.parent / "uv-cache"),
+        "UV_OFFLINE": "1",
+        "VULNWITNESS_STORE_ROOT": str(store_root),
+    }
     if executable_dir is not None:
-        environment["PATH"] = f"{executable_dir}:{os.defpath}"
+        environment["PATH"] = f"{executable_dir}:{environment['PATH']}"
     return subprocess.run(
-        [sys.executable, str(REFRESH_SCRIPT), *arguments],
+        [sys.executable, str(refresh_script), *arguments],
         env=environment,
         capture_output=True,
         text=True,
@@ -156,10 +176,27 @@ def test_invalid_or_existing_target_is_refused_before_fetch(
     assert read_active_bytes(store_root) == active_before
 
 
-def write_fixture_download_commands(executable_dir: Path, input_manifest: Path) -> None:
-    """Replace external curl and sleep executables; every URL serves local fixture bytes."""
+def write_fixture_download_commands(executable_dir: Path, input_manifest: Path) -> Path:
+    """Stub curl/sleep and copy the checkout with a synthetic catalog for fetch and import."""
     executable_dir.mkdir()
     feed_dir = input_manifest.parent
+    cnvd_files = [
+        write_cnvd_file(feed_dir, "part-0.parquet", [build_cnvd_row(3)]),
+        write_cnvd_file(feed_dir, "part-1.parquet", [build_cnvd_row(4)]),
+    ]
+    catalog = build_test_catalog(cnvd_files, [1, 1])
+    checkout = executable_dir.parent / "checkout"
+    shutil.copytree(
+        REFRESH_SCRIPT.parents[2] / "src",
+        checkout / "src",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    shutil.copytree(REFRESH_SCRIPT.parent, checkout / "scripts" / "operator")
+    (checkout / "pyproject.toml").symlink_to(REFRESH_SCRIPT.parents[2] / "pyproject.toml")
+    (checkout / ".venv").symlink_to(Path(sys.executable).parent.parent)
+    (checkout / "src/vulnwitness/knowledge/cnvd_snapshots.yaml").write_text(
+        yaml.safe_dump(catalog.model_dump(mode="json"))
+    )
     nvd_bytes = gzip.decompress((feed_dir / "nvdcve-2.0-2099.json.gz").read_bytes())
     feed_names = ["modified"]
     for year in range(2002, 2100):
@@ -180,6 +217,9 @@ def write_fixture_download_commands(executable_dir: Path, input_manifest: Path) 
         '  https://nvd.nist.gov/feeds/json/cve/2.0/*.json.gz) source="${url##*/}";;\n'
         "  https://www.cisa.gov/sites/default/files/csv/known_exploited_vulnerabilities.csv) "
         "source=kev.csv;;\n"
+        "  https://huggingface.co/datasets/CIRCL/Vulnerability-CNVD/"
+        f"resolve/{TEST_REVISION}/data/part-*.parquet) "
+        'source="${url##*/}";;\n'
         "  *) exit 77;;\n"
         'esac\nwhile [ "$#" -gt 0 ]; do\n'
         '  if [ "$1" = -o ]; then cp "$fixture_dir/$source" "$2"; exit 0; fi\n'
@@ -189,6 +229,7 @@ def write_fixture_download_commands(executable_dir: Path, input_manifest: Path) 
     sleep = executable_dir / "sleep"
     sleep.write_text("#!/bin/sh\nexit 0\n")
     sleep.chmod(0o755)
+    return checkout / "scripts/operator/refresh_store.py"
 
 
 def test_fixture_downloads_are_checked_imported_and_activated(
@@ -196,7 +237,7 @@ def test_fixture_downloads_are_checked_imported_and_activated(
 ) -> None:
     # Arrange
     commands = tmp_path / "commands"
-    write_fixture_download_commands(commands, input_manifest)
+    refresh_script = write_fixture_download_commands(commands, input_manifest)
     feeds = tmp_path / "downloads"
 
     # Act
@@ -204,6 +245,7 @@ def test_fixture_downloads_are_checked_imported_and_activated(
         store_root,
         ["--feeds-dir", str(feeds), "--store", "current", "--activate"],
         executable_dir=commands,
+        refresh_script=refresh_script,
     )
 
     # Assert
@@ -211,6 +253,22 @@ def test_fixture_downloads_are_checked_imported_and_activated(
     assert (feeds / "inputs.yaml").is_file()
     assert (feeds / "provenance.tsv").is_file()
     assert read_active_cve_ids(store_root) == ["CVE-9999-0003"]
+    active_store = load_active_store(store_root)
+    assert active_store.records[0].cnvd[0].cnvd_id == "CNVD-9999-00003"
+    manifest = yaml.safe_load((feeds / "inputs.yaml").read_text())
+    cnvd_inputs = []
+    for declaration in manifest["inputs"]:
+        if declaration["source"] == "circl-cnvd":
+            cnvd_inputs.append(declaration)
+    assert len(cnvd_inputs) == 2
+    provenance = (feeds / "provenance.tsv").read_text()
+    for index, declaration in enumerate(cnvd_inputs):
+        assert declaration["path"] == f"part-{index}.parquet"
+        assert declaration["retrieved_at"].endswith("Z")
+        assert (
+            f"part-{index}.parquet\thttps://huggingface.co/datasets/CIRCL/Vulnerability-CNVD/"
+            f"resolve/{TEST_REVISION}/data/part-{index}.parquet\t{declaration['retrieved_at']}\t"
+        ) in provenance
 
 
 def test_download_digest_mismatch_stops_before_import_and_activation(
@@ -218,7 +276,7 @@ def test_download_digest_mismatch_stops_before_import_and_activation(
 ) -> None:
     # Arrange
     commands = tmp_path / "commands"
-    write_fixture_download_commands(commands, input_manifest)
+    refresh_script = write_fixture_download_commands(commands, input_manifest)
     (input_manifest.parent / "nvdcve-2.0-2002.meta").write_text(f"sha256:{'0' * 64}\n")
     active_before = read_active_bytes(store_root)
     feeds = tmp_path / "downloads"
@@ -228,11 +286,40 @@ def test_download_digest_mismatch_stops_before_import_and_activation(
         store_root,
         ["--feeds-dir", str(feeds), "--store", "current", "--activate"],
         executable_dir=commands,
+        refresh_script=refresh_script,
     )
 
     # Assert
     assert refresh.returncode != 0
     assert "does not match the SHA-256" in refresh.stderr
     assert not (feeds / "inputs.yaml").exists()
+    assert not (store_root / "current").exists()
+    assert read_active_bytes(store_root) == active_before
+
+
+@pytest.mark.parametrize("file_name", ["part-0.parquet", "part-1.parquet"])
+def test_cnvd_digest_mismatch_publishes_no_manifest_and_keeps_active_store(
+    store_root: Path, input_manifest: Path, tmp_path: Path, file_name: str
+) -> None:
+    # Arrange
+    commands = tmp_path / "commands"
+    refresh_script = write_fixture_download_commands(commands, input_manifest)
+    (input_manifest.parent / file_name).write_bytes(b"SYNTHETIC: mismatched CNVD download")
+    active_before = read_active_bytes(store_root)
+    feeds = tmp_path / "downloads"
+
+    # Act
+    refresh = run_refresh(
+        store_root,
+        ["--feeds-dir", str(feeds), "--store", "current", "--activate"],
+        executable_dir=commands,
+        refresh_script=refresh_script,
+    )
+
+    # Assert
+    assert refresh.returncode != 0
+    assert f"{file_name} does not match the SHA-256 in the CNVD catalog" in refresh.stderr
+    assert not (feeds / "inputs.yaml").exists()
+    assert not (feeds / "provenance.tsv").exists()
     assert not (store_root / "current").exists()
     assert read_active_bytes(store_root) == active_before

@@ -86,10 +86,14 @@ this repository commits no data from that source.
 
 ## Operator-supplied data
 
-An operator imports NVD feeds and the CISA KEV catalog into a corpus store
-(`vulnwitness migrate legacy`) and may supply the full FiGHT `fight.yaml` as a
-pinned snapshot. Both stay on the operator's machine under the sources'
-own terms; neither belongs in version control. A server over a corpus store gives MCP
+An operator imports NVD feeds, the CISA KEV catalog and both pinned CIRCL/Vulnerability-CNVD
+Parquet files into a corpus store (`vulnwitness migrate legacy`) and may supply the full
+FiGHT `fight.yaml` as a pinned snapshot. These stay on the operator's machine under the
+sources' own terms and belong outside version control. The CNVD files must match the
+revision and SHA-256 values in `src/vulnwitness/knowledge/cnvd_snapshots.yaml`; served
+entries credit CIRCL, link its declared CC BY 4.0 licence and state VulnWitness's
+normalisation and the unverified relation to CNVD's own terms
+([ADR 0015](docs/rebuild/adr/0015-cnvd-entries.md)). A server over a corpus store gives MCP
 clients the notice NVD asks services that use its data to display: "This product uses
 data from the NVD API but is not endorsed or certified by the NVD." A FiGHT snapshot is
 served only when the reviewed catalog lists its SHA-256, and every technique anchor it

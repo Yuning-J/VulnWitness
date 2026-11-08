@@ -20,6 +20,7 @@ Install the semantic extra separately in a checkout.
 
 ```sh
 vulnwitness lookup CVE-9999-0001
+vulnwitness lookup CNVD-2026-12345 --format text
 vulnwitness search "authentication bypass" --graph-expand
 vulnwitness product --vendor democorp --version 2.0 --format text
 vulnwitness topic 5G-AKA --scope mixed
@@ -46,7 +47,9 @@ For product pagination repeat vendor, product, version and limit with `--cursor
 Invalid/mismatched cursors fail (CLI 2, REST 422, MCP failure).
 
 Lookup text shows catalogue paths and limits; search text shows word-match ranks, channel
-outcomes and warnings. `product --vendor democorp --all --limit 20` traverses one fixed corpus,
+outcomes and warnings. A CNVD ID resolves to its CVE record or pending entry when imported;
+entries without a well-formed CVE ID are not retained ([ADR 0015](rebuild/adr/0015-cnvd-entries.md)).
+`product --vendor democorp --all --limit 20` traverses one fixed corpus,
 printing a JSON array of unchanged `ProductQueryResponse` pages, each with its cursors
 and evidence. `--max-pages` defaults to 100; an unfinished traversal exits 2 without
 printing pages or publishing an export. `--output FILE --export csv|jsonl` exports every
@@ -115,7 +118,10 @@ export VULNWITNESS_STORE_ROOT=/srv/vulnwitness/stores
 
 Fetch downloads NVD 2.0 year feeds from 2002 through the current year, `modified` and
 CISA KEV, paces/retries requests and verifies decompressed NVD feeds against `.meta`.
-The feed download is about 270 MB; retry interrupted fetches into a fresh directory.
+It also downloads both CIRCL CNVD Parquet files (about 25 MB) at the pinned revision
+`986160c9b1c910049f64a166ab4056de191f6de7`, verifying each SHA-256 against
+`src/vulnwitness/knowledge/cnvd_snapshots.yaml` ([ADR 0015](rebuild/adr/0015-cnvd-entries.md#8-fetching)).
+The NVD/KEV download is about 270 MB; retry interrupted fetches into a fresh directory.
 Only a complete fetch publishes `provenance.tsv` and `inputs.yaml`. Import uses a
 fresh store name; failures stop before activation. Activation verifies the store
 and preserves the previous store. Restart API/MCP after activation: there is no hot reload.
@@ -123,8 +129,24 @@ Use `--inputs /data/feeds/inputs.yaml` instead of `--feeds-dir` to reuse local f
 without fetching. Omit `--activate` to keep `ACTIVE`; the command prints activation steps.
 For a hand-managed manifest, `vulnwitness migrate legacy --inputs /data/feeds/inputs.yaml
 --target /srv/vulnwitness/stores/nvd-2026-10-31 --dry-run` checks before importing;
-remove `--dry-run` to write. Manifests declare raw NVD 1.1/2.0 and KEV CSV with acquisition
-times. Import never overwrites targets or writes beside inputs; derived exports are refused.
+remove `--dry-run` to write. Manifests declare raw NVD 1.1/2.0, KEV CSV and each CNVD
+Parquet file with acquisition times. CNVD declarations must cover both files of one
+catalogued revision. Import never overwrites targets or writes beside inputs; derived exports are refused.
+
+The migration report counts each CNVD row under one of six join outcomes:
+
+| Outcome | Meaning |
+|---|---|
+| `merged` | Attached to a servable NVD record |
+| `cnvd_without_nvd_record` | No NVD candidate; kept pending |
+| `cnvd_for_rejected_nvd_record` | NVD winner rejected; kept pending |
+| `cnvd_for_excluded_nvd_record` | NVD CVE excluded by import; kept pending |
+| `cnvd_without_cve_id` | Empty CVE ID; not stored |
+| `cnvd_unrecognised_cve_id` | Other CVE ID text; not stored |
+
+A pending entry has a well-formed CVE ID but no servable NVD record. Every import rebuilds
+from all its inputs; the entry joins on a later import whose NVD input supplies a servable
+record for that CVE.
 
 ```sh
 vulnwitness store validate nvd-2026-10-31
