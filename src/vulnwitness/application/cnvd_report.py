@@ -125,10 +125,13 @@ def build_cnvd_facts(lookups: Sequence[CveLookupResponse]) -> tuple[str, ...]:
                 unanalysed.add(cve_id)
     if not listed:
         return ()
+    disagreement_noun = "CVE" if len(disagreements) == 1 else "CVEs"
+    unanalysed_noun = "CVE" if len(unanalysed) == 1 else "CVEs"
     return (
-        f"CNVD severity disagrees with NVD for {len(disagreements)} CVEs under "
+        f"CNVD severity disagrees with NVD for {len(disagreements)} {disagreement_noun} under "
         "cnvd_severity_vs_nvd_primary_cvss3 (VulnWitness's comparison).",
-        f"CNVD lists {len(unanalysed)} CVEs whose NVD state is awaiting_analysis or deferred, "
+        f"CNVD lists {len(unanalysed)} {unanalysed_noun} whose NVD state is "
+        "awaiting_analysis or deferred, "
         "or whose NVD snapshot has no servable record. Counts describe recorded lookups "
         "only; they are not a ranking.",
     )

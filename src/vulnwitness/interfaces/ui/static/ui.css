@@ -267,6 +267,10 @@ th {
   min-width:0;
   overflow-wrap:anywhere;
 }
+.columns > .two > section,
+.columns > .two > section > :first-child {
+  margin-top:0;
+}
 .facts-grid {
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(170px,1fr));

@@ -146,7 +146,7 @@ def test_pending_only_lookup_has_its_own_card_with_nvd_state(
     assert literal("NVD's snapshot has no servable record.") in document
     assert literal(f"NVD state: {state}") in document
     assert literal("not_comparable") in document
-    assert "CNVD lists 1 CVEs" in document
+    assert "CNVD lists 1 CVE whose NVD state" in document
     assert "CIRCL/Vulnerability-CNVD" in document
 
 
@@ -161,10 +161,35 @@ def test_comparison_is_read_from_the_recording_instead_of_recomputed(cnvd_sessio
     document = render_html_report(report)
 
     # Assert
-    assert "CNVD severity disagrees with NVD for 1 CVEs" in document
+    assert "CNVD severity disagrees with NVD for 1 CVE under" in document
     assert (
         report.sections[2].sections[0].sections[0].sections[1].sections[0].badges[0].text == "agree"
     )
+
+
+@pytest.mark.parametrize("report_format", ("html", "md"))
+@pytest.mark.parametrize(
+    "cve_id,disagreements,unanalysed",
+    (
+        ("CVE-9999-0001", "1 CVE", "0 CVEs"),
+        ("CVE-9999-0006", "0 CVEs", "1 CVE"),
+    ),
+    ids=("one-disagreement", "one-unanalysed"),
+)
+def test_cnvd_key_facts_use_singular_only_for_one_cve(
+    tmp_path: Path, report_format: str, cve_id: str, disagreements: str, unanalysed: str
+) -> None:
+    # Arrange
+    directory = build_cnvd_report_session(tmp_path / "workspace", (cve_id,))
+    render = render_html_report if report_format == "html" else render_markdown_report
+
+    # Act
+    report = build_session_report(SessionChecker(directory).check_with_contents())
+    document = render(report)
+
+    # Assert
+    assert f"CNVD severity disagrees with NVD for {disagreements} under" in document
+    assert f"CNVD lists {unanalysed} whose NVD state" in document
 
 
 @pytest.mark.parametrize("render", (render_html_report, render_markdown_report), ids=("html", "md"))

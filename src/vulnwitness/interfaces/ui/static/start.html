@@ -30,7 +30,7 @@
         Start an investigation
       </h1>
       <p class="lede">
-        Explore a product, a CVE or a telecom question. Keep the evidence, limits and recorded calls together.
+        Explore a product, a CVE or CNVD ID, or a telecom question. Keep the evidence, limits and recorded calls together.
       </p>
       <p id="readiness" role="status">
         Data loading…
@@ -46,7 +46,7 @@
                   Product
                 </option>
                 <option value="cve">
-                  CVE
+                  CVE / CNVD
                 </option>
                 <option value="topic">
                   Topic
@@ -78,8 +78,8 @@
             </div>
             <div id="cve-fields" hidden>
               <label>
-                CVE ID
-                <input name="cve_id" placeholder="CVE-2024-0001" pattern="CVE-[0-9]{4}-[0-9]{4,}" disabled>
+                CVE or CNVD ID
+                <input name="cve_id" placeholder="CVE-2024-0001 or CNVD-2024-00001" pattern="(CVE-[0-9]{4}-[0-9]{4,}|CNVD-[0-9]{4}-[0-9]{4,6})" disabled>
               </label>
             </div>
             <div id="topic-fields" hidden>

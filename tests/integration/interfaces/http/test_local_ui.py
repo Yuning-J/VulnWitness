@@ -1,6 +1,7 @@
 """Local UI operations on demo data through the guarded in-process HTTP client."""
 
 import json
+import re
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from pathlib import Path
@@ -17,6 +18,12 @@ from tests.support.asgi import (
     AsgiRequest,
     open_app_client,
     send_request,
+)
+from tests.support.cnvd_inputs import import_cnvd_lookup_corpus
+from tests.support.cnvd_serving import (
+    CNVD_LOOKUP_CASE_IDS,
+    CNVD_LOOKUP_CASES,
+    assert_cnvd_lookup,
 )
 from tests.support.report_sessions import (
     CNVD_REPORT_CVE_IDS,
@@ -101,6 +108,93 @@ async def test_manual_entry_records_one_call_with_its_investigation(
     assert snapshot.json()["calls"][0]["command"] == command
     assert saved.json()["call"]["command"] == command
     assert json.loads(saved.json()["response_json"]) == recorded.json()
+
+
+@pytest.mark.parametrize("path", ("/", "/investigations/inv_" + "a" * 20))
+@pytest.mark.parametrize(
+    "lookup_id,is_valid",
+    (
+        ("CVE-2024-0001", True),
+        ("CVE-2024-1234567", True),
+        ("CNVD-2026-0001", True),
+        ("CNVD-2026-17891", True),
+        ("CNVD-2026-123456", True),
+        ("CNVD-2026-123", False),
+        ("CNVD-2026-1234567", False),
+        ("CNVD-2026-\uff11\uff12\uff13\uff14", False),
+    ),
+)
+async def test_lookup_forms_accept_cve_and_cnvd_ids_with_domain_bounds(
+    ui_client: httpx2.AsyncClient, path: str, lookup_id: str, is_valid: bool
+) -> None:
+    # Arrange / Act
+    page = await ui_client.get(path)
+
+    # Assert
+    assert page.status_code == 200
+    field = re.search(r'<input name="cve_id"[^>]*>', page.text)
+    assert field is not None
+    pattern = re.search(r'pattern="([^"]+)"', field.group())
+    assert pattern is not None
+    assert (re.fullmatch(pattern.group(1), lookup_id) is not None) is is_valid
+    assert "CVE or CNVD ID" in page.text
+    assert 'placeholder="CVE-2024-0001 or CNVD-2024-00001"' in field.group()
+
+
+@pytest.mark.parametrize(
+    "lookup_id,cve_id,severities,nvd_state,is_pending",
+    CNVD_LOOKUP_CASES,
+    ids=CNVD_LOOKUP_CASE_IDS,
+)
+async def test_ui_lookup_resolves_cnvd_ids_to_recorded_cve_details(
+    tmp_path: Path,
+    lookup_id: str,
+    cve_id: str,
+    severities: list[str],
+    nvd_state: str,
+    is_pending: bool,
+) -> None:
+    # Arrange
+    corpus = import_cnvd_lookup_corpus(tmp_path)
+    toolbox, workspace = build_test_workspace(tmp_path / "workspace", corpus=corpus)
+    app = build_ui_app(
+        UiState(McpDeployment(toolbox, workspace=workspace)),
+        port=HTTP_PORT,
+        token=HTTP_SECRET_TOKEN,
+    )
+    async with open_app_client(app) as client:
+        started = await client.post("/ui-api/start", json={"goal": lookup_id})
+        session_id = started.json()["session_id"]
+
+        # Act
+        recorded = await client.post(
+            "/ui-api/lookup", json={"session_id": session_id, "cve_id": lookup_id}
+        )
+        snapshot = await client.get(f"/ui-api/get/{session_id}")
+        view = await client.get(f"/ui-api/view/{session_id}")
+        rendered = await client.post("/ui-api/render", json={"session_id": session_id})
+        exported = await client.get(f"/ui-api/report/{session_id}")
+
+    # Assert
+    assert recorded.status_code == snapshot.status_code == view.status_code == 200
+    assert rendered.status_code == exported.status_code == 200
+    assert_cnvd_lookup(recorded.json(), cve_id, severities, nvd_state, is_pending)
+    assert snapshot.json()["calls"][0]["command"] == "lookup_cve"
+    report = view.json()["report"]
+    card = report["sections"][2]["sections"][0]
+    assert card["title"] == cve_id
+    sources = card["sections"][0]
+    assert sources["title"] == "Recorded source facts"
+    assert sources["sections"][0]["title"] == "NVD"
+    assert sources["sections"][1]["title"] == "CNVD · untrusted source text"
+    assert f"NVD state: {nvd_state}" in exported.text
+    facts = report["sections"][1]["sections"][0]["bullets"]
+    disagreements = "0 CVEs" if is_pending else "1 CVE"
+    unanalysed = "1 CVE" if is_pending else "0 CVEs"
+    assert f"CNVD severity disagrees with NVD for {disagreements} under" in facts[1]
+    assert f"CNVD lists {unanalysed} whose NVD state" in facts[2]
+    assert f"CNVD severity disagrees with NVD for {disagreements} under" in exported.text
+    assert f"CNVD lists {unanalysed} whose NVD state" in exported.text
 
 
 async def test_follow_up_makes_report_stale_until_rendered_again(
