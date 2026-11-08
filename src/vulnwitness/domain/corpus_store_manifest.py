@@ -18,15 +18,11 @@ from vulnwitness.domain.hashing import canonical_sha256
 from vulnwitness.domain.search import HIDDEN_REQUEST_CHARACTERS
 from vulnwitness.domain.timestamps import Timestamp
 
-STORE_FORMAT_VERSION: Literal[1] = 1
-# The SHA-256 of the canonical JSON of the published schemas of CorpusStoreManifest,
-# CveRecord and EvidenceAnchor, which a format-1 store persists. A test fails when they
-# change: the change is then judged by hand (ADR 0008 §9 lists what moves the format) and
-# either re-pinned here, with the reason it keeps format 1, or made a format change. It
-# proves nothing about compatibility by itself.
-# Adding circl-cnvd to StoreSource widens the accepted value set within format 1
-# (ADR 0008 §9); the provenance descriptions do not change validation.
-STORE_FORMAT_SCHEMA_SHA256 = "7fff93d3f744407cbdf1ea88410e1074a05a1bd698e5066be4486f06c016d97d"
+STORE_FORMAT_VERSION: Literal[2] = 2
+# Format 2 persists NVD status, CNVD entries and pending CNVD rows. This digest guards
+# the published schemas of the manifest, CVE record, evidence anchor and pending entry;
+# changes require judging the persisted shape and reader rules against ADR 0008 §9.
+STORE_FORMAT_SCHEMA_SHA256 = "31f098ad164a4024de12142dde9383924459fb2eb5b38e26b895bb1f68af66b4"
 # NVD's first year feed; it also holds the CVE IDs of 1999 to 2001.
 FIRST_FEED_YEAR = 2002
 STORE_FILE_NAME_PATTERN = r"^[a-z_]+\.jsonl$"
@@ -173,10 +169,10 @@ class CorpusStoreManifest(ContractModel):
         description="The contract version the store was created under; provenance only, "
         "never compared with the version a reader serves."
     )
-    store_format_version: Literal[1] = Field(
+    store_format_version: Literal[1, 2] = Field(
         default=STORE_FORMAT_VERSION,
         description="What decides whether a reader can read the store; a reader refuses "
-        "any other integer.",
+        "integers other than 1 and 2.",
     )
     synthetic: Literal[False] = False
     created_at: Timestamp
@@ -214,27 +210,24 @@ class CorpusStoreManifest(ContractModel):
         return self
 
 
-def derive_corpus_content_sha256(records_file: StoreFile, anchors_file: StoreFile) -> str:
-    """The SHA-256 naming the dataset a store's records and anchors hold, from their pins
-    alone: no manifest field other than the two files' hashes and sizes enters it, so
-    stores with byte-for-byte equal records and anchors serve one dataset (ADR 0009 §2).
-    Taken only once both files have been checked against their pins."""
+def derive_corpus_content_sha256(
+    records_file: StoreFile, anchors_file: StoreFile, pending_file: StoreFile | None = None
+) -> str:
+    """Name the verified dataset from its logical file roles, hashes and sizes alone.
+
+    Format 1 has records and anchors; format 2 also has pending CNVD entries. Manifest
+    provenance and physical file names never enter the content identity (ADR 0009 §2).
+    """
+    content_files: list[dict[str, str | int]] = []
+    role_files = [("records", records_file), ("anchors", anchors_file)]
+    if pending_file is not None:
+        role_files.append(("pending_cnvd", pending_file))
+    for role, store_file in role_files:
+        content_files.append(
+            {"role": role, "sha256": store_file.sha256, "size_bytes": store_file.size_bytes}
+        )
     return canonical_sha256(
-        {
-            "identity_version": CORPUS_CONTENT_IDENTITY_VERSION,
-            "files": [
-                {
-                    "role": "records",
-                    "sha256": records_file.sha256,
-                    "size_bytes": records_file.size_bytes,
-                },
-                {
-                    "role": "anchors",
-                    "sha256": anchors_file.sha256,
-                    "size_bytes": anchors_file.size_bytes,
-                },
-            ],
-        }
+        {"identity_version": CORPUS_CONTENT_IDENTITY_VERSION, "files": content_files}
     )
 
 

@@ -539,6 +539,7 @@ class NvdNormalizer:
             "affected": _affected_products(_optional_list(vulnerability, "configurations")),
             "references": _references(_optional_list(vulnerability, "references"), "source"),
             "kev": _inline_kev(vulnerability),
+            "nvd_status": vulnerability.get("vulnStatus"),
         }
         return _assemble(cve_id, record_fields, nvd_anchor, kev, self._terms.cisa_kev)
 

@@ -444,7 +444,7 @@ def test_store_manifest_with_synthetic_data_or_another_rollback_is_refused(
         build_store_manifest_fields(files=[]),
         build_store_manifest_fields(record_count=0),
         build_store_manifest_fields(anchor_count=0),
-        build_store_manifest_fields(store_format_version=2),
+        build_store_manifest_fields(store_format_version=3),
         build_store_manifest_fields(created_at="2026-10-25T12:00:00"),
         build_store_manifest_fields(importer_version=""),
         build_store_manifest_fields(store_path="/srv/store"),

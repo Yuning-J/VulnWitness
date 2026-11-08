@@ -10,7 +10,6 @@ from vulnwitness.domain.cve import CVE_ID_PATTERN, MAX_CVE_ID_CHARS
 from vulnwitness.domain.migration_report import MigrationFailed, MigrationFailureCode
 
 CNVD_COLUMNS = ("id", "title", "description", "severity", "cve_id", "source")
-CNVD_ID_PATTERN = r"CNVD-[0-9]{4}-[0-9]{4,6}"
 
 
 @dataclass(frozen=True)

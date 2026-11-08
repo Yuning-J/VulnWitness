@@ -42,6 +42,7 @@ class ResolvedInput:
     artifact: NvdArtifact | None
     source_uri: str
     retrieved_at: datetime
+    cnvd_revision: str | None = None
 
     def sort_key(self) -> tuple[str, str, str, int, str]:
         artifact = self.artifact
@@ -163,23 +164,25 @@ def compute_import_identity(
     importer_version: str,
 ) -> str:
     """``import_identity_sha256``: the sorted inputs (file and payload SHA-256, source,
-    artifact, container, retrieval instant), the cited registry entries, the importer and
+    artifact, container, retrieval instant and CNVD revision), the cited registry, importer and
     store format versions and the contract version. No path and no manifest bytes.
     ``payload_hashes`` maps each input file's SHA-256 to its payload's."""
     identity_inputs: list[object] = []
     for resolved_input in inputs:
-        identity_inputs.append(
-            {
-                "source": resolved_input.source.value,
-                "artifact": None
-                if resolved_input.artifact is None
-                else resolved_input.artifact.model_dump(mode="json"),
-                "container": resolved_input.input_file.container.value,
-                "input_file_sha256": resolved_input.input_file.sha256,
-                "payload_sha256": payload_hashes[resolved_input.input_file.sha256],
-                "retrieved_at": resolved_input.retrieved_at.isoformat(),
-            }
-        )
+        input_identity: dict[str, object] = {
+            "source": resolved_input.source.value,
+            "artifact": None
+            if resolved_input.artifact is None
+            else resolved_input.artifact.model_dump(mode="json"),
+            "container": resolved_input.input_file.container.value,
+            "input_file_sha256": resolved_input.input_file.sha256,
+            "payload_sha256": payload_hashes[resolved_input.input_file.sha256],
+            "retrieved_at": resolved_input.retrieved_at.isoformat(),
+        }
+        if resolved_input.source is StoreSource.CIRCL_CNVD:
+            # The revision determines the row anchors even when two revisions reuse files.
+            input_identity["cnvd_revision"] = resolved_input.cnvd_revision
+        identity_inputs.append(input_identity)
     return canonical_sha256(
         {
             "inputs": identity_inputs,

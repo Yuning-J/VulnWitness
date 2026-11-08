@@ -38,6 +38,7 @@ from tests.support.legacy_inputs import (
 from vulnwitness.adapters.store.corpus_store import (
     ANCHORS_FILE,
     MAX_STORE_MANIFEST_BYTES,
+    PENDING_CNVD_FILE,
     RECORDS_FILE,
     STORE_MANIFEST_FILE,
     CorpusStore,
@@ -50,6 +51,7 @@ from vulnwitness.adapters.store.corpus_store import (
     verify_corpus_store,
     write_store_manifest,
 )
+from vulnwitness.domain.cnvd import CnvdIndex
 from vulnwitness.domain.corpus_store_manifest import CorpusStoreManifest
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.evidence import EvidenceAnchor
@@ -71,10 +73,12 @@ def build_content_identity(store_dir: Path) -> bytes:
     §2 specifies it, from the bytes of the store's two files."""
     records_bytes = (store_dir / RECORDS_FILE).read_bytes()
     anchors_bytes = (store_dir / ANCHORS_FILE).read_bytes()
+    pending_bytes = (store_dir / PENDING_CNVD_FILE).read_bytes()
     return (
         '{"files":['
         f'{{"role":"records","sha256":"{sha256_hex(records_bytes)}","size_bytes":{len(records_bytes)}}},'
-        f'{{"role":"anchors","sha256":"{sha256_hex(anchors_bytes)}","size_bytes":{len(anchors_bytes)}}}'
+        f'{{"role":"anchors","sha256":"{sha256_hex(anchors_bytes)}","size_bytes":{len(anchors_bytes)}}},'
+        f'{{"role":"pending_cnvd","sha256":"{sha256_hex(pending_bytes)}","size_bytes":{len(pending_bytes)}}}'
         '],"identity_version":1}'
     ).encode()
 
@@ -120,10 +124,11 @@ def write_store_lines(
     for line in anchor_lines:
         anchors_writer.write_line(line)
     anchors_file = anchors_writer.close()
+    pending_file = StoreFileWriter(store_dir, PENDING_CNVD_FILE).close()
     record_offset, anchor_offset = count_offsets
     store_manifest = manifest.model_copy(
         update={
-            "files": (anchors_file, records_file),
+            "files": (anchors_file, records_file, pending_file),
             "record_count": records_writer.line_count + record_offset,
             "anchor_count": anchors_writer.line_count + anchor_offset,
         }
@@ -249,6 +254,7 @@ def test_load_corpus_store_returns_manifest_records_and_anchors_as_written(
         corpus_content_sha256=sha256_hex(build_content_identity(imported_store)),
         records=tuple(imported_contents.records),
         evidence=tuple(imported_contents.anchors),
+        cnvd_index=CnvdIndex(),
     )
 
 
@@ -368,13 +374,14 @@ def test_store_written_with_store_writers_loads_back_unchanged(
         corpus_content_sha256=sha256_hex(build_content_identity(rewritten_dir)),
         records=tuple(imported_contents.records),
         evidence=tuple(imported_contents.anchors),
+        cnvd_index=CnvdIndex(),
     )
 
 
 @pytest.mark.parametrize(
     "file_name",
-    [RECORDS_FILE, ANCHORS_FILE, STORE_MANIFEST_FILE],
-    ids=["records", "anchors", "manifest"],
+    [RECORDS_FILE, ANCHORS_FILE, PENDING_CNVD_FILE, STORE_MANIFEST_FILE],
+    ids=["records", "anchors", "pending", "manifest"],
 )
 def test_store_writers_reproduce_imported_store_byte_for_byte(
     imported_store: Path, imported_contents: StoreContents, rewritten_dir: Path, file_name: str
@@ -411,8 +418,8 @@ def process_umask(request: pytest.FixtureRequest) -> Iterator[int]:
 )
 @pytest.mark.parametrize(
     "file_name",
-    [RECORDS_FILE, ANCHORS_FILE, STORE_MANIFEST_FILE],
-    ids=["records", "anchors", "manifest"],
+    [RECORDS_FILE, ANCHORS_FILE, PENDING_CNVD_FILE, STORE_MANIFEST_FILE],
+    ids=["records", "anchors", "pending", "manifest"],
 )
 def test_store_writers_create_files_with_mode_0644_whatever_the_umask(
     imported_contents: StoreContents, rewritten_dir: Path, process_umask: int, file_name: str
@@ -512,8 +519,8 @@ def test_reading_store_with_unpinned_extra_file_is_refused(
 
 @pytest.mark.parametrize(
     "file_name",
-    [RECORDS_FILE, ANCHORS_FILE, STORE_MANIFEST_FILE],
-    ids=["records", "anchors", "manifest"],
+    [RECORDS_FILE, ANCHORS_FILE, PENDING_CNVD_FILE, STORE_MANIFEST_FILE],
+    ids=["records", "anchors", "pending", "manifest"],
 )
 def test_reading_store_missing_file_is_refused(
     imported_store: Path, read_store: StoreReader, file_name: str
@@ -539,8 +546,8 @@ def test_reading_store_with_subdirectory_is_refused(
 
 @pytest.mark.parametrize(
     "file_name",
-    [RECORDS_FILE, ANCHORS_FILE, STORE_MANIFEST_FILE],
-    ids=["records", "anchors", "manifest"],
+    [RECORDS_FILE, ANCHORS_FILE, PENDING_CNVD_FILE, STORE_MANIFEST_FILE],
+    ids=["records", "anchors", "pending", "manifest"],
 )
 def test_reading_store_with_directory_in_place_of_store_file_is_refused(
     imported_store: Path, read_store: StoreReader, file_name: str
@@ -556,8 +563,8 @@ def test_reading_store_with_directory_in_place_of_store_file_is_refused(
 
 @pytest.mark.parametrize(
     "file_name",
-    [RECORDS_FILE, ANCHORS_FILE, STORE_MANIFEST_FILE],
-    ids=["records", "anchors", "manifest"],
+    [RECORDS_FILE, ANCHORS_FILE, PENDING_CNVD_FILE, STORE_MANIFEST_FILE],
+    ids=["records", "anchors", "pending", "manifest"],
 )
 def test_reading_store_with_symlinked_file_is_refused(
     imported_store: Path, tmp_path: Path, read_store: StoreReader, file_name: str
@@ -662,7 +669,9 @@ def test_reading_store_with_anchor_no_record_cites_is_refused(
     )
 
     # Act / Assert
-    with pytest.raises(CorpusStoreIntegrityError, match="an anchor no record cites"):
+    with pytest.raises(
+        CorpusStoreIntegrityError, match="an anchor no record or pending entry cites"
+    ):
         read_store(rewritten_dir)
 
 
@@ -896,7 +905,7 @@ def test_reading_store_without_a_format_version_is_refused_as_invalid(
         read_store(imported_store)
 
 
-@pytest.mark.parametrize("format_version", [0, 2, 10**30], ids=["zero", "next", "huge"])
+@pytest.mark.parametrize("format_version", [0, 3, 10**30], ids=["zero", "next", "huge"])
 def test_reading_store_of_another_format_version_is_refused_as_unsupported(
     imported_store: Path, read_store: StoreReader, format_version: int
 ) -> None:
@@ -1003,7 +1012,9 @@ def release_fifo_reader(fifo_path: Path) -> None:
     os.close(writer_descriptor)
 
 
-@pytest.fixture(params=[RECORDS_FILE, ANCHORS_FILE], ids=["records", "anchors"])
+@pytest.fixture(
+    params=[RECORDS_FILE, ANCHORS_FILE, PENDING_CNVD_FILE], ids=["records", "anchors", "pending"]
+)
 def store_with_fifo(imported_store: Path, request: pytest.FixtureRequest) -> Iterator[Path]:
     """The imported store with a FIFO in place of one of its files; a reader left blocked
     on it is released afterwards."""

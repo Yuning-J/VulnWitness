@@ -17,6 +17,7 @@ from vulnwitness.domain.timestamps import CalendarDate, Timestamp
 
 # [0-9], not \d: Python and pydantic read \d as any Unicode digit, JSON Schema as ASCII.
 CVE_ID_PATTERN = r"^CVE-[0-9]{4}-[0-9]{4,}$"
+CNVD_ID_PATTERN = r"^CNVD-[0-9]{4}-[0-9]{4,6}$"
 CWE_ID_PATTERN = r"^CWE-[0-9]+$"
 PURL_PATTERN = r"^pkg:"
 
@@ -123,6 +124,18 @@ class KevEntry(ContractModel):
     )
 
 
+class CnvdEntry(ContractModel):
+    cnvd_id: str = Field(pattern=CNVD_ID_PATTERN)
+    title: str = Field(min_length=1, description="CNVD's Chinese title; untrusted source text.")
+    description: str = Field(
+        min_length=1, description="CNVD's Chinese description; untrusted source text."
+    )
+    severity: Literal["high", "medium", "low"] = Field(
+        description="CNVD's severity: high for 高, medium for 中, low for 低."
+    )
+    evidence_id: EvidenceId
+
+
 class CveRecord(ContractModel):
     """An implementation-level vulnerability record.
 
@@ -142,10 +155,27 @@ class CveRecord(ContractModel):
     kev: KevEntry | None = Field(
         default=None, description="CISA KEV entry, when a consulted source lists one."
     )
+    nvd_status: str | None = Field(
+        default=None,
+        description="NVD 2.0 vulnStatus verbatim, untrusted source text; "
+        "null for NVD 1.1 and synthetic data.",
+    )
+    cnvd: tuple[CnvdEntry, ...] = Field(
+        default=(), description="CNVD entries ordered by CNVD ID; Chinese text is untrusted data."
+    )
     vulnerability_origin: VulnerabilityOrigin = VulnerabilityOrigin.UNKNOWN
     protocol_design_claim: Literal["not_established"] = "not_established"
     formal_seed_eligible: Literal[False] = False
     evidence_ids: tuple[EvidenceId, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def check_cnvd_order(self) -> Self:
+        previous_cnvd_id = ""
+        for entry in self.cnvd:
+            if entry.cnvd_id <= previous_cnvd_id:
+                raise ValueError("CNVD entries must be in strict CNVD ID order")
+            previous_cnvd_id = entry.cnvd_id
+        return self
 
     def list_implicated_products(self) -> tuple[AffectedProduct, ...]:
         """Products a source lists as affected or of unknown status, never ``unaffected`` ones."""

@@ -27,6 +27,7 @@
         "nvd_api_2",
         "nvd_json_11",
         "cisa_kev",
+        "circl_cnvd_parquet",
         "mitre_fight_yaml"
       ],
       "title": "SourceType",

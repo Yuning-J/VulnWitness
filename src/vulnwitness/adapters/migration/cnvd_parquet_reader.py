@@ -7,12 +7,12 @@ import pyarrow.parquet
 
 from vulnwitness.adapters.migration.cnvd_types import (
     CNVD_COLUMNS,
-    CNVD_ID_PATTERN,
     CnvdRow,
     check_cnvd_input,
 )
 from vulnwitness.adapters.migration.input_files import InputFile, open_input_file
 from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+from vulnwitness.domain.cve import CNVD_ID_PATTERN
 from vulnwitness.domain.migration_report import MigrationFailed, MigrationFailureCode
 
 PARQUET_MAGIC = b"PAR1"

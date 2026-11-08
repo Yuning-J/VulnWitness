@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "CnvdEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "cnvd_id": {
+          "pattern": "^CNVD-[0-9]{4}-[0-9]{4,6}$(?!\\n)",
+          "title": "Cnvd Id",
+          "type": "string"
+        },
+        "description": {
+          "description": "CNVD's Chinese description; untrusted source text.",
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "evidence_id": {
+          "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "severity": {
+          "description": "CNVD's severity: high for 高, medium for 中, low for 低.",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "title": {
+          "description": "CNVD's Chinese title; untrusted source text.",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cnvd_id",
+        "title",
+        "description",
+        "severity",
+        "evidence_id"
+      ],
+      "title": "CnvdEntry",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One CNVD entry whose CVE has no servable NVD record in this store.",
+  "properties": {
+    "cve_id": {
+      "maxLength": 32,
+      "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+      "title": "Cve Id",
+      "type": "string"
+    },
+    "entry": {
+      "$ref": "#/$defs/CnvdEntry"
+    },
+    "outcome": {
+      "enum": [
+        "cnvd_without_nvd_record",
+        "cnvd_for_rejected_nvd_record",
+        "cnvd_for_excluded_nvd_record"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    }
+  },
+  "required": [
+    "cve_id",
+    "outcome",
+    "entry"
+  ],
+  "title": "PendingCnvdEntry",
+  "type": "object"
+}

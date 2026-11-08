@@ -2,6 +2,7 @@
 
 from typing import Protocol
 
+from vulnwitness.domain.cnvd import CnvdIndex
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.served_dataset import ServedDataset
@@ -16,7 +17,12 @@ class ServedCorpus(Protocol):
 
     @property
     def evidence(self) -> tuple[EvidenceAnchor, ...]:
-        """Every anchor the records cite."""
+        """Every anchor the records and pending entries cite."""
+        ...
+
+    @property
+    def cnvd_index(self) -> CnvdIndex:
+        """CNVD entries by CVE and CNVD ID, including entries pending an NVD record."""
         ...
 
     def describe_served_dataset(self) -> ServedDataset:

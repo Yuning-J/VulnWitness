@@ -273,9 +273,12 @@
       "type": "string"
     },
     "store_format_version": {
-      "const": 1,
-      "default": 1,
-      "description": "What decides whether a reader can read the store; a reader refuses any other integer.",
+      "default": 2,
+      "description": "What decides whether a reader can read the store; a reader refuses integers other than 1 and 2.",
+      "enum": [
+        1,
+        2
+      ],
       "title": "Store Format Version",
       "type": "integer"
     },

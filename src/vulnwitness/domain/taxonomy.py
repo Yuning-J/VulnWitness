@@ -50,6 +50,7 @@ class SourceType(StrEnum):
     NVD_API_2 = "nvd_api_2"
     NVD_JSON_11 = "nvd_json_11"
     CISA_KEV = "cisa_kev"
+    CIRCL_CNVD_PARQUET = "circl_cnvd_parquet"
     MITRE_FIGHT_YAML = "mitre_fight_yaml"
 
 

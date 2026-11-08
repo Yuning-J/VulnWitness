@@ -41,7 +41,7 @@ sources:
     redistribution_conditions: "Credit CIRCL and the dataset, link the licence and indicate changes. The dataset card at revision 986160c9b1c910049f64a166ab4056de191f6de7 declares license: cc-by-4.0; how this licence relates to CNVD's own terms is unverified. The repository commits no CNVD data."
     local_storage_policy: operator_supplied
     terms_verified_on: 2026-11-08
-    artifact_uri_template: "https://huggingface.co/datasets/CIRCL/Vulnerability-CNVD"
+    artifact_uri_template: "https://huggingface.co/datasets/CIRCL/Vulnerability-CNVD/resolve/{revision}/{path}"
   - name: cnvd
     official_url: "https://www.cnvd.org.cn"
     terms_or_license_url: null

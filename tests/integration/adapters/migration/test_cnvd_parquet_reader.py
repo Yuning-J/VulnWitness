@@ -6,18 +6,24 @@ Every file is built in tmp_path; no upstream row or binary fixture is committed.
 
 import dataclasses
 import gzip
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pyarrow
 import pyarrow.parquet
 import pytest
 
+from tests.support.cnvd_inputs import (
+    TEST_REVISION,
+    CnvdImport,
+    build_cnvd_dependencies,
+    build_cnvd_row,
+    build_cnvd_table,
+    build_test_catalog,
+    write_cnvd_file,
+    write_cnvd_manifest,
+)
 from tests.support.legacy_inputs import (
-    build_cve_id,
     build_declaration,
-    build_migration_dependencies,
     build_v2_entry,
     build_v2_feed,
     run_test_migration,
@@ -28,12 +34,9 @@ from vulnwitness.adapters.migration.cnvd_snapshot_catalog import (
     default_cnvd_snapshot_catalog_file,
     load_cnvd_snapshot_catalog,
 )
-from vulnwitness.adapters.migration.cnvd_types import CNVD_COLUMNS
-from vulnwitness.adapters.migration.input_files import inspect_input_file
-from vulnwitness.adapters.migration.legacy_migration import MigrationDependencies
 from vulnwitness.adapters.migration.migration_limits import MigrationLimits
 from vulnwitness.adapters.store.corpus_store import load_corpus_store, read_store_manifest
-from vulnwitness.domain.cnvd_snapshot import CnvdSnapshot, CnvdSnapshotCatalog, CnvdSnapshotFile
+from vulnwitness.domain.cnvd_snapshot import CnvdSnapshotCatalog, CnvdSnapshotFile
 from vulnwitness.domain.corpus_store_manifest import InputContainer, StoreSource
 from vulnwitness.domain.migration_report import (
     MIGRATION_FAILURE_MESSAGES,
@@ -41,14 +44,6 @@ from vulnwitness.domain.migration_report import (
     MigrationFailureCode,
     MigrationOutcome,
 )
-
-TEST_REVISION = "a" * 40
-
-
-@dataclass(frozen=True)
-class CnvdImport:
-    inputs_dir: Path
-    target: Path
 
 
 @pytest.fixture
@@ -59,63 +54,6 @@ def cnvd_import(tmp_path: Path) -> CnvdImport:
     stores_dir.mkdir()
     write_plain_feed(inputs_dir / "nvdcve-2.0-9999.json", build_v2_feed([build_v2_entry(1)]))
     return CnvdImport(inputs_dir, stores_dir / "target")
-
-
-def build_cnvd_row(number: int, **fields: Any) -> dict[str, Any]:
-    row = {
-        "id": f"CNVD-9999-{number:05d}",
-        "title": "SYNTHETIC: 示例标题",
-        "description": "SYNTHETIC: fictional vulnerability description.",
-        "severity": "中",
-        "cve_id": build_cve_id(number),
-        "source": "cnvd",
-    }
-    row.update(fields)
-    return row
-
-
-def build_cnvd_table(rows: list[dict[str, Any]]) -> pyarrow.Table:
-    schema_fields = []
-    for column in CNVD_COLUMNS:
-        schema_fields.append(pyarrow.field(column, pyarrow.string()))
-    return pyarrow.Table.from_pylist(rows, schema=pyarrow.schema(schema_fields))
-
-
-def write_cnvd_file(directory: Path, name: str, rows: list[dict[str, Any]]) -> Path:
-    path = directory / name
-    pyarrow.parquet.write_table(build_cnvd_table(rows), path)
-    return path
-
-
-def build_test_catalog(
-    paths: list[Path], row_counts: list[int], revision: str = TEST_REVISION
-) -> CnvdSnapshotCatalog:
-    snapshot_files: list[CnvdSnapshotFile] = []
-    for index, (path, row_count) in enumerate(zip(paths, row_counts, strict=True)):
-        inspected_file = inspect_input_file(path, MigrationLimits())
-        snapshot_files.append(
-            CnvdSnapshotFile(
-                upstream_path=f"data/part-{index}.parquet",
-                sha256=inspected_file.sha256,
-                row_count=row_count,
-            )
-        )
-    return CnvdSnapshotCatalog(
-        snapshots=(CnvdSnapshot(revision=revision, files=tuple(snapshot_files)),)
-    )
-
-
-def build_cnvd_dependencies(
-    catalog: CnvdSnapshotCatalog, limits: MigrationLimits | None = None
-) -> MigrationDependencies:
-    return dataclasses.replace(build_migration_dependencies(limits), cnvd_catalog=catalog)
-
-
-def write_cnvd_manifest(cnvd_import: CnvdImport, paths: list[Path]) -> Path:
-    declarations = [build_declaration("nvdcve-2.0-9999.json")]
-    for path in paths:
-        declarations.append(build_declaration(path.name, source="circl-cnvd"))
-    return write_inputs_manifest(cnvd_import.inputs_dir, declarations)
 
 
 def write_faulty_cnvd(path: Path, fault: str) -> int:

@@ -7,13 +7,14 @@ manifest.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from typing import Any, Literal
 
 from pydantic import AwareDatetime, Field
 
+from vulnwitness.domain.cnvd import CnvdIndex
 from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.evidence import (
@@ -61,6 +62,7 @@ class FixtureBundle:
     manifest: FixtureManifest
     records: tuple[CveRecord, ...]
     evidence: tuple[EvidenceAnchor, ...]
+    cnvd_index: CnvdIndex = field(default_factory=CnvdIndex)
 
     def describe_session_corpus(self) -> SessionCorpusIdentity:
         records_digest = next(

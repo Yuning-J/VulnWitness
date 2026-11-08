@@ -62,6 +62,7 @@ def match_cnvd_inputs(
                 resolved_input = replace(
                     resolved_input,
                     source_uri=f"{CNVD_RESOLVE_URL}/{snapshot.revision}/{snapshot_file.upstream_path}",
+                    cnvd_revision=snapshot.revision,
                 )
             pinned_inputs.append(resolved_input)
         return tuple(pinned_inputs), matched_files

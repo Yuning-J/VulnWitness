@@ -85,8 +85,8 @@
           "$ref": "#/$defs/AffectednessRequest"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         }
@@ -653,6 +653,52 @@
       "title": "Claim",
       "type": "object"
     },
+    "CnvdEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "cnvd_id": {
+          "pattern": "^CNVD-[0-9]{4}-[0-9]{4,6}$(?!\\n)",
+          "title": "Cnvd Id",
+          "type": "string"
+        },
+        "description": {
+          "description": "CNVD's Chinese description; untrusted source text.",
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "evidence_id": {
+          "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "severity": {
+          "description": "CNVD's severity: high for 高, medium for 中, low for 低.",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "title": {
+          "description": "CNVD's Chinese title; untrusted source text.",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cnvd_id",
+        "title",
+        "description",
+        "severity",
+        "evidence_id"
+      ],
+      "title": "CnvdEntry",
+      "type": "object"
+    },
     "ConceptResolution": {
       "additionalProperties": false,
       "properties": {
@@ -660,8 +706,8 @@
           "$ref": "#/$defs/TopicResolution"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         }
@@ -798,6 +844,15 @@
           "title": "Affected",
           "type": "array"
         },
+        "cnvd": {
+          "default": [],
+          "description": "CNVD entries ordered by CNVD ID; Chinese text is untrusted data.",
+          "items": {
+            "$ref": "#/$defs/CnvdEntry"
+          },
+          "title": "Cnvd",
+          "type": "array"
+        },
         "cve_id": {
           "maxLength": 32,
           "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
@@ -871,6 +926,19 @@
           "default": null,
           "title": "Last Modified"
         },
+        "nvd_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "NVD 2.0 vulnStatus verbatim, untrusted source text; null for NVD 1.1 and synthetic data.",
+          "title": "Nvd Status"
+        },
         "protocol_design_claim": {
           "const": "not_established",
           "default": "not_established",
@@ -921,6 +989,8 @@
         "affected",
         "references",
         "kev",
+        "nvd_status",
+        "cnvd",
         "vulnerability_origin",
         "protocol_design_claim",
         "formal_seed_eligible",
@@ -1258,8 +1328,8 @@
           "$ref": "#/$defs/EvidenceAnchor"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         }
@@ -1908,8 +1978,8 @@
           "type": "boolean"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         },
@@ -2307,8 +2377,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         },
@@ -3265,8 +3335,8 @@
           "title": "Product"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         },
@@ -4357,8 +4427,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         },
@@ -5114,6 +5184,7 @@
         "nvd_api_2",
         "nvd_json_11",
         "cisa_kev",
+        "circl_cnvd_parquet",
         "mitre_fight_yaml"
       ],
       "title": "SourceType",
@@ -5753,8 +5824,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         },
@@ -6216,8 +6287,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.53",
-          "default": "2.0.0-dev.53",
+          "const": "2.0.0-dev.54",
+          "default": "2.0.0-dev.54",
           "title": "Schema Version",
           "type": "string"
         },

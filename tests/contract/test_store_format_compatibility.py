@@ -13,6 +13,7 @@ import json
 
 from tests.support.corpus_stores import COMPATIBILITY_STORE
 from vulnwitness.adapters.store.corpus_store import load_corpus_store, verify_corpus_store
+from vulnwitness.domain.cnvd import PendingCnvdEntry
 from vulnwitness.domain.corpus_store_manifest import STORE_FORMAT_SCHEMA_SHA256, CorpusStoreManifest
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.evidence import EvidenceAnchor
@@ -78,15 +79,15 @@ def test_compatibility_store_serves_the_dataset_version_its_files_name() -> None
     )
 
 
-def test_persisted_models_match_the_schemas_format_1_was_judged_against() -> None:
-    # A failure here is a reminder, not a verdict: judge the change against ADR 0008 §9,
-    # then re-pin STORE_FORMAT_SCHEMA_SHA256 with the reason it keeps format 1, or move
-    # the store format version.
+def test_persisted_models_match_the_schemas_format_2_was_judged_against() -> None:
+    # Format 2 persists these four models; schema changes require judging the format
+    # against ADR 0008 §9, including rules not captured by the published schemas.
     persisted_schemas: dict[str, object] = {}
     for contract_name, model in (
         ("corpus_store_manifest", CorpusStoreManifest),
         ("cve_record", CveRecord),
         ("evidence_anchor", EvidenceAnchor),
+        ("pending_cnvd_entry", PendingCnvdEntry),
     ):
         persisted_schemas[contract_name] = json.loads(render_schema(model, "serialization"))
 

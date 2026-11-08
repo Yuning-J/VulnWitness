@@ -1,6 +1,7 @@
 """The knowledge tool surface uses the registered v2
 contracts, no tool input can name a location, a query language, a command or a model, every
-source-text field a CVE record or FiGHT technique carries is named untrusted, every tool
+source-text field a CVE record or FiGHT technique carries is named untrusted in the
+server instructions or its published field description, every tool
 answering with CVE records says their affected entries are no affectedness check, and the
 limits let the affectedness port time out inside its tool's limit."""
 
@@ -165,19 +166,25 @@ def test_no_input_schema_accepts_free_form_keys() -> None:
 
 
 @pytest.mark.parametrize(
-    ("record_model", "untrusted_fields"),
+    ("record_model", "untrusted_fields", "schema_untrusted_fields"),
     [
-        (CveRecord, CVE_RECORD_SOURCE_TEXT_FIELDS),
-        (ThreatContextItem, FIGHT_TECHNIQUE_SOURCE_TEXT_FIELDS),
+        (CveRecord, CVE_RECORD_SOURCE_TEXT_FIELDS, ("nvd_status", "cnvd")),
+        (ThreatContextItem, FIGHT_TECHNIQUE_SOURCE_TEXT_FIELDS, ()),
     ],
     ids=["cve_record", "fight_technique"],
 )
-def test_every_source_text_field_is_named_untrusted_in_the_server_instructions(
-    record_model: type[BaseModel], untrusted_fields: tuple[str, ...]
+def test_every_source_text_field_is_named_untrusted_in_instructions_or_field_descriptions(
+    record_model: type[BaseModel],
+    untrusted_fields: tuple[str, ...],
+    schema_untrusted_fields: tuple[str, ...],
 ) -> None:
     source_text_fields = list_free_text_fields(record_model) - SERVICE_MATCH_FIELDS
 
-    assert source_text_fields == set(untrusted_fields)
+    assert source_text_fields == set(untrusted_fields) | set(schema_untrusted_fields)
+    for field_name in schema_untrusted_fields:
+        description = record_model.model_fields[field_name].description
+        assert description is not None
+        assert "untrusted" in description
     for instructions in SERVER_INSTRUCTIONS.values():
         assert f"({', '.join(untrusted_fields)})" in instructions
 

@@ -8,6 +8,7 @@ from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaV
 from pydantic_core import CoreSchema, core_schema
 
 from vulnwitness.domain.affectedness import AffectednessCheck, AffectednessRequest
+from vulnwitness.domain.cnvd import PendingCnvdEntry
 from vulnwitness.domain.corpus_store_manifest import CorpusStoreManifest
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.data_readiness import WaitForDataRequest, WaitForDataResponse
@@ -96,6 +97,7 @@ RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
     "http_rejection": HttpRejection,
     # The corpus store the legacy-data importer writes, and what an import reports.
     "corpus_store_manifest": CorpusStoreManifest,
+    "pending_cnvd_entry": PendingCnvdEntry,
     "migration_report": MigrationReport,
     "store_status": StoreStatus,
 }

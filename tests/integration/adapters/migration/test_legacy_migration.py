@@ -70,6 +70,7 @@ from vulnwitness.adapters.nvd.normalizer import (
 )
 from vulnwitness.adapters.store.corpus_store import (
     ANCHORS_FILE,
+    PENDING_CNVD_FILE,
     RECORDS_FILE,
     STORE_MANIFEST_FILE,
     CorpusStore,
@@ -460,6 +461,7 @@ def test_import_publishes_its_files_with_mode_0644_and_its_directory_0755_whatev
         STORE_MANIFEST_FILE: 0o644,
         RECORDS_FILE: 0o644,
         ANCHORS_FILE: 0o644,
+        PENDING_CNVD_FILE: 0o644,
     }
 
 

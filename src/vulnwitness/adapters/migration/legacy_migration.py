@@ -4,7 +4,7 @@ A run resolves the declared inputs, checks the target, optionally walks the lega
 then copies each input in turn into its staging directory and reads only that copy:
 it fingerprints every input, stages every NVD entry and reads the KEV catalog and
 CNVD rows. It then chooses each CVE's winner, normalizes the winners with their final
-provenance and KEV entries, counts the CNVD join outcomes, and writes the store in a
+provenance and KEV entries, joins CNVD entries and their anchors, and writes the store in a
 partial directory beside the target. The store is verified there and renamed into
 place; a dry run stages in the system's temporary directory and writes no store. Any
 failure removes only what the run created, and the report says why in the server's words.
@@ -15,7 +15,7 @@ import os
 import shutil
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,8 +26,13 @@ from vulnwitness.adapters.migration.candidate_staging import (
     StagedCandidate,
     resolve_cve,
 )
+from vulnwitness.adapters.migration.cnvd_enrichment import (
+    SourcedCnvdRow,
+    build_cnvd_entry,
+    enrich_cnvd,
+)
 from vulnwitness.adapters.migration.cnvd_snapshot_catalog import match_cnvd_inputs
-from vulnwitness.adapters.migration.cnvd_types import CnvdRow, check_cnvd_input
+from vulnwitness.adapters.migration.cnvd_types import check_cnvd_input
 from vulnwitness.adapters.migration.input_files import (
     DecompressionBudget,
     InputFile,
@@ -66,6 +71,7 @@ from vulnwitness.adapters.nvd.normalizer import (
 )
 from vulnwitness.adapters.store.corpus_store import (
     ANCHORS_FILE,
+    PENDING_CNVD_FILE,
     RECORDS_FILE,
     CorpusStoreIntegrityError,
     StoreFileWriter,
@@ -76,6 +82,7 @@ from vulnwitness.adapters.store.corpus_store import (
     verify_corpus_store,
     write_store_manifest,
 )
+from vulnwitness.domain.cnvd import PendingCnvdEntry, PendingCnvdOutcome
 from vulnwitness.domain.cnvd_snapshot import CnvdSnapshotCatalog, CnvdSnapshotFile
 from vulnwitness.domain.corpus_store_manifest import (
     ROLLBACK_INSTRUCTION,
@@ -150,7 +157,7 @@ class InputReading:
     generated_at: dict[int, datetime | None] = field(default_factory=dict)
     kev_catalog: KevCatalog | None = None
     kev_input: ResolvedInput | None = None
-    cnvd_rows: list[CnvdRow] = field(default_factory=list)
+    cnvd_rows: list[SourcedCnvdRow] = field(default_factory=list)
 
 
 def with_position(failure: MigrationFailed, input_position: int) -> MigrationFailed:
@@ -330,7 +337,12 @@ class Migration:
                         )
                         if len(rows) != cnvd_files[resolved_input.position].row_count:
                             raise MigrationFailed(MigrationFailureCode.CNVD_ROW_COUNT_MISMATCH)
-                        reading.cnvd_rows.extend(rows)
+                        for row in rows:
+                            reading.cnvd_rows.append(
+                                SourcedCnvdRow(
+                                    row, resolved_input, cast(str, resolved_input.cnvd_revision)
+                                )
+                            )
                     else:
                         self._read_nvd_input(resolved_input, snapshot, staging, budget, reading)
                     staging.check_size()
@@ -391,33 +403,35 @@ class Migration:
         partial_dir: Path | None,
     ) -> WrittenStore | None:
         """Choose each CVE's winner, normalize it with its final provenance and KEV entry,
-        and stage its anchors; unless this is a dry run (no ``partial_dir``), write the
-        records and anchors.
+        join CNVD entries and stage all anchors; unless this is a dry run (no
+        ``partial_dir``), write records, pending entries and anchors.
         Raises ``OSError`` when a store file cannot be written. Each writer is closed on
         every way out, without a sync when the run fails, since the partial store goes."""
-        records_writer = None if partial_dir is None else StoreFileWriter(partial_dir, RECORDS_FILE)
-        try:
-            records_file = self._write_records(inputs, reading, staging, records_writer)
-        except BaseException:
-            if records_writer is not None:
-                records_writer.discard()
-            raise
-        if records_writer is None or records_file is None:
-            return None
-        anchors_writer = StoreFileWriter(records_writer.store_dir, ANCHORS_FILE)
-        try:
+        with ExitStack() as writers:
+            records_writer = None
+            pending_writer = None
+            if partial_dir is not None:
+                records_writer = StoreFileWriter(partial_dir, RECORDS_FILE)
+                writers.callback(records_writer.discard)
+                pending_writer = StoreFileWriter(partial_dir, PENDING_CNVD_FILE)
+                writers.callback(pending_writer.discard)
+            records_file = self._write_records(
+                inputs, reading, staging, records_writer, pending_writer
+            )
+            if records_writer is None or records_file is None or pending_writer is None:
+                return None
+            pending_file = pending_writer.close()
+            anchors_writer = StoreFileWriter(records_writer.store_dir, ANCHORS_FILE)
+            writers.callback(anchors_writer.discard)
             for anchor_json in staging.list_anchor_lines():
                 anchors_writer.write_line(anchor_json.encode())
             anchors_file = anchors_writer.close()
-        except BaseException:
-            anchors_writer.discard()
-            raise
-        return WrittenStore(
-            store_dir=records_writer.store_dir,
-            files=(anchors_file, records_file),
-            record_count=records_writer.line_count,
-            anchor_count=anchors_writer.line_count,
-        )
+            return WrittenStore(
+                store_dir=records_writer.store_dir,
+                files=(anchors_file, records_file, pending_file),
+                record_count=records_writer.line_count,
+                anchor_count=anchors_writer.line_count,
+            )
 
     def _write_records(
         self,
@@ -425,16 +439,19 @@ class Migration:
         reading: InputReading,
         staging: CandidateStaging,
         records_writer: StoreFileWriter | None,
+        pending_writer: StoreFileWriter | None,
     ) -> StoreFile | None:
-        """Choose and normalize every CVE's winner and stage its anchors; with
-        ``records_writer``, write each record and return the records file, closed. A dry
-        run, with no writer, returns ``None``."""
+        """Resolve NVD winners, enrich them, and write records and pending CNVD entries.
+
+        Stage every stored row's anchor, including in dry runs. Return the closed
+        records file pin, or ``None`` for a dry run with no writers.
+        """
         kev_entries = {} if reading.kev_catalog is None else reading.kev_catalog.entries
         kev_cve_outcomes: dict[str, CveOutcome] = {}
-        cnvd_cve_ids: set[str] = set()
-        for row in reading.cnvd_rows:
-            if row.has_cve_id():
-                cnvd_cve_ids.add(row.cve_id)
+        cnvd_by_cve: dict[str, list[SourcedCnvdRow]] = {}
+        for source in sorted(reading.cnvd_rows, key=cnvd_id_key):
+            if source.row.has_cve_id():
+                cnvd_by_cve.setdefault(source.row.cve_id, []).append(source)
         cnvd_cve_outcomes: dict[str, CveOutcome] = {}
         source_versions: dict[int, str] = {}
         for position, payload_sha256 in reading.payload_hashes.items():
@@ -447,13 +464,20 @@ class Migration:
                 self.tally.candidate_outcomes[candidate_outcome] += 1
             if resolution.cve_id in kev_entries:
                 kev_cve_outcomes[resolution.cve_id] = resolution.outcome
-            if resolution.cve_id in cnvd_cve_ids:
+            if resolution.cve_id in cnvd_by_cve:
                 cnvd_cve_outcomes[resolution.cve_id] = resolution.outcome
             if resolution.winner is None:
                 continue
             normalized = self._normalize_winner(
                 inputs, reading, resolution.winner, kev_entries.get(resolution.cve_id)
             )
+            cnvd_sources = cnvd_by_cve.get(resolution.cve_id)
+            if cnvd_sources:
+                normalized = enrich_cnvd(
+                    normalized,
+                    cnvd_sources,
+                    self._dependencies.source_registry.require_terms("circl-cnvd"),
+                )
             imported_records += 1
             if records_writer is not None:
                 records_writer.write_line(encode_line(normalized.record))
@@ -463,7 +487,8 @@ class Migration:
         # The last anchors may follow the last periodic measurement.
         staging.check_size()
         self._count_kev_outcomes(reading, kev_cve_outcomes)
-        self._count_cnvd_outcomes(reading, cnvd_cve_outcomes)
+        self._write_pending_cnvd(reading, cnvd_cve_outcomes, staging, pending_writer)
+        staging.check_size()
         if imported_records == 0:
             raise MigrationFailed(MigrationFailureCode.NO_IMPORTABLE_RECORDS)
         if records_writer is None:
@@ -527,10 +552,15 @@ class Migration:
                 kev_outcome = KevOutcome.FOR_EXCLUDED_NVD_RECORD
             self.tally.kev_outcomes[kev_outcome] += 1
 
-    def _count_cnvd_outcomes(
-        self, reading: InputReading, cve_outcomes: dict[str, CveOutcome]
+    def _write_pending_cnvd(
+        self,
+        reading: InputReading,
+        cve_outcomes: dict[str, CveOutcome],
+        staging: CandidateStaging,
+        pending_writer: StoreFileWriter | None,
     ) -> None:
-        for row in reading.cnvd_rows:
+        for source in sorted(reading.cnvd_rows, key=cnvd_pending_key):
+            row = source.row
             cve_outcome = cve_outcomes.get(row.cve_id)
             if row.cve_id == "":
                 outcome = CnvdOutcome.WITHOUT_CVE_ID
@@ -545,6 +575,21 @@ class Migration:
             else:
                 outcome = CnvdOutcome.FOR_EXCLUDED_NVD_RECORD
             self.tally.cnvd_outcomes[outcome] += 1
+            if outcome in {
+                CnvdOutcome.MERGED,
+                CnvdOutcome.WITHOUT_CVE_ID,
+                CnvdOutcome.UNRECOGNISED_CVE_ID,
+            }:
+                continue
+            entry, anchor = build_cnvd_entry(
+                source, self._dependencies.source_registry.require_terms("circl-cnvd")
+            )
+            pending = PendingCnvdEntry(
+                cve_id=row.cve_id, outcome=cast(PendingCnvdOutcome, outcome.value), entry=entry
+            )
+            staging.add_anchor(anchor.evidence_id, encode_line(anchor).decode())
+            if pending_writer is not None:
+                pending_writer.write_line(encode_line(pending))
 
     def _publish(
         self,
@@ -604,6 +649,14 @@ def open_snapshot(input_file: InputFile, staging_dir: Path) -> Iterator[InputFil
             snapshot_path.unlink(missing_ok=True)
         except OSError:
             raise MigrationFailed(MigrationFailureCode.STAGING_FAILED) from None
+
+
+def cnvd_id_key(source: SourcedCnvdRow) -> str:
+    return source.row.cnvd_id
+
+
+def cnvd_pending_key(source: SourcedCnvdRow) -> tuple[str, str]:
+    return source.row.cve_id, source.row.cnvd_id
 
 
 def build_store_input(resolved_input: ResolvedInput, reading: InputReading) -> StoreInput:

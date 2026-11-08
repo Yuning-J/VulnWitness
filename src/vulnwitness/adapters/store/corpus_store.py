@@ -1,19 +1,20 @@
 """Write and read a corpus store: ``manifest.json`` and the JSON Lines files it pins
 (ADR 0008 §9).
 
-Every record and anchor is one line of canonical JSON, records in CVE ID order and
-anchors in evidence ID order. Reading a store fails closed: the directory holds exactly
-the manifest and the files it pins, each matching its SHA-256 and size; every anchor's
-ID re-derives from its fields; every record cites its own CVE anchor and only anchors the
-store holds; no anchor is left uncited. A store is read as untrusted input, so the
-manifest and every line are read within a cap and a file's size is checked before its
-lines are. ``verify_corpus_store`` checks a store keeping only an index of anchor IDs in
-memory; ``load_corpus_store`` also keeps every record and anchor, for serving.
+Records, anchors and pending entries are canonical JSON lines, ordered by CVE ID,
+evidence ID and (CVE ID, CNVD ID), respectively. Reading a store fails closed: the
+directory holds exactly the manifest and its pinned files, each matching its SHA-256
+and size. Every anchor's ID re-derives from its fields; every record cites its own CVE
+anchor and only anchors the store holds. CNVD entries cite anchors binding their six
+source columns, and no anchor is left uncited. The manifest and every line are read
+within a cap, and a file's size is checked before its lines are. Verification keeps an
+anchor index with CNVD row provenance; loading also keeps records, anchors and CNVD
+indexes for serving.
 
 A store has three identities (ADR 0009 §2): the SHA-256 of the manifest bytes the reader
 parsed names the physical store; the manifest's import identity names the import; and the
-corpus content digest, derived from the records' and anchors' pins once both files match
-them, names the dataset served.
+corpus content digest, derived from all verified content file pins, names the dataset
+served. Format 1 holds records and anchors; format 2 also holds pending CNVD entries.
 """
 
 import hashlib
@@ -27,24 +28,30 @@ from typing import IO
 from pydantic import ValidationError
 
 from vulnwitness.adapters.regular_files import open_regular_file
+from vulnwitness.domain.cnvd import (
+    CnvdIndex,
+    PendingCnvdEntry,
+    build_cnvd_index,
+    cnvd_source_row,
+)
 from vulnwitness.domain.corpus_store_manifest import (
-    STORE_FORMAT_VERSION,
     CorpusStoreManifest,
     StoreFile,
     derive_corpus_content_sha256,
     name_corpus_store_version,
 )
-from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.cve import CnvdEntry, CveRecord
 from vulnwitness.domain.evidence import EvidenceAnchor
-from vulnwitness.domain.hashing import canonical_json_bytes, sha256_hex
+from vulnwitness.domain.hashing import canonical_json_bytes, canonical_sha256, sha256_hex
 from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
 from vulnwitness.domain.session_record import SessionCorpusIdentity
-from vulnwitness.domain.taxonomy import KnowledgeScope
+from vulnwitness.domain.taxonomy import AssertionKind, KnowledgeScope, SourceType, TrustLevel
 from vulnwitness.domain.validation import find_anchor_violations
 
 STORE_MANIFEST_FILE = "manifest.json"
 RECORDS_FILE = "records.jsonl"
 ANCHORS_FILE = "anchors.jsonl"
+PENDING_CNVD_FILE = "pending_cnvd.jsonl"
 # Every store has the same modes whatever the umask of the run that wrote it: readable by
 # every user, so by the server whichever user runs it, and writable only by its owner.
 STORE_FILE_MODE = 0o644
@@ -91,6 +98,7 @@ class CorpusStore:
     corpus_content_sha256: str
     records: tuple[CveRecord, ...]
     evidence: tuple[EvidenceAnchor, ...]
+    cnvd_index: CnvdIndex
 
     store_name: str
 
@@ -153,7 +161,7 @@ class StoreFileWriter:
         )
 
 
-def encode_line(model: CveRecord | EvidenceAnchor) -> bytes:
+def encode_line(model: CveRecord | EvidenceAnchor | PendingCnvdEntry) -> bytes:
     return canonical_json_bytes(model.model_dump(mode="json"))
 
 
@@ -205,10 +213,10 @@ def read_manifest_bytes(store_dir: Path) -> bytes:
 
 
 def check_store_format(manifest_bytes: bytes) -> None:
-    """Refuse a manifest whose ``store_format_version`` is an integer other than the one
-    this release reads, before the rest of it is parsed against this release's model, and
-    one whose format version is missing or not an integer (``true`` included, which the
-    model's literal would take for 1)."""
+    """Read the version before parsing the manifest: formats 1 and 2 are supported;
+    any other integer is unsupported, and a missing or non-integer version is invalid.
+    Booleans are not version integers.
+    """
     try:
         manifest_document = json.loads(manifest_bytes)
     # json.loads recurses per nesting level: a deeply nested manifest within the cap
@@ -221,7 +229,7 @@ def check_store_format(manifest_bytes: bytes) -> None:
     is_integer = isinstance(format_version, int) and not isinstance(format_version, bool)
     if not is_integer:
         raise CorpusStoreIntegrityError("manifest.json is not a corpus store manifest")
-    if format_version != STORE_FORMAT_VERSION:
+    if format_version not in (1, 2):
         raise UnsupportedStoreFormatError(
             "the store's format version is not one this release reads"
         )
@@ -250,7 +258,10 @@ def check_store_entries(store_dir: Path, manifest: CorpusStoreManifest) -> None:
         found_names.add(entry.name)
     if found_names != expected_names:
         raise CorpusStoreIntegrityError("the store holds files its manifest does not pin")
-    if {RECORDS_FILE, ANCHORS_FILE} != expected_names - {STORE_MANIFEST_FILE}:
+    required_files = {RECORDS_FILE, ANCHORS_FILE}
+    if manifest.store_format_version == 2:
+        required_files.add(PENDING_CNVD_FILE)
+    if required_files != expected_names - {STORE_MANIFEST_FILE}:
         raise CorpusStoreIntegrityError("the manifest pins other files than a store's")
 
 
@@ -287,14 +298,16 @@ def find_store_file(manifest: CorpusStoreManifest, file_name: str) -> StoreFile:
 class IndexedAnchor:
     scope: KnowledgeScope
     authoritative_record_id: str
+    cnvd_anchor: EvidenceAnchor | None
 
 
 def verify_store_files(
     store_dir: Path,
     keep_anchor: Callable[[EvidenceAnchor], None],
     keep_record: Callable[[CveRecord], None],
+    keep_pending: Callable[[PendingCnvdEntry], None] | None = None,
 ) -> VerifiedStore:
-    """Verify the store, handing each anchor and record to the callbacks as it is read."""
+    """Verify every content file, passing its models to the supplied callbacks."""
     parsed_manifest = read_store_manifest(store_dir)
     manifest = parsed_manifest.manifest
     check_store_entries(store_dir, manifest)
@@ -313,12 +326,16 @@ def verify_store_files(
         if find_anchor_violations((anchor,)):
             raise CorpusStoreIntegrityError(f"{anchor.evidence_id} breaks the anchor rules")
         anchors_by_id[anchor.evidence_id] = IndexedAnchor(
-            anchor.scope, anchor.authoritative_record_id
+            anchor.scope,
+            anchor.authoritative_record_id,
+            anchor if anchor.source_type is SourceType.CIRCL_CNVD_PARQUET else None,
         )
         keep_anchor(anchor)
     cited_evidence_ids: set[str] = set()
     previous_cve_id = ""
     record_count = 0
+    record_cve_ids: set[str] = set()
+    cnvd_ids: set[str] = set()
     for line in read_pinned_lines(store_dir, records_file):
         try:
             record = CveRecord.model_validate_json(line)
@@ -327,18 +344,50 @@ def verify_store_files(
         if record.cve_id <= previous_cve_id:
             raise CorpusStoreIntegrityError("records are not in strict CVE ID order")
         previous_cve_id = record.cve_id
+        if manifest.store_format_version == 1 and (record.nvd_status is not None or record.cnvd):
+            raise CorpusStoreIntegrityError("format 1 holds no NVD status or CNVD entries")
         check_record_evidence(record, anchors_by_id)
+        for entry in record.cnvd:
+            if entry.evidence_id not in record.evidence_ids:
+                raise CorpusStoreIntegrityError("a CNVD entry's anchor is not cited by its record")
+            check_cnvd_evidence(entry, record.cve_id, anchors_by_id, cnvd_ids)
+        record_cve_ids.add(record.cve_id)
         cited_evidence_ids.update(record.evidence_ids)
         record_count += 1
         keep_record(record)
+    pending_file = None
+    if manifest.store_format_version == 2:
+        pending_file = find_store_file(manifest, PENDING_CNVD_FILE)
+        previous_pending_key = ("", "")
+        for line in read_pinned_lines(store_dir, pending_file):
+            try:
+                pending = PendingCnvdEntry.model_validate_json(line)
+            except ValidationError as error:
+                raise CorpusStoreIntegrityError("a pending line is not a CNVD entry") from error
+            pending_key = (pending.cve_id, pending.entry.cnvd_id)
+            if pending_key <= previous_pending_key:
+                raise CorpusStoreIntegrityError(
+                    "pending entries are not in strict CVE/CNVD ID order"
+                )
+            previous_pending_key = pending_key
+            if pending.cve_id in record_cve_ids:
+                raise CorpusStoreIntegrityError("a pending entry has a servable NVD record")
+            check_cnvd_evidence(pending.entry, pending.cve_id, anchors_by_id, cnvd_ids)
+            cited_evidence_ids.add(pending.entry.evidence_id)
+            if keep_pending is not None:
+                keep_pending(pending)
     if cited_evidence_ids != set(anchors_by_id):
-        raise CorpusStoreIntegrityError("the store holds an anchor no record cites")
+        raise CorpusStoreIntegrityError(
+            "the store holds an anchor no record or pending entry cites"
+        )
     if record_count != manifest.record_count or len(anchors_by_id) != manifest.anchor_count:
         raise CorpusStoreIntegrityError("the store's counts differ from its manifest's")
     return VerifiedStore(
         manifest=manifest,
         store_manifest_sha256=parsed_manifest.store_manifest_sha256,
-        corpus_content_sha256=derive_corpus_content_sha256(records_file, anchors_file),
+        corpus_content_sha256=derive_corpus_content_sha256(
+            records_file, anchors_file, pending_file
+        ),
     )
 
 
@@ -358,6 +407,33 @@ def check_record_evidence(record: CveRecord, anchors_by_id: dict[str, IndexedAnc
         raise CorpusStoreIntegrityError(f"{record.cve_id} cites no anchor of its own")
 
 
+def check_cnvd_evidence(
+    entry: CnvdEntry,
+    cve_id: str,
+    anchors_by_id: dict[str, IndexedAnchor],
+    cnvd_ids: set[str],
+) -> None:
+    """Each stored CNVD ID is unique and its anchor binds the exact source row."""
+    if entry.cnvd_id in cnvd_ids:
+        raise CorpusStoreIntegrityError("a CNVD ID is stored more than once")
+    cnvd_ids.add(entry.cnvd_id)
+    indexed_anchor = anchors_by_id.get(entry.evidence_id)
+    if indexed_anchor is None or indexed_anchor.cnvd_anchor is None:
+        raise CorpusStoreIntegrityError("a CNVD entry cites no CNVD anchor")
+    anchor = indexed_anchor.cnvd_anchor
+    if (
+        anchor.authoritative_record_id != entry.cnvd_id
+        or anchor.source_name != "circl-cnvd"
+        or anchor.locator != f"id={entry.cnvd_id}"
+        or anchor.scope is not KnowledgeScope.IMPLEMENTATION_VULNERABILITY
+        or anchor.assertion_kind is not AssertionKind.ASSERTED
+        or anchor.trust_level is not TrustLevel.SECONDARY
+        or anchor.excerpt is not None
+        or anchor.content_sha256 != canonical_sha256(cnvd_source_row(entry, cve_id))
+    ):
+        raise CorpusStoreIntegrityError("a CNVD entry differs from its row anchor")
+
+
 def ignore_model(model: CveRecord | EvidenceAnchor) -> None:
     """Keep nothing: verification needs only the anchor index."""
 
@@ -373,7 +449,10 @@ def load_corpus_store(store_dir: Path) -> CorpusStore:
     """The store at ``store_dir``, verified; raises as ``verify_corpus_store`` does."""
     anchors: list[EvidenceAnchor] = []
     records: list[CveRecord] = []
-    verified_store = verify_store_files(store_dir, anchors.append, records.append)
+    pending_entries: list[PendingCnvdEntry] = []
+    verified_store = verify_store_files(
+        store_dir, anchors.append, records.append, pending_entries.append
+    )
     return CorpusStore(
         store_name=store_dir.name,
         manifest=verified_store.manifest,
@@ -381,4 +460,5 @@ def load_corpus_store(store_dir: Path) -> CorpusStore:
         corpus_content_sha256=verified_store.corpus_content_sha256,
         records=tuple(records),
         evidence=tuple(anchors),
+        cnvd_index=build_cnvd_index(records, pending_entries),
     )
