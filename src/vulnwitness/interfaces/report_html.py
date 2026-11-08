@@ -121,8 +121,12 @@ def render_html_section(section: ReportSection, level: int) -> str:
         fragments.append("</dd></div></dl>")
     for table in section.tables:
         fragments.append(render_html_table(table))
+    if section.layout == "columns":
+        fragments.append('<div class="two">')
     for subsection in section.sections:
         fragments.append(render_html_section(subsection, level + 1))
+    if section.layout == "columns":
+        fragments.append("</div>")
     if section.layout == "paths":
         fragments.append("</div>")
     fragments.append(f"</{tag}>")

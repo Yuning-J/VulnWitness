@@ -5,9 +5,15 @@ from datetime import UTC
 
 from pydantic import BaseModel
 
+from vulnwitness.application.cnvd_report import (
+    build_cnvd_entries,
+    build_cnvd_facts,
+    build_pending_cnvd_card,
+)
 from vulnwitness.application.investigation_report import build_investigation_report
 from vulnwitness.application.triage_workflow import triage_selection_key
 from vulnwitness.domain.cve import CveRecord, CvssMetric
+from vulnwitness.domain.cve_lookup import CveLookupResponse, LookupCandidate, PendingCnvdLookup
 from vulnwitness.domain.cvss_ranking import rank_cvss_metric
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.investigation import KnowledgeEvidenceSet, NeedOutcome
@@ -367,6 +373,23 @@ def build_card(
                 "Other severity metrics", bullets=tuple(metrics), folded=True, layout="inline"
             )
         )
+    if isinstance(candidate, LookupCandidate) and candidate.record.cnvd:
+        sections = [
+            ReportSection(
+                "Recorded source facts",
+                sections=(
+                    ReportSection(
+                        "NVD",
+                        paragraphs=(
+                            ReportParagraph(f"NVD status: {record.nvd_status or 'not recorded'}"),
+                        ),
+                        sections=tuple(sections),
+                    ),
+                    build_cnvd_entries(candidate.record.cnvd, sequence),
+                ),
+                layout="columns",
+            )
+        ]
     sections.append(build_associations(candidate.weakness_associations))
     sources: list[str] = []
     links: list[ReportLink] = []
@@ -557,7 +580,10 @@ def build_session_report(
     triage = parse_triage_scope(triage_scope)
     pages: list[tuple[int, ProductQueryResponse]] = []
     inventory: list[tuple[int, ProductVulnerability]] = []
-    lookups: list[tuple[int, Candidate, dict[str, EvidenceAnchor]]] = []
+    lookup_candidates: list[Candidate] = []
+    lookup_calls: list[tuple[int, SearchResponse]] = []
+    cnvd_lookups: list[CveLookupResponse] = []
+    pending_by_call: dict[int, dict[str, list[PendingCnvdLookup]]] = {}
     investigations: list[tuple[int, KnowledgeEvidenceSet]] = []
     limits = [
         "Affectedness is unknown for every CVE: a version “hit” only "
@@ -574,8 +600,24 @@ def build_session_report(
             for vulnerability in answer.items:
                 inventory.append((call.sequence, vulnerability))
         elif isinstance(answer, SearchResponse) and call.command in {"lookup", "lookup_cve"}:
+            lookup_calls.append((call.sequence, answer))
             for candidate in answer.candidates:
-                lookups.append((call.sequence, candidate, collect_anchors(answer)))
+                lookup_candidates.append(candidate)
+            if isinstance(answer, CveLookupResponse):
+                cnvd_lookups.append(answer)
+                pending_groups: dict[str, list[PendingCnvdLookup]] = {}
+                for entry in answer.pending_cnvd:
+                    pending_groups.setdefault(entry.cve_id, []).append(entry)
+                pending_by_call[call.sequence] = pending_groups
+                if (
+                    answer.cnvd_attribution is not None
+                    and (
+                        answer.pending_cnvd
+                        or any(candidate.record.cnvd for candidate in answer.candidates)
+                    )
+                    and answer.cnvd_attribution not in limits
+                ):
+                    limits.append(answer.cnvd_attribution)
         elif isinstance(answer, KnowledgeEvidenceSet):
             investigations.append((call.sequence, answer))
             for need in answer.coverage.needs:
@@ -585,6 +627,7 @@ def build_session_report(
                         f"{need.subject or '(no subject)'} "
                         f"· {need.outcome}"
                     )
+    lookup_count = len(lookup_candidates) + sum(len(groups) for groups in pending_by_call.values())
     if contents.findings is not None:
         for question in contents.findings.open_questions:
             limits.append(f"Open question: {question}")
@@ -638,7 +681,11 @@ def build_session_report(
             (
                 ReportStat("Total matches", total, "reported by the product query"),
                 ReportStat("Read", str(len(inventory)), f"{len(pages)} pages"),
-                ReportStat("CVE details", str(len(lookups)), mode),
+                ReportStat(
+                    "CVE details",
+                    str(lookup_count),
+                    mode,
+                ),
                 ReportStat("Applicability", "unknown", "not established for any CVE"),
             )
         )
@@ -702,7 +749,7 @@ def build_session_report(
         )
     returned = reaching = omitted = 0
     techniques: set[str] = set()
-    for _, candidate, _ in lookups:
+    for candidate in lookup_candidates:
         associations = candidate.weakness_associations
         if associations is not None:
             count, distinct = path_counts(associations)
@@ -710,12 +757,13 @@ def build_session_report(
             reaching += count
             techniques.update(distinct)
             omitted += associations.omitted_count
-    if lookups:
+    if lookup_count:
         facts.append(
-            f"The {len(lookups)} CVE details returned {returned} catalogue "
+            f"The {lookup_count} CVE details returned {returned} catalogue "
             f"paths; {reaching} paths reaching ATT&CK; {len(techniques)} "
             f"distinct techniques; {omitted} paths omitted by the cap."
         )
+    facts.extend(build_cnvd_facts(cnvd_lookups))
     for sequence, investigation in investigations:
         facts.append(
             f"Call {sequence} investigation ({investigation.applied_scope}): "
@@ -730,14 +778,24 @@ def build_session_report(
         ranks[vulnerability.record.cve_id] = rank
     cards: list[ReportSection] = []
     card_links: list[ReportLink] = []
-    for sequence, candidate, anchors in lookups:
-        cve_id = candidate.record.cve_id
-        cards.append(
-            build_card(
-                candidate, sequence, anchors, vulnerabilities.get(cve_id), ranks.get(cve_id), triage
+    for sequence, lookup in lookup_calls:
+        anchors = collect_anchors(lookup)
+        for candidate in lookup.candidates:
+            cve_id = candidate.record.cve_id
+            cards.append(
+                build_card(
+                    candidate,
+                    sequence,
+                    anchors,
+                    vulnerabilities.get(cve_id),
+                    ranks.get(cve_id),
+                    triage,
+                )
             )
-        )
-        card_links.append(ReportLink(cve_id, f"#{cve_id}"))
+            card_links.append(ReportLink(cve_id, f"#{cve_id}"))
+        for cve_id, entries in pending_by_call.get(sequence, {}).items():
+            cards.append(build_pending_cnvd_card(cve_id, entries, sequence))
+            card_links.append(ReportLink(cve_id, f"#{cve_id}"))
     rows: list[tuple[str, ...]] = []
     for index, (sequence, vulnerability) in enumerate(inventory, 1):
         record = vulnerability.record
@@ -764,8 +822,8 @@ def build_session_report(
         total = str(pages[-1][1].total_available) if pages else "unknown"
         inventory_title = f"Read inventory · {len(inventory)} of {total}"
     card_ids: set[str] = set()
-    for _, candidate, _ in lookups:
-        card_ids.add(candidate.record.cve_id)
+    for link in card_links:
+        card_ids.add(link.text)
     record_sections: list[ReportSection] = []
     if cards:
         record_sections.append(

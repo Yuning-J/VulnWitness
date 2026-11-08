@@ -18,6 +18,12 @@ from tests.support.asgi import (
     open_app_client,
     send_request,
 )
+from tests.support.report_sessions import (
+    CNVD_REPORT_CVE_IDS,
+    CNVD_REPORT_DESCRIPTION,
+    CNVD_REPORT_TITLE,
+    build_cnvd_report_corpus,
+)
 from tests.support.ui_startup import DeferredUiDeployment
 from tests.support.workspaces import agent_note, build_test_workspace
 from vulnwitness.adapters.session.files import hold_session_lock
@@ -525,3 +531,64 @@ async def test_report_symlink_cannot_serve_an_unrelated_file(tmp_path: Path) -> 
     assert refused.status_code == 422
     assert refused.json()["code"] == "invalid_arguments"
     assert "private unrelated file" not in refused.text
+
+
+async def test_cnvd_lookup_details_and_export_share_recorded_comparisons(tmp_path: Path) -> None:
+    # Arrange
+    toolbox, workspace = build_test_workspace(
+        tmp_path / "workspace", corpus=build_cnvd_report_corpus()
+    )
+    app = build_ui_app(
+        UiState(McpDeployment(toolbox, workspace=workspace)),
+        port=HTTP_PORT,
+        token=HTTP_SECRET_TOKEN,
+    )
+    async with open_app_client(app) as client:
+        started = await client.post("/ui-api/start", json={"goal": "Synthetic CNVD comparison"})
+        session_id = started.json()["session_id"]
+        for cve_id in CNVD_REPORT_CVE_IDS:
+            recorded = await client.post(
+                "/ui-api/lookup", json={"session_id": session_id, "cve_id": cve_id}
+            )
+            assert recorded.status_code == 200
+        attribution = recorded.json()["cnvd_attribution"]
+
+        # Act
+        view = await client.get(f"/ui-api/view/{session_id}")
+        rendered = await client.post("/ui-api/render", json={"session_id": session_id})
+        exported = await client.get(f"/ui-api/report/{session_id}")
+        script = await client.get("/ui.js")
+        styles = await client.get("/ui.css")
+
+    # Assert
+    assert view.status_code == rendered.status_code == exported.status_code == 200
+    report = view.json()["report"]
+    facts = report["sections"][1]["sections"][0]["bullets"]
+    limits = report["sections"][1]["sections"][1]["bullets"]
+    assert "CNVD severity disagrees with NVD for 2 CVEs" in facts[1]
+    assert "CNVD lists 5 CVEs" in facts[2]
+    assert limits.count(attribution) == 1
+    cards = report["sections"][2]["sections"]
+    card_titles = []
+    for card in cards:
+        card_titles.append(card["title"])
+    assert tuple(card_titles) == CNVD_REPORT_CVE_IDS
+    paired_sources = cards[1]["sections"][0]
+    assert paired_sources["layout"] == "columns"
+    assert paired_sources["sections"][0]["title"] == "NVD"
+    cnvd_entries = paired_sources["sections"][1]["sections"]
+    assert cnvd_entries[0]["paragraphs"][0]["text"] == CNVD_REPORT_TITLE
+    assert cnvd_entries[1]["badges"] == [
+        {"text": "≠ disagree", "tone": "neutral", "severity": None}
+    ]
+    description = cnvd_entries[0]["sections"][0]
+    assert description["folded"] is True
+    assert description["verbatim"] == CNVD_REPORT_DESCRIPTION
+    pending = cards[2]["sections"][0]["sections"][0]
+    assert pending["paragraphs"][0]["text"] == "NVD's snapshot has no servable record."
+    assert pending["paragraphs"][1]["text"] == "NVD state: not_in_nvd_snapshot"
+    assert "<img" not in view.text and "\\u003cimg" in view.text
+    assert "<script>" not in exported.text and "&lt;script&gt;" in exported.text
+    assert "textContent" in script.text and "innerHTML" not in script.text
+    assert '["two", "columns"].includes(section.layout)' in script.text
+    assert ".columns .two > section" in styles.text

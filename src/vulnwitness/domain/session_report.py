@@ -73,7 +73,18 @@ class ReportSection:
     verbatim: str | None = None
     bullets: tuple[str, ...] = ()
     layout: Literal[
-        "", "two", "panel", "limits", "card", "facts", "timeline", "step", "desc", "paths", "inline"
+        "",
+        "two",
+        "columns",
+        "panel",
+        "limits",
+        "card",
+        "facts",
+        "timeline",
+        "step",
+        "desc",
+        "paths",
+        "inline",
     ] = ""
     folded: bool = False
     anchor: str = ""

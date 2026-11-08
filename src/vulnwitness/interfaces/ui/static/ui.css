@@ -263,6 +263,10 @@ th {
   grid-template-columns:1fr 1fr;
   gap:24px;
 }
+.columns .two > section {
+  min-width:0;
+  overflow-wrap:anywhere;
+}
 .facts-grid {
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(170px,1fr));

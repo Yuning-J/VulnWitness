@@ -128,7 +128,7 @@ function renderSection(section, level = 3, showTitle = true) {
     }
     appendTable(container, table.headings, rows);
   }
-  const childHost = section.layout === "two" ? element("div", undefined, "two") : container;
+  const childHost = ["two", "columns"].includes(section.layout) ? element("div", undefined, "two") : container;
   for (const child of section.sections) childHost.append(renderSection(child, level + 1));
   if (childHost !== container) container.append(childHost);
   if (section.layout === "card" && /^CVE-\d{4}-\d{4,}$/.test(section.title)) {

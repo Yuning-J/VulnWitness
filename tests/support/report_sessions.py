@@ -1,12 +1,115 @@
 """Real CLI fixture sessions and authored findings for report integration tests."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from tests.support.builders import (
+    build_anchor,
+    build_cnvd_entry,
+    build_cve_record,
+    build_cvss_metric,
+    build_versioned_product,
+)
+from tests.support.workspaces import build_test_workspace
+from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
 from vulnwitness.cli import main
+from vulnwitness.composition import load_packaged_fixture
+from vulnwitness.domain.cnvd import PendingCnvdEntry, PendingCnvdOutcome, build_cnvd_index
+from vulnwitness.domain.cve import CnvdEntry, CveRecord
+from vulnwitness.domain.workspace import StartInvestigationRequest
+
+CNVD_REPORT_CVE_IDS = (
+    "CVE-9999-0004",
+    "CVE-9999-0001",
+    "CVE-9999-0006",
+    "CVE-9999-0003",
+    "CVE-9999-0002",
+    "CVE-9999-0005",
+    "CVE-9999-0007",
+    "CVE-9999-0008",
+    "CVE-9999-0001",
+)
+CNVD_REPORT_TITLE = 'SYNTHETIC: 中文标题 <img src=x onerror="alert(1)"> & [链接](bad)'
+CNVD_REPORT_DESCRIPTION = 'SYNTHETIC: 中文描述 <script>alert("源")</script> & | *文本*\n第二行'
+
+
+def build_cnvd_report_corpus() -> FixtureBundle:
+    """Synthetic source pairs, unusable metrics, NVD states and all pending outcomes."""
+    fixture = load_packaged_fixture()
+    records: list[CveRecord] = []
+    anchors = []
+    pending: list[PendingCnvdEntry] = []
+    entry_number = 0
+    outcomes: tuple[PendingCnvdOutcome, ...] = (
+        "cnvd_without_nvd_record",
+        "cnvd_for_rejected_nvd_record",
+        "cnvd_for_excluded_nvd_record",
+    )
+    for number in range(1, 9):
+        cve_id = f"CVE-9999-{number:04d}"
+        entries: list[CnvdEntry] = []
+        for severity in ("medium", "low") if number in {1, 6} else ("high",):
+            entry_number += 1
+            cnvd_id = f"CNVD-9999-{entry_number:05d}"
+            anchor = build_anchor(
+                source_name="circl-cnvd",
+                authoritative_record_id=cnvd_id,
+                source_uri=f"urn:synthetic:cnvd:{cnvd_id}",
+                locator=f"id={cnvd_id}",
+            )
+            anchors.append(anchor)
+            entry = build_cnvd_entry(
+                cnvd_id=cnvd_id,
+                title=CNVD_REPORT_TITLE,
+                description=CNVD_REPORT_DESCRIPTION,
+                severity=severity,
+                evidence_id=anchor.evidence_id,
+            )
+            entries.append(entry)
+            if number >= 6:
+                pending.append(
+                    PendingCnvdEntry(cve_id=cve_id, outcome=outcomes[number - 6], entry=entry)
+                )
+        if number >= 6:
+            continue
+        nvd_anchor = build_anchor(authoritative_record_id=cve_id)
+        anchors.append(nvd_anchor)
+        metrics = (build_cvss_metric(),)
+        if number == 2:
+            metrics = ()
+        elif number == 3:
+            metrics = (build_cvss_metric(base_severity="CRITICAL", base_score=9.8),)
+        elif number == 5:
+            metrics = (build_cvss_metric(base_severity="NONE", base_score=0),)
+        records.append(
+            build_cve_record(
+                cve_id=cve_id,
+                cvss=metrics,
+                cnvd=tuple(entries),
+                nvd_status={3: "Awaiting Analysis", 4: "Deferred"}.get(number, "Analyzed"),
+                affected=(build_versioned_product(),),
+                evidence_ids=(nvd_anchor.evidence_id,),
+            )
+        )
+    return replace(
+        fixture,
+        records=tuple(records),
+        evidence=tuple(anchors),
+        cnvd_index=build_cnvd_index(records, pending),
+    )
+
+
+def build_cnvd_report_session(root: Path, cve_ids: tuple[str, ...] = CNVD_REPORT_CVE_IDS) -> Path:
+    """Record actual workspace lookups, including a repeat to exercise distinct-CVE counts."""
+    _, workspace = build_test_workspace(root, corpus=build_cnvd_report_corpus())
+    started = workspace.start(StartInvestigationRequest(goal="Synthetic CNVD source comparison"))
+    for cve_id in cve_ids:
+        workspace.record(started.session_id, "lookup_cve", {"cve_id": cve_id})
+    return root / started.session_id
 
 
 def read_document(directory: Path, sequence: int) -> dict[str, Any]:

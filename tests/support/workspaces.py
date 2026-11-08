@@ -13,13 +13,16 @@ from vulnwitness.composition import (
     load_packaged_fixture,
 )
 from vulnwitness.interfaces.knowledge_toolbox import KnowledgeToolbox
+from vulnwitness.ports.served_corpus import ServedCorpus
 from vulnwitness.workspace_composition import build_workspace_investigations
 
 
 def build_test_workspace(
-    root: Path, **options: object
+    root: Path, *, corpus: ServedCorpus | None = None, **options: object
 ) -> tuple[KnowledgeToolbox, WorkspaceInvestigations]:
-    plane = build_serving_data_plane(load_packaged_fixture(), clock=read_fixed_clock)
+    plane = build_serving_data_plane(
+        corpus if corpus is not None else load_packaged_fixture(), clock=read_fixed_clock
+    )
     toolbox = build_knowledge_toolbox(plane)
     service = build_workspace_investigations(
         root,
