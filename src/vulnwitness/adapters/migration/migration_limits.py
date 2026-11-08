@@ -22,6 +22,8 @@ class MigrationLimits:
     max_staging_bytes: int = 16 * GIB
     max_kev_bytes: int = 16 * MIB
     max_kev_rows: int = 50_000
+    max_cnvd_bytes: int = 64 * MIB
+    max_cnvd_rows: int = 250_000
     max_walk_depth: int = 32
     max_walk_entries: int = 100_000
     magic_prefix_bytes: int = 8 * KIB

@@ -65,6 +65,7 @@ def build_report_fields(outcome: str, **overrides: Any) -> dict[str, Any]:
         "candidate_outcomes": {"chosen": 1},
         "normalization_failures": {},
         "kev_outcomes": {},
+        "cnvd_outcomes": {},
         "kev_advice": None,
         "skipped_entries": [],
         "legacy_root_findings": None,

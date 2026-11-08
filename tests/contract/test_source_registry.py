@@ -10,6 +10,8 @@ REQUIRED_SOURCES = {
     "nvd",
     "cve-program",
     "cisa-kev",
+    "circl-cnvd",
+    "cnvd",
     "mitre-fight",
     "mitre-attack",
     "mitre-cwe",

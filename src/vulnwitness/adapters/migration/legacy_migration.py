@@ -2,12 +2,12 @@
 
 A run resolves the declared inputs, checks the target, optionally walks the legacy root,
 then copies each input in turn into its staging directory and reads only that copy:
-it fingerprints every input, stages every NVD entry and reads the KEV catalog. It then
-chooses each CVE's winner, normalizes the winners with their final provenance and KEV
-entries, and writes the store in a partial directory beside the target. The store is verified
-there and renamed into place; a dry run stages in the system's temporary directory and
-writes no store. Any failure removes only what the run created, and the report says why
-in the server's words.
+it fingerprints every input, stages every NVD entry and reads the KEV catalog and
+CNVD rows. It then chooses each CVE's winner, normalizes the winners with their final
+provenance and KEV entries, counts the CNVD join outcomes, and writes the store in a
+partial directory beside the target. The store is verified there and renamed into
+place; a dry run stages in the system's temporary directory and writes no store. Any
+failure removes only what the run created, and the report says why in the server's words.
 """
 
 import json
@@ -26,6 +26,8 @@ from vulnwitness.adapters.migration.candidate_staging import (
     StagedCandidate,
     resolve_cve,
 )
+from vulnwitness.adapters.migration.cnvd_snapshot_catalog import match_cnvd_inputs
+from vulnwitness.adapters.migration.cnvd_types import CnvdRow, check_cnvd_input
 from vulnwitness.adapters.migration.input_files import (
     DecompressionBudget,
     InputFile,
@@ -74,6 +76,7 @@ from vulnwitness.adapters.store.corpus_store import (
     verify_corpus_store,
     write_store_manifest,
 )
+from vulnwitness.domain.cnvd_snapshot import CnvdSnapshotCatalog, CnvdSnapshotFile
 from vulnwitness.domain.corpus_store_manifest import (
     ROLLBACK_INSTRUCTION,
     CorpusStoreManifest,
@@ -84,6 +87,7 @@ from vulnwitness.domain.corpus_store_manifest import (
 from vulnwitness.domain.hashing import sha256_hex
 from vulnwitness.domain.migration_inputs import InputsManifest
 from vulnwitness.domain.migration_report import (
+    CnvdOutcome,
     CveOutcome,
     KevOutcome,
     MigrationFailed,
@@ -123,6 +127,7 @@ class MigrationDependencies:
     clock: Callable[[], datetime]
     importer_version: str
     limits: MigrationLimits
+    cnvd_catalog: CnvdSnapshotCatalog
 
 
 @dataclass(frozen=True)
@@ -139,12 +144,13 @@ class WrittenStore:
 @dataclass
 class InputReading:
     """What reading the inputs gave: each NVD payload's hash and generation time by
-    input position, and the KEV catalog with its input, if one."""
+    input position, the KEV catalog with its input, if one, and the CNVD rows."""
 
     payload_hashes: dict[int, str] = field(default_factory=dict)
     generated_at: dict[int, datetime | None] = field(default_factory=dict)
     kev_catalog: KevCatalog | None = None
     kev_input: ResolvedInput | None = None
+    cnvd_rows: list[CnvdRow] = field(default_factory=list)
 
 
 def with_position(failure: MigrationFailed, input_position: int) -> MigrationFailed:
@@ -175,6 +181,7 @@ class Migration:
             now,
             limits,
         )
+        inputs, cnvd_files = match_cnvd_inputs(inputs, self._dependencies.cnvd_catalog)
         target = self._resolve_target()
         legacy_root = None
         if self._request.legacy_root is not None:
@@ -193,7 +200,7 @@ class Migration:
         with self._working_directories(target) as (staging_dir, partial_dir):
             staging = CandidateStaging(staging_dir, limits)
             try:
-                reading = self._read_inputs(inputs, staging, staging_dir)
+                reading = self._read_inputs(inputs, staging, staging_dir, cnvd_files)
                 identity = compute_import_identity(
                     inputs,
                     self._map_payload_hashes(inputs, reading),
@@ -292,15 +299,22 @@ class Migration:
         )
 
     def _read_inputs(
-        self, inputs: Sequence[ResolvedInput], staging: CandidateStaging, staging_dir: Path
+        self,
+        inputs: Sequence[ResolvedInput],
+        staging: CandidateStaging,
+        staging_dir: Path,
+        cnvd_files: dict[int, CnvdSnapshotFile],
     ) -> InputReading:
         reading = InputReading()
+        cnvd_ids: set[str] = set()
         limits = self._dependencies.limits
         budget = DecompressionBudget(remaining_bytes=limits.max_total_decompressed_bytes)
         for resolved_input in inputs:
             try:
                 if resolved_input.source is StoreSource.CISA_KEV:
                     check_kev_input(resolved_input.input_file, limits)
+                elif resolved_input.source is StoreSource.CIRCL_CNVD:
+                    check_cnvd_input(resolved_input.input_file, limits)
                 # The copy counts against the staging cap from before it is made until it
                 # is removed: there must be room for it, and the check after its input is
                 # read sees it still there.
@@ -310,6 +324,13 @@ class Migration:
                     if resolved_input.source is StoreSource.CISA_KEV:
                         reading.kev_catalog = read_kev_catalog(snapshot, limits)
                         reading.kev_input = resolved_input
+                    elif resolved_input.source is StoreSource.CIRCL_CNVD:
+                        rows = self._dependencies.parsers.read_cnvd_rows(
+                            snapshot, limits, cnvd_ids, len(reading.cnvd_rows)
+                        )
+                        if len(rows) != cnvd_files[resolved_input.position].row_count:
+                            raise MigrationFailed(MigrationFailureCode.CNVD_ROW_COUNT_MISMATCH)
+                        reading.cnvd_rows.extend(rows)
                     else:
                         self._read_nvd_input(resolved_input, snapshot, staging, budget, reading)
                     staging.check_size()
@@ -410,6 +431,11 @@ class Migration:
         run, with no writer, returns ``None``."""
         kev_entries = {} if reading.kev_catalog is None else reading.kev_catalog.entries
         kev_cve_outcomes: dict[str, CveOutcome] = {}
+        cnvd_cve_ids: set[str] = set()
+        for row in reading.cnvd_rows:
+            if row.has_cve_id():
+                cnvd_cve_ids.add(row.cve_id)
+        cnvd_cve_outcomes: dict[str, CveOutcome] = {}
         source_versions: dict[int, str] = {}
         for position, payload_sha256 in reading.payload_hashes.items():
             source_versions[position] = f"sha256:{payload_sha256}"
@@ -421,6 +447,8 @@ class Migration:
                 self.tally.candidate_outcomes[candidate_outcome] += 1
             if resolution.cve_id in kev_entries:
                 kev_cve_outcomes[resolution.cve_id] = resolution.outcome
+            if resolution.cve_id in cnvd_cve_ids:
+                cnvd_cve_outcomes[resolution.cve_id] = resolution.outcome
             if resolution.winner is None:
                 continue
             normalized = self._normalize_winner(
@@ -435,6 +463,7 @@ class Migration:
         # The last anchors may follow the last periodic measurement.
         staging.check_size()
         self._count_kev_outcomes(reading, kev_cve_outcomes)
+        self._count_cnvd_outcomes(reading, cnvd_cve_outcomes)
         if imported_records == 0:
             raise MigrationFailed(MigrationFailureCode.NO_IMPORTABLE_RECORDS)
         if records_writer is None:
@@ -497,6 +526,25 @@ class Migration:
             else:
                 kev_outcome = KevOutcome.FOR_EXCLUDED_NVD_RECORD
             self.tally.kev_outcomes[kev_outcome] += 1
+
+    def _count_cnvd_outcomes(
+        self, reading: InputReading, cve_outcomes: dict[str, CveOutcome]
+    ) -> None:
+        for row in reading.cnvd_rows:
+            cve_outcome = cve_outcomes.get(row.cve_id)
+            if row.cve_id == "":
+                outcome = CnvdOutcome.WITHOUT_CVE_ID
+            elif not row.has_cve_id():
+                outcome = CnvdOutcome.UNRECOGNISED_CVE_ID
+            elif cve_outcome is None:
+                outcome = CnvdOutcome.WITHOUT_NVD_RECORD
+            elif cve_outcome is CveOutcome.IMPORTED:
+                outcome = CnvdOutcome.MERGED
+            elif cve_outcome is CveOutcome.WITHDRAWN_BY_SOURCE:
+                outcome = CnvdOutcome.FOR_REJECTED_NVD_RECORD
+            else:
+                outcome = CnvdOutcome.FOR_EXCLUDED_NVD_RECORD
+            self.tally.cnvd_outcomes[outcome] += 1
 
     def _publish(
         self,

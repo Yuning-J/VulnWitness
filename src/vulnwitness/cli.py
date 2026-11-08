@@ -64,6 +64,10 @@ from vulnwitness.adapter_discovery import (
     discover_ui_server_runner,
 )
 from vulnwitness.adapters.fight.operator_snapshot import FightSnapshotUnavailable
+from vulnwitness.adapters.migration.cnvd_snapshot_catalog import (
+    default_cnvd_snapshot_catalog_file,
+    load_cnvd_snapshot_catalog,
+)
 from vulnwitness.adapters.migration.inputs_manifest import InputsManifestError, load_inputs_manifest
 from vulnwitness.adapters.migration.legacy_migration import (
     MigrationDependencies,
@@ -1581,6 +1585,7 @@ def run_legacy_migration_command(
             clock=utc_now,
             importer_version=read_installed_version(),
             limits=MigrationLimits(),
+            cnvd_catalog=load_cnvd_snapshot_catalog(default_cnvd_snapshot_catalog_file()),
         ),
     )
     print(report.model_dump_json(indent=2))

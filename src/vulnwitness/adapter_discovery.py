@@ -64,7 +64,7 @@ API_EXTRA = OptionalExtra(
     missing_detail="the 'api' extra is not installed: pip install 'vulnwitness[api]'",
 )
 MIGRATION_EXTRA = OptionalExtra(
-    modules=frozenset({"ijson"}),
+    modules=frozenset({"ijson", "pyarrow"}),
     missing_detail="the 'migration' extra is not installed: pip install 'vulnwitness[migration]'",
 )
 

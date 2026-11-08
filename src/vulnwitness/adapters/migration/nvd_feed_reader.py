@@ -28,6 +28,7 @@ from collections.abc import Iterator
 
 import ijson
 
+from vulnwitness.adapters.migration.cnvd_parquet_reader import read_cnvd_rows
 from vulnwitness.adapters.migration.entry_assembler import EntryAssembler
 from vulnwitness.adapters.migration.ijson_events import ParserEvent, parse_basic_events
 from vulnwitness.adapters.migration.input_files import PayloadStream
@@ -197,4 +198,8 @@ def read_header_value(events: Iterator[ParserEvent]) -> HeaderValue | None:
 def build_migration_parsers() -> MigrationParsers:
     """The ``migration_parsers`` entry point: the parsers the ``migration`` extra
     provides."""
-    return MigrationParsers(read_nvd_feed=read_nvd_feed, classify_json_prefix=classify_json_prefix)
+    return MigrationParsers(
+        read_nvd_feed=read_nvd_feed,
+        classify_json_prefix=classify_json_prefix,
+        read_cnvd_rows=read_cnvd_rows,
+    )

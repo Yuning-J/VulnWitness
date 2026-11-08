@@ -37,10 +37,11 @@ api = [
     "starlette>=0.48,<2",
     "uvicorn>=0.31.1,<1",
 ]
-# The legacy-data importer: a streaming JSON parser, so an NVD feed is never held whole
-# (ADR 0008 §8).
+# The legacy-data importer: streaming NVD JSON and bounded CNVD Parquet
+# (ADR 0008 §8, ADR 0015 §2).
 migration = [
     "ijson>=3.3,<4",
+    "pyarrow>=23,<24",
 ]
 
 [project.entry-points."vulnwitness.adapters"]
@@ -100,7 +101,7 @@ files = ["src/vulnwitness"]
 strict = true
 plugins = ["pydantic.mypy"]
 
-# ijson ships no type information; the feed reader is its only importer.
+# Optional source parsers ship no type information.
 [[tool.mypy.overrides]]
-module = ["ijson", "ijson.*"]
+module = ["ijson", "ijson.*", "pyarrow", "pyarrow.*"]
 ignore_missing_imports = true

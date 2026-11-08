@@ -1,4 +1,4 @@
-"""What the importer's JSON parsers hand back, and the parsers themselves as one value.
+"""What the importer's source parsers hand back, and the parsers themselves as one value.
 The parsers need the ``migration`` extra and are loaded only through the
 ``migration_parsers`` entry point, so the rest of the importer imports these types alone.
 """
@@ -7,7 +7,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from vulnwitness.adapters.migration.input_files import PayloadStream
+from vulnwitness.adapters.migration.cnvd_types import CnvdRow
+from vulnwitness.adapters.migration.input_files import InputFile, PayloadStream
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
 from vulnwitness.domain.corpus_store_manifest import NvdFeedFormat
 from vulnwitness.domain.migration_report import LegacyFileKind
 
@@ -27,7 +29,9 @@ EntryHandler = Callable[[NvdFeedFormat, int, dict[str, Any]], None]
 @dataclass(frozen=True)
 class MigrationParsers:
     """``read_nvd_feed`` streams a feed's entries to a handler and returns its header;
-    ``classify_json_prefix`` tells a legacy derived file by its first bytes."""
+    ``classify_json_prefix`` tells a legacy derived file by its first bytes;
+    ``read_cnvd_rows`` validates a Parquet file within the shared ID and row bounds."""
 
     read_nvd_feed: Callable[[PayloadStream, EntryHandler], FeedHeader]
     classify_json_prefix: Callable[[bytes], LegacyFileKind | None]
+    read_cnvd_rows: Callable[[InputFile, MigrationLimits, set[str], int], tuple[CnvdRow, ...]]

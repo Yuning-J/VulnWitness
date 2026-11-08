@@ -80,6 +80,22 @@ class MigrationFailureCode(StrEnum):
     KEV_INVALID_ROW = "kev_invalid_row"
     KEV_CONFLICTING_ROWS = "kev_conflicting_rows"
     KEV_TOO_LARGE = "kev_too_large"
+    CNVD_UNCATALOGUED_FILE = "cnvd_uncatalogued_file"
+    CNVD_INCOMPLETE_SNAPSHOT = "cnvd_incomplete_snapshot"
+    CNVD_INVALID_PARQUET = "cnvd_invalid_parquet"
+    CNVD_MISSING_COLUMN = "cnvd_missing_column"
+    CNVD_EXTRA_COLUMN = "cnvd_extra_column"
+    CNVD_MISTYPED_COLUMN = "cnvd_mistyped_column"
+    CNVD_NULL_VALUE = "cnvd_null_value"
+    CNVD_INVALID_ID = "cnvd_invalid_id"
+    CNVD_REPEATED_ID = "cnvd_repeated_id"
+    CNVD_EMPTY_TITLE = "cnvd_empty_title"
+    CNVD_EMPTY_DESCRIPTION = "cnvd_empty_description"
+    CNVD_INVALID_SEVERITY = "cnvd_invalid_severity"
+    CNVD_INVALID_SOURCE = "cnvd_invalid_source"
+    CNVD_FILE_TOO_LARGE = "cnvd_file_too_large"
+    CNVD_TOO_MANY_ROWS = "cnvd_too_many_rows"
+    CNVD_ROW_COUNT_MISMATCH = "cnvd_row_count_mismatch"
     LEGACY_ROOT_UNREADABLE = "legacy_root_unreadable"
     LEGACY_ROOT_CHANGED = "legacy_root_changed"
     LEGACY_ROOT_TOO_DEEP = "legacy_root_too_deep"
@@ -153,6 +169,38 @@ MIGRATION_FAILURE_MESSAGES: dict[MigrationFailureCode, str] = {
     ),
     MigrationFailureCode.KEV_TOO_LARGE: (
         "The KEV input is larger or longer than the cap." + KEV_REMEDY
+    ),
+    MigrationFailureCode.CNVD_UNCATALOGUED_FILE: (
+        "A CNVD input is not a file in the reviewed snapshot catalog."
+    ),
+    MigrationFailureCode.CNVD_INCOMPLETE_SNAPSHOT: (
+        "The CNVD inputs are not exactly one reviewed revision's complete file set."
+    ),
+    MigrationFailureCode.CNVD_INVALID_PARQUET: (
+        "A CNVD input is not readable Parquet with Parquet magic."
+    ),
+    MigrationFailureCode.CNVD_MISSING_COLUMN: "A CNVD input lacks a required column.",
+    MigrationFailureCode.CNVD_EXTRA_COLUMN: "A CNVD input has an extra or repeated column.",
+    MigrationFailureCode.CNVD_MISTYPED_COLUMN: (
+        "A CNVD input has a column whose type is not string."
+    ),
+    MigrationFailureCode.CNVD_NULL_VALUE: "A CNVD row holds a null value.",
+    MigrationFailureCode.CNVD_INVALID_ID: "A CNVD row has an invalid CNVD ID.",
+    MigrationFailureCode.CNVD_REPEATED_ID: "A CNVD ID repeats within or across the inputs.",
+    MigrationFailureCode.CNVD_EMPTY_TITLE: "A CNVD row has an empty title.",
+    MigrationFailureCode.CNVD_EMPTY_DESCRIPTION: "A CNVD row has an empty description.",
+    MigrationFailureCode.CNVD_INVALID_SEVERITY: (
+        "A CNVD row has a severity other than 高, 中 or 低."
+    ),
+    MigrationFailureCode.CNVD_INVALID_SOURCE: "A CNVD row has a source other than cnvd.",
+    MigrationFailureCode.CNVD_FILE_TOO_LARGE: (
+        "A CNVD input is larger than the per-file byte cap."
+    ),
+    MigrationFailureCode.CNVD_TOO_MANY_ROWS: (
+        "The CNVD inputs hold more rows than the total row cap."
+    ),
+    MigrationFailureCode.CNVD_ROW_COUNT_MISMATCH: (
+        "A CNVD input has another row count than its reviewed catalog entry."
     ),
     MigrationFailureCode.LEGACY_ROOT_UNREADABLE: "Part of the legacy root cannot be read.",
     MigrationFailureCode.LEGACY_ROOT_CHANGED: "The legacy root changed while it was walked.",
@@ -240,6 +288,17 @@ class KevOutcome(StrEnum):
     FOR_EXCLUDED_NVD_RECORD = "kev_for_excluded_nvd_record"
 
 
+class CnvdOutcome(StrEnum):
+    """What became of each CNVD row after NVD resolution (ADR 0015 §3)."""
+
+    MERGED = "merged"
+    WITHOUT_NVD_RECORD = "cnvd_without_nvd_record"
+    FOR_REJECTED_NVD_RECORD = "cnvd_for_rejected_nvd_record"
+    FOR_EXCLUDED_NVD_RECORD = "cnvd_for_excluded_nvd_record"
+    WITHOUT_CVE_ID = "cnvd_without_cve_id"
+    UNRECOGNISED_CVE_ID = "cnvd_unrecognised_cve_id"
+
+
 class LegacyFileKind(StrEnum):
     """What a file found under the legacy root is, by structure or magic bytes."""
 
@@ -317,6 +376,7 @@ class MigrationReport(ContractModel):
     candidate_outcomes: dict[CandidateOutcome, int]
     normalization_failures: dict[NormalizationFailureCode, int]
     kev_outcomes: dict[KevOutcome, int]
+    cnvd_outcomes: dict[CnvdOutcome, int]
     skipped_entries: tuple[EntryLocator, ...] = Field(
         max_length=MAX_REPORTED_LOCATORS,
         description=f"The first {MAX_REPORTED_LOCATORS} skipped malformed entries.",

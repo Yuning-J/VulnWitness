@@ -43,7 +43,9 @@ from vulnwitness.adapter_discovery import (
     InterfaceUnavailable,
 )
 from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
-from vulnwitness.adapters.migration.input_files import PayloadStream
+from vulnwitness.adapters.migration.cnvd_types import CnvdRow
+from vulnwitness.adapters.migration.input_files import InputFile, PayloadStream
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
 from vulnwitness.adapters.migration.parser_types import EntryHandler, FeedHeader, MigrationParsers
 from vulnwitness.application.evidence_set_verification import MAX_EVIDENCE_SET_BYTES
 from vulnwitness.application.investigation_policy import describe_deterministic_planner
@@ -1724,12 +1726,20 @@ def refuse_to_classify_json(prefix: bytes) -> LegacyFileKind | None:
     raise AssertionError("the run walks no legacy root")
 
 
+def refuse_to_read_cnvd(
+    input_file: InputFile, limits: MigrationLimits, cnvd_ids: set[str], preceding_rows: int
+) -> tuple[CnvdRow, ...]:
+    raise AssertionError("the run reads no CNVD input")
+
+
 @pytest.fixture
 def unreached_parsers() -> MigrationParsers:
     """Parsers a run must never reach, standing in for the migration extra, so these tests
     hold in the core-only lane."""
     return MigrationParsers(
-        read_nvd_feed=refuse_to_read_feed, classify_json_prefix=refuse_to_classify_json
+        read_nvd_feed=refuse_to_read_feed,
+        classify_json_prefix=refuse_to_classify_json,
+        read_cnvd_rows=refuse_to_read_cnvd,
     )
 
 

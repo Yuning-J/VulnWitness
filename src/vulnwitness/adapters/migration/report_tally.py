@@ -12,6 +12,7 @@ from vulnwitness.domain.migration_report import (
     LEGACY_FORMATS_COMMIT,
     MAX_REPORTED_LOCATORS,
     CandidateOutcome,
+    CnvdOutcome,
     CveOutcome,
     EntryLocator,
     KevOutcome,
@@ -33,6 +34,7 @@ class ReportTally:
         self.normalization_failures: dict[NormalizationFailureCode, int] = dict.fromkeys(
             NormalizationFailureCode, 0
         )
+        self.cnvd_outcomes: dict[CnvdOutcome, int] = dict.fromkeys(CnvdOutcome, 0)
         self.kev_outcomes: dict[KevOutcome, int] = dict.fromkeys(KevOutcome, 0)
         self.skipped_entries: list[EntryLocator] = []
         self.legacy_root_findings: dict[LegacyFileKind, int] | None = None
@@ -75,6 +77,7 @@ class ReportTally:
             candidate_outcomes=self.candidate_outcomes,
             normalization_failures=self.normalization_failures,
             kev_outcomes=self.kev_outcomes,
+            cnvd_outcomes=self.cnvd_outcomes,
             kev_advice=KEV_WITHOUT_NVD_RECORD_ADVICE if has_kev_without_nvd else None,
             skipped_entries=tuple(self.skipped_entries),
             legacy_root_findings=self.legacy_root_findings,

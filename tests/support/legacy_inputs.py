@@ -17,6 +17,10 @@ from typing import Any
 import yaml
 
 from vulnwitness.adapter_discovery import InterfaceUnavailable, discover_migration_parsers
+from vulnwitness.adapters.migration.cnvd_snapshot_catalog import (
+    default_cnvd_snapshot_catalog_file,
+    load_cnvd_snapshot_catalog,
+)
 from vulnwitness.adapters.migration.inputs_manifest import load_inputs_manifest
 from vulnwitness.adapters.migration.legacy_migration import (
     MigrationDependencies,
@@ -256,6 +260,7 @@ def build_migration_dependencies(
         clock=FixedClock(now).read,
         importer_version=TEST_IMPORTER_VERSION,
         limits=limits or MigrationLimits(),
+        cnvd_catalog=load_cnvd_snapshot_catalog(default_cnvd_snapshot_catalog_file()),
     )
 
 

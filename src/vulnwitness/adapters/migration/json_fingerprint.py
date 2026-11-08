@@ -87,6 +87,8 @@ def read_prefix_keys(prefix: bytes) -> tuple[str, list[str]]:
 
 def classify_json_prefix(prefix: bytes) -> LegacyFileKind | None:
     """The kind of legacy derived file ``prefix`` begins, or ``None``."""
+    if prefix.startswith(b"PAR1"):
+        return None
     shape, keys = read_prefix_keys(prefix)
     if shape == "object":
         return classify_top_level_object(keys)

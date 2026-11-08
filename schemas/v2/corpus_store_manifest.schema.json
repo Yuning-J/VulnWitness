@@ -99,7 +99,7 @@
               "type": "null"
             }
           ],
-          "description": "Every NVD input's; null for KEV."
+          "description": "Every NVD input's; null for KEV and CNVD."
         },
         "container": {
           "$ref": "#/$defs/InputContainer"
@@ -125,7 +125,7 @@
               "type": "null"
             }
           ],
-          "description": "SHA-256 of an NVD feed's decompressed JSON payload; null for KEV.",
+          "description": "SHA-256 of an NVD feed's decompressed JSON payload; null for KEV and CNVD.",
           "title": "Payload Sha256"
         },
         "retrieved_at": {
@@ -149,7 +149,7 @@
               "type": "null"
             }
           ],
-          "description": "When the source generated the feed, as it states; null for KEV and for a feed that states no generation time.",
+          "description": "When the source generated the feed, as it states; null for KEV, CNVD and for a feed that states no generation time.",
           "title": "Source Generated At"
         },
         "source_uri": {
@@ -183,7 +183,8 @@
       "description": "The sources an import reads, by their source-registry names.",
       "enum": [
         "nvd",
-        "cisa-kev"
+        "cisa-kev",
+        "circl-cnvd"
       ],
       "title": "StoreSource",
       "type": "string"

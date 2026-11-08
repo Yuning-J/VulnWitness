@@ -26,6 +26,7 @@ HEAVY_OR_OPTIONAL_MODULES = (
     "networkx",
     "numpy",
     "pandas",
+    "pyarrow",
     "requests",
     "sentence_transformers",
     "sse_starlette",

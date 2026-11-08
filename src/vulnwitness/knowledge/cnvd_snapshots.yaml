@@ -1,0 +1,10 @@
+# Reviewed complete CIRCL/Vulnerability-CNVD revisions (ADR 0015 §2).
+snapshots:
+  - revision: "986160c9b1c910049f64a166ab4056de191f6de7"
+    files:
+      - upstream_path: "data/train-00000-of-00001.parquet"
+        sha256: "43ba97f36b023f0155b008f5591a9c390e245937c8747f7feaefae843d06c035"
+        row_count: 116871
+      - upstream_path: "data/test-00000-of-00001.parquet"
+        sha256: "d702b92d6ef51ff506dce5895dd7a01f9df029be39baff5791bf87c4022fd940"
+        row_count: 12986

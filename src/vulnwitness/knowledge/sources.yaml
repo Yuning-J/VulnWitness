@@ -32,6 +32,25 @@ sources:
     local_storage_policy: operator_supplied
     terms_verified_on: 2026-10-14
     artifact_uri_template: "https://www.cisa.gov/sites/default/files/csv/known_exploited_vulnerabilities.csv"
+  - name: circl-cnvd
+    official_url: "https://huggingface.co/datasets/CIRCL/Vulnerability-CNVD"
+    terms_or_license_url: "https://creativecommons.org/licenses/by/4.0/"
+    version_strategy: "Revision pinned in knowledge/cnvd_snapshots.yaml, with each file's SHA-256 and row count."
+    attribution: "CNVD entries from CIRCL/Vulnerability-CNVD (Hugging Face, revision 986160c), licensed CC BY 4.0 as declared by CIRCL (https://creativecommons.org/licenses/by/4.0/); normalised by VulnWitness. How this licence relates to CNVD's own terms is unverified."
+    redistribution_allowed: allowed_with_conditions
+    redistribution_conditions: "Credit CIRCL and the dataset, link the licence and indicate changes. The dataset card at revision 986160c9b1c910049f64a166ab4056de191f6de7 declares license: cc-by-4.0; how this licence relates to CNVD's own terms is unverified. The repository commits no CNVD data."
+    local_storage_policy: operator_supplied
+    terms_verified_on: 2026-11-08
+    artifact_uri_template: "https://huggingface.co/datasets/CIRCL/Vulnerability-CNVD"
+  - name: cnvd
+    official_url: "https://www.cnvd.org.cn"
+    terms_or_license_url: null
+    version_strategy: "CNVD ID; CIRCL's republished files are pinned separately in knowledge/cnvd_snapshots.yaml."
+    attribution: null
+    redistribution_allowed: unknown
+    redistribution_conditions: "CNVD's own terms are unverified; the repository commits no CNVD data."
+    local_storage_policy: operator_supplied
+    terms_verified_on: null
   - name: mitre-fight
     official_url: "https://fight.mitre.org"
     terms_or_license_url: "https://fight.mitre.org/resources/terms/"

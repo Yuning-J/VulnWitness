@@ -13,6 +13,19 @@
       "title": "CandidateOutcome",
       "type": "string"
     },
+    "CnvdOutcome": {
+      "description": "What became of each CNVD row after NVD resolution (ADR 0015 §3).",
+      "enum": [
+        "merged",
+        "cnvd_without_nvd_record",
+        "cnvd_for_rejected_nvd_record",
+        "cnvd_for_excluded_nvd_record",
+        "cnvd_without_cve_id",
+        "cnvd_unrecognised_cve_id"
+      ],
+      "title": "CnvdOutcome",
+      "type": "string"
+    },
     "CveOutcome": {
       "description": "What became of each CVE the NVD inputs name (ADR 0008 §5).",
       "enum": [
@@ -566,6 +579,262 @@
           "if": {
             "properties": {
               "code": {
+                "const": "cnvd_uncatalogued_file"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD input is not a file in the reviewed snapshot catalog."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_incomplete_snapshot"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The CNVD inputs are not exactly one reviewed revision's complete file set."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_invalid_parquet"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD input is not readable Parquet with Parquet magic."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_missing_column"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD input lacks a required column."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_extra_column"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD input has an extra or repeated column."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_mistyped_column"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD input has a column whose type is not string."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_null_value"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD row holds a null value."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_invalid_id"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD row has an invalid CNVD ID."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_repeated_id"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD ID repeats within or across the inputs."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_empty_title"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD row has an empty title."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_empty_description"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD row has an empty description."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_invalid_severity"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD row has a severity other than 高, 中 or 低."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_invalid_source"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD row has a source other than cnvd."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_file_too_large"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD input is larger than the per-file byte cap."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_too_many_rows"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "The CNVD inputs hold more rows than the total row cap."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_row_count_mismatch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A CNVD input has another row count than its reviewed catalog entry."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
                 "const": "legacy_root_unreadable"
               }
             }
@@ -866,6 +1135,22 @@
         "kev_invalid_row",
         "kev_conflicting_rows",
         "kev_too_large",
+        "cnvd_uncatalogued_file",
+        "cnvd_incomplete_snapshot",
+        "cnvd_invalid_parquet",
+        "cnvd_missing_column",
+        "cnvd_extra_column",
+        "cnvd_mistyped_column",
+        "cnvd_null_value",
+        "cnvd_invalid_id",
+        "cnvd_repeated_id",
+        "cnvd_empty_title",
+        "cnvd_empty_description",
+        "cnvd_invalid_severity",
+        "cnvd_invalid_source",
+        "cnvd_file_too_large",
+        "cnvd_too_many_rows",
+        "cnvd_row_count_mismatch",
         "legacy_root_unreadable",
         "legacy_root_changed",
         "legacy_root_too_deep",
@@ -925,6 +1210,16 @@
         "$ref": "#/$defs/CandidateOutcome"
       },
       "title": "Candidate Outcomes",
+      "type": "object"
+    },
+    "cnvd_outcomes": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/CnvdOutcome"
+      },
+      "title": "Cnvd Outcomes",
       "type": "object"
     },
     "corpus_content_sha256": {
@@ -1115,6 +1410,7 @@
     "candidate_outcomes",
     "normalization_failures",
     "kev_outcomes",
+    "cnvd_outcomes",
     "skipped_entries",
     "kev_advice",
     "legacy_root_findings",

@@ -24,8 +24,9 @@ STORE_FORMAT_VERSION: Literal[1] = 1
 # change: the change is then judged by hand (ADR 0008 §9 lists what moves the format) and
 # either re-pinned here, with the reason it keeps format 1, or made a format change. It
 # proves nothing about compatibility by itself.
-# The distribution name in importer_version's description does not affect format-1 validation.
-STORE_FORMAT_SCHEMA_SHA256 = "903bb5d0b7a9b9802cd059430472e76c051f661f8b4c860b902368435f061c04"
+# Adding circl-cnvd to StoreSource widens the accepted value set within format 1
+# (ADR 0008 §9); the provenance descriptions do not change validation.
+STORE_FORMAT_SCHEMA_SHA256 = "7fff93d3f744407cbdf1ea88410e1074a05a1bd698e5066be4486f06c016d97d"
 # NVD's first year feed; it also holds the CVE IDs of 1999 to 2001.
 FIRST_FEED_YEAR = 2002
 STORE_FILE_NAME_PATTERN = r"^[a-z_]+\.jsonl$"
@@ -51,6 +52,7 @@ class StoreSource(StrEnum):
 
     NVD = "nvd"
     CISA_KEV = "cisa-kev"
+    CIRCL_CNVD = "circl-cnvd"
 
 
 class NvdFeedFormat(StrEnum):
@@ -116,7 +118,7 @@ class StoreInput(ContractModel):
     """One input as the store records it, in the sorted order of the import identity."""
 
     source: StoreSource
-    artifact: NvdArtifact | None = Field(description="Every NVD input's; null for KEV.")
+    artifact: NvdArtifact | None = Field(description="Every NVD input's; null for KEV and CNVD.")
     container: InputContainer
     source_uri: str = Field(min_length=1, max_length=2048)
     source_version: str = Field(pattern=SOURCE_VERSION_PATTERN)
@@ -125,11 +127,11 @@ class StoreInput(ContractModel):
     )
     payload_sha256: str | None = Field(
         pattern=SHA256_PATTERN,
-        description="SHA-256 of an NVD feed's decompressed JSON payload; null for KEV.",
+        description="SHA-256 of an NVD feed's decompressed JSON payload; null for KEV and CNVD.",
     )
     retrieved_at: Timestamp = Field(description="When the operator obtained the file.")
     source_generated_at: Timestamp | None = Field(
-        description="When the source generated the feed, as it states; null for KEV and "
+        description="When the source generated the feed, as it states; null for KEV, CNVD and "
         "for a feed that states no generation time."
     )
     input_bytes: int = Field(ge=0)
@@ -137,8 +139,8 @@ class StoreInput(ContractModel):
     @model_validator(mode="after")
     def check_source_fields(self) -> Self:
         """An NVD input names its artifact and payload, and its version is the payload's
-        hash; a KEV input is a plain file with no generation time, and its version is the
-        file's hash (ADR 0008 §3)."""
+        hash; a KEV or CNVD input is a plain file with no generation time, and its version
+        is the file's hash (ADR 0008 §3)."""
         if self.source is StoreSource.NVD:
             if self.artifact is None or self.payload_sha256 is None:
                 raise ValueError("an NVD input names its artifact and payload")
@@ -146,9 +148,11 @@ class StoreInput(ContractModel):
         else:
             has_nvd_fields = self.artifact is not None or self.payload_sha256 is not None
             if has_nvd_fields or self.source_generated_at is not None:
-                raise ValueError("a KEV input names no artifact, payload or generation time")
+                raise ValueError(
+                    "a KEV or CNVD input names no artifact, payload or generation time"
+                )
             if self.container is not InputContainer.PLAIN:
-                raise ValueError("a KEV input is a plain file")
+                raise ValueError("a KEV or CNVD input is a plain file")
             version_sha256 = self.input_file_sha256
         if self.source_version != f"sha256:{version_sha256}":
             raise ValueError("source_version is the hash the input's source is versioned by")

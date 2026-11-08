@@ -3,15 +3,17 @@
 The MIT licence of this repository covers its code only. Every data source is a
 separate provenance subject; the machine-readable registry is
 `src/vulnwitness/knowledge/sources.yaml`. Terms below were read from the official
-pages on 2026-10-14, and the trustify-mcp licence on 2026-10-17. Where they could
-not be verified the entry says so, and this repository commits no data from that
-source.
+pages on 2026-10-14, the trustify-mcp licence on 2026-10-17, and CIRCL's declared
+CNVD licence on 2026-11-08. Where they could not be verified the entry says so, and
+this repository commits no data from that source.
 
 | Source | Terms | Redistribution | Stored here |
 |---|---|---|---|
 | NVD | https://nvd.nist.gov/developers/terms-of-use | allowed with conditions | operator-supplied feeds and the corpus stores imported from them only |
 | CVE Program | https://www.cve.org/Legal/TermsOfUse | allowed with conditions | operator-supplied only |
 | CISA KEV | https://www.cisa.gov/sites/default/files/licenses/kev/license.txt | allowed (CC0 1.0) | operator-supplied catalogs and the corpus stores imported from them only |
+| CIRCL/Vulnerability-CNVD | https://creativecommons.org/licenses/by/4.0/ (as declared by CIRCL) | allowed with conditions | operator-supplied only; no CNVD data committed |
+| CNVD | not verified (https://www.cnvd.org.cn) | unknown | operator-supplied only; no CNVD data committed |
 | MITRE FiGHT | https://fight.mitre.org/resources/terms/ | allowed with conditions (FiGHT Terms of Use; ATT&CK terms for derived content) | six-technique excerpt (`src/vulnwitness/fixtures/fight/`); the full file only as an operator-supplied snapshot |
 | MITRE ATT&CK | https://attack.mitre.org/resources/legal-and-branding/terms-of-use/ | allowed with conditions | FiGHT excerpt and the derived weakness mapping excerpt (technique names, IDs and tactics) |
 | MITRE CWE | https://cwe.mitre.org/about/termsofuse.html | copies allowed with conditions | related CAPEC links in the derived weakness mapping excerpt |
@@ -45,6 +47,12 @@ source.
   policies and licenses of those 3rd party websites. Use of the information does
   not authorize you to use the CISA Logo or DHS Seal, nor should such use be
   interpreted as an endorsement by CISA or DHS."
+- **CIRCL/Vulnerability-CNVD.** The [dataset card at the pinned revision](https://huggingface.co/datasets/CIRCL/Vulnerability-CNVD/blob/986160c9b1c910049f64a166ab4056de191f6de7/README.md)
+  declares "license: cc-by-4.0". [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+  requires: "You must give appropriate credit, provide a link to the license, and
+  indicate if changes were made." Credit CIRCL and the dataset; VulnWitness's
+  attribution states that it normalises the entries. How this licence relates to
+  CNVD's own terms is unverified. The repository commits no CNVD data.
 - **MITRE FiGHT.** The website grants: "a non-exclusive, royalty-free license to
   use FiGHT™ for research, development, and commercial purposes. Any copy you make
   for such purposes is authorized provided that you reproduce MITRE's copyright

@@ -19,11 +19,13 @@ from tests.support.planners import AdapterAbort, ScriptedModelPort, reconfigure_
 from vulnwitness.adapter_discovery import (
     API_EXTRA,
     MCP_EXTRA,
+    MIGRATION_EXTRA,
     GuardedModelPort,
     InterfaceUnavailable,
     discover_api_server_runner,
     discover_mcp_http_server_runner,
     discover_mcp_server_runner,
+    discover_migration_parsers,
     discover_planner_setup,
     discover_semantic_retriever,
 )
@@ -541,4 +543,19 @@ def test_interrupt_while_loading_the_semantic_adapter_stops_the_process_without_
 
     assert raised.value.args == ()
     assert raised.value.__suppress_context__ is True
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize("missing_module", ["ijson", "pyarrow"], ids=str)
+def test_migration_parser_load_without_an_extra_module_reports_the_missing_extra(
+    caplog: pytest.LogCaptureFixture, missing_module: str
+) -> None:
+    registry = FakeAdapterRegistry(
+        [FakeEntryPoint("migration_parsers", ImportFailure(missing_module).load)]
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="vulnwitness.adapter_discovery"):
+        parsers = discover_migration_parsers(registry.list_adapters)
+
+    assert parsers == InterfaceUnavailable(MIGRATION_EXTRA.missing_detail)
     assert caplog.records == []

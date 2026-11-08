@@ -3,7 +3,7 @@
 # Modules that import an optional extra, loaded only through an entry point: the semantic
 # adapter, every module of the MCP server, HTTP, REST and UI packages (not the
 # packages themselves, which stay empty), the shared anyio readiness signal, and
-# the importer's JSON parsers.
+# the importer's JSON and Parquet parsers.
 OPTIONAL_MODULE_PREFIXES = (
     "vulnwitness.adapters.semantic.chroma_retriever",
     "vulnwitness.interfaces.mcp.",
@@ -14,6 +14,7 @@ OPTIONAL_MODULE_PREFIXES = (
     "vulnwitness.adapters.migration.ijson_events",
     "vulnwitness.adapters.migration.json_fingerprint",
     "vulnwitness.adapters.migration.nvd_feed_reader",
+    "vulnwitness.adapters.migration.cnvd_parquet_reader",
 )
 # Imports each core module; a package that fails to import fails the script instead of
 # being skipped, which is what walk_packages does without an onerror.
