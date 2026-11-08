@@ -8,6 +8,7 @@ from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode, JsonSchemaV
 from pydantic_core import CoreSchema, core_schema
 
 from vulnwitness.domain.affectedness import AffectednessCheck, AffectednessRequest
+from vulnwitness.domain.asset_register import AssetRegister
 from vulnwitness.domain.cnvd import PendingCnvdEntry
 from vulnwitness.domain.corpus_store_manifest import CorpusStoreManifest
 from vulnwitness.domain.cve import CveRecord
@@ -20,6 +21,7 @@ from vulnwitness.domain.http_rejection import HttpRejection
 from vulnwitness.domain.investigation import InvestigationRequest, KnowledgeEvidenceSet
 from vulnwitness.domain.migration_report import MigrationReport
 from vulnwitness.domain.planning import QueryPlan
+from vulnwitness.domain.priority_decision import PriorityArtifact
 from vulnwitness.domain.product_query import ProductQueryRequest, ProductQueryResponse
 from vulnwitness.domain.relevance import RelevanceProposal
 from vulnwitness.domain.search import SCHEMA_VERSION, SearchRequest, SearchResponse
@@ -54,6 +56,7 @@ MANIFEST_FILE = "manifest.json"
 # The evidence-set schema relies on ``prefixItems``, which earlier drafts read differently.
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
+    "asset_register": AssetRegister,
     "wait_for_data_request": WaitForDataRequest,
     "session_findings": SessionFindings,
     "product_query_request": ProductQueryRequest,
@@ -74,6 +77,7 @@ REQUEST_CONTRACTS: dict[str, type[BaseModel]] = {
     "affectedness_request": AffectednessRequest,
 }
 RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
+    "priority": PriorityArtifact,
     "wait_for_data_response": WaitForDataResponse,
     "triage": TriageSummary,
     "session_record": SessionRecord,

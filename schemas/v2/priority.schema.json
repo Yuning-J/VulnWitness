@@ -1,0 +1,684 @@
+{
+  "$defs": {
+    "ApplicabilityFact": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "affected",
+            "not_affected",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids"
+      ],
+      "title": "ApplicabilityFact",
+      "type": "object"
+    },
+    "ComplianceStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "missing_basis": {
+          "items": {
+            "enum": [
+              "platform_record",
+              "platform_grade",
+              "publication_date",
+              "reference_date",
+              "handling_evidence"
+            ],
+            "type": "string"
+          },
+          "title": "Missing Basis",
+          "type": "array"
+        },
+        "reason": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        },
+        "regulation_id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Regulation Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "basis_insufficient",
+            "not_applicable",
+            "not_met",
+            "met"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "regulation_id",
+        "status",
+        "missing_basis",
+        "reason"
+      ],
+      "title": "ComplianceStatus",
+      "type": "object"
+    },
+    "DecisionResponseDigest": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "response_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Response Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call",
+        "response_sha256"
+      ],
+      "title": "DecisionResponseDigest",
+      "type": "object"
+    },
+    "HighGradeFact": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "triggering_authorities": {
+            "maxItems": 0
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "value": {
+            "const": "present"
+          }
+        }
+      },
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "triggering_authorities": {
+          "default": [],
+          "items": {
+            "enum": [
+              "NVD",
+              "CNVD"
+            ],
+            "type": "string"
+          },
+          "title": "Triggering Authorities",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "present",
+            "absent",
+            "none_available"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids",
+        "triggering_authorities"
+      ],
+      "then": {
+        "properties": {
+          "triggering_authorities": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "triggering_authorities"
+        ]
+      },
+      "title": "HighGradeFact",
+      "type": "object"
+    },
+    "KevFact": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "snapshot_retrieved_at": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "value": {
+            "const": "not_listed_in_snapshot"
+          }
+        }
+      },
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "snapshot_retrieved_at": {
+          "anyOf": [
+            {
+              "format": "date",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Snapshot Retrieved At"
+        },
+        "value": {
+          "enum": [
+            "listed",
+            "not_listed_in_snapshot",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids",
+        "snapshot_retrieved_at"
+      ],
+      "then": {
+        "properties": {
+          "snapshot_retrieved_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_retrieved_at"
+        ]
+      },
+      "title": "KevFact",
+      "type": "object"
+    },
+    "PolicyCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "fact": {
+          "enum": [
+            "applicability",
+            "system_category",
+            "kev",
+            "high_grade"
+          ],
+          "title": "Fact",
+          "type": "string"
+        },
+        "operator": {
+          "enum": [
+            "equals",
+            "in"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "fact",
+        "operator",
+        "values"
+      ],
+      "title": "PolicyCondition",
+      "type": "object"
+    },
+    "PolicyIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1,
+          "title": "Format Version",
+          "type": "integer"
+        },
+        "name": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "format_version",
+        "content_sha256"
+      ],
+      "title": "PolicyIdentity",
+      "type": "object"
+    },
+    "PriorityDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "asset": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Asset",
+          "type": "string"
+        },
+        "compliance": {
+          "items": {
+            "$ref": "#/$defs/ComplianceStatus"
+          },
+          "title": "Compliance",
+          "type": "array"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "earlier_unmatched_rules": {
+          "items": {
+            "$ref": "#/$defs/UnmatchedRule"
+          },
+          "title": "Earlier Unmatched Rules",
+          "type": "array"
+        },
+        "facts": {
+          "$ref": "#/$defs/PriorityFacts"
+        },
+        "matched_rule": {
+          "$ref": "#/$defs/PriorityRule"
+        },
+        "reason": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        },
+        "recommendation": {
+          "enum": [
+            "act",
+            "attend",
+            "track",
+            "manual_triage_required"
+          ],
+          "title": "Recommendation",
+          "type": "string"
+        },
+        "unknown_facts": {
+          "items": {
+            "enum": [
+              "applicability",
+              "system_category",
+              "kev",
+              "high_grade"
+            ],
+            "type": "string"
+          },
+          "title": "Unknown Facts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "asset",
+        "cve_id",
+        "recommendation",
+        "reason",
+        "matched_rule",
+        "facts",
+        "unknown_facts",
+        "earlier_unmatched_rules",
+        "compliance"
+      ],
+      "title": "PriorityDecision",
+      "type": "object"
+    },
+    "PriorityFacts": {
+      "additionalProperties": false,
+      "properties": {
+        "applicability": {
+          "$ref": "#/$defs/ApplicabilityFact"
+        },
+        "high_grade": {
+          "$ref": "#/$defs/HighGradeFact"
+        },
+        "kev": {
+          "$ref": "#/$defs/KevFact"
+        },
+        "system_category": {
+          "$ref": "#/$defs/SystemCategoryFact"
+        }
+      },
+      "required": [
+        "applicability",
+        "system_category",
+        "kev",
+        "high_grade"
+      ],
+      "title": "PriorityFacts",
+      "type": "object"
+    },
+    "PriorityRule": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "items": {
+            "$ref": "#/$defs/PolicyCondition"
+          },
+          "title": "Conditions",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "act",
+            "attend",
+            "track",
+            "manual_triage_required"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Fixed policy text; may interpolate justification or high_grade_reasons.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "conditions",
+        "outcome",
+        "reason"
+      ],
+      "title": "PriorityRule",
+      "type": "object"
+    },
+    "ServedDataset": {
+      "additionalProperties": false,
+      "description": "What the deployment's CVE records and evidence are. ``cve_search_version`` is the\n``cve_search`` capability's version: equal versions name byte-for-byte equal records\nand evidence, so a set sealed under one verifies under the other.",
+      "properties": {
+        "cve_search_version": {
+          "minLength": 1,
+          "title": "Cve Search Version",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ServedDatasetKind"
+        }
+      },
+      "required": [
+        "kind",
+        "cve_search_version"
+      ],
+      "title": "ServedDataset",
+      "type": "object"
+    },
+    "ServedDatasetKind": {
+      "enum": [
+        "synthetic_fixture",
+        "corpus_store"
+      ],
+      "title": "ServedDatasetKind",
+      "type": "string"
+    },
+    "SessionDatasetIdentity": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "store_name": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "served": {
+            "properties": {
+              "kind": {
+                "const": "corpus_store"
+              }
+            }
+          }
+        }
+      },
+      "properties": {
+        "corpus_content_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Corpus Content Sha256",
+          "type": "string"
+        },
+        "fight_snapshot_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Fight Snapshot Sha256"
+        },
+        "mitre_snapshot_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mitre Snapshot Sha256"
+        },
+        "served": {
+          "$ref": "#/$defs/ServedDataset"
+        },
+        "store_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Store Manifest Sha256",
+          "type": "string"
+        },
+        "store_name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Store Name"
+        }
+      },
+      "required": [
+        "served",
+        "store_name",
+        "store_manifest_sha256",
+        "corpus_content_sha256",
+        "fight_snapshot_sha256",
+        "mitre_snapshot_sha256"
+      ],
+      "then": {
+        "properties": {
+          "store_name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "title": "SessionDatasetIdentity",
+      "type": "object"
+    },
+    "SystemCategoryFact": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "external_connection",
+            "software_update",
+            "other",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids"
+      ],
+      "title": "SystemCategoryFact",
+      "type": "object"
+    },
+    "UnmatchedRule": {
+      "additionalProperties": false,
+      "properties": {
+        "failed_conditions": {
+          "items": {
+            "$ref": "#/$defs/PolicyCondition"
+          },
+          "minItems": 1,
+          "title": "Failed Conditions",
+          "type": "array"
+        },
+        "rule_id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Rule Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "failed_conditions"
+      ],
+      "title": "UnmatchedRule",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "dataset": {
+      "$ref": "#/$defs/SessionDatasetIdentity"
+    },
+    "decisions": {
+      "items": {
+        "$ref": "#/$defs/PriorityDecision"
+      },
+      "title": "Decisions",
+      "type": "array"
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicyIdentity"
+    },
+    "program_version": {
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Program Version",
+      "type": "string"
+    },
+    "reference_date": {
+      "format": "date",
+      "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+      "title": "Reference Date",
+      "type": "string"
+    },
+    "register_sha256": {
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Register Sha256",
+      "type": "string"
+    },
+    "response_digests": {
+      "items": {
+        "$ref": "#/$defs/DecisionResponseDigest"
+      },
+      "title": "Response Digests",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.56",
+      "default": "2.0.0-dev.56",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "used_after_reference_date_information": {
+      "title": "Used After Reference Date Information",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "program_version",
+    "policy",
+    "dataset",
+    "response_digests",
+    "register_sha256",
+    "reference_date",
+    "used_after_reference_date_information",
+    "decisions"
+  ],
+  "title": "PriorityArtifact",
+  "type": "object"
+}

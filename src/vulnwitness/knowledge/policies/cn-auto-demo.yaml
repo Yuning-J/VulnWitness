@@ -1,0 +1,100 @@
+format_version: 1
+name: cn-auto-demo
+rules:
+  - id: rule-1
+    conditions:
+      - fact: applicability
+        operator: equals
+        values: [unknown]
+    outcome: manual_triage_required
+    reason: "Applicability has not been assessed."
+  - id: rule-2
+    conditions:
+      - fact: applicability
+        operator: equals
+        values: [not_affected]
+    outcome: track
+    reason: "The analyst assessed the asset as not affected: {justification}"
+  - id: rule-3
+    conditions:
+      - fact: applicability
+        operator: equals
+        values: [affected]
+      - fact: kev
+        operator: equals
+        values: [listed]
+      - fact: system_category
+        operator: in
+        values: [external_connection, software_update]
+    outcome: act
+    reason: "The affected asset is in a policy-selected system category and the CVE is KEV-listed."
+  - id: rule-4
+    conditions:
+      - fact: applicability
+        operator: equals
+        values: [affected]
+      - fact: kev
+        operator: equals
+        values: [listed]
+    outcome: attend
+    reason: "The affected asset's CVE is KEV-listed."
+  - id: rule-5
+    conditions:
+      - fact: applicability
+        operator: equals
+        values: [affected]
+      - fact: system_category
+        operator: equals
+        values: [unknown]
+    outcome: manual_triage_required
+    reason: "The affected asset's system category is unknown."
+  - id: rule-6
+    conditions:
+      - fact: applicability
+        operator: equals
+        values: [affected]
+      - fact: system_category
+        operator: in
+        values: [external_connection, software_update]
+      - fact: high_grade
+        operator: equals
+        values: [present]
+    outcome: attend
+    reason: "{high_grade_reasons}"
+  - id: rule-7
+    conditions:
+      - fact: applicability
+        operator: equals
+        values: [affected]
+      - fact: kev
+        operator: equals
+        values: [unknown]
+    outcome: manual_triage_required
+    reason: "The KEV status is unknown."
+  - id: rule-8
+    conditions:
+      - fact: applicability
+        operator: equals
+        values: [affected]
+      - fact: system_category
+        operator: in
+        values: [external_connection, software_update]
+      - fact: high_grade
+        operator: equals
+        values: [none_available]
+    outcome: manual_triage_required
+    reason: "No usable authority grade is available."
+  - id: rule-9
+    conditions: []
+    outcome: track
+    reason: "No earlier rule in this triage policy matched."
+regulations:
+  - id: gb-44495-vulnerability-clause
+    market: CN
+    system_categories: [external_connection, software_update]
+    required_basis:
+      - platform_record
+      - platform_grade
+      - publication_date
+      - reference_date
+      - handling_evidence

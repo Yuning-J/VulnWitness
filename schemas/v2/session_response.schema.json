@@ -85,8 +85,8 @@
           "$ref": "#/$defs/AffectednessRequest"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         }
@@ -867,8 +867,8 @@
           "$ref": "#/$defs/TopicResolution"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         }
@@ -1089,8 +1089,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         },
@@ -1616,8 +1616,8 @@
           "$ref": "#/$defs/EvidenceAnchor"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         }
@@ -2273,8 +2273,8 @@
           "type": "boolean"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         },
@@ -2673,8 +2673,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         },
@@ -3923,8 +3923,8 @@
           "title": "Product"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         },
@@ -5015,8 +5015,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         },
@@ -6522,8 +6522,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         },
@@ -6985,8 +6985,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.55",
-          "default": "2.0.0-dev.55",
+          "const": "2.0.0-dev.56",
+          "default": "2.0.0-dev.56",
           "title": "Schema Version",
           "type": "string"
         },

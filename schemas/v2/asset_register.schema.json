@@ -1,0 +1,151 @@
+{
+  "$defs": {
+    "Asset": {
+      "additionalProperties": false,
+      "properties": {
+        "markets": {
+          "items": {
+            "pattern": "^[A-Z]{2}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Markets",
+          "type": "array"
+        },
+        "name": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Name",
+          "type": "string"
+        },
+        "system_category": {
+          "enum": [
+            "external_connection",
+            "software_update",
+            "other",
+            "unknown"
+          ],
+          "title": "System Category",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "markets",
+        "system_category"
+      ],
+      "title": "Asset",
+      "type": "object"
+    },
+    "AssetAssessment": {
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "applicability": {
+            "enum": [
+              "affected",
+              "not_affected"
+            ]
+          }
+        }
+      },
+      "properties": {
+        "applicability": {
+          "enum": [
+            "affected",
+            "not_affected",
+            "unknown"
+          ],
+          "title": "Applicability",
+          "type": "string"
+        },
+        "assessed_at": {
+          "format": "date",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+          "title": "Assessed At",
+          "type": "string"
+        },
+        "assessor": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Assessor",
+          "type": "string"
+        },
+        "asset": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Asset",
+          "type": "string"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "justification": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Justification"
+        }
+      },
+      "required": [
+        "asset",
+        "cve_id",
+        "applicability",
+        "assessor",
+        "assessed_at"
+      ],
+      "then": {
+        "properties": {
+          "justification": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "justification"
+        ]
+      },
+      "title": "AssetAssessment",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assessments": {
+      "items": {
+        "$ref": "#/$defs/AssetAssessment"
+      },
+      "title": "Assessments",
+      "type": "array"
+    },
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/Asset"
+      },
+      "title": "Assets",
+      "type": "array"
+    },
+    "format_version": {
+      "const": 1,
+      "title": "Format Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "format_version",
+    "assets",
+    "assessments"
+  ],
+  "title": "AssetRegister",
+  "type": "object"
+}

@@ -197,8 +197,8 @@
       "$ref": "#/$defs/SessionRecordCheck"
     },
     "schema_version": {
-      "const": "2.0.0-dev.55",
-      "default": "2.0.0-dev.55",
+      "const": "2.0.0-dev.56",
+      "default": "2.0.0-dev.56",
       "title": "Schema Version",
       "type": "string"
     },
