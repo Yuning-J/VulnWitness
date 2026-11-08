@@ -17,6 +17,7 @@ from vulnwitness.domain.investigation import (
     pin_capability_order,
 )
 from vulnwitness.domain.investigation_validation import find_capability_shape_violations
+from vulnwitness.domain.kev import KevCapability
 from vulnwitness.domain.search import (
     MAX_RESULTS_PER_CALL,
     SCHEMA_VERSION,
@@ -47,6 +48,7 @@ class KnowledgeCapabilities(ContractModel):
         json_schema_extra=pin_capability_order,
     )
     weakness_associations: WeaknessSnapshotCapability | None = None
+    kev: KevCapability = KevCapability(imported=False)
     cnvd: CnvdCapability = CnvdCapability(imported=False)
     purl_filter_available: StrictBool = Field(
         description=(

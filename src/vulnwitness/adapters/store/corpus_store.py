@@ -45,6 +45,7 @@ from vulnwitness.domain.corpus_store_manifest import (
 from vulnwitness.domain.cve import CnvdEntry, CveRecord
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.hashing import canonical_json_bytes, canonical_sha256, sha256_hex
+from vulnwitness.domain.kev import KevCapability
 from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
 from vulnwitness.domain.session_record import SessionCorpusIdentity
 from vulnwitness.domain.taxonomy import AssertionKind, KnowledgeScope, SourceType, TrustLevel
@@ -103,6 +104,16 @@ class CorpusStore:
     cnvd_index: CnvdIndex
 
     store_name: str
+
+    def describe_kev(self) -> KevCapability:
+        for store_input in self.manifest.inputs:
+            if store_input.source is StoreSource.CISA_KEV:
+                return KevCapability(
+                    imported=True,
+                    retrieved_at=store_input.retrieved_at,
+                    source_version=store_input.source_version,
+                )
+        return KevCapability(imported=False)
 
     def describe_session_corpus(self) -> SessionCorpusIdentity:
         return SessionCorpusIdentity(

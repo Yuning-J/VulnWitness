@@ -43,6 +43,7 @@ class PriorityDecision(ContractModel):
     unknown_facts: tuple[FactName, ...]
     earlier_unmatched_rules: tuple[UnmatchedRule, ...]
     compliance: tuple[ComplianceStatus, ...]
+    notes: tuple[NonblankText, ...] = ()
 
 
 class PolicyIdentity(ContractModel):

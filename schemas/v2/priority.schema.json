@@ -332,6 +332,16 @@
         "matched_rule": {
           "$ref": "#/$defs/PriorityRule"
         },
+        "notes": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
         "reason": {
           "minLength": 1,
           "pattern": "\\S",
@@ -371,7 +381,8 @@
         "facts",
         "unknown_facts",
         "earlier_unmatched_rules",
-        "compliance"
+        "compliance",
+        "notes"
       ],
       "title": "PriorityDecision",
       "type": "object"

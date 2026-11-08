@@ -212,6 +212,7 @@ def build_search_service(
         semantic_retriever=semantic_retriever,
         weakness_mapping=weakness_mapping,
         cnvd_index=served_corpus.cnvd_index,
+        kev_capability=served_corpus.describe_kev(),
         cnvd_language=cnvd_language,
         cnvd_attribution=load_packaged_source_registry().find_source("circl-cnvd").attribution,
     )

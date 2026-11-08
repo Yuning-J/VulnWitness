@@ -79,6 +79,7 @@ def describe_knowledge_capabilities(
         source_capabilities=source_capabilities,
         weakness_associations=deployment.search_service.describe_weakness_snapshot(),
         cnvd=deployment.search_service.describe_cnvd(),
+        kev=deployment.search_service.describe_kev(),
         purl_filter_available=deployment.search_service.serves_purl_filter(),
     )
 

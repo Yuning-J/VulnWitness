@@ -25,6 +25,7 @@ from vulnwitness.domain.evidence import (
     seal_evidence_anchor,
 )
 from vulnwitness.domain.hashing import canonical_sha256, sha256_hex
+from vulnwitness.domain.kev import KevCapability
 from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
 from vulnwitness.domain.session_record import SessionCorpusIdentity
 from vulnwitness.domain.taxonomy import (
@@ -63,6 +64,11 @@ class FixtureBundle:
     records: tuple[CveRecord, ...]
     evidence: tuple[EvidenceAnchor, ...]
     cnvd_index: CnvdIndex = field(default_factory=CnvdIndex)
+    kev_snapshot: KevCapability = field(default_factory=lambda: KevCapability(imported=False))
+
+    def describe_kev(self) -> KevCapability:
+        """The declared synthetic snapshot state; packaged fields import no CISA snapshot."""
+        return self.kev_snapshot
 
     def describe_session_corpus(self) -> SessionCorpusIdentity:
         records_digest = next(

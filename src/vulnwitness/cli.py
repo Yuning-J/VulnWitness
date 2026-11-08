@@ -226,6 +226,7 @@ from vulnwitness.interfaces.product_query_output import (
 from vulnwitness.interfaces.search_summary import render_search_summary
 from vulnwitness.ports.served_corpus import ServedCorpus
 from vulnwitness.ports.sources import FightSource
+from vulnwitness.priority_cli import add_priority_parser, run_priority
 from vulnwitness.report_cli import add_report_parser, run_report
 from vulnwitness.schema_snapshots import find_schema_drift, write_contract_schemas
 from vulnwitness.settings import (
@@ -370,6 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vulnwitness", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     add_report_parser(commands)
+    add_priority_parser(commands)
     hook_parser = commands.add_parser("hook", help="run an advisory Claude Code hook from stdin")
     hook_commands = hook_parser.add_subparsers(dest="hook_command", required=True)
     hook_commands.add_parser("record-investigation", help="record returned investigation IDs")
@@ -1822,6 +1824,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         )
     if arguments.command == "report":
         return run_report(arguments, parser)
+    if arguments.command == "prioritise":
+        return run_priority(arguments, parser)
     try:
         settings = load_settings(os.environ if environment is None else environment)
     except SettingsError as error:

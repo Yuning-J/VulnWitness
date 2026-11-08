@@ -103,19 +103,7 @@ def compare_cnvd_severity(
             cnvd_raw_severity=CNVD_RAW_SEVERITIES[entry.severity],
             nvd_raw_severity=None,
         )
-    compared_severity = None
-    for version in ("3.1", "3.0"):
-        for metric in record.cvss:
-            if metric.version == version and metric.scorer == "nvd@nist.gov":
-                compared_severity = ComparedNvdSeverity(
-                    base_severity=metric.base_severity,
-                    cvss_version=version,
-                    scorer=metric.scorer,
-                    scorer_type=metric.scorer_type,
-                )
-                break
-        if compared_severity is not None:
-            break
+    compared_severity = select_nvd_cvss3(record)
     grade_relative: Literal["higher", "same", "lower", "not_compared"] = "not_compared"
     reason: Literal["no_nvd_cvss3_metric", "no_usable_base_severity"] | None = None
     if compared_severity is None:
@@ -140,3 +128,17 @@ def compare_cnvd_severity(
         cnvd_raw_severity=CNVD_RAW_SEVERITIES[entry.severity],
         nvd_raw_severity=compared_severity,
     )
+
+
+def select_nvd_cvss3(record: CveRecord) -> ComparedNvdSeverity | None:
+    """NVD's own v3.1 metric, else v3.0; an unusable v3.1 never falls back."""
+    for version in ("3.1", "3.0"):
+        for metric in record.cvss:
+            if metric.version == version and metric.scorer == "nvd@nist.gov":
+                return ComparedNvdSeverity(
+                    base_severity=metric.base_severity,
+                    cvss_version=version,
+                    scorer=metric.scorer,
+                    scorer_type=metric.scorer_type,
+                )
+    return None

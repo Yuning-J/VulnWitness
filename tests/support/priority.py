@@ -1,9 +1,17 @@
 """Synthetic explicit inputs shared by priority policy boundary tests."""
 
+from dataclasses import replace
 from datetime import date
+from pathlib import Path
 from typing import Any
 
+import yaml
+
+from tests.support.builders import FIXED_RETRIEVED_AT
+from tests.support.report_sessions import build_cnvd_report_corpus
+from tests.support.workspaces import build_test_workspace
 from vulnwitness.domain.asset_register import Applicability, Asset, AssetAssessment, SystemCategory
+from vulnwitness.domain.kev import KevCapability
 from vulnwitness.domain.priority_decision import PolicyIdentity, PriorityArtifact, PriorityDecision
 from vulnwitness.domain.priority_facts import (
     ApplicabilityFact,
@@ -17,6 +25,7 @@ from vulnwitness.domain.priority_facts import (
 )
 from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
 from vulnwitness.domain.session_record import SessionDatasetIdentity
+from vulnwitness.domain.workspace import StartInvestigationRequest
 
 EVIDENCE_ID = "ev:1234567890abcdef12345678"
 REFERENCE_DATE = date(2026, 11, 8)
@@ -93,3 +102,68 @@ def build_priority_artifact(decisions: tuple[PriorityDecision, ...]) -> Priority
         used_after_reference_date_information=False,
         decisions=decisions,
     )
+
+
+def build_priority_session(
+    root: Path,
+    cve_ids: tuple[str, ...] = ("CVE-9999-0001",),
+    *,
+    record_capabilities: bool = True,
+    kev_imported: bool = True,
+    record_overrides: dict[str, Any] | None = None,
+) -> Path:
+    """Frozen real workspace calls over the shared synthetic CNVD comparison corpus."""
+    corpus = build_cnvd_report_corpus()
+    records = list(corpus.records)
+    if record_overrides is not None:
+        records[0] = records[0].model_copy(update=record_overrides)
+    snapshot = KevCapability(imported=False)
+    if kev_imported:
+        snapshot = KevCapability(
+            imported=True,
+            retrieved_at=FIXED_RETRIEVED_AT,
+            source_version="synthetic-kev-snapshot",
+        )
+    corpus = replace(corpus, records=tuple(records), kev_snapshot=snapshot)
+    _, workspace = build_test_workspace(root, corpus=corpus)
+    started = workspace.start(StartInvestigationRequest(goal="Synthetic priority decisions"))
+    if record_capabilities:
+        workspace.record(started.session_id, "get_knowledge_capabilities", {})
+    for cve_id in cve_ids:
+        workspace.record(started.session_id, "lookup_cve", {"cve_id": cve_id})
+    return root / started.session_id
+
+
+def write_priority_register(
+    path: Path,
+    cve_ids: tuple[str, ...] = ("CVE-9999-0001",),
+    *,
+    category: str = "external_connection",
+    applicability: str = "affected",
+) -> Path:
+    document = build_register_document()
+    document["assets"][0]["system_category"] = category
+    assessments = []
+    for cve_id in cve_ids:
+        assessment = dict(document["assessments"][0])
+        assessment["cve_id"] = cve_id
+        assessment["applicability"] = applicability
+        assessments.append(assessment)
+    document["assessments"] = assessments
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    return path
+
+
+def priority_arguments(
+    directory: Path, assets: Path, reference_date: str = "2026-11-08"
+) -> list[str]:
+    return [
+        "prioritise",
+        str(directory),
+        "--assets",
+        str(assets),
+        "--policy",
+        "cn-auto-demo",
+        "--as-of",
+        reference_date,
+    ]

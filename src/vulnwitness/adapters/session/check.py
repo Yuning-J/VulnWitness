@@ -68,15 +68,20 @@ class SessionChecker:
         self._session: SessionRecord | None = None
         self._findings: SessionFindings | None = None
         self._recorded_responses: dict[int, BaseModel] = {}
+        self._response_digests: dict[int, str] = {}
 
     def check_with_contents(self) -> CheckedSession:
         """Return the check and the same parsed files it checked, without rereading them."""
         report = self.check()
+        response_digests: dict[int, str] = {}
+        for sequence in self._responses:
+            response_digests[sequence] = self._response_digests[sequence]
         return CheckedSession(
             check=report,
             session=self._session,
             calls=tuple(self._calls.values()),
             responses=dict(self._recorded_responses),
+            response_digests=response_digests,
             findings=self._findings,
         )
 
@@ -92,6 +97,7 @@ class SessionChecker:
         self._session = None
         self._findings = None
         self._recorded_responses.clear()
+        self._response_digests.clear()
         try:
             check_session_path(self._directory)
             session = parse_session_document(
@@ -213,7 +219,8 @@ class SessionChecker:
             return None
         try:
             content = read_session_file(self._directory / location)
-            if call.response_sha256 is not None and call.response_sha256 != sha256_hex(content):
+            response_digest = sha256_hex(content)
+            if call.response_sha256 is not None and call.response_sha256 != response_digest:
                 self._add(location, "response bytes differ from the recorded input digest")
             answer = parse_session_document(content, response_model)
             document = json.loads(content)
@@ -229,6 +236,7 @@ class SessionChecker:
             self._add(f"calls/{call.sequence:04d}.json.request", "successful call needs a request")
         self._anchors[call.sequence] = collect_response_anchors(document)
         self._recorded_responses[call.sequence] = answer
+        self._response_digests[call.sequence] = response_digest
         return answer
 
     def _check_findings(self, session: SessionRecord) -> None:

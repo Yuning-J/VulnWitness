@@ -11,6 +11,7 @@ from vulnwitness.domain.cve_lookup import CveLookupResponse
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.evidence_catalog import EvidenceCatalog
 from vulnwitness.domain.hashing import UNSEALED_SHA256
+from vulnwitness.domain.kev import KevCapability
 from vulnwitness.domain.relations import record_relations
 from vulnwitness.domain.search import (
     SEMANTIC_UNAVAILABLE_FAILURES,
@@ -89,7 +90,9 @@ class SearchService:
         cnvd_index: CnvdIndex | None = None,
         cnvd_attribution: str | None = None,
         cnvd_language: str | None = None,
+        kev_capability: KevCapability | None = None,
     ) -> None:
+        self._kev_capability = kev_capability or KevCapability(imported=False)
         self._cnvd_index = cnvd_index or CnvdIndex()
         self._cnvd_attribution = cnvd_attribution
         self._cnvd_language = cnvd_language
@@ -104,6 +107,9 @@ class SearchService:
     def describe_weakness_snapshot(self) -> WeaknessSnapshotCapability | None:
         """The mapping served by lookup, separately from retrieval capabilities."""
         return None if self._weakness_mapping is None else self._weakness_mapping.describe()
+
+    def describe_kev(self) -> KevCapability:
+        return self._kev_capability
 
     def describe_cnvd(self) -> CnvdCapability:
         """Whether the store imported CNVD, including imports with no retained entries."""

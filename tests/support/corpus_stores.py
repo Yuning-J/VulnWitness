@@ -35,9 +35,11 @@ def import_store(
     name: str,
     cve_numbers: tuple[int, ...] = (1, 2),
     description: str = "SYNTHETIC: democorp gateway mishandles input.",
+    *,
+    include_kev: bool = True,
 ) -> Path:
     """A store named ``name`` under ``store_root``, imported from a 2.0 feed holding
-    ``CVE-9999-<n>`` for each of ``cve_numbers`` and a KEV catalog listing the first. Its
+    ``CVE-9999-<n>`` for each of ``cve_numbers`` and, optionally, KEV listing the first. Its
     inputs are written beside the root, never in it."""
     inputs_dir = store_root.parent / f"inputs-{name}"
     inputs_dir.mkdir()
@@ -45,14 +47,11 @@ def import_store(
     for cve_number in cve_numbers:
         entries.append(build_v2_entry(cve_number, description=description))
     write_gzip_feed(inputs_dir / "nvdcve-2.0-2099.json.gz", build_v2_feed(entries))
-    write_kev_csv(inputs_dir / "kev.csv", [build_kev_row(cve_numbers[0])])
-    manifest_path = write_inputs_manifest(
-        inputs_dir,
-        [
-            build_declaration("nvdcve-2.0-2099.json.gz"),
-            build_declaration("kev.csv", source="cisa-kev"),
-        ],
-    )
+    declarations = [build_declaration("nvdcve-2.0-2099.json.gz")]
+    if include_kev:
+        write_kev_csv(inputs_dir / "kev.csv", [build_kev_row(cve_numbers[0])])
+        declarations.append(build_declaration("kev.csv", source="cisa-kev"))
+    manifest_path = write_inputs_manifest(inputs_dir, declarations)
     store_dir = store_root / name
     report = run_test_migration(manifest_path, store_dir, store_root=store_root)
     assert report.outcome is MigrationOutcome.IMPORTED, report.failure

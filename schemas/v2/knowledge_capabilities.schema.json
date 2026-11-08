@@ -103,6 +103,80 @@
       "title": "FightUnavailableDetail",
       "type": "string"
     },
+    "KevCapability": {
+      "additionalProperties": false,
+      "else": {
+        "properties": {
+          "retrieved_at": {
+            "type": "null"
+          },
+          "source_version": {
+            "type": "null"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "imported": {
+            "const": true
+          }
+        }
+      },
+      "properties": {
+        "imported": {
+          "title": "Imported",
+          "type": "boolean"
+        },
+        "retrieved_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved At"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        }
+      },
+      "required": [
+        "imported",
+        "retrieved_at",
+        "source_version"
+      ],
+      "then": {
+        "properties": {
+          "retrieved_at": {
+            "type": "string"
+          },
+          "source_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "retrieved_at",
+          "source_version"
+        ]
+      },
+      "title": "KevCapability",
+      "type": "object"
+    },
     "KnowledgeSource": {
       "enum": [
         "cve_search",
@@ -685,6 +759,14 @@
         "revision": null
       }
     },
+    "kev": {
+      "$ref": "#/$defs/KevCapability",
+      "default": {
+        "imported": false,
+        "retrieved_at": null,
+        "source_version": null
+      }
+    },
     "purl_filter_available": {
       "description": "Whether a search or investigation may filter by package URL (filters.purls): only a dataset whose records name package URLs can execute it, and an NVD import names none. Without it, a request with a purls filter is refused (filter_unsupported) instead of answered as if nothing matched.",
       "title": "Purl Filter Available",
@@ -803,6 +885,7 @@
     "tools",
     "source_capabilities",
     "weakness_associations",
+    "kev",
     "cnvd",
     "purl_filter_available"
   ],

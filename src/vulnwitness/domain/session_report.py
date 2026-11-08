@@ -20,6 +20,7 @@ class CheckedSession:
     session: SessionRecord | None
     calls: tuple[SessionCall, ...]
     responses: dict[int, BaseModel]
+    response_digests: dict[int, str]
     findings: SessionFindings | None
 
 

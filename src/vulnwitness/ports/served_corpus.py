@@ -5,6 +5,7 @@ from typing import Protocol
 from vulnwitness.domain.cnvd import CnvdIndex
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.kev import KevCapability
 from vulnwitness.domain.served_dataset import ServedDataset
 from vulnwitness.domain.session_record import SessionCorpusIdentity
 
@@ -31,4 +32,8 @@ class ServedCorpus(Protocol):
 
     def describe_session_corpus(self) -> SessionCorpusIdentity:
         """The verified physical store and corpus identities used for session binding."""
+        ...
+
+    def describe_kev(self) -> KevCapability:
+        """The served dataset's KEV snapshot, including imports retaining no rows."""
         ...
