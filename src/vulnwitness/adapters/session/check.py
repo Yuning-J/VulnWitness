@@ -12,6 +12,7 @@ from vulnwitness.adapters.session.validation import parse_session_document
 from vulnwitness.adapters.strict_yaml import load_declaration_yaml
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.priority_decision import PriorityArtifact
 from vulnwitness.domain.session_claim_check import check_session_claim
 from vulnwitness.domain.session_contracts import CLI_SESSION_CONTRACTS, MCP_SESSION_CONTRACTS
 from vulnwitness.domain.session_record import (
@@ -54,8 +55,16 @@ def collect_response_anchors(document: Any) -> set[str]:
 class SessionChecker:
     """Read a bounded session tree. Never execute instructions or follow file links."""
 
-    def __init__(self, directory: Path, findings: SessionFindings | None = None) -> None:
+    def __init__(
+        self,
+        directory: Path,
+        findings: SessionFindings | None = None,
+        *,
+        include_priority: bool = True,
+    ) -> None:
         self._findings_override = findings
+        self._include_priority = include_priority
+        self._priority: PriorityArtifact | None = None
         self._directory = directory
         self._violations: list[SessionViolation] = []
         self._calls: dict[int, SessionCall] = {}
@@ -83,6 +92,7 @@ class SessionChecker:
             responses=dict(self._recorded_responses),
             response_digests=response_digests,
             findings=self._findings,
+            priority=self._priority,
         )
 
     def check(self) -> SessionCheckReport:
@@ -98,6 +108,7 @@ class SessionChecker:
         self._findings = None
         self._recorded_responses.clear()
         self._response_digests.clear()
+        self._priority = None
         try:
             check_session_path(self._directory)
             session = parse_session_document(
@@ -109,7 +120,42 @@ class SessionChecker:
         self._session = session
         self._check_calls(session)
         self._check_findings(session)
+        if self._include_priority:
+            self._check_priority(session)
         return self._report()
+
+    def _check_priority(self, session: SessionRecord) -> None:
+        path = self._directory / "priority.json"
+        try:
+            content = read_session_file(path)
+        except FileNotFoundError:
+            if path.is_symlink():
+                self._add("priority.json", "priority decisions are unreadable or invalid")
+            return
+        except (OSError, ValueError):
+            self._add("priority.json", "priority decisions are unreadable or invalid")
+            return
+        try:
+            priority = parse_session_document(content, PriorityArtifact)
+            if priority.dataset != session.dataset:
+                raise ValueError("priority dataset differs from session.json")
+            used_anchors: set[str] = set()
+            for digest in priority.response_digests:
+                if (
+                    digest.call not in self._responses
+                    or self._response_digests.get(digest.call) != digest.response_sha256
+                ):
+                    raise ValueError("priority response digest differs from a checked response")
+                used_anchors.update(self._anchors[digest.call])
+            for decision in priority.decisions:
+                for fact_name in ("applicability", "system_category", "kev", "high_grade"):
+                    fact = getattr(decision.facts, fact_name)
+                    if not used_anchors.issuperset(fact.evidence_ids):
+                        raise ValueError("priority evidence is absent from its checked responses")
+        except (ValueError, RecursionError):
+            self._add("priority.json", "priority decisions are invalid or differ from the record")
+            return
+        self._priority = priority
 
     def _add(self, location: str, message: str) -> None:
         self._violations.append(SessionViolation(location=location, message=message))

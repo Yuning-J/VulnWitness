@@ -57,7 +57,7 @@ def run_priority(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
             raise ValueError("priority.json already exists; use --force to overwrite")
         loaded_policy = load_priority_policy(default_priority_policy_file())
         artifact = build_session_priority(
-            SessionChecker(arguments.directory).check_with_contents(),
+            SessionChecker(arguments.directory, include_priority=False).check_with_contents(),
             register,
             loaded_policy.policy,
             loaded_policy.content_sha256,

@@ -25,6 +25,7 @@ from tests.support.cnvd_serving import (
     CNVD_LOOKUP_CASES,
     assert_cnvd_lookup,
 )
+from tests.support.priority import build_priority_report_session
 from tests.support.report_sessions import (
     CNVD_REPORT_CVE_IDS,
     CNVD_REPORT_DESCRIPTION,
@@ -46,6 +47,89 @@ from vulnwitness.interfaces.ui.lifespan import UiLifespan
 from vulnwitness.interfaces.ui.state import UiState
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.mark.parametrize("invalid", [None, "json", "symlink"], ids=["valid", "invalid", "linked"])
+async def test_priority_details_and_export_share_checked_decisions(
+    tmp_path: Path, invalid: str | None
+) -> None:
+    root = tmp_path / "workspace"
+    directory = build_priority_report_session(root)
+    app = build_test_ui_app(root)
+
+    async with open_app_client(app) as client:
+        await client.post("/ui-api/render", json={"session_id": directory.name})
+        if invalid == "json":
+            (directory / "priority.json").write_text("{invalid")
+        elif invalid == "symlink":
+            other = tmp_path / "other-priority.json"
+            (directory / "priority.json").rename(other)
+            (directory / "priority.json").symlink_to(other)
+        snapshot = await client.get(f"/ui-api/get/{directory.name}")
+        view = await client.get(f"/ui-api/view/{directory.name}")
+        rendered = await client.post("/ui-api/render", json={"session_id": directory.name})
+        exported = await client.get(f"/ui-api/report/{directory.name}")
+        script = await client.get("/ui.js")
+        styles = await client.get("/ui.css")
+
+    assert (
+        snapshot.status_code
+        == view.status_code
+        == rendered.status_code
+        == exported.status_code
+        == 200
+    )
+    report = view.json()["report"]
+    priority = next(
+        (section for section in report["sections"] if section["title"] == "Priority decisions"),
+        None,
+    )
+    assert "textContent" in script.text and "innerHTML" not in script.text
+    assert "#priority-decisions" in styles.text and "overflow-wrap:anywhere" in styles.text
+    assert "@media(max-width:640px)" in styles.text
+    assert ":root[data-theme=dark]" in styles.text
+    if invalid:
+        assert snapshot.json()["report"] == "stale"
+        assert priority is None
+        assert not report["check"]["record"]["consistent"]
+        assert "priority.json" in exported.text
+        assert "Priority decisions" not in exported.text
+    else:
+        assert priority is not None
+        assert priority["anchor"] == "priority-decisions"
+        assert len(priority["sections"]) == 5
+        for decision in priority["sections"]:
+            assert decision["sections"][-1]["title"] == (
+                "Compliance status — separate from the recommendation"
+            )
+            assert decision["sections"][3]["title"] == "What would change this"
+        assert "<script>" not in exported.text and "&lt;script&gt;" in exported.text
+        assert "\\u003cscript\\u003e" in view.text
+        assert "Priority decisions" in exported.text
+
+
+async def test_priority_artifact_changes_make_the_html_report_stale(tmp_path: Path) -> None:
+    root = tmp_path / "workspace"
+    directory = build_priority_report_session(root)
+    priority_path = directory / "priority.json"
+    priority_bytes = priority_path.read_bytes()
+    priority_path.unlink()
+    app = build_test_ui_app(root)
+
+    async with open_app_client(app) as client:
+        await client.post("/ui-api/render", json={"session_id": directory.name})
+        before = await client.get(f"/ui-api/get/{directory.name}")
+        priority_path.write_bytes(priority_bytes)
+        added = await client.get(f"/ui-api/get/{directory.name}")
+        await client.post("/ui-api/render", json={"session_id": directory.name})
+        refreshed = await client.get(f"/ui-api/get/{directory.name}")
+        priority_path.write_bytes(priority_bytes + b" ")
+        changed = await client.get(f"/ui-api/get/{directory.name}")
+        priority_path.unlink()
+        removed = await client.get(f"/ui-api/get/{directory.name}")
+
+    assert before.json()["report"] == refreshed.json()["report"] == "current"
+    assert added.json()["report"] == changed.json()["report"] == removed.json()["report"] == "stale"
 
 
 @pytest.fixture

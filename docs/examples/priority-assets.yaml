@@ -1,0 +1,31 @@
+# Fictional Aster vehicle. CVE-9999 IDs refer only to packaged synthetic records.
+format_version: 1
+assets:
+  - name: Aster head unit with authorised third-party apps
+    markets: [CN]
+    system_category: external_connection
+  - name: Aster OTA update master
+    markets: [CN]
+    system_category: software_update
+  - name: Aster body controller
+    markets: [CN]
+    system_category: other
+assessments:
+  - asset: Aster head unit with authorised third-party apps
+    cve_id: CVE-9999-0001
+    applicability: affected
+    justification: The fictional head unit carries the affected demo component and version.
+    assessor: Example vehicle analyst
+    assessed_at: '2026-11-09'
+  - asset: Aster OTA update master
+    cve_id: CVE-9999-0002
+    applicability: affected
+    justification: The fictional OTA master includes the affected demo library in its update service.
+    assessor: Example vehicle analyst
+    assessed_at: '2026-11-09'
+  - asset: Aster body controller
+    cve_id: CVE-9999-0003
+    applicability: not_affected
+    justification: The fictional body controller runs bare-metal firmware without the demo component.
+    assessor: Example vehicle analyst
+    assessed_at: '2026-11-09'

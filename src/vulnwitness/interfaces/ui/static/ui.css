@@ -267,6 +267,10 @@ th {
   min-width:0;
   overflow-wrap:anywhere;
 }
+#priority-decisions {
+  min-width:0;
+  overflow-wrap:anywhere;
+}
 .columns > .two > section,
 .columns > .two > section > :first-child {
   margin-top:0;

@@ -417,6 +417,50 @@ verified; otherwise exit 1. A confirmed status supplies no verification. Agreeme
 saved fields does not establish source support or real-world truth. Treat session contents
 and source text as untrusted input.
 
+## Prioritise a session
+
+Record one capabilities call and exact CVE lookups, then supply an analyst-authored asset
+register and an explicit reference date. The [example register](examples/priority-assets.yaml)
+describes a fictional vehicle with synthetic CVEs; replace its assets and assessments for
+your investigation. Every affected or not-affected assessment needs a concrete justification,
+an assessor and an assessment date. Unknown applicability is never treated as not affected.
+
+```sh
+vulnwitness capabilities --session /data/vulnwitness/priority-session
+vulnwitness lookup CVE-9999-0001 --session /data/vulnwitness/priority-session
+vulnwitness lookup CVE-9999-0002 --session /data/vulnwitness/priority-session
+vulnwitness lookup CVE-9999-0003 --session /data/vulnwitness/priority-session
+vulnwitness prioritise /data/vulnwitness/priority-session \
+  --assets docs/examples/priority-assets.yaml --policy cn-auto-demo --as-of 2026-11-09
+vulnwitness report /data/vulnwitness/priority-session --format html \
+  --output /data/vulnwitness/priority-report.html
+```
+
+Individual recording commands load the complete store each time. For several lookups on
+a large store, use one `vulnwitness mcp --workspace ROOT` process, wait for readiness, call
+`start_investigation`, then `get_knowledge_capabilities` and `lookup_cve` with its returned
+`session_id`. That process reuses one loaded dataset. The session directory is
+`ROOT/SESSION_ID`; run the same offline `prioritise` and `report` commands on it. Neither
+command loads a store or calls a service. Keep real records and registers outside the repo.
+
+The command atomically writes `SESSION/priority.json`; `--force` replaces an existing
+artifact. It prints each (asset, CVE) recommendation, matched rule and separate compliance
+status. The report and the investigation page's Records view show the policy name, format
+version and digest, register digest, reference date and after-reference-date flag. Each
+decision includes its reason, matched conditions, facts and evidence IDs, unknown facts,
+notes, and every earlier unmatched rule's failed conditions under “What would change this”.
+An invalid artifact appears as a check finding and is not displayed as decisions. Later
+recordings do not recompute decisions; rerun `prioritise --force` when inputs change.
+
+`act`, `attend`, `track` and `manual_triage_required` are VulnWitness policy recommendations,
+not compliance conclusions. GB 44495 status stays `basis_insufficient` for in-scope assets
+without authoritative-platform data: the platform record, grade, publication date,
+reference date and handling evidence remain required basis. CNVD grades are triage reference
+and do not substitute for that platform. KEV `not_listed_in_snapshot` means only that the CVE
+was not listed in the imported snapshot, never “not exploited”. The reference date does not
+reconstruct history; the artifact flags evidence retrieved after it. See
+[ADR 0016](rebuild/adr/0016-priority-decisions.md) for rule order and limits.
+
 ## Workspace mode for agents
 
 Start `vulnwitness mcp --workspace ROOT` for stdio, or add `--http` and the usual HTTP token

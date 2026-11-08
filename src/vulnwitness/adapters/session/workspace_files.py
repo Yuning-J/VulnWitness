@@ -203,11 +203,20 @@ class LocalWorkspaceFiles:
         directory = self.resolve(session_id)
         check_session_path(directory / "calls")
         names = ["session.json", "findings.yaml"]
+        if (directory / "priority.json").exists() or (directory / "priority.json").is_symlink():
+            names.append("priority.json")
         for path in sorted((directory / "calls").iterdir()):
             names.append("calls/" + path.name)
         digest = hashlib.sha256()
         for name in names:
-            content = self.read(session_id, name)
+            try:
+                content = self.read(session_id, name)
+            except (OSError, ValueError):
+                if name != "priority.json":
+                    raise
+                # Optional invalid decisions render as a finding, without reading a link target.
+                digest.update(name.encode() + b"\0unreadable\0")
+                continue
             digest.update(name.encode() + b"\0" + str(len(content)).encode() + b"\0" + content)
         return digest.hexdigest()
 

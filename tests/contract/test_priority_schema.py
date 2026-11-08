@@ -1,6 +1,7 @@
 """The register and artifact are published contracts with closed nested fact models."""
 
 import json
+from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -12,10 +13,31 @@ from tests.support.priority import (
     build_register_document,
 )
 from vulnwitness.adapters.priority_policy import default_priority_policy_file, load_priority_policy
+from vulnwitness.adapters.strict_yaml import load_declaration_yaml
 from vulnwitness.application.priority_decision import evaluate_priority
 from vulnwitness.domain.asset_register import AssetRegister
 from vulnwitness.domain.priority_decision import PriorityArtifact
 from vulnwitness.schema_snapshots import render_contract_schemas
+
+
+def test_fictional_vehicle_example_validates_against_the_register_schema() -> None:
+    example = Path(__file__).parents[2] / "docs/examples/priority-assets.yaml"
+    document = load_declaration_yaml(example.read_text())
+    schema = json.loads(render_contract_schemas()["asset_register.schema.json"])
+
+    Draft202012Validator(schema).validate(document)
+    register = AssetRegister.model_validate(document)
+
+    assert len(register.assets) == 3
+    categories = []
+    for asset in register.assets:
+        categories.append(asset.system_category)
+    assert tuple(categories) == (
+        "external_connection",
+        "software_update",
+        "other",
+    )
+    assert all(assessment.justification for assessment in register.assessments)
 
 
 def test_asset_register_schema_accepts_the_operator_document() -> None:

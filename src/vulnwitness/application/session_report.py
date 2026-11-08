@@ -11,6 +11,7 @@ from vulnwitness.application.cnvd_report import (
     build_pending_cnvd_card,
 )
 from vulnwitness.application.investigation_report import build_investigation_report
+from vulnwitness.application.priority_report import build_priority_report
 from vulnwitness.application.triage_workflow import triage_selection_key
 from vulnwitness.domain.cve import CveRecord, CvssMetric
 from vulnwitness.domain.cve_lookup import CveLookupResponse, LookupCandidate, PendingCnvdLookup
@@ -425,6 +426,10 @@ def build_card(
 
 def build_checks(contents: CheckedSession) -> ReportSection:
     check = contents.check
+    paragraphs = [ReportParagraph(f"Superseded findings: {check.superseded_count}.")]
+    for violation in check.record.violations:
+        if violation.location == "priority.json":
+            paragraphs.append(ReportParagraph(f"priority.json: {violation.message}", True))
     claim_failures = sum(entry.status != "verified" for entry in check.claims.checks)
     rows: list[tuple[str, ...]] = []
     for name, passed, count, failures, meaning in (
@@ -462,7 +467,7 @@ def build_checks(contents: CheckedSession) -> ReportSection:
     )
     return ReportSection(
         "Check layers",
-        paragraphs=(ReportParagraph(f"Superseded findings: {check.superseded_count}."),),
+        paragraphs=tuple(paragraphs),
         tables=(ReportTable(("Status", "Layer", "Count", "Meaning"), tuple(rows)),),
     )
 
@@ -592,6 +597,12 @@ def build_session_report(
         "were not evaluated.",
         DERIVED_ASSOCIATION_NOTE,
     ]
+    if contents.priority is not None:
+        limits[0] = (
+            "Automated affectedness is unknown: NVD version conditions do not establish "
+            "deployment applicability. Priority decisions use the analyst's recorded "
+            "applicability assessments, not verified affectedness."
+        )
     for call in contents.calls:
         answer = contents.responses.get(call.sequence)
         if call.outcome != "ok":
@@ -864,6 +875,8 @@ def build_session_report(
         record_sections.append(
             ReportSection("Investigations", sections=tuple(investigation_sections))
         )
+    if contents.priority is not None:
+        record_sections.append(build_priority_report(contents.priority))
     return SessionReport(
         title,
         session.dataset.served.kind == ServedDatasetKind.SYNTHETIC_FIXTURE,

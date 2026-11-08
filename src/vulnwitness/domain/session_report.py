@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from vulnwitness.domain.cve import Severity
+from vulnwitness.domain.priority_decision import PriorityArtifact
 from vulnwitness.domain.session_record import (
     SessionCall,
     SessionCheckReport,
@@ -22,6 +23,7 @@ class CheckedSession:
     responses: dict[int, BaseModel]
     response_digests: dict[int, str]
     findings: SessionFindings | None
+    priority: PriorityArtifact | None = None
 
 
 @dataclass(frozen=True)

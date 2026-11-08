@@ -10,7 +10,17 @@ import yaml
 from tests.support.builders import FIXED_RETRIEVED_AT
 from tests.support.report_sessions import build_cnvd_report_corpus
 from tests.support.workspaces import build_test_workspace
-from vulnwitness.domain.asset_register import Applicability, Asset, AssetAssessment, SystemCategory
+from vulnwitness.adapters.priority_policy import default_priority_policy_file, load_priority_policy
+from vulnwitness.adapters.session.check import SessionChecker
+from vulnwitness.application.priority_session import build_session_priority
+from vulnwitness.domain.asset_register import (
+    Applicability,
+    Asset,
+    AssetAssessment,
+    AssetRegister,
+    SystemCategory,
+)
+from vulnwitness.domain.cve import KevEntry
 from vulnwitness.domain.kev import KevCapability
 from vulnwitness.domain.priority_decision import PolicyIdentity, PriorityArtifact, PriorityDecision
 from vulnwitness.domain.priority_facts import (
@@ -167,3 +177,46 @@ def priority_arguments(
         "--as-of",
         reference_date,
     ]
+
+
+def build_priority_report_session(root: Path) -> Path:
+    """Record all four recommendation outcomes and a missing-lookup note on frozen data."""
+    directory = build_priority_session(
+        root,
+        ("CVE-9999-0001", "CVE-9999-0002", "CVE-9999-0003", "CVE-9999-0004"),
+        record_overrides={"kev": KevEntry(date_added="2026-01-01")},
+    )
+    assets = []
+    assessments = []
+    for name, cve_id, category, applicability in (
+        ("head <script>alert(1)</script>", "CVE-9999-0001", "external_connection", "affected"),
+        ("ota", "CVE-9999-0002", "software_update", "affected"),
+        ("body", "CVE-9999-0003", "other", "not_affected"),
+        ("unclassified", "CVE-9999-0004", "unknown", "affected"),
+        ("missing", "CVE-9999-0099", "external_connection", "unknown"),
+    ):
+        assets.append({"name": name, "markets": ["CN"], "system_category": category})
+        assessments.append(
+            {
+                "asset": name,
+                "cve_id": cve_id,
+                "applicability": applicability,
+                "justification": "Synthetic inventory assessment <img src=x>.",
+                "assessor": "synthetic analyst",
+                "assessed_at": "2026-11-08",
+            }
+        )
+    register = AssetRegister.model_validate(
+        {"format_version": 1, "assets": assets, "assessments": assessments}
+    )
+    policy = load_priority_policy(default_priority_policy_file())
+    artifact = build_session_priority(
+        SessionChecker(directory).check_with_contents(),
+        register,
+        policy.policy,
+        policy.content_sha256,
+        date(2026, 10, 12),
+        "2.0.0.dev0",
+    )
+    (directory / "priority.json").write_bytes(artifact.to_json_bytes())
+    return directory

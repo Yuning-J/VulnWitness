@@ -7,6 +7,10 @@ what it cannot establish. Its general core covers CVE/KEV records, product queri
 CWE → CAPEC → ATT&CK catalogue associations, recorded sessions, checks and reports. A
 built-in telecom extension adds topic cards and MITRE FiGHT threat context.
 
+`prioritise` applies a named policy to a recorded session and an analyst's asset register;
+reports and the local UI show recommendations separately from compliance status
+([ADR 0016](docs/rebuild/adr/0016-priority-decisions.md), [runbook](docs/runbook.md#prioritise-a-session)).
+
 ![Open5GS walkthrough: triage reads 211 product matches over 11 pages, looks up 5 CVEs, records the session, checks 495 claims against the record and renders a report; affectedness stays unknown](docs/media/open5gs-walkthrough.webp)
 
 *A real triage of Open5GS 2.7.6 on the NVD snapshot of 2026-10-27: selected recorded events,
