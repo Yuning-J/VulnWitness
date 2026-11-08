@@ -25,9 +25,15 @@ Store activation and snapshot changes require service restart.
 CNVD entries from the pinned CIRCL dataset join by CVE ID with their own evidence anchors;
 NVD's fields stay separate. Entries with a well-formed CVE ID but no servable NVD record
 remain pending beside the records. Records retain NVD's `nvd_status` verbatim (null when
-unavailable); the NVD-state and severity comparison is computed when served under the
-named VulnWitness rule `cnvd_severity_vs_nvd_primary_cvss3`, with both raw values and source
-attribution ([ADR 0015](rebuild/adr/0015-cnvd-entries.md)).
+unavailable). Each authority retains its raw grade, scheme, assessing body and provenance.
+The comparison uses NVD's own CVSS v3.1, else v3.0, under the named VulnWitness mapping
+`cnvd_grade_vs_nvd_own_cvss3`; CNA scores remain separate. Reports mark only CNVD grading
+higher under that mapping and count distinct CVEs with explicit denominators and dataset
+identities. NVD record gaps, score gaps and awaiting-analysis or deferred status are separate
+signals; they change no triage order, selection or checker verdict. CVSS measures severity,
+not risk. Recorded CNVD language tags apply only to titles and descriptions; the core flow
+does no translation, while clients and browsers can translate
+([ADR 0015](rebuild/adr/0015-cnvd-entries.md)).
 FiGHT files must match a reviewed catalog; optional expected SHA-256 adds a pin.
 MITRE mapping files have no reviewed catalog: their computed identity alone proves
 neither authenticity nor unchanged bytes. A configured invalid snapshot fails startup,

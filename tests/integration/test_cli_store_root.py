@@ -914,14 +914,16 @@ def test_cli_lookup_text_labels_source_statements_and_project_comparison(
     text = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "NVD:" in text and " | CNVD CNVD-9999-" in text
+    assert "NVD:" in text and "CNVD CNVD-9999-" in text
     assert "cnvd_grade_vs_nvd_own_cvss3" in text
     assert "VulnWitness's mapping between two grading schemes" in text
     assert cnvd_attribution() in " ".join(text.split())
     assert text.count("CNVD language: zh") == 1
     if identifier.startswith("CVE-"):
-        assert "CVSS 3.1 MEDIUM | CNVD CNVD-9999-00007: 低" in text
-        assert "comparison: lower" in text
+        assert "CVSS 3.1 MEDIUM · assessed by nvd@nist.gov" in text
+        assert "CNVD CNVD-9999-00007: 低 · CNVD three-grade scheme" in text
+        assert "CVSS 3.1 MEDIUM: lower under cnvd_grade_vs_nvd_own_cvss3" in text
+        assert "◇" not in text
     else:
         assert "not_in_nvd_snapshot" in text
         assert "not_compared" in text

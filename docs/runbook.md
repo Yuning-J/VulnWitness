@@ -49,6 +49,16 @@ Invalid/mismatched cursors fail (CLI 2, REST 422, MCP failure).
 Lookup text shows catalogue paths and limits; search text shows word-match ranks, channel
 outcomes and warnings. A CNVD ID resolves to its CVE record or pending entry when imported;
 entries without a well-formed CVE ID are not retained ([ADR 0015](rebuild/adr/0015-cnvd-entries.md)).
+Each authority's raw grade is shown with its scheme, assessing body and provenance. An NVD
+record may carry a CNA score; only NVD's own CVSS v3.1, else v3.0, participates in
+`cnvd_grade_vs_nvd_own_cvss3`. The neutral mark means CNVD grades higher under a named
+VulnWitness mapping; same and lower grades stay plain text. Reports count distinct CVEs
+from recorded lookups, naming the dataset and denominator: higher grades out of compared
+CVEs, NVD record gaps (no servable record), score gaps (a record without an NVD-owned CVSS
+v3 metric), and awaiting-analysis and deferred status separately. Status does not imply
+a missing score. These signals change no triage order, selection or checker verdict.
+CVSS measures severity, not risk. CNVD text stays in its original language; the core flow
+does no translation, and clients and browsers can translate it.
 `product --vendor democorp --all --limit 20` traverses one fixed corpus,
 printing a JSON array of unchanged `ProductQueryResponse` pages, each with its cursors
 and evidence. `--max-pages` defaults to 100; an unfinished traversal exits 2 without
@@ -146,7 +156,10 @@ The migration report counts each CNVD row under one of six join outcomes:
 
 A pending entry has a well-formed CVE ID but no servable NVD record. Every import rebuilds
 from all its inputs; the entry joins on a later import whose NVD input supplies a servable
-record for that CVE.
+record for that CVE. Refresh preserves each authority's grade and provenance; CNVD grading
+higher under a named VulnWitness mapping and the separate record, score and status gaps
+are descriptive signals, not a priority policy. CVSS measures severity, not risk. The core
+flow does no translation; clients and browsers can translate the original CNVD text.
 
 ```sh
 vulnwitness store validate nvd-2026-10-31

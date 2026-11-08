@@ -30,8 +30,10 @@ from tests.support.report_sessions import (
     CNVD_REPORT_DESCRIPTION,
     CNVD_REPORT_TITLE,
     build_cnvd_report_corpus,
+    build_cnvd_report_session,
+    set_recorded_cnvd_language,
 )
-from tests.support.ui_startup import DeferredUiDeployment
+from tests.support.ui_startup import DeferredUiDeployment, build_test_ui_app
 from tests.support.workspaces import agent_note, build_test_workspace
 from vulnwitness.adapters.session.files import hold_session_lock
 from vulnwitness.domain.investigation import KnowledgeEvidenceSet
@@ -189,12 +191,18 @@ async def test_ui_lookup_resolves_cnvd_ids_to_recorded_cve_details(
     assert sources["sections"][1]["title"] == "CNVD · untrusted source text"
     assert f"NVD state: {nvd_state}" in exported.text
     facts = report["sections"][1]["sections"][0]["bullets"]
-    disagreements = "0 CVEs" if is_pending else "1 CVE"
-    unanalysed = "1 CVE" if is_pending else "0 CVEs"
-    assert f"CNVD severity disagrees with NVD for {disagreements} under" in facts[1]
-    assert f"CNVD lists {unanalysed} whose NVD state" in facts[2]
-    assert f"CNVD severity disagrees with NVD for {disagreements} under" in exported.text
-    assert f"CNVD lists {unanalysed} whose NVD state" in exported.text
+    compared = 0 if is_pending else 1
+    record_gaps = 1 if is_pending else 0
+    dataset = snapshot.json()["session"]["dataset"]
+    identity = f"store {dataset['store_name']} (corpus {dataset['corpus_content_sha256']})"
+    assert facts[1] == f"CNVD counts below cover recorded lookups from {identity}."
+    assert f"cnvd_grade_vs_nvd_own_cvss3: 0 of {compared}" in facts[2]
+    assert f"NVD record gaps: {record_gaps} of 1" in facts[3]
+    assert f"NVD score gaps: 0 of {compared}" in facts[4]
+    assert f"NVD status awaiting_analysis: 0 of {compared}" in facts[5]
+    assert f"NVD status deferred: 0 of {compared}" in facts[6]
+    assert "disagree" not in exported.text
+    assert "◇" not in exported.text
 
 
 async def test_follow_up_makes_report_stale_until_rendered_again(
@@ -629,14 +637,7 @@ async def test_report_symlink_cannot_serve_an_unrelated_file(tmp_path: Path) -> 
 
 async def test_cnvd_lookup_details_and_export_share_recorded_comparisons(tmp_path: Path) -> None:
     # Arrange
-    toolbox, workspace = build_test_workspace(
-        tmp_path / "workspace", corpus=build_cnvd_report_corpus()
-    )
-    app = build_ui_app(
-        UiState(McpDeployment(toolbox, workspace=workspace)),
-        port=HTTP_PORT,
-        token=HTTP_SECRET_TOKEN,
-    )
+    app = build_test_ui_app(tmp_path / "workspace", corpus=build_cnvd_report_corpus())
     async with open_app_client(app) as client:
         started = await client.post("/ui-api/start", json={"goal": "Synthetic CNVD comparison"})
         session_id = started.json()["session_id"]
@@ -659,8 +660,11 @@ async def test_cnvd_lookup_details_and_export_share_recorded_comparisons(tmp_pat
     report = view.json()["report"]
     facts = report["sections"][1]["sections"][0]["bullets"]
     limits = report["sections"][1]["sections"][1]["bullets"]
-    assert "CNVD severity disagrees with NVD for 2 CVEs" in facts[1]
-    assert "CNVD lists 5 CVEs" in facts[2]
+    assert "cnvd_grade_vs_nvd_own_cvss3: 1 of 3 distinct CVEs" in facts[2]
+    assert "NVD record gaps: 3 of 8 distinct CNVD-listed CVEs" in facts[3]
+    assert "NVD score gaps: 1 of 5 distinct CNVD-listed CVEs" in facts[4]
+    assert "NVD status awaiting_analysis: 1 of 5" in facts[5]
+    assert "NVD status deferred: 1 of 5" in facts[6]
     assert limits.count(attribution) == 1
     cards = report["sections"][2]["sections"]
     card_titles = []
@@ -672,10 +676,30 @@ async def test_cnvd_lookup_details_and_export_share_recorded_comparisons(tmp_pat
     assert paired_sources["sections"][0]["title"] == "NVD"
     cnvd_entries = paired_sources["sections"][1]["sections"]
     assert cnvd_entries[0]["paragraphs"][0]["text"] == CNVD_REPORT_TITLE
-    assert cnvd_entries[1]["badges"] == [{"text": "lower", "tone": "neutral", "severity": None}]
+    assert cnvd_entries[0]["paragraphs"][0]["language"] == "zh"
+    assert cnvd_entries[0]["badges"] == cnvd_entries[1]["badges"] == []
+    higher_entry = cards[0]["sections"][0]["sections"][1]["sections"][0]
+    assert higher_entry["badges"] == [
+        {
+            "text": (
+                "◇ CNVD grades higher than nvd@nist.gov's CVSS 3.1 MEDIUM "
+                "under cnvd_grade_vs_nvd_own_cvss3"
+            ),
+            "tone": "neutral",
+            "severity": None,
+        }
+    ]
+    assert "cna@example.org" in exported.text
     description = cnvd_entries[0]["sections"][0]
     assert description["folded"] is True
     assert description["verbatim"] == CNVD_REPORT_DESCRIPTION
+    assert description["verbatim_language"] == "zh"
+    assert "if (paragraph.language !== null) text.lang = paragraph.language;" in script.text
+    assert (
+        "if (section.verbatim_language !== null) text.lang = section.verbatim_language;"
+        in script.text
+    )
+    assert exported.text.count(" lang=") == 25
     pending = cards[2]["sections"][0]["sections"][0]
     assert pending["paragraphs"][0]["text"] == "NVD's snapshot has no servable record."
     assert pending["paragraphs"][1]["text"] == "NVD state: not_in_nvd_snapshot"
@@ -684,3 +708,44 @@ async def test_cnvd_lookup_details_and_export_share_recorded_comparisons(tmp_pat
     assert "textContent" in script.text and "innerHTML" not in script.text
     assert '["two", "columns"].includes(section.layout)' in script.text
     assert ".columns .two > section" in styles.text
+
+
+@pytest.mark.parametrize("cve_id", ("CVE-9999-0001", "CVE-9999-0006"), ids=("record", "pending"))
+@pytest.mark.parametrize("language", ("zh-Hans", None))
+async def test_ui_title_and_description_language_comes_only_from_recording(
+    tmp_path: Path, cve_id: str, language: str | None
+) -> None:
+    # Arrange
+    root = tmp_path / "workspace"
+    directory = build_cnvd_report_session(root, (cve_id,), declares_language=False)
+    if language is not None:
+        set_recorded_cnvd_language(directory, language)
+    app = build_test_ui_app(root)
+
+    # Act
+    async with open_app_client(app) as client:
+        view = await client.get(f"/ui-api/view/{directory.name}")
+        rendered = await client.post("/ui-api/render", json={"session_id": directory.name})
+        exported = await client.get(f"/ui-api/report/{directory.name}")
+        page = await client.get(f"/investigations/{directory.name}")
+        script = await client.get("/ui.js")
+
+    # Assert
+    assert (
+        view.status_code == rendered.status_code == exported.status_code == page.status_code == 200
+    )
+    report = view.json()["report"]
+    entries = report["sections"][2]["sections"][0]["sections"][0]["sections"][1]["sections"]
+    for entry in entries:
+        assert entry["paragraphs"][0]["language"] == language
+        for paragraph in entry["paragraphs"][1:]:
+            assert paragraph["language"] is None
+        assert entry["sections"][0]["verbatim_language"] == language
+    assert "if (paragraph.language !== null) text.lang = paragraph.language;" in script.text
+    assert (
+        "if (section.verbatim_language !== null) text.lang = section.verbatim_language;"
+        in script.text
+    )
+    assert 'lang="en"' in page.text
+    assert exported.text.count(" lang=") == (1 if language is None else 5)
+    assert ('lang="zh-Hans"' in exported.text) is (language is not None)

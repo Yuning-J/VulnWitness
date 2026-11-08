@@ -93,6 +93,8 @@ def render_html_section(section: ReportSection, level: int) -> str:
         )
     for paragraph in () if section.stats else section.paragraphs:
         attributes = ' class="warning"' if paragraph.warning else ""
+        if paragraph.language is not None:
+            attributes += f' lang="{escape(paragraph.language, quote=True)}"'
         fragments.append(f"<p{attributes}>{escape(paragraph.text)}</p>")
     if section.bullets:
         fragments.append("<ul>")
@@ -100,7 +102,10 @@ def render_html_section(section: ReportSection, level: int) -> str:
             fragments.append(f"<li>{escape(bullet)}</li>")
         fragments.append("</ul>")
     if section.verbatim is not None:
-        fragments.append(f"<pre><code>{escape(section.verbatim)}</code></pre>")
+        language = ""
+        if section.verbatim_language is not None:
+            language = f' lang="{escape(section.verbatim_language, quote=True)}"'
+        fragments.append(f"<pre{language}><code>{escape(section.verbatim)}</code></pre>")
     if section.facts:
         fragments.append('<dl class="facts-grid">')
         for fact in section.facts:

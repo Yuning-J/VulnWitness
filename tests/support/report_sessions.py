@@ -16,6 +16,10 @@ from tests.support.builders import (
 )
 from tests.support.workspaces import build_test_workspace
 from vulnwitness.adapters.fixture.synthetic_fixture import FixtureBundle
+from vulnwitness.adapters.migration.cnvd_snapshot_catalog import (
+    default_cnvd_snapshot_catalog_file,
+    load_cnvd_snapshot_catalog,
+)
 from vulnwitness.cli import main
 from vulnwitness.composition import load_packaged_fixture
 from vulnwitness.domain.cnvd import PendingCnvdEntry, PendingCnvdOutcome, build_cnvd_index
@@ -37,7 +41,7 @@ CNVD_REPORT_TITLE = 'SYNTHETIC: 中文标题 <img src=x onerror="alert(1)"> & [�
 CNVD_REPORT_DESCRIPTION = 'SYNTHETIC: 中文描述 <script>alert("源")</script> & | *文本*\n第二行'
 
 
-def build_cnvd_report_corpus() -> FixtureBundle:
+def build_cnvd_report_corpus(*, declares_language: bool = True) -> FixtureBundle:
     """Synthetic source pairs, unusable metrics, NVD states and all pending outcomes."""
     fixture = load_packaged_fixture()
     records: list[CveRecord] = []
@@ -78,11 +82,21 @@ def build_cnvd_report_corpus() -> FixtureBundle:
             continue
         nvd_anchor = build_anchor(authoritative_record_id=cve_id)
         anchors.append(nvd_anchor)
+        evidence_ids = [nvd_anchor.evidence_id]
+        for entry in entries:
+            evidence_ids.append(entry.evidence_id)
         metrics = (build_cvss_metric(),)
         if number == 2:
             metrics = ()
         elif number == 3:
-            metrics = (build_cvss_metric(base_severity="CRITICAL", base_score=9.8),)
+            metrics = (
+                build_cvss_metric(
+                    base_severity="CRITICAL", base_score=9.8, scorer="cna@example.org"
+                ),
+                build_cvss_metric(
+                    version="3.0", base_severity="HIGH", base_score=8.1, scorer_type="secondary"
+                ),
+            )
         elif number == 5:
             metrics = (build_cvss_metric(base_severity="NONE", base_score=0),)
         records.append(
@@ -92,24 +106,44 @@ def build_cnvd_report_corpus() -> FixtureBundle:
                 cnvd=tuple(entries),
                 nvd_status={3: "Awaiting Analysis", 4: "Deferred"}.get(number, "Analyzed"),
                 affected=(build_versioned_product(),),
-                evidence_ids=(nvd_anchor.evidence_id,),
+                evidence_ids=tuple(evidence_ids),
             )
         )
+    catalog = load_cnvd_snapshot_catalog(default_cnvd_snapshot_catalog_file())
+    revision = catalog.snapshots[0].revision if declares_language else None
     return replace(
         fixture,
         records=tuple(records),
         evidence=tuple(anchors),
-        cnvd_index=build_cnvd_index(records, pending),
+        cnvd_index=build_cnvd_index(records, pending, imported_revision=revision),
     )
 
 
-def build_cnvd_report_session(root: Path, cve_ids: tuple[str, ...] = CNVD_REPORT_CVE_IDS) -> Path:
+def build_cnvd_report_session(
+    root: Path,
+    cve_ids: tuple[str, ...] = CNVD_REPORT_CVE_IDS,
+    *,
+    declares_language: bool = True,
+) -> Path:
     """Record actual workspace lookups, including a repeat to exercise distinct-CVE counts."""
-    _, workspace = build_test_workspace(root, corpus=build_cnvd_report_corpus())
+    _, workspace = build_test_workspace(
+        root, corpus=build_cnvd_report_corpus(declares_language=declares_language)
+    )
     started = workspace.start(StartInvestigationRequest(goal="Synthetic CNVD source comparison"))
     for cve_id in cve_ids:
         workspace.record(started.session_id, "lookup_cve", {"cve_id": cve_id})
     return root / started.session_id
+
+
+def set_recorded_cnvd_language(directory: Path, language: str | None) -> None:
+    """Edit source metadata at the recording boundary; digest violations remain visible."""
+    for path in sorted((directory / "responses").glob("*.json")):
+        lookup = json.loads(path.read_bytes())
+        if language is None:
+            lookup.pop("cnvd_language", None)
+        else:
+            lookup["cnvd_language"] = language
+        path.write_text(json.dumps(lookup), encoding="utf-8")
 
 
 def read_document(directory: Path, sequence: int) -> dict[str, Any]:

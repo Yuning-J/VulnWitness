@@ -92,9 +92,12 @@ servers, sizing and recovery.
 
 Lookups show CNVD's statement beside NVD's using the default pinned CIRCL/Vulnerability-CNVD
 dataset, with CIRCL attribution, its declared CC BY 4.0 licence and VulnWitness's normalisation
-notice; the relation to CNVD's own terms is unverified. The named VulnWitness comparison
-reports NVD state and mapped severity agreement, without establishing equivalent grading
-criteria or which source is correct ([ADR 0015](docs/rebuild/adr/0015-cnvd-entries.md)).
+notice; the relation to CNVD's own terms is unverified. Each authority keeps its own grade,
+grading scheme, assessing body and provenance. Reports separate NVD record and score gaps
+from awaiting-analysis or deferred status, and signal when CNVD grades higher under a named
+VulnWitness mapping (`cnvd_grade_vs_nvd_own_cvss3`). CVSS measures severity, not risk. The
+core flow does no translation; clients and browsers can translate the original source text
+([ADR 0015](docs/rebuild/adr/0015-cnvd-entries.md)).
 
 ## Reference
 

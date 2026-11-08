@@ -27,6 +27,7 @@ class CheckedSession:
 class ReportParagraph:
     text: str
     warning: bool = False
+    language: str | None = None
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,7 @@ class ReportSection:
     stats: tuple[ReportStat, ...] = ()
     facts: tuple[ReportFact, ...] = ()
     heading_note: str = ""
+    verbatim_language: str | None = None
 
 
 @dataclass(frozen=True)

@@ -2,6 +2,7 @@
 
 from textwrap import fill
 
+from vulnwitness.application.cnvd_presentation import describe_cnvd_comparison
 from vulnwitness.application.investigation_presentation import format_severity
 from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse
 from vulnwitness.domain.search import SearchResponse
@@ -60,6 +61,13 @@ def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
                 "",
             )
         )
+        if record.cnvd:
+            for metric in record.cvss:
+                lines.append(
+                    f"CVSS {metric.version} {metric.base_severity or 'unknown'} "
+                    f"{metric.base_score:g} · assessed by {metric.scorer} "
+                    f"· {metric.scorer_type or 'type not recorded'} · channel: NVD"
+                )
         for entry in record.cnvd:
             if isinstance(entry, ComparedCnvdEntry):
                 lines.extend(render_cnvd_comparison(entry, width))
@@ -103,26 +111,36 @@ def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
     lines.extend(("", "Source anchors:"))
     for anchor in lookup.evidence:
         lines.append(anchor.evidence_id)
+        if isinstance(lookup, CveLookupResponse) and lookup.cnvd_attribution is not None:
+            lines.append(
+                f"  {anchor.source_name} · {anchor.authoritative_record_id} "
+                f"· {anchor.source_uri} · revision {anchor.source_version or 'not recorded'}"
+            )
     if not lookup.evidence:
         lines.append("None recorded.")
     return "\n".join(lines)
 
 
 def render_cnvd_comparison(entry: ComparedCnvdEntry, width: int) -> list[str]:
-    """Keep the two source grades on one line and label the project's comparison."""
+    """Keep raw grades, assessing bodies and the recorded comparison explicit."""
     comparison = entry.source_comparison
     nvd_grade = comparison.nvd_raw_severity
     nvd_statement = "no severity from NVD's own CVSS v3 metric"
     if nvd_grade is not None:
-        nvd_statement = f"CVSS {nvd_grade.cvss_version} {nvd_grade.base_severity or 'unknown'}"
-    reason = ""
-    if comparison.not_compared_reason is not None:
-        reason = f" ({comparison.not_compared_reason})"
+        nvd_statement = (
+            f"CVSS {nvd_grade.cvss_version} {nvd_grade.base_severity or 'unknown'} "
+            f"· assessed by {nvd_grade.scorer} "
+            f"· {nvd_grade.scorer_type or 'type not recorded'}"
+        )
     return [
-        f"NVD: {nvd_statement} | CNVD {entry.cnvd_id}: {comparison.cnvd_raw_severity}",
+        f"NVD: {nvd_statement}",
+        f"CNVD {entry.cnvd_id}: {comparison.cnvd_raw_severity} "
+        "· CNVD three-grade scheme (高 / 中 / 低) · assessed by CNVD",
         f"NVD state: {comparison.nvd_state}",
         fill(f"CNVD title: {entry.title}", width=width),
         fill(f"CNVD description: {entry.description}", width=width),
-        f"VulnWitness grade comparison: {comparison.grade_relative}{reason} [{comparison.rule}]",
+        describe_cnvd_comparison(comparison),
+        f"Rule: {comparison.rule}",
         fill(comparison.statement, width=width),
+        f"Evidence: {entry.evidence_id}",
     ]

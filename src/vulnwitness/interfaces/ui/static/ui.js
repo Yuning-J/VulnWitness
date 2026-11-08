@@ -89,7 +89,11 @@ function renderSection(section, level = 3, showTitle = true) {
   if (section.anchor) container.id = section.anchor;
   if (section.folded || showTitle) container.append(element(section.folded ? "summary" : `h${Math.min(level, 6)}`, section.title));
   if (section.heading_note) container.append(element("p", section.heading_note, "muted"));
-  for (const paragraph of section.paragraphs) container.append(element("p", paragraph.text));
+  for (const paragraph of section.paragraphs) {
+    const text = element("p", paragraph.text);
+    if (paragraph.language !== null) text.lang = paragraph.language;
+    container.append(text);
+  }
   for (const badge of section.badges) container.append(element("span", badge.text, `pill ${badge.tone}`));
   for (const chip of section.chips) container.append(element("span", chip, "chip"));
   const stats = element("div", undefined, "stats");
@@ -115,7 +119,11 @@ function renderSection(section, level = 3, showTitle = true) {
     for (const bullet of section.bullets) bullets.append(element("li", bullet));
     container.append(bullets);
   }
-  if (section.verbatim !== null) container.append(element("pre", section.verbatim));
+  if (section.verbatim !== null) {
+    const text = element("pre", section.verbatim);
+    if (section.verbatim_language !== null) text.lang = section.verbatim_language;
+    container.append(text);
+  }
   for (const table of section.tables) {
     const rows = [];
     for (const row of table.rows) {

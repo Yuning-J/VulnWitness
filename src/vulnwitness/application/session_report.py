@@ -309,6 +309,7 @@ def build_card(
     vulnerability: ProductVulnerability | None,
     rank: int | None,
     triage: TriageSummary | None,
+    cnvd_language: str | None,
 ) -> ReportSection:
     record = candidate.record
     preferred_metric = max(record.cvss, key=rank_cvss_metric) if record.cvss else None
@@ -385,7 +386,7 @@ def build_card(
                         ),
                         sections=tuple(sections),
                     ),
-                    build_cnvd_entries(candidate.record.cnvd, sequence),
+                    build_cnvd_entries(candidate.record.cnvd, sequence, cnvd_language),
                 ),
                 layout="columns",
             )
@@ -763,7 +764,7 @@ def build_session_report(
             f"paths; {reaching} paths reaching ATT&CK; {len(techniques)} "
             f"distinct techniques; {omitted} paths omitted by the cap."
         )
-    facts.extend(build_cnvd_facts(cnvd_lookups))
+    facts.extend(build_cnvd_facts(cnvd_lookups, session.dataset))
     for sequence, investigation in investigations:
         facts.append(
             f"Call {sequence} investigation ({investigation.applied_scope}): "
@@ -790,11 +791,13 @@ def build_session_report(
                     vulnerabilities.get(cve_id),
                     ranks.get(cve_id),
                     triage,
+                    lookup.cnvd_language if isinstance(lookup, CveLookupResponse) else None,
                 )
             )
             card_links.append(ReportLink(cve_id, f"#{cve_id}"))
         for cve_id, entries in pending_by_call.get(sequence, {}).items():
-            cards.append(build_pending_cnvd_card(cve_id, entries, sequence))
+            language = lookup.cnvd_language if isinstance(lookup, CveLookupResponse) else None
+            cards.append(build_pending_cnvd_card(cve_id, entries, sequence, language))
             card_links.append(ReportLink(cve_id, f"#{cve_id}"))
     rows: list[tuple[str, ...]] = []
     for index, (sequence, vulnerability) in enumerate(inventory, 1):
