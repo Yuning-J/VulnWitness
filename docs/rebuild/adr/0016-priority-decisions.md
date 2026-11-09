@@ -5,9 +5,8 @@ Status: accepted (2026-11-08). Builds on ADR 0010 (sessions), ADR 0011 (triage),
 
 ## Context
 
-Vulnerability analysis and prioritisation (VAP) asks three questions of a CVE: does it
-affect our asset (triage), how urgent is it (priority), and what obligation applies
-(compliance). ADR 0015 keeps each authority's verdict with its provenance. This ADR turns
+Prioritising a vulnerability asks three questions of a CVE: does it affect our asset
+(triage), how urgent is it (priority), and what obligation applies (compliance). ADR 0015 keeps each authority's verdict with its provenance. This ADR turns
 recorded verdicts into a recommendation that states its reasons, so the same inputs always
 give the same answer.
 

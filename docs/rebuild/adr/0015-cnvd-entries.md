@@ -6,11 +6,11 @@ local UI (ADR 0014).
 
 ## Context
 
-Vulnerability analysis and prioritisation (VAP) work watches US and Chinese sources side
-by side: NVD and the two Chinese national databases, CNVD (run by CNCERT) and CNNVD (run
-by CNITSEC). VulnWitness serves NVD records with CISA KEV joined by CVE ID. The need is
-one CVE with each source's statement shown side by side, each with its own provenance,
-and grades compared under a stated mapping.
+A vulnerability record can be described by more than one authority. VulnWitness serves NVD
+records with CISA KEV joined by CVE ID; the Chinese national databases, CNVD (run by
+CNCERT) and CNNVD (run by CNITSEC), describe many of the same CVEs. The need is one CVE
+with each source's statement shown side by side, each with its own provenance, and grades
+compared under a stated mapping.
 
 Access, checked on 2026-11-08:
 
