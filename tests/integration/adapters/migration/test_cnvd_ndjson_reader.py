@@ -88,6 +88,56 @@ def test_increment_replaces_old_cve_links_instead_of_accumulating_them(tmp_path:
     assert report.cnvd_outcomes[CnvdOutcome.MERGED] == 0
 
 
+def test_nested_cve_list_retains_distinct_links_and_null_advice(tmp_path: Path) -> None:
+    scenario = build_raw_cnvd_scenario(
+        tmp_path,
+        [
+            build_raw_cnvd_record(
+                1,
+                cves={
+                    "cve": [
+                        {"cveNumber": build_cve_id(1)},
+                        {"cveNumber": build_cve_id(4)},
+                        {"cveNumber": build_cve_id(1)},
+                    ]
+                },
+                formalWay=None,
+            )
+        ],
+    )
+
+    corpus, report = import_scenario(scenario)
+
+    assert report.cnvd_outcomes[CnvdOutcome.MERGED] == 1
+    assert report.cnvd_outcomes[CnvdOutcome.WITHOUT_NVD_RECORD] == 1
+    assert corpus.records[0].cnvd[0].handling_advice is None
+    assert (
+        corpus.cnvd_index.pending_by_cve_id[build_cve_id(4)][0].entry.cnvd_id == "CNVD-9999-00001"
+    )
+
+
+def test_missing_grade_without_cve_is_counted_without_a_served_entry(tmp_path: Path) -> None:
+    record = build_raw_cnvd_record(1, cves=[], formalWay=None)
+    del record["serverity"]
+    scenario = build_raw_cnvd_scenario(tmp_path, [record])
+
+    corpus, report = import_scenario(scenario)
+
+    assert report.cnvd_outcomes[CnvdOutcome.WITHOUT_CVE_ID] == 1
+    assert corpus.records[0].cnvd == ()
+
+
+def test_missing_grade_with_a_cve_refuses_the_import(tmp_path: Path) -> None:
+    record = build_raw_cnvd_record(1)
+    del record["serverity"]
+    scenario = build_raw_cnvd_scenario(tmp_path, [record])
+
+    report = run_test_migration(scenario.manifest, scenario.target)
+
+    assert report.failure is not None
+    assert report.failure.code is MigrationFailureCode.CNVD_INVALID_RECORD
+
+
 @pytest.mark.parametrize(
     "retrieved_at", [RETRIEVED_AT, "2026-10-24T16:30:00+08:00"], ids=["same", "same-instant"]
 )
@@ -128,6 +178,11 @@ def test_both_cnvd_sources_are_refused_before_catalog_matching(tmp_path: Path) -
     ("cves", "products", "expected_products"),
     [
         ({"cve": {"cveNumber": build_cve_id(1)}}, {"product": " unchanged "}, [" unchanged "]),
+        (
+            {"cve": [{"cveNumber": build_cve_id(1)}, {"cveNumber": build_cve_id(2)}]},
+            {"product": " unchanged "},
+            [" unchanged "],
+        ),
         ([{"cve": {"cveNumber": build_cve_id(1)}}], {"product": ["a", "b"]}, ["a", "b"]),
         (
             [{"cve": {"cveNumber": build_cve_id(1)}}],
@@ -135,7 +190,7 @@ def test_both_cnvd_sources_are_refused_before_catalog_matching(tmp_path: Path) -
             ["a", "b", "c"],
         ),
     ],
-    ids=["objects", "list-cves-list-product", "lists-and-nested-products"],
+    ids=["objects", "nested-cves", "list-cves-list-product", "lists-and-nested-products"],
 )
 def test_raw_fields_round_trip_and_serve_verbatim_with_research_attribution(
     tmp_path: Path, cves: Any, products: Any, expected_products: list[str]

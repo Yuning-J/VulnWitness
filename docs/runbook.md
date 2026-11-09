@@ -150,16 +150,6 @@ remove `--dry-run` to write. Manifests declare raw NVD 1.1/2.0, KEV CSV and each
 Parquet file with acquisition times. CNVD declarations must cover both files of one
 catalogued revision. Import never overwrites targets or writes beside inputs; derived exports are refused.
 
-Raw CNVD records distributed by CIRCL Vulnerability-Lookup are an opt-in research
-input; their data licence is unverified. In `inputs.yaml`, declare the base dump and
-each increment separately with `source: vulnerability-lookup-cnvd`, a relative `.ndjson`
-`path` and a distinct RFC 3339 `retrieved_at`. Import reads them in retrieval order;
-a later record replaces the whole earlier record with the same CNVD ID. Use this source
-instead of `circl-cnvd`; combining them is refused. Each file is pinned in the store by
-its SHA-256. The raw fields are untrusted source text, and the name check still uses the
-title. CIRCL's `since` filter follows `openTime` and cannot see edits made after that date;
-a new base download needs the owner's decision. Operator fetch commands follow in part 2.
-
 The migration report counts each CNVD row under one of six join outcomes:
 
 | Outcome | Meaning |
@@ -177,6 +167,62 @@ record for that CVE. Refresh preserves each authority's grade and provenance; CN
 higher under a named VulnWitness mapping and the separate record, score and status gaps
 are descriptive signals, not a priority policy. CVSS measures severity, not risk. The core
 flow does no translation; clients and browsers can translate the original CNVD text.
+
+## Raw CNVD research input
+
+Raw CNVD records from CIRCL Vulnerability-Lookup are an opt-in research input with an
+unverified data licence ([ADR 0018](rebuild/adr/0018-cnvd-raw-research-input.md)). Keep
+them outside repositories and build a store under a separate research root:
+
+```sh
+.venv/bin/python scripts/operator/fetch_raw_cnvd.py base ~/data/vulnwitness/feeds/cnvd-raw
+.venv/bin/python scripts/operator/fetch_raw_cnvd.py increment ~/data/vulnwitness/feeds/cnvd-raw
+.venv/bin/python scripts/operator/fetch_raw_cnvd.py manifest ~/data/vulnwitness/feeds/cnvd-raw \
+  --inputs /data/feeds/nvd-kev-only.yaml --output ~/data/vulnwitness/feeds/cnvd-raw/inputs.yaml
+mkdir -p ~/data/vulnwitness/stores-cnvd-raw
+VULNWITNESS_STORE_ROOT=~/data/vulnwitness/stores-cnvd-raw \
+  .venv/bin/python scripts/operator/refresh_store.py \
+  --inputs ~/data/vulnwitness/feeds/cnvd-raw/inputs.yaml --store research-2026-11-09 --activate
+```
+
+`base` streams one dump into a temporary file, validates its NDJSON and renames it only
+when complete. It refuses a directory that already holds a base. `increment` reads the
+latest `openTime` recorded across the base and all earlier runs in `provenance.tsv`,
+queries from that date minus one day, and requests pages of 100 in ascending updated
+order until a short page. All attempts are spaced by at least one second. A 429 or 5xx
+gets one retry, respecting `Retry-After` (seconds or HTTP date); other non-200 statuses,
+invalid JSON and interruptions fail without a partial run file or provenance row.
+SIGINT/SIGTERM are handled; an uncatchable kill or power loss may require removing a
+stale `.fetch.lock` and temporary files after checking that no fetch process remains.
+
+Each successful run adds a provenance row with retrieval time, SHA-256, byte and record
+counts, high-water date, request/429 counts and elapsed seconds. Base rows also retain
+the URL, Last-Modified and ETag; increment rows retain the query template, `since` and
+page count. Nonempty increments use retrieval-time filenames. A zero-record run adds a
+row with an empty filename, zero bytes and the empty-stream SHA-256, and writes no NDJSON.
+The base is downloaded once; increments run only when an operator requests them.
+Nothing is scheduled. CIRCL maps `openTime` to updated: increments cannot see CNVD edits
+made after that date. A new base download needs the owner's decision.
+
+`manifest --inputs EXISTING --output NEW` combines existing NVD/KEV entries with the
+base and nonempty increments in retrieval order, each with its recorded `retrieved_at`.
+It resolves all paths to absolute paths, so NEW can live in a different directory, and
+refuses an existing output or any CNVD source already in EXISTING, including `circl-cnvd`.
+For a manifest containing pinned CNVD, first write an NVD/KEV-only copy, preserving the
+original file and resolving each retained path relative to its original manifest directory.
+
+The raw source is `vulnerability-lookup-cnvd`, used instead of `circl-cnvd`; combining
+them is refused. Import pins every file by SHA-256 and replaces the whole earlier record
+when a later input has the same CNVD ID. Raw fields are untrusted source text; the name
+check still uses the title. Full API records use the same retained-field object shape as
+dump lines, with different optional metadata keys; increments serialize each record
+directly as one NDJSON line, with no wrapper or light-mode query. Both outer `cves` and
+inner `cve` values can be an object or list. Null `formalWay` means absent advice. Raw
+records lacking both a CVE link and `serverity` count as `cnvd_without_cve_id` and are
+never served; a linked record still requires a valid grade.
+Use the research root for every activation and serving command; the command-scoped
+environment assignment above leaves the default root untouched. For several checks
+with one store load, use the documented MCP workspace process below.
 
 ```sh
 vulnwitness store validate nvd-2026-10-31

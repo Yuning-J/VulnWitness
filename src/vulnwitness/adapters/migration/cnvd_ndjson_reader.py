@@ -56,12 +56,10 @@ def read_objects(value: object) -> list[dict[str, object]]:
 def read_cve_ids(record: dict[str, object]) -> tuple[str, ...]:
     cve_ids: list[str] = []
     for citation in read_objects(record.get("cves", [])):
-        cve = citation["cve"]
-        if not isinstance(cve, dict):
-            raise ValueError("expected a CVE object")
-        cve_id = read_text(cve, "cveNumber")
-        if cve_id not in cve_ids:
-            cve_ids.append(cve_id)
+        for cve in read_objects(citation["cve"]):
+            cve_id = read_text(cve, "cveNumber")
+            if cve_id not in cve_ids:
+                cve_ids.append(cve_id)
     return tuple(cve_ids) or ("",)
 
 
@@ -89,10 +87,17 @@ def parse_raw_cnvd_record(record: object) -> tuple[CnvdRow, ...]:
     cnvd_id = read_text(record, "number")
     title = read_text(record, "title")
     description = read_text(record, "description")
-    severity = read_text(record, "serverity")
+    cve_ids = read_cve_ids(record)
+    severity = read_text(record, "serverity") if "serverity" in record else ""
     if re.fullmatch(CNVD_ID_PATTERN, cnvd_id) is None:
         raise ValueError("invalid CNVD ID")
-    if not title or not description or severity not in {"高", "中", "低"}:
+    # Unlinked source records can omit the grade; they are counted but never served.
+    missing_unlinked_grade = "serverity" not in record and cve_ids == ("",)
+    if (
+        not title
+        or not description
+        or (severity not in {"高", "中", "低"} and not missing_unlinked_grade)
+    ):
         raise ValueError("invalid CNVD text or grade")
     row = CnvdRow(
         cnvd_id=cnvd_id,
@@ -104,10 +109,12 @@ def parse_raw_cnvd_record(record: object) -> tuple[CnvdRow, ...]:
         products=read_products(record),
         submit_time=read_date(record, "submitTime"),
         open_time=read_date(record, "openTime"),
-        handling_advice=read_text(record, "formalWay") if "formalWay" in record else None,
+        handling_advice=read_text(record, "formalWay")
+        if record.get("formalWay") is not None
+        else None,
     )
     rows = []
-    for cve_id in read_cve_ids(record):
+    for cve_id in cve_ids:
         rows.append(replace(row, cve_id=cve_id))
     return tuple(rows)
 

@@ -14,6 +14,9 @@ reports and the local UI show recommendations separately from compliance status
 CNVD links carry a name-overlap check for review without changing grades or links
 ([ADR 0017](docs/rebuild/adr/0017-cnvd-name-check.md)).
 
+Raw CNVD base and incremental inputs are available for opt-in research with an unverified
+data licence ([ADR 0018](docs/rebuild/adr/0018-cnvd-raw-research-input.md)).
+
 ![Open5GS walkthrough: triage reads 211 product matches over 11 pages, looks up 5 CVEs, records the session, checks 495 claims against the record and renders a report; affectedness stays unknown](docs/media/open5gs-walkthrough.webp)
 
 *A real triage of Open5GS 2.7.6 on the NVD snapshot of 2026-10-27: selected recorded events,
