@@ -34,7 +34,8 @@ from vulnwitness.domain.store_status import is_store_name
 @dataclass(frozen=True)
 class ResolvedInput:
     """One declared input, found and identified. ``position`` is its place in the inputs
-    sorted by source, artifact and file SHA-256, which locates it in reports."""
+    sorted by source and artifact, then file SHA-256 for NVD/Parquet or retrieval
+    instant and manifest order for raw CNVD, which locates it in reports."""
 
     position: int
     source: StoreSource
@@ -45,6 +46,14 @@ class ResolvedInput:
     cnvd_revision: str | None = None
 
     def sort_key(self) -> tuple[str, str, str, int, str]:
+        if self.source is StoreSource.VULNERABILITY_LOOKUP_CNVD:
+            return (
+                self.source.value,
+                self.retrieved_at.isoformat(timespec="microseconds"),
+                "",
+                self.position,
+                "",
+            )
         artifact = self.artifact
         if artifact is None:
             return (self.source.value, "", "", 0, self.input_file.sha256)
@@ -101,9 +110,28 @@ def resolve_inputs(
 ) -> tuple[ResolvedInput, ...]:
     """Every declared input, found, identified and sorted; raises ``MigrationFailed``
     naming the failing declaration by its ``manifest_index``."""
+    cnvd_sources: set[StoreSource] = set()
+    raw_retrieval_times: set[datetime] = set()
+    for declaration_index, declaration in enumerate(manifest.inputs):
+        if declaration.source in {StoreSource.CIRCL_CNVD, StoreSource.VULNERABILITY_LOOKUP_CNVD}:
+            cnvd_sources.add(declaration.source)
+            if len(cnvd_sources) > 1:
+                raise MigrationFailed(
+                    MigrationFailureCode.CNVD_MIXED_SOURCES, manifest_index=declaration_index
+                )
+        if declaration.source is StoreSource.VULNERABILITY_LOOKUP_CNVD:
+            if declaration.retrieved_at in raw_retrieval_times:
+                raise MigrationFailed(
+                    MigrationFailureCode.CNVD_EQUAL_RETRIEVED_AT, manifest_index=declaration_index
+                )
+            raw_retrieval_times.add(declaration.retrieved_at)
+            if Path(declaration.path).suffix != ".ndjson":
+                raise MigrationFailed(
+                    MigrationFailureCode.CNVD_INVALID_NDJSON, manifest_index=declaration_index
+                )
     unsorted_inputs: list[ResolvedInput] = []
     resolved_paths: set[Path] = set()
-    file_hashes: set[str] = set()
+    file_sources_by_hash: dict[str, StoreSource] = {}
     for declaration_index, declaration in enumerate(manifest.inputs):
         try:
             path = manifest_dir / declaration.path
@@ -112,10 +140,15 @@ def resolve_inputs(
             resolved_path = resolve_path(path, MigrationFailureCode.INPUT_UNREADABLE)
             if resolved_path in resolved_paths:
                 raise MigrationFailed(MigrationFailureCode.INPUT_REPEATED)
-            if inspected_file.sha256 in file_hashes:
+            previous_source = file_sources_by_hash.get(inspected_file.sha256)
+            is_raw_repeat = (
+                previous_source is StoreSource.VULNERABILITY_LOOKUP_CNVD
+                and declaration.source is StoreSource.VULNERABILITY_LOOKUP_CNVD
+            )
+            if previous_source is not None and not is_raw_repeat:
                 raise MigrationFailed(MigrationFailureCode.INPUT_BYTES_REPEATED)
             resolved_paths.add(resolved_path)
-            file_hashes.add(inspected_file.sha256)
+            file_sources_by_hash[inspected_file.sha256] = declaration.source
             artifact = None
             if declaration.source is StoreSource.NVD:
                 artifact = read_artifact(declaration, resolved_path.name)
@@ -147,13 +180,14 @@ def digest_registry_entries(source_registry: SourceRegistry) -> str:
     cited_entries: list[object] = []
     for source in StoreSource:
         registry_entry = source_registry.find_source(source.value)
-        cited_entries.append(
-            {
-                "name": registry_entry.name,
-                "terms_or_license_url": registry_entry.terms_or_license_url,
-                "artifact_uri_template": registry_entry.artifact_uri_template,
-            }
-        )
+        cited_source: dict[str, object] = {
+            "name": registry_entry.name,
+            "terms_or_license_url": registry_entry.terms_or_license_url,
+            "artifact_uri_template": registry_entry.artifact_uri_template,
+        }
+        if source is StoreSource.VULNERABILITY_LOOKUP_CNVD:
+            cited_source["redistribution_conditions"] = registry_entry.redistribution_conditions
+        cited_entries.append(cited_source)
     return canonical_sha256(cited_entries)
 
 

@@ -42,6 +42,16 @@ sources:
     local_storage_policy: operator_supplied
     terms_verified_on: 2026-11-08
     artifact_uri_template: "https://huggingface.co/datasets/CIRCL/Vulnerability-CNVD/resolve/{revision}/{path}"
+  - name: vulnerability-lookup-cnvd
+    official_url: "https://vulnerability.circl.lu"
+    terms_or_license_url: null
+    version_strategy: "Operator-supplied NDJSON base and increments, each pinned by SHA-256 and retrieval time; later records replace earlier CNVD IDs."
+    attribution: "CNVD entries distributed by CIRCL Vulnerability-Lookup; CNVD data licence unverified. This store is for research use; normalised by VulnWitness."
+    redistribution_allowed: unknown
+    redistribution_conditions: "CNVD data licence unverified; opt-in research input only. The repository commits no CNVD data."
+    local_storage_policy: operator_supplied
+    terms_verified_on: null
+    artifact_uri_template: "https://vulnerability.circl.lu/dumps/cnvd.ndjson"
   - name: cnvd
     official_url: "https://www.cnvd.org.cn"
     terms_or_license_url: null

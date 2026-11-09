@@ -79,8 +79,8 @@ def test_compatibility_store_serves_the_dataset_version_its_files_name() -> None
     )
 
 
-def test_persisted_models_match_the_schemas_format_2_was_judged_against() -> None:
-    # Format 2 persists these four models; schema changes require judging the format
+def test_persisted_models_match_the_schemas_format_3_was_judged_against() -> None:
+    # Format 3 persists these four models; schema changes require judging the format
     # against ADR 0008 §9, including rules not captured by the published schemas.
     persisted_schemas: dict[str, object] = {}
     for contract_name, model in (

@@ -18,11 +18,11 @@ from vulnwitness.domain.hashing import canonical_sha256
 from vulnwitness.domain.search import HIDDEN_REQUEST_CHARACTERS
 from vulnwitness.domain.timestamps import Timestamp
 
-STORE_FORMAT_VERSION: Literal[2] = 2
-# Format 2 persists NVD status, CNVD entries and pending CNVD rows. This digest guards
+STORE_FORMAT_VERSION: Literal[3] = 3
+# Format 3 persists raw CNVD products, calendar dates and handling advice. This digest guards
 # the published schemas of the manifest, CVE record, evidence anchor and pending entry;
 # changes require judging the persisted shape and reader rules against ADR 0008 §9.
-STORE_FORMAT_SCHEMA_SHA256 = "31f098ad164a4024de12142dde9383924459fb2eb5b38e26b895bb1f68af66b4"
+STORE_FORMAT_SCHEMA_SHA256 = "60e4deb10d7eaa0301f04b1feda8cec8d71e5dcc2d42374081218ae77cc17ab9"
 # NVD's first year feed; it also holds the CVE IDs of 1999 to 2001.
 FIRST_FEED_YEAR = 2002
 STORE_FILE_NAME_PATTERN = r"^[a-z_]+\.jsonl$"
@@ -49,6 +49,7 @@ class StoreSource(StrEnum):
     NVD = "nvd"
     CISA_KEV = "cisa-kev"
     CIRCL_CNVD = "circl-cnvd"
+    VULNERABILITY_LOOKUP_CNVD = "vulnerability-lookup-cnvd"
 
 
 class NvdFeedFormat(StrEnum):
@@ -169,10 +170,10 @@ class CorpusStoreManifest(ContractModel):
         description="The contract version the store was created under; provenance only, "
         "never compared with the version a reader serves."
     )
-    store_format_version: Literal[1, 2] = Field(
+    store_format_version: Literal[1, 2, 3] = Field(
         default=STORE_FORMAT_VERSION,
         description="What decides whether a reader can read the store; a reader refuses "
-        "integers other than 1 and 2.",
+        "integers other than 1, 2 and 3.",
     )
     synthetic: Literal[False] = False
     created_at: Timestamp

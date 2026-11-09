@@ -611,6 +611,70 @@
           "if": {
             "properties": {
               "code": {
+                "const": "cnvd_mixed_sources"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "An import accepts only one CNVD source."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_equal_retrieved_at"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "Raw CNVD inputs must have distinct retrieved_at instants."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_invalid_ndjson"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A raw CNVD input must be a plain .ndjson file with one JSON object per line."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "cnvd_invalid_record"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "message": {
+                "const": "A raw CNVD record has malformed retained fields."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
                 "const": "cnvd_invalid_parquet"
               }
             }
@@ -1060,6 +1124,20 @@
         "code": {
           "$ref": "#/$defs/MigrationFailureCode"
         },
+        "input_line": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "One-based line number of a malformed NDJSON record.",
+          "title": "Input Line"
+        },
         "input_position": {
           "anyOf": [
             {
@@ -1097,7 +1175,8 @@
         "code",
         "message",
         "manifest_index",
-        "input_position"
+        "input_position",
+        "input_line"
       ],
       "title": "MigrationFailure",
       "type": "object"
@@ -1138,6 +1217,10 @@
         "cnvd_uncatalogued_file",
         "cnvd_incomplete_snapshot",
         "cnvd_invalid_parquet",
+        "cnvd_mixed_sources",
+        "cnvd_equal_retrieved_at",
+        "cnvd_invalid_ndjson",
+        "cnvd_invalid_record",
         "cnvd_missing_column",
         "cnvd_extra_column",
         "cnvd_mistyped_column",
@@ -1372,8 +1455,8 @@
       "title": "Rollback Scope"
     },
     "schema_version": {
-      "const": "2.0.0-dev.57",
-      "default": "2.0.0-dev.57",
+      "const": "2.0.0-dev.58",
+      "default": "2.0.0-dev.58",
       "title": "Schema Version",
       "type": "string"
     },

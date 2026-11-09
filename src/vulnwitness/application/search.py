@@ -114,7 +114,10 @@ class SearchService:
     def describe_cnvd(self) -> CnvdCapability:
         """Whether the store imported CNVD, including imports with no retained entries."""
         revision = self._cnvd_index.imported_revision
-        return CnvdCapability(imported=revision is not None, revision=revision)
+        return CnvdCapability(
+            imported=self._cnvd_index.source_name is not None or revision is not None,
+            revision=revision,
+        )
 
     def describe_cnvd_attribution(self) -> str | None:
         """Registry credit for instructions exactly when the corpus holds CNVD entries."""

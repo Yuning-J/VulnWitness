@@ -13,6 +13,7 @@ this repository commits no data from that source.
 | CVE Program | https://www.cve.org/Legal/TermsOfUse | allowed with conditions | operator-supplied only |
 | CISA KEV | https://www.cisa.gov/sites/default/files/licenses/kev/license.txt | allowed (CC0 1.0) | operator-supplied catalogs and the corpus stores imported from them only |
 | CIRCL/Vulnerability-CNVD | https://creativecommons.org/licenses/by/4.0/ (as declared by CIRCL) | allowed with conditions | operator-supplied only; no CNVD data committed |
+| CIRCL Vulnerability-Lookup CNVD raw records | licence unverified (https://vulnerability.circl.lu) | unknown | opt-in, operator-supplied research input only; no CNVD data committed |
 | CNVD | not verified (https://www.cnvd.org.cn) | unknown | operator-supplied only; no CNVD data committed |
 | MITRE FiGHT | https://fight.mitre.org/resources/terms/ | allowed with conditions (FiGHT Terms of Use; ATT&CK terms for derived content) | six-technique excerpt (`src/vulnwitness/fixtures/fight/`); the full file only as an operator-supplied snapshot |
 | MITRE ATT&CK | https://attack.mitre.org/resources/legal-and-branding/terms-of-use/ | allowed with conditions | FiGHT excerpt and the derived weakness mapping excerpt (technique names, IDs and tactics) |
@@ -98,6 +99,14 @@ clients the notice NVD asks services that use its data to display: "This product
 data from the NVD API but is not endorsed or certified by the NVD." A FiGHT snapshot is
 served only when the reviewed catalog lists its SHA-256, and every technique anchor it
 serves cites the FiGHT terms (`license_or_terms_ref`).
+
+As an opt-in research alternative, an operator may supply raw CNVD NDJSON from CIRCL
+Vulnerability-Lookup: one base and separately recorded increments, each pinned by SHA-256
+and retrieval time. Its data licence is unverified; the source registry has no licence
+URL and redistribution remains unknown. A store accepts this source or the pinned Parquet
+source, and serves the corresponding attribution. Raw-source attribution names CIRCL
+Vulnerability-Lookup as distributor, states "CNVD data licence unverified", and says the
+store is for research use ([ADR 0018](docs/rebuild/adr/0018-cnvd-raw-research-input.md)).
 
 The format-1 compatibility store under `tests/contract/data/` is synthetic test data
 (`CVE-9999-*` records of a fictional vendor) written by this repository's importer. Its

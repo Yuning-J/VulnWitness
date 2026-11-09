@@ -1,6 +1,7 @@
 """Synthetic CNVD Parquet inputs and injected catalogs for importer and store tests."""
 
 import dataclasses
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from vulnwitness.adapters.migration.legacy_migration import MigrationDependencie
 from vulnwitness.adapters.migration.migration_limits import MigrationLimits
 from vulnwitness.adapters.store.corpus_store import CorpusStore, load_corpus_store
 from vulnwitness.domain.cnvd_snapshot import CnvdSnapshot, CnvdSnapshotCatalog, CnvdSnapshotFile
+from vulnwitness.domain.hashing import canonical_json_bytes, sha256_hex
 from vulnwitness.domain.migration_report import MigrationOutcome
 
 TEST_REVISION = "a" * 40
@@ -101,17 +103,14 @@ class CnvdScenario:
     rows: tuple[dict[str, Any], ...]
 
 
-def build_cnvd_scenario(
+def write_cnvd_nvd_inputs(
     directory: Path,
     *,
-    cnvd_title: str = "SYNTHETIC: 示例标题",
     nvd_status: str = "Analyzed",
     metrics: dict[str, Any] | None = None,
     extra_nvd_entries: tuple[dict[str, Any], ...] = (),
-    retain_cnvd: bool = True,
-    revision: str = TEST_REVISION,
-) -> CnvdScenario:
-    """One merged CVE with two entries, all pending outcomes and both unstored outcomes."""
+) -> tuple[Path, Path]:
+    """NVD winners, rejected and conflicting candidates shared by both CNVD sources."""
     inputs_dir = directory / "inputs"
     inputs_dir.mkdir()
     stores_dir = directory / "stores"
@@ -130,6 +129,23 @@ def build_cnvd_scenario(
     write_plain_feed(
         inputs_dir / "nvdcve-2.0-modified.json",
         build_v2_feed([build_v2_entry(3, description="SYNTHETIC: conflicting text.")]),
+    )
+    return inputs_dir, stores_dir
+
+
+def build_cnvd_scenario(
+    directory: Path,
+    *,
+    cnvd_title: str = "SYNTHETIC: 示例标题",
+    nvd_status: str = "Analyzed",
+    metrics: dict[str, Any] | None = None,
+    extra_nvd_entries: tuple[dict[str, Any], ...] = (),
+    retain_cnvd: bool = True,
+    revision: str = TEST_REVISION,
+) -> CnvdScenario:
+    """One merged CVE with two entries, all pending outcomes and both unstored outcomes."""
+    inputs_dir, stores_dir = write_cnvd_nvd_inputs(
+        directory, nvd_status=nvd_status, metrics=metrics, extra_nvd_entries=extra_nvd_entries
     )
     rows = (
         build_cnvd_row(7, cve_id=build_cve_id(1), severity="低", title=cnvd_title),
@@ -208,3 +224,90 @@ def import_cnvd_lookup_corpus(
     )
     assert report.outcome is MigrationOutcome.IMPORTED, report.failure
     return load_corpus_store(scenario.target)
+
+
+def build_raw_cnvd_record(record_number: int, **fields: Any) -> dict[str, Any]:
+    """A fictional raw record using the same CNVD values as the Parquet builders."""
+    row = build_cnvd_row(record_number)
+    record = {
+        "number": row["id"],
+        "title": row["title"],
+        "description": row["description"],
+        "serverity": row["severity"],
+        "cves": {"cve": {"cveNumber": row["cve_id"]}},
+        "products": {"product": "SYNTHETIC: Example Gateway <2.0"},
+        "submitTime": "2026-10-01",
+        "openTime": "2026-10-02",
+        "formalWay": "SYNTHETIC: 升级到修复版本。",
+    }
+    record.update(fields)
+    return record
+
+
+def write_raw_cnvd_file(directory: Path, name: str, records: list[Any]) -> Path:
+    """Write only synthetic NDJSON in the test's temporary directory."""
+    lines = []
+    for record in records:
+        lines.append(json.dumps(record, ensure_ascii=False))
+    path = directory / name
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def build_raw_cnvd_scenario(
+    directory: Path,
+    base_records: list[Any],
+    *,
+    increment_records: list[Any] | None = None,
+    increment_retrieved_at: str = "2026-10-24T09:30:00Z",
+    reverse_manifest: bool = False,
+) -> CnvdScenario:
+    """Synthetic raw base/increments with the shared NVD candidate and outcome builders."""
+    inputs_dir, stores_dir = write_cnvd_nvd_inputs(directory)
+    base = write_raw_cnvd_file(inputs_dir, "base.ndjson", base_records)
+    cnvd_declarations = [build_declaration(base.name, source="vulnerability-lookup-cnvd")]
+    if increment_records is not None:
+        increment = write_raw_cnvd_file(inputs_dir, "increment.ndjson", increment_records)
+        cnvd_declarations.append(
+            build_declaration(
+                increment.name,
+                source="vulnerability-lookup-cnvd",
+                retrieved_at=increment_retrieved_at,
+            )
+        )
+    if reverse_manifest:
+        cnvd_declarations.reverse()
+    manifest = write_inputs_manifest(
+        inputs_dir,
+        [
+            build_declaration("nvdcve-2.0-9999.json"),
+            build_declaration("nvdcve-2.0-modified.json"),
+            *cnvd_declarations,
+        ],
+    )
+    return CnvdScenario(manifest, stores_dir / "cnvd", build_migration_dependencies(), ())
+
+
+def write_format_2_cnvd_store(store_dir: Path) -> None:
+    """Represent a synthetic Parquet store with format 2's persisted CNVD fields."""
+    manifest_path = store_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for pin in manifest["files"]:
+        if pin["path"] not in {"records.jsonl", "pending_cnvd.jsonl"}:
+            continue
+        path = store_dir / pin["path"]
+        lines = []
+        for line in path.read_bytes().splitlines():
+            record = json.loads(line)
+            entries = record["cnvd"] if pin["path"] == "records.jsonl" else [record["entry"]]
+            for entry in entries:
+                for field_name in ("products", "submit_time", "open_time", "handling_advice"):
+                    del entry[field_name]
+            lines.append(canonical_json_bytes(record))
+        file_bytes = b"\n".join(lines) + b"\n"
+        path.write_bytes(file_bytes)
+        pin["sha256"] = sha256_hex(file_bytes)
+        pin["size_bytes"] = len(file_bytes)
+    manifest["store_format_version"] = 2
+    manifest["schema_version"] = "2.0.0-dev.57"
+    manifest_path.write_bytes(canonical_json_bytes(manifest))

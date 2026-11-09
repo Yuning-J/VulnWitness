@@ -178,6 +178,7 @@
         "nvd_json_11",
         "cisa_kev",
         "circl_cnvd_parquet",
+        "vulnerability_lookup_cnvd_ndjson",
         "mitre_fight_yaml"
       ],
       "title": "SourceType",
@@ -202,8 +203,8 @@
       "$ref": "#/$defs/EvidenceAnchor"
     },
     "schema_version": {
-      "const": "2.0.0-dev.57",
-      "default": "2.0.0-dev.57",
+      "const": "2.0.0-dev.58",
+      "default": "2.0.0-dev.58",
       "title": "Schema Version",
       "type": "string"
     }

@@ -150,6 +150,16 @@ remove `--dry-run` to write. Manifests declare raw NVD 1.1/2.0, KEV CSV and each
 Parquet file with acquisition times. CNVD declarations must cover both files of one
 catalogued revision. Import never overwrites targets or writes beside inputs; derived exports are refused.
 
+Raw CNVD records distributed by CIRCL Vulnerability-Lookup are an opt-in research
+input; their data licence is unverified. In `inputs.yaml`, declare the base dump and
+each increment separately with `source: vulnerability-lookup-cnvd`, a relative `.ndjson`
+`path` and a distinct RFC 3339 `retrieved_at`. Import reads them in retrieval order;
+a later record replaces the whole earlier record with the same CNVD ID. Use this source
+instead of `circl-cnvd`; combining them is refused. Each file is pinned in the store by
+its SHA-256. The raw fields are untrusted source text, and the name check still uses the
+title. CIRCL's `since` filter follows `openTime` and cannot see edits made after that date;
+a new base download needs the owner's decision. Operator fetch commands follow in part 2.
+
 The migration report counts each CNVD row under one of six join outcomes:
 
 | Outcome | Meaning |

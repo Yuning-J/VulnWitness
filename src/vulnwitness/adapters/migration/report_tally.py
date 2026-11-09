@@ -64,7 +64,7 @@ class ReportTally:
             failure=None
             if failure is None
             else build_migration_failure(
-                failure.code, failure.input_position, failure.manifest_index
+                failure.code, failure.input_position, failure.manifest_index, failure.input_line
             ),
             import_identity_sha256=self.import_identity_sha256,
             store_manifest_sha256=None

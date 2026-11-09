@@ -111,10 +111,10 @@ def tamper_with_anchors(store_dir: Path) -> None:
 
 
 def declare_later_format(store_dir: Path) -> None:
-    """The manifest declaring store format 3, as a later release would write it."""
+    """The manifest declaring store format 4, as a later release would write it."""
     manifest_path = store_dir / "manifest.json"
     manifest_fields = json.loads(manifest_path.read_bytes())
-    manifest_fields["store_format_version"] = 3
+    manifest_fields["store_format_version"] = 4
     manifest_path.write_text(json.dumps(manifest_fields, sort_keys=True, separators=(",", ":")))
 
 

@@ -31,6 +31,10 @@ from vulnwitness.adapters.migration.cnvd_enrichment import (
     build_cnvd_entry,
     enrich_cnvd,
 )
+from vulnwitness.adapters.migration.cnvd_ndjson_reader import (
+    check_raw_cnvd_input,
+    read_raw_cnvd_rows,
+)
 from vulnwitness.adapters.migration.cnvd_snapshot_catalog import match_cnvd_inputs
 from vulnwitness.adapters.migration.cnvd_types import check_cnvd_input
 from vulnwitness.adapters.migration.input_files import (
@@ -164,7 +168,7 @@ def with_position(failure: MigrationFailed, input_position: int) -> MigrationFai
     """``failure`` naming the input at ``input_position``, unless it names one already."""
     if failure.input_position is not None or failure.manifest_index is not None:
         return failure
-    return MigrationFailed(failure.code, input_position)
+    return MigrationFailed(failure.code, input_position, input_line=failure.input_line)
 
 
 class Migration:
@@ -314,6 +318,8 @@ class Migration:
     ) -> InputReading:
         reading = InputReading()
         cnvd_ids: set[str] = set()
+        raw_rows_by_id: dict[str, list[SourcedCnvdRow]] = {}
+        raw_rows_read = 0
         limits = self._dependencies.limits
         budget = DecompressionBudget(remaining_bytes=limits.max_total_decompressed_bytes)
         for resolved_input in inputs:
@@ -322,6 +328,8 @@ class Migration:
                     check_kev_input(resolved_input.input_file, limits)
                 elif resolved_input.source is StoreSource.CIRCL_CNVD:
                     check_cnvd_input(resolved_input.input_file, limits)
+                elif resolved_input.source is StoreSource.VULNERABILITY_LOOKUP_CNVD:
+                    check_raw_cnvd_input(resolved_input.input_file, limits)
                 # The copy counts against the staging cap from before it is made until it
                 # is removed: there must be room for it, and the check after its input is
                 # read sees it still there.
@@ -343,12 +351,31 @@ class Migration:
                                     row, resolved_input, cast(str, resolved_input.cnvd_revision)
                                 )
                             )
+                    elif resolved_input.source is StoreSource.VULNERABILITY_LOOKUP_CNVD:
+                        rows = read_raw_cnvd_rows(snapshot, limits, raw_rows_read)
+                        raw_rows_read += len(rows)
+                        file_rows_by_id: dict[str, list[SourcedCnvdRow]] = {}
+                        for row in rows:
+                            file_rows_by_id.setdefault(row.cnvd_id, []).append(
+                                SourcedCnvdRow(row, resolved_input, f"sha256:{snapshot.sha256}")
+                            )
+                        raw_rows_by_id.update(file_rows_by_id)
                     else:
                         self._read_nvd_input(resolved_input, snapshot, staging, budget, reading)
                     staging.check_size()
             except MigrationFailed as failure:
                 raise with_position(failure, resolved_input.position) from None
+        for cnvd_rows in raw_rows_by_id.values():
+            reading.cnvd_rows.extend(cnvd_rows)
         return reading
+
+    def _cnvd_terms(self, reading: InputReading) -> str:
+        """Research imports cite the registry's unverified-terms statement, never a licence."""
+        source_name = reading.cnvd_rows[0].input.source.value
+        source = self._dependencies.source_registry.find_source(source_name)
+        if source_name == StoreSource.VULNERABILITY_LOOKUP_CNVD.value:
+            return source.redistribution_conditions
+        return self._dependencies.source_registry.require_terms(source_name)
 
     def _refuse_derived_file(self, snapshot: InputFile, budget: DecompressionBudget) -> None:
         """Raise ``derived_file_declared_as_source`` when the input, whatever source it is
@@ -476,7 +503,7 @@ class Migration:
                 normalized = enrich_cnvd(
                     normalized,
                     cnvd_sources,
-                    self._dependencies.source_registry.require_terms("circl-cnvd"),
+                    self._cnvd_terms(reading),
                 )
             imported_records += 1
             if records_writer is not None:
@@ -581,9 +608,7 @@ class Migration:
                 CnvdOutcome.UNRECOGNISED_CVE_ID,
             }:
                 continue
-            entry, anchor = build_cnvd_entry(
-                source, self._dependencies.source_registry.require_terms("circl-cnvd")
-            )
+            entry, anchor = build_cnvd_entry(source, self._cnvd_terms(reading))
             pending = PendingCnvdEntry(
                 cve_id=row.cve_id, outcome=cast(PendingCnvdOutcome, outcome.value), entry=entry
             )

@@ -184,7 +184,8 @@
       "enum": [
         "nvd",
         "cisa-kev",
-        "circl-cnvd"
+        "circl-cnvd",
+        "vulnerability-lookup-cnvd"
       ],
       "title": "StoreSource",
       "type": "string"
@@ -273,11 +274,12 @@
       "type": "string"
     },
     "store_format_version": {
-      "default": 2,
-      "description": "What decides whether a reader can read the store; a reader refuses integers other than 1 and 2.",
+      "default": 3,
+      "description": "What decides whether a reader can read the store; a reader refuses integers other than 1, 2 and 3.",
       "enum": [
         1,
-        2
+        2,
+        3
       ],
       "title": "Store Format Version",
       "type": "integer"

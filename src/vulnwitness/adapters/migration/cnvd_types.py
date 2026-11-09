@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from datetime import date
 
 from vulnwitness.adapters.migration.input_files import InputFile
 from vulnwitness.adapters.migration.migration_limits import MigrationLimits
@@ -20,6 +21,10 @@ class CnvdRow:
     severity: str
     cve_id: str
     source: str
+    products: tuple[str, ...] = ()
+    submit_time: date | None = None
+    open_time: date | None = None
+    handling_advice: str | None = None
 
     def has_cve_id(self) -> bool:
         """Whether the whole, unchanged value is exactly one valid CVE ID."""

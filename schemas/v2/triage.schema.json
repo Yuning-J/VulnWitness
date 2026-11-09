@@ -233,8 +233,8 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "2.0.0-dev.57",
-      "default": "2.0.0-dev.57",
+      "const": "2.0.0-dev.58",
+      "default": "2.0.0-dev.58",
       "title": "Schema Version",
       "type": "string"
     },

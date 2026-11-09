@@ -23,6 +23,7 @@ class MigrationLimits:
     max_kev_bytes: int = 16 * MIB
     max_kev_rows: int = 50_000
     max_cnvd_bytes: int = 64 * MIB
+    max_raw_cnvd_bytes: int = 256 * MIB
     max_cnvd_rows: int = 250_000
     max_walk_depth: int = 32
     max_walk_entries: int = 100_000

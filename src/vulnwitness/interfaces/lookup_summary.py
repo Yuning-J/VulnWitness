@@ -132,7 +132,7 @@ def render_cnvd_comparison(entry: ComparedCnvdEntry, width: int) -> list[str]:
             f"· assessed by {nvd_grade.scorer} "
             f"· {nvd_grade.scorer_type or 'type not recorded'}"
         )
-    return [
+    lines = [
         f"NVD: {nvd_statement}",
         f"CNVD {entry.cnvd_id}: {comparison.cnvd_raw_severity} "
         "· CNVD three-grade scheme (高 / 中 / 低) · assessed by CNVD",
@@ -145,6 +145,15 @@ def render_cnvd_comparison(entry: ComparedCnvdEntry, width: int) -> list[str]:
         fill(comparison.statement, width=width),
         f"Evidence: {entry.evidence_id}",
     ]
+    for product in entry.products:
+        lines.append(fill(f"CNVD product: {product}", width=width))
+    if entry.submit_time is not None:
+        lines.append(f"CNVD submitTime: {entry.submit_time.isoformat()}")
+    if entry.open_time is not None:
+        lines.append(f"CNVD openTime: {entry.open_time.isoformat()}")
+    if entry.handling_advice is not None:
+        lines.append(fill(f"CNVD handling advice: {entry.handling_advice}", width=width))
+    return lines
 
 
 def render_cnvd_name_check(entry: ComparedCnvdEntry) -> str:

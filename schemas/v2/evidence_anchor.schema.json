@@ -28,6 +28,7 @@
         "nvd_json_11",
         "cisa_kev",
         "circl_cnvd_parquet",
+        "vulnerability_lookup_cnvd_ndjson",
         "mitre_fight_yaml"
       ],
       "title": "SourceType",

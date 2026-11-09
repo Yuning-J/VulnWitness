@@ -83,6 +83,10 @@ class MigrationFailureCode(StrEnum):
     CNVD_UNCATALOGUED_FILE = "cnvd_uncatalogued_file"
     CNVD_INCOMPLETE_SNAPSHOT = "cnvd_incomplete_snapshot"
     CNVD_INVALID_PARQUET = "cnvd_invalid_parquet"
+    CNVD_MIXED_SOURCES = "cnvd_mixed_sources"
+    CNVD_EQUAL_RETRIEVED_AT = "cnvd_equal_retrieved_at"
+    CNVD_INVALID_NDJSON = "cnvd_invalid_ndjson"
+    CNVD_INVALID_RECORD = "cnvd_invalid_record"
     CNVD_MISSING_COLUMN = "cnvd_missing_column"
     CNVD_EXTRA_COLUMN = "cnvd_extra_column"
     CNVD_MISTYPED_COLUMN = "cnvd_mistyped_column"
@@ -176,6 +180,14 @@ MIGRATION_FAILURE_MESSAGES: dict[MigrationFailureCode, str] = {
     MigrationFailureCode.CNVD_INCOMPLETE_SNAPSHOT: (
         "The CNVD inputs are not exactly one reviewed revision's complete file set."
     ),
+    MigrationFailureCode.CNVD_MIXED_SOURCES: "An import accepts only one CNVD source.",
+    MigrationFailureCode.CNVD_EQUAL_RETRIEVED_AT: (
+        "Raw CNVD inputs must have distinct retrieved_at instants."
+    ),
+    MigrationFailureCode.CNVD_INVALID_NDJSON: (
+        "A raw CNVD input must be a plain .ndjson file with one JSON object per line."
+    ),
+    MigrationFailureCode.CNVD_INVALID_RECORD: "A raw CNVD record has malformed retained fields.",
     MigrationFailureCode.CNVD_INVALID_PARQUET: (
         "A CNVD input is not readable Parquet with Parquet magic."
     ),
@@ -250,11 +262,13 @@ class MigrationFailed(Exception):
         code: MigrationFailureCode,
         input_position: int | None = None,
         manifest_index: int | None = None,
+        input_line: int | None = None,
     ) -> None:
         super().__init__(code.value)
         self.code = code
         self.input_position = input_position
         self.manifest_index = manifest_index
+        self.input_line = input_line
 
 
 class CveOutcome(StrEnum):
@@ -328,6 +342,10 @@ class MigrationFailure(ContractModel):
         description="The failing input's position in the sorted input list, when it failed later.",
     )
 
+    input_line: int | None = Field(
+        default=None, ge=1, description="One-based line number of a malformed NDJSON record."
+    )
+
     @model_validator(mode="after")
     def check_message(self) -> Self:
         if self.message != MIGRATION_FAILURE_MESSAGES[self.code]:
@@ -341,12 +359,14 @@ def build_migration_failure(
     code: MigrationFailureCode,
     input_position: int | None = None,
     manifest_index: int | None = None,
+    input_line: int | None = None,
 ) -> MigrationFailure:
     return MigrationFailure(
         code=code,
         message=MIGRATION_FAILURE_MESSAGES[code],
         manifest_index=manifest_index,
         input_position=input_position,
+        input_line=input_line,
     )
 
 

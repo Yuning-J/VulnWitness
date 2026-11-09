@@ -905,7 +905,7 @@ def test_reading_store_without_a_format_version_is_refused_as_invalid(
         read_store(imported_store)
 
 
-@pytest.mark.parametrize("format_version", [0, 3, 10**30], ids=["zero", "next", "huge"])
+@pytest.mark.parametrize("format_version", [0, 4, 10**30], ids=["zero", "next", "huge"])
 def test_reading_store_of_another_format_version_is_refused_as_unsupported(
     imported_store: Path, read_store: StoreReader, format_version: int
 ) -> None:

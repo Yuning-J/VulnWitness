@@ -195,6 +195,9 @@ def build_search_service(
         else:
             semantic_retriever = discover_semantic_retriever(semantic_settings, list_adapters)
     cnvd_language = None
+    cnvd_source = served_corpus.cnvd_index.source_name or "circl-cnvd"
+    if cnvd_source == "vulnerability-lookup-cnvd":
+        cnvd_language = "zh"
     if cnvd_catalog is None:
         cnvd_catalog = load_cnvd_snapshot_catalog(default_cnvd_snapshot_catalog_file())
     for snapshot in cnvd_catalog.snapshots:
@@ -214,7 +217,7 @@ def build_search_service(
         cnvd_index=served_corpus.cnvd_index,
         kev_capability=served_corpus.describe_kev(),
         cnvd_language=cnvd_language,
-        cnvd_attribution=load_packaged_source_registry().find_source("circl-cnvd").attribution,
+        cnvd_attribution=load_packaged_source_registry().find_source(cnvd_source).attribution,
     )
 
 

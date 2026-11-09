@@ -6,6 +6,8 @@ from typing import Literal
 from vulnwitness.adapters.migration.cnvd_types import CnvdRow
 from vulnwitness.adapters.migration.input_resolution import ResolvedInput
 from vulnwitness.adapters.nvd.normalizer import NormalizedCve
+from vulnwitness.domain.cnvd import cnvd_source_row
+from vulnwitness.domain.corpus_store_manifest import StoreSource
 from vulnwitness.domain.cve import CnvdEntry
 from vulnwitness.domain.evidence import (
     UNSEALED_EVIDENCE_ID,
@@ -24,33 +26,9 @@ class SourcedCnvdRow:
 
 
 def build_cnvd_entry(source: SourcedCnvdRow, terms: str) -> tuple[CnvdEntry, EvidenceAnchor]:
-    """Normalize a validated row and bind its six original columns to its own anchor."""
+    """Normalize retained CNVD fields and bind each CVE link to its own source anchor."""
     row = source.row
-    source_columns = {
-        "id": row.cnvd_id,
-        "title": row.title,
-        "description": row.description,
-        "severity": row.severity,
-        "cve_id": row.cve_id,
-        "source": row.source,
-    }
-    anchor = seal_evidence_anchor(
-        EvidenceAnchor(
-            evidence_id=UNSEALED_EVIDENCE_ID,
-            source_name="circl-cnvd",
-            source_type=SourceType.CIRCL_CNVD_PARQUET,
-            authoritative_record_id=row.cnvd_id,
-            source_uri=source.input.source_uri,
-            source_version=source.revision,
-            retrieved_at=source.input.retrieved_at,
-            content_sha256=canonical_sha256(source_columns),
-            locator=f"id={row.cnvd_id}",
-            scope=KnowledgeScope.IMPLEMENTATION_VULNERABILITY,
-            assertion_kind=AssertionKind.ASSERTED,
-            license_or_terms_ref=terms,
-            trust_level=TrustLevel.SECONDARY,
-        )
-    )
+    is_raw = source.input.source is StoreSource.VULNERABILITY_LOOKUP_CNVD
     severities: dict[str, Literal["high", "medium", "low"]] = {
         "高": "high",
         "中": "medium",
@@ -61,9 +39,34 @@ def build_cnvd_entry(source: SourcedCnvdRow, terms: str) -> tuple[CnvdEntry, Evi
         title=row.title,
         description=row.description,
         severity=severities[row.severity],
-        evidence_id=anchor.evidence_id,
+        products=row.products,
+        submit_time=row.submit_time,
+        open_time=row.open_time,
+        handling_advice=row.handling_advice,
+        evidence_id=UNSEALED_EVIDENCE_ID,
     )
-    return entry, anchor
+    anchor = seal_evidence_anchor(
+        EvidenceAnchor(
+            evidence_id=UNSEALED_EVIDENCE_ID,
+            source_name=source.input.source.value,
+            source_type=(
+                SourceType.VULNERABILITY_LOOKUP_CNVD_NDJSON
+                if is_raw
+                else SourceType.CIRCL_CNVD_PARQUET
+            ),
+            authoritative_record_id=row.cnvd_id,
+            source_uri=source.input.source_uri,
+            source_version=source.revision,
+            retrieved_at=source.input.retrieved_at,
+            content_sha256=canonical_sha256(cnvd_source_row(entry, row.cve_id, raw=is_raw)),
+            locator=f"id={row.cnvd_id}",
+            scope=KnowledgeScope.IMPLEMENTATION_VULNERABILITY,
+            assertion_kind=AssertionKind.ASSERTED,
+            license_or_terms_ref=terms,
+            trust_level=TrustLevel.SECONDARY,
+        )
+    )
+    return entry.model_copy(update={"evidence_id": anchor.evidence_id}), anchor
 
 
 def enrich_cnvd(

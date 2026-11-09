@@ -51,6 +51,7 @@ class SourceType(StrEnum):
     NVD_JSON_11 = "nvd_json_11"
     CISA_KEV = "cisa_kev"
     CIRCL_CNVD_PARQUET = "circl_cnvd_parquet"
+    VULNERABILITY_LOOKUP_CNVD_NDJSON = "vulnerability_lookup_cnvd_ndjson"
     MITRE_FIGHT_YAML = "mitre_fight_yaml"
 
 

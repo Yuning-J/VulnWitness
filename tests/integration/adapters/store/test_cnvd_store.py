@@ -36,7 +36,7 @@ def test_merged_entries_are_ordered_and_keep_nvd_fields_and_evidence(
 ) -> None:
     corpus = load_corpus_store(cnvd_store.target)
 
-    assert corpus.manifest.store_format_version == 2
+    assert corpus.manifest.store_format_version == 3
     assert len(corpus.records) == 1
     record = corpus.records[0]
     assert record.nvd_status == "Analyzed"

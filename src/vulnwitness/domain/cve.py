@@ -133,6 +133,18 @@ class CnvdEntry(ContractModel):
     severity: Literal["high", "medium", "low"] = Field(
         description="CNVD's severity: high for 高, medium for 中, low for 低."
     )
+    products: tuple[str, ...] = Field(
+        default=(), description="CNVD's verbatim product text; untrusted source text."
+    )
+    submit_time: CalendarDate | None = Field(
+        default=None, description="CNVD's submitTime calendar date, as given."
+    )
+    open_time: CalendarDate | None = Field(
+        default=None, description="CNVD's openTime calendar date, as given; not a publication date."
+    )
+    handling_advice: str | None = Field(
+        default=None, description="CNVD's formalWay; verbatim, untrusted source text."
+    )
     evidence_id: EvidenceId
 
 
