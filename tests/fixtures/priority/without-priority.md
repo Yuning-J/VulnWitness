@@ -187,7 +187,7 @@ Scope: not recorded
 
 Created at: 2026-10-15T08:30:00+00:00
 
-Contract version: 2.0.0-dev.56
+Contract version: 2.0.0-dev.57
 
 | Identity | Recorded value |
 | --- | --- |
@@ -235,7 +235,7 @@ None recorded.
 <summary>Full check JSON</summary>
 
     {
-      "schema_version": "2.0.0-dev.56",
+      "schema_version": "2.0.0-dev.57",
       "record": {
         "consistent": true,
         "calls_checked": 2,

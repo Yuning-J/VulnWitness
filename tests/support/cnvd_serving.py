@@ -95,6 +95,17 @@ def assert_cnvd_lookup(
     for anchor in lookup["evidence"]:
         evidence_ids.add(anchor["evidence_id"])
     for entry in entries:
+        name_check = entry["name_check"]
+        assert name_check["rule"] == "cnvd_title_vs_nvd_cpe_names"
+        assert name_check["cnvd_name"] == "SYNTHETIC:"
+        assert name_check["nvd_pair"] is None
+        assert "evidence for review" in name_check["statement"]
+        if is_pending:
+            assert name_check["result"] == "uncheckable"
+            assert name_check["uncheckable_reason"] == "no_nvd_record"
+        else:
+            assert name_check["result"] == "no_overlap"
+            assert "uncheckable_reason" not in name_check
         comparison = entry["source_comparison"]
         actual_severities.append(comparison["grade_relative"])
         assert comparison["nvd_state"] == nvd_state

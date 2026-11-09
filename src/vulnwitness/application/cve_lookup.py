@@ -10,6 +10,7 @@ from vulnwitness.domain.cve_lookup import (
     PendingCnvdLookup,
 )
 from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.name_check import check_cnvd_name
 from vulnwitness.domain.search import SearchResponse, SearchWarningCode
 from vulnwitness.domain.source_comparison import compare_cnvd_severity
 from vulnwitness.domain.taxonomy import ResultStatus
@@ -44,6 +45,7 @@ def build_cve_lookup(
                 ComparedCnvdEntry(
                     **entry.model_dump(),
                     source_comparison=compare_cnvd_severity(entry, record),
+                    name_check=check_cnvd_name(entry, record),
                 )
             )
         carries_cnvd = carries_cnvd or bool(compared_entries)
@@ -77,6 +79,7 @@ def build_cve_lookup(
                 cve_id=pending.cve_id,
                 outcome=pending.outcome,
                 source_comparison=compare_cnvd_severity(entry, None, pending.outcome),
+                name_check=check_cnvd_name(entry, None),
             )
         )
         pending_anchor = evidence_catalog.get_evidence(entry.evidence_id)

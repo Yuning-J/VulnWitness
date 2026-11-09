@@ -7,6 +7,7 @@ from pydantic import Field
 
 from vulnwitness.domain.cnvd import PendingCnvdOutcome
 from vulnwitness.domain.cve import CnvdEntry, CveId, CveRecord
+from vulnwitness.domain.name_check import CnvdNameCheck
 from vulnwitness.domain.search import Candidate, SearchResponse
 from vulnwitness.domain.source_comparison import SourceComparison
 
@@ -15,6 +16,7 @@ CNVD_NOT_FOUND_STATEMENT = "The import keeps no CNVD entry without a CVE ID."
 
 class ComparedCnvdEntry(CnvdEntry):
     source_comparison: SourceComparison
+    name_check: CnvdNameCheck
 
 
 class LookupCveRecord(CveRecord):
@@ -24,7 +26,9 @@ class LookupCveRecord(CveRecord):
         """The persisted source fields, without the serving-time comparisons."""
         source_entries = []
         for entry in self.cnvd:
-            source_entries.append(CnvdEntry(**entry.model_dump(exclude={"source_comparison"})))
+            source_entries.append(
+                CnvdEntry(**entry.model_dump(exclude={"source_comparison", "name_check"}))
+            )
         return CveRecord(**self.model_dump(exclude={"cnvd"}), cnvd=tuple(source_entries))
 
 

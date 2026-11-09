@@ -16,5 +16,5 @@ def test_fixture_capabilities_report_no_imported_cisa_snapshot(
     assert main(["capabilities"], environment={}) == 0
     capabilities = json.loads(capsys.readouterr().out)
 
-    assert capabilities["schema_version"] == "2.0.0-dev.56"
+    assert capabilities["schema_version"] == "2.0.0-dev.57"
     assert capabilities["kev"] == {"imported": False, "retrieved_at": None, "source_version": None}

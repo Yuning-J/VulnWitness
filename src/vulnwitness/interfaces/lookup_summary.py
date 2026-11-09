@@ -140,7 +140,20 @@ def render_cnvd_comparison(entry: ComparedCnvdEntry, width: int) -> list[str]:
         fill(f"CNVD title: {entry.title}", width=width),
         fill(f"CNVD description: {entry.description}", width=width),
         describe_cnvd_comparison(comparison),
+        render_cnvd_name_check(entry),
         f"Rule: {comparison.rule}",
         fill(comparison.statement, width=width),
         f"Evidence: {entry.evidence_id}",
     ]
+
+
+def render_cnvd_name_check(entry: ComparedCnvdEntry) -> str:
+    """One line with the label and the names available for review."""
+    check = entry.name_check
+    label: str = check.result
+    if check.uncheckable_reason is not None:
+        label += f" ({check.uncheckable_reason})"
+    line = f"Name check: {label} · CNVD name: {check.cnvd_name or 'none extracted'}"
+    if check.nvd_pair is not None:
+        line += f" · NVD: {check.nvd_pair.vendor}/{check.nvd_pair.product}"
+    return line

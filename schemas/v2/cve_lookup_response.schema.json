@@ -373,6 +373,135 @@
       "title": "ChannelOutcome",
       "type": "object"
     },
+    "CnvdNameCheck": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "not": {
+              "required": [
+                "uncheckable_reason"
+              ]
+            }
+          },
+          "if": {
+            "properties": {
+              "result": {
+                "const": "uncheckable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "uncheckable_reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "uncheckable_reason"
+            ]
+          }
+        },
+        {
+          "else": {
+            "properties": {
+              "nvd_pair": {
+                "type": "object"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "result": {
+                "enum": [
+                  "no_overlap",
+                  "uncheckable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "nvd_pair": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "cnvd_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cnvd Name"
+        },
+        "nvd_pair": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NvdNamePair"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "enum": [
+            "vendor_product_overlap",
+            "product_overlap",
+            "vendor_overlap",
+            "no_overlap",
+            "uncheckable"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "rule": {
+          "const": "cnvd_title_vs_nvd_cpe_names",
+          "default": "cnvd_title_vs_nvd_cpe_names",
+          "title": "Rule",
+          "type": "string"
+        },
+        "statement": {
+          "const": "Name overlap is evidence for review, not a judgement that the link is right or wrong. Either source's names may be wrong.",
+          "default": "Name overlap is evidence for review, not a judgement that the link is right or wrong. Either source's names may be wrong.",
+          "title": "Statement",
+          "type": "string"
+        },
+        "uncheckable_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "no_nvd_record",
+                "no_affected_products",
+                "no_extractable_name"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncheckable Reason"
+        }
+      },
+      "required": [
+        "result",
+        "rule",
+        "cnvd_name",
+        "nvd_pair",
+        "statement"
+      ],
+      "title": "CnvdNameCheck",
+      "type": "object"
+    },
     "ComparedCnvdEntry": {
       "additionalProperties": false,
       "properties": {
@@ -391,6 +520,9 @@
           "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
           "title": "Evidence Id",
           "type": "string"
+        },
+        "name_check": {
+          "$ref": "#/$defs/CnvdNameCheck"
         },
         "severity": {
           "description": "CNVD's severity: high for 高, medium for 中, low for 低.",
@@ -418,7 +550,8 @@
         "description",
         "severity",
         "evidence_id",
-        "source_comparison"
+        "source_comparison",
+        "name_check"
       ],
       "title": "ComparedCnvdEntry",
       "type": "object"
@@ -1110,6 +1243,27 @@
       "title": "MissingAssociationLink",
       "type": "object"
     },
+    "NvdNamePair": {
+      "additionalProperties": false,
+      "properties": {
+        "product": {
+          "minLength": 1,
+          "title": "Product",
+          "type": "string"
+        },
+        "vendor": {
+          "minLength": 1,
+          "title": "Vendor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "product"
+      ],
+      "title": "NvdNamePair",
+      "type": "object"
+    },
     "PendingCnvdLookup": {
       "additionalProperties": false,
       "properties": {
@@ -1134,6 +1288,9 @@
           "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
           "title": "Evidence Id",
           "type": "string"
+        },
+        "name_check": {
+          "$ref": "#/$defs/CnvdNameCheck"
         },
         "outcome": {
           "enum": [
@@ -1171,6 +1328,7 @@
         "severity",
         "evidence_id",
         "source_comparison",
+        "name_check",
         "cve_id",
         "outcome"
       ],
@@ -1840,8 +1998,8 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "2.0.0-dev.56",
-      "default": "2.0.0-dev.56",
+      "const": "2.0.0-dev.57",
+      "default": "2.0.0-dev.57",
       "title": "Schema Version",
       "type": "string"
     },

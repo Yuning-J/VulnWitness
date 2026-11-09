@@ -41,6 +41,7 @@ from vulnwitness.domain.cve import CVE_ID_PATTERN, CveRecord
 from vulnwitness.domain.cve_lookup import CveLookupResponse, LookupCveRecord
 from vulnwitness.domain.evidence import Claim, EvidenceAnchor, derive_evidence_id
 from vulnwitness.domain.evidence_catalog import EvidenceCatalog
+from vulnwitness.domain.name_check import check_cnvd_name
 from vulnwitness.domain.search import (
     SCHEMA_VERSION,
     Candidate,
@@ -169,6 +170,8 @@ def find_uncatalogued_record_violations(
             for entry in record.cnvd:
                 if entry.source_comparison != compare_cnvd_severity(entry, record):
                     violations.append(f"{entry.cnvd_id}: source comparison differs from the rule")
+                if entry.name_check != check_cnvd_name(entry, record):
+                    violations.append(f"{entry.cnvd_id}: name check differs from the rule")
             record = record.to_source_record()
         catalogued_record = evidence_catalog.get_cve(record.cve_id)
         if catalogued_record is None:
@@ -383,6 +386,8 @@ def validate_search_response(response: SearchResponse, evidence_catalog: Evidenc
                 violations.append(f"{pending.cnvd_id}: pending entry cites absent evidence")
             if pending.source_comparison != compare_cnvd_severity(pending, None, pending.outcome):
                 violations.append(f"{pending.cnvd_id}: source comparison differs from the rule")
+            if pending.name_check != check_cnvd_name(pending, None):
+                violations.append(f"{pending.cnvd_id}: name check differs from the rule")
         if not has_cnvd and response.cnvd_language is not None:
             violations.append("CNVD language requires CNVD content")
         if has_cnvd != (response.cnvd_attribution is not None):

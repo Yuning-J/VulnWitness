@@ -104,6 +104,7 @@ class CnvdScenario:
 def build_cnvd_scenario(
     directory: Path,
     *,
+    cnvd_title: str = "SYNTHETIC: 示例标题",
     nvd_status: str = "Analyzed",
     metrics: dict[str, Any] | None = None,
     extra_nvd_entries: tuple[dict[str, Any], ...] = (),
@@ -131,11 +132,11 @@ def build_cnvd_scenario(
         build_v2_feed([build_v2_entry(3, description="SYNTHETIC: conflicting text.")]),
     )
     rows = (
-        build_cnvd_row(7, cve_id=build_cve_id(1), severity="低"),
-        build_cnvd_row(4),
+        build_cnvd_row(7, cve_id=build_cve_id(1), severity="低", title=cnvd_title),
+        build_cnvd_row(4, title=cnvd_title),
         build_cnvd_row(3, severity="高"),
         build_cnvd_row(2),
-        build_cnvd_row(1),
+        build_cnvd_row(1, title=cnvd_title),
         build_cnvd_row(5, cve_id=""),
         build_cnvd_row(6, cve_id="CVE-9999-0001\n"),
     )
@@ -166,6 +167,7 @@ def build_cnvd_scenario(
 def import_cnvd_lookup_corpus(
     directory: Path,
     *,
+    cnvd_title: str = "SYNTHETIC: 示例标题",
     nvd_status: str = "Analyzed",
     with_metrics: bool = True,
     retain_cnvd: bool = True,
@@ -192,6 +194,7 @@ def import_cnvd_lookup_corpus(
         }
     scenario = build_cnvd_scenario(
         directory,
+        cnvd_title=cnvd_title,
         nvd_status=nvd_status,
         metrics=metrics,
         extra_nvd_entries=(build_v2_entry(8),),
