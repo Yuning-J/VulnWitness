@@ -20,6 +20,7 @@ Dataset packaged demo data · session “inv\_hc2omuxejwt7enyntytg” · recorde
 - NVD status awaiting\_analysis: 0 of 1 distinct CNVD-listed CVEs with a servable NVD record.
 - NVD status deferred: 0 of 1 distinct CNVD-listed CVEs with a servable NVD record.
 - These counts describe recorded lookups only; they are not a ranking and change no triage order, selection or checker verdict. NVD status is independent of score gaps; awaiting\_analysis or deferred does not mean no score.
+- CNVD name check: 2 of 2 distinct CNVD entries in recorded lookups show no name overlap with NVD's CPE names. The denominator includes all linked entries and pending entries only when their name check is checkable; repeated CNVD IDs count once.
 
 ### What is not established
 
@@ -82,6 +83,10 @@ Rule: cnvd\_grade\_vs\_nvd\_own\_cvss3
 
 This is VulnWitness's mapping between two grading schemes, not a judgement that either source is right. CNVD's grading criteria are unverified. CVSS measures severity, not risk.
 
+CNVD name check: no name overlap; review the link. CNVD name: SYNTHETIC:.
+
+Name overlap is evidence for review, not a judgement that the link is right or wrong. Either source's names may be wrong.
+
 Evidence: ev:523d574e67f24db41268d72c · call 2
 
 CNVD grade relative to nvd@nist.gov's CVSS 3.1 MEDIUM: same under cnvd\_grade\_vs\_nvd\_own\_cvss3
@@ -109,6 +114,10 @@ NVD severity used for comparison: MEDIUM · CVSS 3.1 · assessed by nvd@nist.gov
 Rule: cnvd\_grade\_vs\_nvd\_own\_cvss3
 
 This is VulnWitness's mapping between two grading schemes, not a judgement that either source is right. CNVD's grading criteria are unverified. CVSS measures severity, not risk.
+
+CNVD name check: no name overlap; review the link. CNVD name: SYNTHETIC:.
+
+Name overlap is evidence for review, not a judgement that the link is right or wrong. Either source's names may be wrong.
 
 Evidence: ev:b7bd1c855b870dcf5bae6aa2 · call 2
 

@@ -121,12 +121,18 @@ def build_priority_session(
     record_capabilities: bool = True,
     kev_imported: bool = True,
     record_overrides: dict[str, Any] | None = None,
+    cnvd_overrides: dict[str, Any] | None = None,
 ) -> Path:
     """Frozen real workspace calls over the shared synthetic CNVD comparison corpus."""
     corpus = build_cnvd_report_corpus()
     records = list(corpus.records)
     if record_overrides is not None:
         records[0] = records[0].model_copy(update=record_overrides)
+    if cnvd_overrides is not None:
+        entries = []
+        for entry in records[0].cnvd:
+            entries.append(entry.model_copy(update=cnvd_overrides))
+        records[0] = records[0].model_copy(update={"cnvd": tuple(entries)})
     snapshot = KevCapability(imported=False)
     if kev_imported:
         snapshot = KevCapability(

@@ -59,6 +59,13 @@ v3 metric), and awaiting-analysis and deferred status separately. Status does no
 a missing score. These signals change no triage order, selection or checker verdict.
 CVSS measures severity, not risk. CNVD text stays in its original language; the core flow
 does no translation, and clients and browsers can translate it.
+
+Each CNVD entry's name check compares its extracted title name with NVD's CPE vendor and
+product names. Overlap is evidence for review; no overlap asks for link review, and an
+uncheckable label explains the missing input. The label never changes a grade or a link.
+See [ADR 0017](rebuild/adr/0017-cnvd-name-check.md#context) for the measured shares and
+sample findings; most differences are naming or scope differences, not wrong links.
+
 `product --vendor democorp --all --limit 20` traverses one fixed corpus,
 printing a JSON array of unchanged `ProductQueryResponse` pages, each with its cursors
 and evidence. `--max-pages` defaults to 100; an unfinished traversal exits 2 without

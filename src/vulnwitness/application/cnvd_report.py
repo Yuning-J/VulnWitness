@@ -2,7 +2,10 @@
 
 from collections.abc import Sequence
 
-from vulnwitness.application.cnvd_presentation import describe_cnvd_comparison
+from vulnwitness.application.cnvd_presentation import (
+    describe_cnvd_comparison,
+    describe_cnvd_name_check,
+)
 from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse, PendingCnvdLookup
 from vulnwitness.domain.session_record import SessionDatasetIdentity
 from vulnwitness.domain.session_report import ReportBadge, ReportParagraph, ReportSection
@@ -43,6 +46,8 @@ def build_cnvd_entries(
             ReportParagraph(f"NVD severity used for comparison: {nvd_value}"),
             ReportParagraph(f"Rule: {comparison.rule}"),
             ReportParagraph(comparison.statement),
+            ReportParagraph(describe_cnvd_name_check(entry.name_check)),
+            ReportParagraph(entry.name_check.statement),
             ReportParagraph(f"Evidence: {entry.evidence_id} · call {sequence}"),
         ]
         badges: tuple[ReportBadge, ...] = ()
@@ -121,14 +126,21 @@ def build_cnvd_facts(
     score_gaps: set[str] = set()
     awaiting: set[str] = set()
     deferred: set[str] = set()
+    name_check_entries: set[str] = set()
+    no_overlap_entries: set[str] = set()
     for lookup in lookups:
         entries: list[tuple[str, ComparedCnvdEntry]] = []
         for candidate in lookup.candidates:
             for entry in candidate.record.cnvd:
                 entries.append((candidate.record.cve_id, entry))
+                name_check_entries.add(entry.cnvd_id)
         for pending in lookup.pending_cnvd:
             entries.append((pending.cve_id, pending))
+            if pending.name_check.result != "uncheckable":
+                name_check_entries.add(pending.cnvd_id)
         for cve_id, entry in entries:
+            if entry.name_check.result == "no_overlap":
+                no_overlap_entries.add(entry.cnvd_id)
             listed.add(cve_id)
             comparison = entry.source_comparison
             if comparison.grade_relative != "not_compared":
@@ -167,4 +179,8 @@ def build_cnvd_facts(
         "These counts describe recorded lookups only; they are not a ranking and change no "
         "triage order, selection or checker verdict. NVD status is independent of score gaps; "
         "awaiting_analysis or deferred does not mean no score.",
+        f"CNVD name check: {len(no_overlap_entries)} of {len(name_check_entries)} distinct "
+        "CNVD entries in recorded lookups show no name overlap with NVD's CPE names. "
+        "The denominator includes all linked entries and pending entries only when their "
+        "name check is checkable; repeated CNVD IDs count once.",
     )

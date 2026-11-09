@@ -23,7 +23,7 @@ from vulnwitness.adapters.migration.cnvd_snapshot_catalog import (
 from vulnwitness.cli import main
 from vulnwitness.composition import load_packaged_fixture
 from vulnwitness.domain.cnvd import PendingCnvdEntry, PendingCnvdOutcome, build_cnvd_index
-from vulnwitness.domain.cve import CnvdEntry, CveRecord
+from vulnwitness.domain.cve import AffectedProduct, CnvdEntry, CveRecord
 from vulnwitness.domain.workspace import StartInvestigationRequest
 
 CNVD_REPORT_CVE_IDS = (
@@ -41,7 +41,12 @@ CNVD_REPORT_TITLE = 'SYNTHETIC: 中文标题 <img src=x onerror="alert(1)"> & [�
 CNVD_REPORT_DESCRIPTION = 'SYNTHETIC: 中文描述 <script>alert("源")</script> & | *文本*\n第二行'
 
 
-def build_cnvd_report_corpus(*, declares_language: bool = True) -> FixtureBundle:
+def build_cnvd_report_corpus(
+    *,
+    declares_language: bool = True,
+    cnvd_title: str = CNVD_REPORT_TITLE,
+    affected: tuple[AffectedProduct, ...] | None = None,
+) -> FixtureBundle:
     """Synthetic source pairs, unusable metrics, NVD states and all pending outcomes."""
     fixture = load_packaged_fixture()
     records: list[CveRecord] = []
@@ -68,7 +73,7 @@ def build_cnvd_report_corpus(*, declares_language: bool = True) -> FixtureBundle
             anchors.append(anchor)
             entry = build_cnvd_entry(
                 cnvd_id=cnvd_id,
-                title=CNVD_REPORT_TITLE,
+                title=cnvd_title,
                 description=CNVD_REPORT_DESCRIPTION,
                 severity=severity,
                 evidence_id=anchor.evidence_id,
@@ -105,7 +110,7 @@ def build_cnvd_report_corpus(*, declares_language: bool = True) -> FixtureBundle
                 cvss=metrics,
                 cnvd=tuple(entries),
                 nvd_status={3: "Awaiting Analysis", 4: "Deferred"}.get(number, "Analyzed"),
-                affected=(build_versioned_product(),),
+                affected=(build_versioned_product(),) if affected is None else affected,
                 evidence_ids=tuple(evidence_ids),
             )
         )
@@ -124,10 +129,15 @@ def build_cnvd_report_session(
     cve_ids: tuple[str, ...] = CNVD_REPORT_CVE_IDS,
     *,
     declares_language: bool = True,
+    cnvd_title: str = CNVD_REPORT_TITLE,
+    affected: tuple[AffectedProduct, ...] | None = None,
 ) -> Path:
     """Record actual workspace lookups, including a repeat to exercise distinct-CVE counts."""
     _, workspace = build_test_workspace(
-        root, corpus=build_cnvd_report_corpus(declares_language=declares_language)
+        root,
+        corpus=build_cnvd_report_corpus(
+            declares_language=declares_language, cnvd_title=cnvd_title, affected=affected
+        ),
     )
     started = workspace.start(StartInvestigationRequest(goal="Synthetic CNVD source comparison"))
     for cve_id in cve_ids:

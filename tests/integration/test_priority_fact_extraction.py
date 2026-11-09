@@ -68,3 +68,35 @@ def test_later_positive_candidate_keeps_the_used_snapshots_after_reference_date_
     assert extracted.facts.kev.value == "listed"
     assert extracted.used_after_reference_date_information is True
     assert len(extracted.calls) == 2
+
+
+def test_high_grade_review_links_use_the_recorded_label_without_recomputing(tmp_path: Path) -> None:
+    directory = build_priority_session(
+        tmp_path / "sessions", cnvd_overrides={"severity": "high", "title": "PHP 漏洞"}
+    )
+    contents = SessionChecker(directory).check_with_contents()
+    lookup = contents.responses[2]
+    assert isinstance(lookup, CveLookupResponse)
+    candidate = lookup.candidates[0]
+    entries = []
+    for entry in candidate.record.cnvd:
+        # Keep the served no-overlap label while changing only the title in memory.
+        entries.append(entry.model_copy(update={"title": "DemoCorp demo_gateway 漏洞"}))
+    record = candidate.record.model_copy(update={"cnvd": tuple(reversed(entries))})
+    lookup = lookup.model_copy(
+        update={"candidates": (candidate.model_copy(update={"record": record}),)}
+    )
+    contents = replace(contents, responses={**contents.responses, 2: lookup})
+    asset, assessment, _ = build_priority_inputs()
+    assessment = assessment.model_copy(update={"cve_id": record.cve_id})
+
+    extracted = extract_priority_facts(contents, asset, assessment, REFERENCE_DATE)
+
+    links = extracted.facts.high_grade.cnvd_links_to_review
+    cnvd_ids = []
+    cnvd_names = []
+    for link in links:
+        cnvd_ids.append(link.cnvd_id)
+        cnvd_names.append(link.cnvd_name)
+    assert cnvd_ids == ["CNVD-9999-00001", "CNVD-9999-00002"]
+    assert cnvd_names == ["PHP", "PHP"]

@@ -5,8 +5,8 @@ from datetime import date
 
 from vulnwitness.application.priority_decision import evaluate_priority
 from vulnwitness.domain.asset_register import Asset, AssetAssessment, AssetRegister
-from vulnwitness.domain.cve import CnvdEntry, CveRecord
-from vulnwitness.domain.cve_lookup import CveLookupResponse
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.priority_decision import (
     DecisionResponseDigest,
@@ -15,6 +15,7 @@ from vulnwitness.domain.priority_decision import (
 )
 from vulnwitness.domain.priority_facts import (
     ApplicabilityFact,
+    CnvdLinkToReview,
     GradeAuthority,
     HighGradeFact,
     HighGradeStatus,
@@ -111,7 +112,8 @@ def extract_high_grade_fact(
     """Retain NVD-own and CNVD grade evidence, including unavailable NVD grades."""
     grade_ids: list[str] = []
     authorities: list[GradeAuthority] = []
-    entries: list[CnvdEntry] = []
+    entries: list[ComparedCnvdEntry] = []
+    links_to_review: dict[str, CnvdLinkToReview] = {}
     has_grade = False
     for candidate in lookup.candidates:
         record = candidate.record
@@ -137,6 +139,11 @@ def extract_high_grade_fact(
         grade_ids.append(entry.evidence_id)
         if entry.severity == "high" and "CNVD" not in authorities:
             authorities.append("CNVD")
+        if entry.severity == "high" and entry.name_check.result == "no_overlap":
+            assert entry.name_check.cnvd_name is not None
+            links_to_review[entry.cnvd_id] = CnvdLinkToReview(
+                cnvd_id=entry.cnvd_id, cnvd_name=entry.name_check.cnvd_name
+            )
     high_grade: HighGradeStatus = "none_available"
     if authorities:
         high_grade = "present"
@@ -146,6 +153,7 @@ def extract_high_grade_fact(
         value=high_grade,
         evidence_ids=tuple(sorted(set(grade_ids))),
         triggering_authorities=tuple(authorities),
+        cnvd_links_to_review=tuple(sorted(links_to_review.values(), key=lambda link: link.cnvd_id)),
     )
 
 

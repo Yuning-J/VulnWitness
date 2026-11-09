@@ -2,10 +2,11 @@
 
 from typing import Literal, Self
 
-from pydantic import ConfigDict, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from vulnwitness.domain.asset_register import Applicability, SystemCategory
 from vulnwitness.domain.contract_model import ContractModel
+from vulnwitness.domain.cve import CNVD_ID_PATTERN
 from vulnwitness.domain.evidence import EvidenceId
 from vulnwitness.domain.timestamps import CalendarDate
 
@@ -48,6 +49,11 @@ class KevFact(ContractModel):
         return self
 
 
+class CnvdLinkToReview(ContractModel):
+    cnvd_id: str = Field(pattern=CNVD_ID_PATTERN)
+    cnvd_name: str = Field(min_length=1)
+
+
 class HighGradeFact(ContractModel):
     model_config = ConfigDict(
         json_schema_extra={
@@ -57,12 +63,25 @@ class HighGradeFact(ContractModel):
                 "properties": {"triggering_authorities": {"minItems": 1}},
             },
             "else": {"properties": {"triggering_authorities": {"maxItems": 0}}},
+            "allOf": [
+                {
+                    "if": {
+                        "required": ["cnvd_links_to_review"],
+                        "properties": {"cnvd_links_to_review": {"minItems": 1}},
+                    },
+                    "then": {
+                        "required": ["triggering_authorities"],
+                        "properties": {"triggering_authorities": {"contains": {"const": "CNVD"}}},
+                    },
+                }
+            ],
         }
     )
 
     value: HighGradeStatus
     evidence_ids: tuple[EvidenceId, ...]
     triggering_authorities: tuple[GradeAuthority, ...] = ()
+    cnvd_links_to_review: tuple[CnvdLinkToReview, ...] = ()
 
     @model_validator(mode="after")
     def check_triggering_authorities(self) -> Self:
@@ -70,6 +89,13 @@ class HighGradeFact(ContractModel):
             raise ValueError("present requires the authorities whose high grades triggered it")
         if len(set(self.triggering_authorities)) != len(self.triggering_authorities):
             raise ValueError("triggering authorities must be unique")
+        if self.cnvd_links_to_review and "CNVD" not in self.triggering_authorities:
+            raise ValueError("links to review require a triggering CNVD high grade")
+        previous_id = ""
+        for link in self.cnvd_links_to_review:
+            if link.cnvd_id <= previous_id:
+                raise ValueError("links to review must have unique CNVD IDs in order")
+            previous_id = link.cnvd_id
         return self
 
 

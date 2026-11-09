@@ -102,6 +102,7 @@ def test_cnvd_high_grade_escalates_even_without_nvd_or_kev_basis(
     assert decision.facts.high_grade.triggering_authorities == ("CNVD",)
     assert decision.facts.high_grade.evidence_ids
     if cve_id == "CVE-9999-0008":
+        assert decision.facts.high_grade.cnvd_links_to_review == ()
         assert decision.facts.kev.value == "unknown"
         assert "kev" in decision.unknown_facts
         assert len(artifact.response_digests) == 1
@@ -304,4 +305,68 @@ def test_cli_recordings_without_stored_byte_digests_can_be_prioritised(tmp_path:
         assert call["response_sha256"] is None
         response_bytes = (directory / f"responses/{digest.call:04d}.json").read_bytes()
         assert digest.response_sha256 == sha256_hex(response_bytes)
+    assert read_recorded_files(directory) == recorded_files
+
+
+@pytest.mark.parametrize(
+    "title,nvd_high,kev_listed,grade,expected_rule,review",
+    (
+        ("PHP 漏洞", False, False, "high", "rule-6", True),
+        ("DemoCorp Platform 漏洞", False, False, "high", "rule-6", False),
+        ("PHP 漏洞", True, False, "high", "rule-6", True),
+        ("PHP 漏洞", False, True, "high", "rule-3", False),
+        ("PHP 漏洞", False, False, "low", "rule-9", False),
+    ),
+    ids=("cnvd-no-overlap", "vendor-overlap", "nvd-also-high", "kev-rule", "low-grade"),
+)
+def test_recorded_name_checks_add_review_reasons_without_changing_outcomes(
+    tmp_path: Path,
+    title: str,
+    nvd_high: bool,
+    kev_listed: bool,
+    grade: str,
+    expected_rule: str,
+    review: bool,
+) -> None:
+    overrides = {
+        "cvss": (build_cvss_metric(base_severity="HIGH", base_score=8.1),) if nvd_high else (),
+        "kev": KevEntry(date_added="2026-01-01") if kev_listed else None,
+    }
+    directory = build_priority_session(
+        tmp_path / "sessions",
+        record_overrides=overrides,
+        cnvd_overrides={"title": title, "severity": grade},
+    )
+    assets = write_priority_register(tmp_path / "assets.yaml")
+    recorded_files = read_recorded_files(directory)
+
+    assert main(priority_arguments(directory, assets), environment={}) == 0
+    first = (directory / "priority.json").read_bytes()
+    artifact = PriorityArtifact.model_validate_json(first)
+    decision = artifact.decisions[0]
+    links = decision.facts.high_grade.cnvd_links_to_review
+
+    assert decision.matched_rule.id == expected_rule
+    assert decision.recommendation == (
+        "act" if kev_listed else "attend" if grade == "high" else "track"
+    )
+    assert ("review the link." in decision.reason) == review
+    if title.startswith("PHP") and grade == "high":
+        cnvd_ids = []
+        for link in links:
+            cnvd_ids.append(link.cnvd_id)
+        assert cnvd_ids == ["CNVD-9999-00001", "CNVD-9999-00002"]
+        assert all(link.cnvd_name == "PHP" for link in links)
+    else:
+        assert links == ()
+    if review:
+        for link in links:
+            assert (
+                f"{link.cnvd_id}'s product name (PHP) does not overlap "
+                "NVD's CPE names; review the link." in decision.reason
+            )
+    if nvd_high:
+        assert decision.facts.high_grade.triggering_authorities == ("NVD", "CNVD")
+    assert main([*priority_arguments(directory, assets), "--force"], environment={}) == 0
+    assert (directory / "priority.json").read_bytes() == first
     assert read_recorded_files(directory) == recorded_files

@@ -28,6 +28,27 @@
       "title": "ApplicabilityFact",
       "type": "object"
     },
+    "CnvdLinkToReview": {
+      "additionalProperties": false,
+      "properties": {
+        "cnvd_id": {
+          "pattern": "^CNVD-[0-9]{4}-[0-9]{4,6}$(?!\\n)",
+          "title": "Cnvd Id",
+          "type": "string"
+        },
+        "cnvd_name": {
+          "minLength": 1,
+          "title": "Cnvd Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cnvd_id",
+        "cnvd_name"
+      ],
+      "title": "CnvdLinkToReview",
+      "type": "object"
+    },
     "ComplianceStatus": {
       "additionalProperties": false,
       "properties": {
@@ -101,6 +122,32 @@
     },
     "HighGradeFact": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "cnvd_links_to_review": {
+                "minItems": 1
+              }
+            },
+            "required": [
+              "cnvd_links_to_review"
+            ]
+          },
+          "then": {
+            "properties": {
+              "triggering_authorities": {
+                "contains": {
+                  "const": "CNVD"
+                }
+              }
+            },
+            "required": [
+              "triggering_authorities"
+            ]
+          }
+        }
+      ],
       "else": {
         "properties": {
           "triggering_authorities": {
@@ -116,6 +163,14 @@
         }
       },
       "properties": {
+        "cnvd_links_to_review": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CnvdLinkToReview"
+          },
+          "title": "Cnvd Links To Review",
+          "type": "array"
+        },
         "evidence_ids": {
           "items": {
             "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
@@ -149,7 +204,8 @@
       "required": [
         "value",
         "evidence_ids",
-        "triggering_authorities"
+        "triggering_authorities",
+        "cnvd_links_to_review"
       ],
       "then": {
         "properties": {

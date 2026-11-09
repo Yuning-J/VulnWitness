@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.priority import build_priority_session
 from tests.support.report_sessions import (
     CNVD_REPORT_CVE_IDS,
     CNVD_REPORT_DESCRIPTION,
@@ -321,6 +322,20 @@ def test_lookup_without_cnvd_renders_exactly_as_plain_nvd_response(
     assert "CNVD severity" not in document
 
 
+@pytest.mark.parametrize("render", (render_html_report, render_markdown_report), ids=("html", "md"))
+def test_nvd_only_recording_matches_the_frozen_pre_name_check_report(
+    tmp_path: Path, render: Callable[[SessionReport], str]
+) -> None:
+    directory = build_priority_session(
+        tmp_path / "workspace", record_capabilities=False, record_overrides={"cnvd": ()}
+    )
+    report = build_session_report(SessionChecker(directory).check_with_contents())
+    format_name = "html" if render is render_html_report else "md"
+    frozen = Path(__file__).parents[1] / f"fixtures/cnvd/without-cnvd.{format_name}"
+
+    assert render(report).encode() == frozen.read_bytes()
+
+
 def test_cli_higher_text_names_raw_grades_scorer_rule_and_provenance(tmp_path: Path) -> None:
     # Arrange
     directory = build_cnvd_report_session(tmp_path / "workspace", ("CVE-9999-0004",))
@@ -362,3 +377,119 @@ def test_markdown_bytes_ignore_language_metadata_and_keep_original_source_text(
     assert "\n".join("    " + line for line in CNVD_REPORT_DESCRIPTION.splitlines()) in declared
     assert escape_markdown(CNVD_REPORT_TITLE) in declared
     assert "lang=" not in declared
+
+
+@pytest.mark.parametrize(
+    "title,has_products,cve_id,wording,name,pair",
+    (
+        (
+            "DemoCorp demo_gateway 漏洞",
+            True,
+            "CVE-9999-0001",
+            "vendor and product names overlap",
+            "DemoCorp demo_gateway",
+            "democorp/demo_gateway",
+        ),
+        (
+            "Other demo_gateway 漏洞",
+            True,
+            "CVE-9999-0001",
+            "only the product name overlaps",
+            "Other demo_gateway",
+            "democorp/demo_gateway",
+        ),
+        (
+            "DemoCorp Platform 漏洞",
+            True,
+            "CVE-9999-0001",
+            "only the vendor name overlaps",
+            "DemoCorp Platform",
+            "democorp/demo_gateway",
+        ),
+        ("PHP 漏洞", True, "CVE-9999-0001", "no name overlap; review the link", "PHP", None),
+        (
+            "中文漏洞",
+            True,
+            "CVE-9999-0001",
+            "cannot check (no extractable CNVD name)",
+            "none extracted",
+            None,
+        ),
+        (
+            "PHP 漏洞",
+            False,
+            "CVE-9999-0001",
+            "cannot check (no NVD affected products)",
+            "PHP",
+            None,
+        ),
+        ("PHP 漏洞", True, "CVE-9999-0006", "cannot check (no servable NVD record)", "PHP", None),
+    ),
+    ids=("both", "product", "vendor", "no-overlap", "no-name", "no-products", "pending"),
+)
+@pytest.mark.parametrize("report_format", ("html", "md"))
+def test_name_check_wording_and_names_in_frozen_recordings(
+    tmp_path: Path,
+    title: str,
+    has_products: bool,
+    cve_id: str,
+    wording: str,
+    name: str,
+    pair: str | None,
+    report_format: str,
+) -> None:
+    directory = build_cnvd_report_session(
+        tmp_path / "workspace",
+        (cve_id,),
+        cnvd_title=title,
+        affected=None if has_products else (),
+    )
+    contents = SessionChecker(directory).check_with_contents()
+    render = render_html_report if report_format == "html" else render_markdown_report
+    literal = escape if report_format == "html" else escape_markdown
+
+    document = render(build_session_report(contents))
+
+    assert contents.check.record.consistent
+    assert literal(f"CNVD name check: {wording}. CNVD name: {name}.") in document
+    if pair is not None:
+        assert literal(f"NVD vendor/product: {pair}.") in document
+    else:
+        assert "NVD vendor/product:" not in document
+    assert "Name overlap is evidence for review" in document
+    assert document == render(build_session_report(contents))
+
+
+@pytest.mark.parametrize("title", ("PHP 漏洞", "中文漏洞"), ids=("checkable", "uncheckable"))
+def test_name_check_key_fact_counts_distinct_linked_entries_and_excludes_uncheckable_pending(
+    tmp_path: Path,
+    title: str,
+) -> None:
+    directory = build_cnvd_report_session(tmp_path / "workspace", cnvd_title=title)
+    report = build_session_report(SessionChecker(directory).check_with_contents())
+
+    for render in (render_html_report, render_markdown_report):
+        document = render(report)
+        expected_count = 6 if title.startswith("PHP") else 0
+        assert f"CNVD name check: {expected_count} of 6 distinct CNVD entries" in document
+        assert "pending entries only when their name check is checkable" in document
+        assert "repeated CNVD IDs count once" in document
+
+
+def test_reports_read_the_recorded_name_check_instead_of_recomputing(cnvd_session: Path) -> None:
+    lookup = read_document(cnvd_session, 1)
+    check = lookup["candidates"][0]["record"]["cnvd"][0]["name_check"]
+    check.update(
+        result="vendor_overlap",
+        cnvd_name="Recorded name",
+        nvd_pair={"vendor": "recorded_vendor", "product": "recorded_product"},
+    )
+    (cnvd_session / "responses/0001.json").write_text(json.dumps(lookup))
+
+    report = build_session_report(SessionChecker(cnvd_session).check_with_contents())
+
+    for render in (render_html_report, render_markdown_report):
+        document = render(report).replace("\\_", "_")
+        assert "only the vendor name overlaps. CNVD name: Recorded name." in document
+        assert "NVD vendor/product: recorded_vendor/recorded_product." in document
+        assert "CNVD name check: 5 of 6 distinct CNVD entries" in document

@@ -56,10 +56,18 @@ def render_rule_reason(
     grade_reasons: list[str] = []
     for authority in sorted(facts.high_grade.triggering_authorities):
         grade_reasons.append(f"the {authority} high grade triggered this policy rule")
-    return rule.reason.format(
+    reason = rule.reason.format(
         justification=assessment.justification,
         high_grade_reasons="; ".join(grade_reasons),
     )
+    if any(condition.fact == "high_grade" for condition in rule.conditions):
+        for link in facts.high_grade.cnvd_links_to_review:
+            reason = reason.rstrip(".") + ". "
+            reason += (
+                f"{link.cnvd_id}'s product name ({link.cnvd_name}) does not overlap "
+                "NVD's CPE names; review the link."
+            )
+    return reason
 
 
 def evaluate_compliance(policy: PriorityPolicy, asset: Asset) -> tuple[ComplianceStatus, ...]:

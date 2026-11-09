@@ -231,7 +231,7 @@ def test_invalid_priority_is_a_visible_finding_and_never_rendered_as_decisions(
 
 
 @pytest.mark.parametrize("format_name", ["html", "md"])
-def test_session_without_priority_renders_byte_identically_to_the_frozen_prior_report(
+def test_session_without_priority_renders_byte_identically_to_the_frozen_report(
     tmp_path: Path, format_name: str
 ) -> None:
     directory = build_priority_session(tmp_path / "sessions")

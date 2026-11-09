@@ -91,3 +91,23 @@ def test_priority_schema_and_model_reject_inconsistent_or_unknown_facts(invalid_
     assert not Draft202012Validator(schema).is_valid(artifact_document)
     with pytest.raises(ValidationError):
         PriorityArtifact.model_validate(artifact_document)
+
+
+def test_priority_schema_keeps_review_names_and_rejects_reviews_without_cnvd_high() -> None:
+    policy = load_priority_policy(default_priority_policy_file()).policy
+    asset, assessment, facts = build_priority_inputs(high_grade="present", authorities=("CNVD",))
+    artifact = build_priority_artifact((evaluate_priority(policy, asset, assessment, facts),))
+    document = json.loads(artifact.to_json_bytes())
+    high_grade = document["decisions"][0]["facts"]["high_grade"]
+    high_grade["cnvd_links_to_review"] = [{"cnvd_id": "CNVD-9999-00001", "cnvd_name": "PHP"}]
+    schema = json.loads(render_contract_schemas()["priority.schema.json"])
+    validator = Draft202012Validator(schema)
+
+    validator.validate(document)
+    parsed = PriorityArtifact.model_validate(document)
+    assert parsed.decisions[0].facts.high_grade.cnvd_links_to_review[0].cnvd_name == "PHP"
+
+    high_grade["triggering_authorities"] = ["NVD"]
+    assert not validator.is_valid(document)
+    with pytest.raises(ValidationError, match="CNVD high grade"):
+        PriorityArtifact.model_validate(document)

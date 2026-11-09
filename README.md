@@ -11,6 +11,9 @@ built-in telecom extension adds topic cards and MITRE FiGHT threat context.
 reports and the local UI show recommendations separately from compliance status
 ([ADR 0016](docs/rebuild/adr/0016-priority-decisions.md), [runbook](docs/runbook.md#prioritise-a-session)).
 
+CNVD links carry a name-overlap check for review without changing grades or links
+([ADR 0017](docs/rebuild/adr/0017-cnvd-name-check.md)).
+
 ![Open5GS walkthrough: triage reads 211 product matches over 11 pages, looks up 5 CVEs, records the session, checks 495 claims against the record and renders a report; affectedness stays unknown](docs/media/open5gs-walkthrough.webp)
 
 *A real triage of Open5GS 2.7.6 on the NVD snapshot of 2026-10-27: selected recorded events,

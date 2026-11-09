@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<title>Synthetic priority decisions · VulnWitness</title><style>
+
+:root { --bg:#f7f8fa; --panel:#ffffff; --ink:#18202b; --muted:#5d6878; --line:#e3e7ee; --accent:#2f5bd3;
+  --ok:#1f7a4d; --ok-bg:#e6f4ec; --warn:#9a5b00; --warn-bg:#fdf1dc; --bad:#b42318; --bad-bg:#fde8e7; --neutral-bg:#eef1f5;
+  --crit:#8e1b1b; --high:#c2410c; --med:#a16207; --low:#3f6212; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0f141b; --panel:#161d27; --ink:#e7ecf3; --muted:#9aa6b6; --line:#273142;
+  --accent:#7aa2ff; --ok:#6fd3a0; --ok-bg:#12301f; --warn:#f2c26b; --warn-bg:#33270f; --bad:#ff8f86; --bad-bg:#3a1714; --neutral-bg:#222b38;
+  --crit:#ff9b9b; --high:#ffb38a; --med:#f5d27a; --low:#b7e08a; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+main { max-width:1040px; margin:0 auto; padding:32px 20px 64px; }
+a { color:var(--accent); }
+code { font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace; }
+h1 { font-size:28px; margin:4px 0 6px; letter-spacing:-.01em; }
+h2 { font-size:19px; margin:40px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+h3 { margin:0; font-size:18px; } h4 { margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.eyebrow { color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.06em; }
+.meta { color:var(--muted); font-size:14px; }
+.muted { color:var(--muted); } .small { font-size:13px; }
+.stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:22px 0 14px; }
+.stat { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.stat-value { font-size:28px; font-weight:700; line-height:1.1; }
+.stat-label { font-weight:600; margin-top:4px; } .stat-note { color:var(--muted); font-size:12.5px; }
+.stat.warn { border-color:var(--warn); } .stat.warn .stat-value { color:var(--warn); }
+.pill { display:inline-block; padding:4px 12px; border-radius:999px; font-size:13px; font-weight:600; }
+.pill.ok { background:var(--ok-bg); color:var(--ok); } .pill.warn { background:var(--warn-bg); color:var(--warn); }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
+.two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.panel h3 { font-size:15px; margin-bottom:8px; }
+.panel ul { margin:0; padding-left:18px; } .panel li { margin:4px 0; }
+.limits { border-left:4px solid var(--warn); }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin:0 0 16px; }
+.card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.why { background:var(--neutral-bg); border-radius:8px; padding:8px 12px; font-size:13.5px; margin:12px 0; }
+.desc { margin:0 0 12px; padding:10px 14px; border-left:3px solid var(--line); color:var(--ink); font-size:14px; }
+.desc .label { display:block; font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }
+.facts { display:grid; grid-template-columns:1fr 1fr; gap:10px 18px; margin:0; }
+.facts dt { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; } .facts dd { margin:2px 0 0; }
+.sev { white-space:nowrap; padding:4px 10px; border-radius:8px; font-weight:700; font-size:13px; background:var(--neutral-bg); }
+.sev small { font-weight:500; color:var(--muted); }
+.sev-critical { color:var(--crit); } .sev-high { color:var(--high); } .sev-medium { color:var(--med); } .sev-low { color:var(--low); }
+.tag { display:inline-block; padding:1px 8px; border-radius:6px; font-size:12px; font-weight:600; background:var(--neutral-bg); color:var(--muted); }
+.tag.ok { background:var(--ok-bg); color:var(--ok); } .tag.warn { background:var(--warn-bg); color:var(--warn); }
+.chip { display:inline-block; margin:2px 4px 2px 0; padding:2px 8px; border:1px solid var(--line); border-radius:999px; font:12px ui-monospace,Menlo,monospace; }
+.chip.strong { font-weight:700; border-color:var(--accent); color:var(--accent); }
+.path-row { padding:6px 0; border-bottom:1px dashed var(--line); } .path-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.arrow { color:var(--muted); } .chips { margin-top:4px; }
+details.inline { margin:6px 0; }
+details.inline > summary { cursor:pointer; color:var(--accent); font-size:12.5px; list-style:none; }
+details.inline > summary::-webkit-details-marker { display:none; }
+.chips > details.inline, .chips > details.inline > summary { display:inline; }
+.sources { padding-left:18px; margin:0; }
+table { width:100%; border-collapse:collapse; font-size:13.5px; }
+th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); } th { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+.table-wrap { max-height:520px; overflow:auto; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+.table-wrap thead th { position:sticky; top:0; background:var(--panel); }
+.timeline { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.step { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13.5px; }
+.step b { display:block; }
+.layers td:first-child { width:30px; }
+.ok-mark { color:var(--ok); font-weight:700; }
+details.appendix { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin:10px 0; }
+details.appendix summary { cursor:pointer; font-weight:600; }
+pre { overflow:auto; font-size:12px; background:var(--neutral-bg); padding:12px; border-radius:8px; }
+footer { margin-top:48px; color:var(--muted); font-size:12.5px; }
+@media (max-width:720px) { .stats, .timeline { grid-template-columns:1fr 1fr; } .two, .facts { grid-template-columns:1fr; } .card-head { flex-direction:column; } }
+@media print { body { background:#fff; } .table-wrap { max-height:none; overflow:visible; } details { display:block; } details > * { display:block; } .card { break-inside:avoid; } }
+
+.pill.bad { background:var(--bad-bg); color:var(--bad); }
+.pill.neutral { background:var(--neutral-bg); color:var(--ink); }
+.pill { margin:4px 6px 4px 0; overflow-wrap:anywhere; }
+.bad-mark { color:var(--bad); font-weight:700; }
+.warning, .banner { border-left:4px solid var(--warn); padding:10px; background:var(--warn-bg); }
+body { overflow-wrap:anywhere; }
+main, section, article, details, .stat, .step, .panel, .limits { min-width:0; }
+section.two > h2, section.timeline > h3 { grid-column:1 / -1; }
+.limits { background:var(--panel); border-radius:12px; padding:18px 20px; border:1px solid var(--line); border-left:4px solid var(--warn); }
+.panel h3, .limits h3 { font-size:15px; }
+.card > h3 { display:inline; }
+.card > .pill { font-weight:700; }
+.card > p:nth-of-type(2) { background:var(--neutral-bg); border-radius:8px; padding:8px 12px; font-size:13.5px; }
+.facts { display:block; }
+.facts .table-wrap { border:0; }
+.facts th { display:none; }
+.facts td { width:50%; }
+.facts td:first-child { color:var(--muted); font-size:12px; }
+.chip, .sev { white-space:normal; max-width:100%; overflow-wrap:anywhere; }
+pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+.appendix { margin:10px 0; }
+.paths { padding:6px 0; border-bottom:1px dashed var(--line); }
+.path-head .chip.strong { margin:2px 0; font-size:12px; text-transform:none; letter-spacing:normal; }
+.table-wrap table { min-width:720px; }
+.table-wrap th { z-index:1; }
+@media (max-width:720px) {
+ main { padding:20px 12px 40px; } h1 { font-size:24px; }
+ .card { padding:16px 14px; } .stat { padding:12px; }
+ .stat-value { font-size:24px; } .facts .table-wrap table { min-width:0; }
+}
+@media print {
+ :root { color-scheme:light; --bg:#fff; --panel:#fff; --ink:#18202b; --muted:#5d6878; --line:#cbd2dc; --accent:#2f5bd3;
+ --ok:#1f7a4d; --ok-bg:#e6f4ec; --warn:#9a5b00; --warn-bg:#fdf1dc; --bad:#b42318; --bad-bg:#fde8e7; --neutral-bg:#eef1f5;
+ --crit:#8e1b1b; --high:#c2410c; --med:#a16207; --low:#3f6212; }
+ body { background:var(--bg); color:var(--ink); font-size:10pt; }
+ main { max-width:none; padding:0; }
+ details::details-content { display:contents; content-visibility:visible; }
+ details > * { display:block !important; }
+ details, .chips > details.inline { display:block; } summary { font-weight:700; }
+ .table-wrap { max-height:none; overflow:visible; }
+ .table-wrap table { min-width:0; table-layout:fixed; font-size:8pt; }
+ .table-wrap th { position:static; }
+ th,td { overflow-wrap:anywhere; padding:4px; }
+ .card, .panel, .stat, .step, tr { break-inside:avoid; }
+ h1,h2,h3,h4 { break-after:avoid; }
+ a { color:var(--accent); text-decoration:underline; }
+ a[href^="https:"]::after { content:" (" attr(href) ")"; font-size:8pt; overflow-wrap:anywhere; }
+ @page { margin:12mm; }
+}
+.facts-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 18px; }
+.facts-grid dt { font-size:12px; color:var(--muted); text-transform:uppercase; }
+.facts-grid dd { margin:2px 0 0; }
+.facts-grid dd small { display:block; font-size:12px; margin-top:3px; }
+.card-head .pill { margin:0; font-size:13px; }
+.desc h4 { font-size:11.5px; margin:0 0 4px; }
+@media(max-width:720px) { .facts-grid { grid-template-columns:1fr; } }
+</style></head><body><main>
+<div class="eyebrow">VulnWitness · session report</div>
+<h1>Synthetic priority decisions</h1>
+<p class="banner">Synthetic demonstration data</p>
+<section><h2>Overview</h2>
+<span class="pill ok">Record, citations and 0 claims consistent with the record</span>
+<p>Dataset packaged demo data · session “inv_hc2omuxejwt7enyntytg” · recorded 2026-10-15 08:30 UTC</p>
+</section>
+<section class="two"><h2>Key facts and limits</h2>
+<section class="panel"><h3>What the records show</h3>
+<ul>
+<li>The 1 CVE details returned 0 catalogue paths; 0 paths reaching ATT&amp;CK; 0 distinct techniques; 0 paths omitted by the cap.</li>
+</ul>
+</section>
+<section class="limits"><h3>What is not established</h3>
+<ul>
+<li>Affectedness is unknown for every CVE: a version “hit” only matches an NVD CPE condition; configuration and environment were not evaluated.</li>
+<li>This association is derived from official catalogues. It is not evidence that the CVE was used with that technique. It is not an attack path. No ATT&amp;CK mapping describes only the loaded catalogue snapshot; it does not mean the weakness has no attack technique or no way to be exploited. CWE inheritance is an inference along the CWE hierarchy, not a catalogue link from the original CWE to CAPEC.</li>
+</ul>
+</section>
+</section>
+<section><h2>CVE details · 1 CVEs</h2>
+<article class="card" id="CVE-9999-0001"><header class="card-head"><h3>CVE-9999-0001</h3>
+<span class="sev sev-medium">Medium 5.3 · CVSS 3.1 · NVD · primary</span>
+</header>
+<p>Published unknown</p>
+<p>Why selected: Recorded lookup; selection reason not recorded.</p>
+<section class="desc"><h4>NVD description · untrusted text</h4>
+<p>[SYNTHETIC] test record</p>
+<details class="inline"><summary>Full recorded NVD description · untrusted text</summary>
+<pre><code>[SYNTHETIC] test record</code></pre>
+</details>
+</section>
+<section class="facts">
+<dl class="facts-grid">
+<div><dt>Match basis</dt><dd>
+not recorded
+</dd></div>
+<div><dt>NVD version condition</dt><dd>
+not recorded
+</dd></div>
+<div><dt>Affectedness</dt><dd>
+<span class="tag warn">unknown</span>
+
+<small class="muted">configuration and environment not evaluated</small>
+</dd></div>
+<div><dt>Weaknesses</dt><dd>
+none recorded
+</dd></div></dl>
+</section>
+<section><h4>Weakness associations</h4>
+<p>Catalogue associations, not attack paths; “no ATT&amp;CK mapping” describes this snapshot only.</p>
+<p>Showing 0 returned paths; 0 paths reaching ATT&amp;CK; 0 distinct techniques; 0 paths omitted by the cap.</p>
+<ul>
+<li>Missing link: CVE-9999-0001: no_specific_cwe</li>
+</ul>
+<details class="inline"><summary>Each original path</summary>
+</details>
+</section>
+<section><h4>Sources</h4>
+<a href="https://nvd.nist.gov/vuln/detail/CVE-9999-0001" rel="noreferrer noopener">NVD record</a>
+<ul>
+<li>ev:945597b4ce639afdd263e0f1 · test-source · feed urn:vulnwitness:test · call 1</li>
+<li>ev:523d574e67f24db41268d72c · circl-cnvd · feed urn:synthetic:cnvd:CNVD-9999-00001 · call 1</li>
+<li>ev:b7bd1c855b870dcf5bae6aa2 · circl-cnvd · feed urn:synthetic:cnvd:CNVD-9999-00002 · call 1</li>
+</ul>
+</section>
+</article>
+</section>
+<section><h2>Execution and checks</h2>
+<section class="timeline"><h3>Call timeline</h3>
+<section class="step"><h4>Call 1</h4>
+<p>mcp: lookup_cve</p>
+</section>
+<section class="step"><h4>Stopped</h4>
+<p>End of recorded calls; stop reason not recorded.</p>
+</section>
+</section>
+<section><h3>Check layers</h3>
+<p>Superseded findings: 0.</p>
+<div class="table-wrap"><table><thead><tr>
+<th scope="col">Status</th>
+<th scope="col">Layer</th>
+<th scope="col">Count</th>
+<th scope="col">Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td class="ok-mark">✓</td>
+<td>Record consistency</td>
+<td>1 calls</td>
+<td>Files are complete and consistent with one dataset.</td>
+</tr>
+<tr>
+<td class="ok-mark">✓</td>
+<td>Citation resolution</td>
+<td>0 citations</td>
+<td>Each citation points to an anchor in a successful recorded call.</td>
+</tr>
+<tr>
+<td class="ok-mark">✓</td>
+<td>Structured claims</td>
+<td>0 claims</td>
+<td>Claim fields equal the recorded response fields; this is not source support.</td>
+</tr>
+<tr>
+<td>–</td>
+<td>Narrative</td>
+<td>0 not checked</td>
+<td>Free text is never checked.</td>
+</tr>
+</tbody></table></div>
+</section>
+</section>
+<section><h2>Technical appendix</h2>
+<details class="appendix"><summary>Dataset identity</summary>
+<p>Goal: Synthetic priority decisions</p>
+<p>Scope: not recorded</p>
+<p>Created at: 2026-10-15T08:30:00+00:00</p>
+<p>Contract version: 2.0.0-dev.57</p>
+<div class="table-wrap"><table><thead><tr>
+<th scope="col">Identity</th>
+<th scope="col">Recorded value</th>
+</tr></thead><tbody>
+<tr>
+<td>Served dataset</td>
+<td>synthetic_fixture</td>
+</tr>
+<tr>
+<td>Search version</td>
+<td>synthetic-cves@1+sha256:5eda7f05bd23fec5638267fc4ba8fee188e0472bf9a01e57a0928ecf6b5a7756</td>
+</tr>
+<tr>
+<td>Store name</td>
+<td>none (synthetic fixture)</td>
+</tr>
+<tr>
+<td>Store manifest identity</td>
+<td>5eda7f05bd23fec5638267fc4ba8fee188e0472bf9a01e57a0928ecf6b5a7756</td>
+</tr>
+<tr>
+<td>Corpus content identity</td>
+<td>cd476ed6c0402549a39e58ba61ce0ead334c106ff343cd9f937d1b97c06ad8a1</td>
+</tr>
+<tr>
+<td>FiGHT snapshot identity</td>
+<td>08cd11d579889c819c00888ecbb85d6d4b470b8fdf9fea833324441e28635726</td>
+</tr>
+<tr>
+<td>MITRE snapshot identity</td>
+<td>a792c7b07a9c94555a0b6253a435c4c05a1043f71dacbb49a34952173f6e6a0b</td>
+</tr>
+</tbody></table></div>
+</details>
+<details class="appendix"><summary>Findings by kind and author</summary>
+<p>None recorded.</p>
+<div class="table-wrap"><table><thead><tr>
+<th scope="col">Kind</th>
+<th scope="col">Author</th>
+<th scope="col">Count</th>
+</tr></thead><tbody>
+</tbody></table></div>
+<p>None recorded.</p>
+<section><h4>Not checked: narrative</h4>
+</section>
+</details>
+<details class="appendix"><summary>Per-claim check results</summary>
+<div class="table-wrap"><table><thead><tr>
+<th scope="col">Finding</th>
+<th scope="col">Call</th>
+<th scope="col">Status</th>
+<th scope="col">Field</th>
+<th scope="col">Expected</th>
+<th scope="col">Recorded</th>
+<th scope="col">Meaning</th>
+</tr></thead><tbody>
+</tbody></table></div>
+<p>None recorded.</p>
+</details>
+<details class="appendix"><summary>Full check JSON</summary>
+<pre><code>{
+  &quot;schema_version&quot;: &quot;2.0.0-dev.57&quot;,
+  &quot;record&quot;: {
+    &quot;consistent&quot;: true,
+    &quot;calls_checked&quot;: 1,
+    &quot;violations&quot;: []
+  },
+  &quot;citations&quot;: {
+    &quot;resolved&quot;: true,
+    &quot;citations_checked&quot;: 0,
+    &quot;violations&quot;: []
+  },
+  &quot;claims&quot;: {
+    &quot;verified&quot;: true,
+    &quot;checks&quot;: []
+  },
+  &quot;not_checked&quot;: {
+    &quot;count&quot;: 0,
+    &quot;finding_ids&quot;: []
+  },
+  &quot;superseded_count&quot;: 0,
+  &quot;support_limitation&quot;: &quot;Free narrative is not checked. This check does not establish that a statement is supported by cited evidence or prove real-world truth.&quot;
+}</code></pre>
+</details>
+</section>
+<footer>Generated by VulnWitness from recorded calls only; rendering performs no retrieval. Source descriptions are untrusted text.</footer>
+</main></body></html>

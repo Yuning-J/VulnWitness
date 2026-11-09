@@ -833,3 +833,70 @@ async def test_ui_title_and_description_language_comes_only_from_recording(
     assert 'lang="en"' in page.text
     assert exported.text.count(" lang=") == (1 if language is None else 5)
     assert ('lang="zh-Hans"' in exported.text) is (language is not None)
+
+
+@pytest.mark.parametrize(
+    "title,cve_id,wording,pair",
+    (
+        (
+            "DemoCorp demo_gateway 漏洞",
+            "CVE-9999-0001",
+            "vendor and product names overlap",
+            "democorp/demo_gateway",
+        ),
+        (
+            "Other demo_gateway 漏洞",
+            "CVE-9999-0001",
+            "only the product name overlaps",
+            "democorp/demo_gateway",
+        ),
+        (
+            "DemoCorp Platform 漏洞",
+            "CVE-9999-0001",
+            "only the vendor name overlaps",
+            "democorp/demo_gateway",
+        ),
+        ("PHP 漏洞", "CVE-9999-0001", "no name overlap; review the link", None),
+        ("中文漏洞", "CVE-9999-0001", "cannot check (no extractable CNVD name)", None),
+        ("PHP 漏洞", "CVE-9999-0006", "cannot check (no servable NVD record)", None),
+    ),
+    ids=("both", "product", "vendor", "no-overlap", "no-name", "pending"),
+)
+async def test_name_check_labels_reach_investigation_records_and_html_export(
+    tmp_path: Path,
+    title: str,
+    cve_id: str,
+    wording: str,
+    pair: str | None,
+) -> None:
+    app = build_test_ui_app(
+        tmp_path / "workspace", corpus=build_cnvd_report_corpus(cnvd_title=title)
+    )
+    async with open_app_client(app) as client:
+        started = await client.post("/ui-api/start", json={"goal": "Name check labels"})
+        session_id = started.json()["session_id"]
+        lookup = await client.post(
+            "/ui-api/lookup", json={"session_id": session_id, "cve_id": cve_id}
+        )
+        view = await client.get(f"/ui-api/view/{session_id}")
+        rendered = await client.post("/ui-api/render", json={"session_id": session_id})
+        exported = await client.get(f"/ui-api/report/{session_id}")
+
+    assert (
+        lookup.status_code
+        == view.status_code
+        == rendered.status_code
+        == exported.status_code
+        == 200
+    )
+    entries = view.json()["report"]["sections"][2]["sections"][0]["sections"][0]["sections"][1][
+        "sections"
+    ]
+    for entry in entries:
+        texts = []
+        for paragraph in entry["paragraphs"]:
+            texts.append(paragraph["text"])
+        assert any(f"CNVD name check: {wording}." in text for text in texts)
+    assert f"CNVD name check: {wording}." in exported.text
+    if pair is not None:
+        assert f"NVD vendor/product: {pair}." in exported.text
