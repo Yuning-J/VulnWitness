@@ -27,6 +27,18 @@ pause_seconds=6
 # --retry does not cover, and NVD answers 503 for minutes at a time. Without --retry-delay,
 # curl backs off exponentially from 1 s, so ten retries wait about 17 minutes in all.
 curl_options=(-fsS --location --user-agent VulnWitness --retry 10 --retry-all-errors)
+# A `.meta` file is a few lines; anything larger is not one.
+max_meta_bytes=65536
+
+# The importer refuses each input above its cap (ADR 0008 §6). Download under the same caps,
+# so an oversized or runaway response stops while it arrives instead of filling the disk.
+# Command substitution propagates a failure to set -e.
+importer_caps="$(uv run --no-sync --project "$repo_root" python -c '
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
+limits = MigrationLimits()
+print(limits.max_compressed_file_bytes, limits.max_kev_bytes, limits.max_cnvd_bytes)
+')"
+read -r max_feed_bytes max_kev_bytes max_cnvd_bytes <<< "$importer_caps"
 
 # Load before downloading: command substitution propagates catalog failures to set -e.
 cnvd_files="$(uv run --no-sync --project "$repo_root" python - \
@@ -44,12 +56,24 @@ for snapshot_file in snapshot.files:
 PY
 )"
 
+# fetch MAX_BYTES CURL_ARGS... URL: curl stops a declared or streamed body above MAX_BYTES
+# (exit 63); a file written with -o is also measured afterwards.
 fetch() {
-  curl "${curl_options[@]}" "$@" || {
+  local max_bytes="$1"
+  shift
+  curl "${curl_options[@]}" --max-filesize "$max_bytes" "$@" || {
     local status=$?
-    echo "fetch_feeds.sh: ${*: -1} failed (curl exit $status)" >&2
+    if [ "$status" -eq 63 ]; then
+      echo "fetch_feeds.sh: ${*: -1} exceeds the $max_bytes-byte import cap" >&2
+    else
+      echo "fetch_feeds.sh: ${*: -1} failed (curl exit $status)" >&2
+    fi
     exit 1
   }
+  if [ "$1" = "-o" ] && [ "$(wc -c < "$2" | tr -d ' ')" -gt "$max_bytes" ]; then
+    echo "fetch_feeds.sh: ${*: -1} exceeds the $max_bytes-byte import cap" >&2
+    exit 1
+  fi
 }
 
 if [ -e "$target_dir" ] && [ -n "$(ls -A "$target_dir")" ]; then
@@ -75,11 +99,11 @@ fetch_nvd_feed() {
   local feed_name="$1"
   local file_name="nvdcve-2.0-$feed_name.json.gz"
   local url="$nvd_feed_base/$file_name"
-  fetch -o "$target_dir/$file_name" "$url"
+  fetch "$max_feed_bytes" -o "$target_dir/$file_name" "$url"
   local retrieved_at
   retrieved_at="$(now_utc)"
   local stated_sha256
-  stated_sha256="$(fetch "$nvd_feed_base/nvdcve-2.0-$feed_name.meta" \
+  stated_sha256="$(fetch "$max_meta_bytes" "$nvd_feed_base/nvdcve-2.0-$feed_name.meta" \
     | tr -d '\r' | sed -n 's/^sha256://p' | tr 'A-F' 'a-f')"
   local payload_sha256
   payload_sha256="$(gzip -dc "$target_dir/$file_name" | sha256_of_stdin)"
@@ -104,7 +128,7 @@ for year in $(seq "$first_year" "$last_year"); do
 done
 fetch_nvd_feed modified
 
-fetch -o "$target_dir/$kev_file" "$kev_url"
+fetch "$max_kev_bytes" -o "$target_dir/$kev_file" "$kev_url"
 kev_retrieved_at="$(now_utc)"
 kev_sha256="$(sha256_of_stdin < "$target_dir/$kev_file")"
 kev_bytes="$(wc -c < "$target_dir/$kev_file" | tr -d ' ')"
@@ -118,7 +142,7 @@ sleep "$pause_seconds"
 while IFS=$'\t' read -r revision upstream_path stated_sha256; do
   file_name="${upstream_path##*/}"
   url="https://huggingface.co/datasets/CIRCL/Vulnerability-CNVD/resolve/$revision/$upstream_path"
-  fetch -o "$target_dir/$file_name" "$url"
+  fetch "$max_cnvd_bytes" -o "$target_dir/$file_name" "$url"
   retrieved_at="$(now_utc)"
   file_sha256="$(sha256_of_stdin < "$target_dir/$file_name")"
   if [ "$file_sha256" != "$stated_sha256" ]; then

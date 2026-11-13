@@ -19,6 +19,7 @@ FACT_VALUES: dict[FactName, tuple[str, ...]] = {
     "system_category": ("external_connection", "software_update", "other", "unknown"),
     "kev": ("listed", "not_listed_in_snapshot", "unknown"),
     "high_grade": ("present", "absent", "none_available"),
+    "public_exploit": ("referenced", "not_referenced_in_record", "unknown"),
 }
 
 

@@ -11,6 +11,10 @@ built-in telecom extension adds topic cards and MITRE FiGHT threat context.
 reports and the local UI show recommendations separately from compliance status
 ([ADR 0016](docs/rebuild/adr/0016-priority-decisions.md), [runbook](docs/runbook.md#prioritise-a-session)).
 
+Priority facts include `public_exploit`: NVD references tagged `Exploit`, cited and never
+fetched; an untagged record is not "no exploit"
+([ADR 0019](docs/rebuild/adr/0019-public-exploit-references.md)).
+
 CNVD links carry a name-overlap check for review without changing grades or links
 ([ADR 0017](docs/rebuild/adr/0017-cnvd-name-check.md)).
 

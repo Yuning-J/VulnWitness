@@ -73,7 +73,17 @@ def test_priority_schema_accepts_serialised_artifact_with_all_explanations() -> 
     Draft202012Validator(schema).validate(json.loads(artifact.to_json_bytes()))
 
 
-@pytest.mark.parametrize("invalid_fact", ["kev-date", "grade-authority", "extra-fact"])
+@pytest.mark.parametrize(
+    "invalid_fact",
+    [
+        "kev-date",
+        "grade-authority",
+        "extra-fact",
+        "exploit-without-urls",
+        "urls-without-exploit",
+        "missing-public-exploit",
+    ],
+)
 def test_priority_schema_and_model_reject_inconsistent_or_unknown_facts(invalid_fact: str) -> None:
     policy = load_priority_policy(default_priority_policy_file()).policy
     asset, assessment, facts = build_priority_inputs()
@@ -84,6 +94,12 @@ def test_priority_schema_and_model_reject_inconsistent_or_unknown_facts(invalid_
         fact_document["kev"]["snapshot_retrieved_at"] = None
     elif invalid_fact == "grade-authority":
         fact_document["high_grade"]["value"] = "present"
+    elif invalid_fact == "exploit-without-urls":
+        fact_document["public_exploit"]["value"] = "referenced"
+    elif invalid_fact == "urls-without-exploit":
+        fact_document["public_exploit"]["reference_urls"] = ["https://exploits.example/1"]
+    elif invalid_fact == "missing-public-exploit":
+        del fact_document["public_exploit"]
     else:
         fact_document["exploitability"] = "high"
     schema = json.loads(render_contract_schemas()["priority.schema.json"])

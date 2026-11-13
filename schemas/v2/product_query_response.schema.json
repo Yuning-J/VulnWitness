@@ -1196,8 +1196,8 @@
       "title": "Product"
     },
     "schema_version": {
-      "const": "2.0.0-dev.58",
-      "default": "2.0.0-dev.58",
+      "const": "2.0.0-dev.59",
+      "default": "2.0.0-dev.59",
       "title": "Schema Version",
       "type": "string"
     },

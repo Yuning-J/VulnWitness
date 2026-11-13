@@ -13,6 +13,7 @@ from vulnwitness.adapters.strict_yaml import load_declaration_yaml
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.hashing import sha256_hex
 from vulnwitness.domain.priority_decision import PriorityArtifact
+from vulnwitness.domain.priority_facts import FACT_NAMES
 from vulnwitness.domain.session_claim_check import check_session_claim
 from vulnwitness.domain.session_contracts import CLI_SESSION_CONTRACTS, MCP_SESSION_CONTRACTS
 from vulnwitness.domain.session_record import (
@@ -148,7 +149,7 @@ class SessionChecker:
                     raise ValueError("priority response digest differs from a checked response")
                 used_anchors.update(self._anchors[digest.call])
             for decision in priority.decisions:
-                for fact_name in ("applicability", "system_category", "kev", "high_grade"):
+                for fact_name in FACT_NAMES:
                     fact = getattr(decision.facts, fact_name)
                     if not used_anchors.issuperset(fact.evidence_ids):
                         raise ValueError("priority evidence is absent from its checked responses")

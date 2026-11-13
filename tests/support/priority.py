@@ -31,6 +31,8 @@ from vulnwitness.domain.priority_facts import (
     KevFact,
     KevStatus,
     PriorityFacts,
+    PublicExploitFact,
+    PublicExploitStatus,
     SystemCategoryFact,
 )
 from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
@@ -38,6 +40,7 @@ from vulnwitness.domain.session_record import SessionDatasetIdentity
 from vulnwitness.domain.workspace import StartInvestigationRequest
 
 EVIDENCE_ID = "ev:1234567890abcdef12345678"
+EXPLOIT_URL = "https://exploits.example/CVE-2026-1234"
 REFERENCE_DATE = date(2026, 11, 8)
 
 
@@ -67,6 +70,7 @@ def build_priority_inputs(
     high_grade: HighGradeStatus = "absent",
     authorities: tuple[GradeAuthority, ...] = (),
     markets: tuple[str, ...] = ("CN",),
+    public_exploit: PublicExploitStatus = "not_referenced_in_record",
 ) -> tuple[Asset, AssetAssessment, PriorityFacts]:
     asset = Asset(name="gateway", markets=markets, system_category=system_category)
     assessment = AssetAssessment(
@@ -87,6 +91,11 @@ def build_priority_inputs(
         ),
         high_grade=HighGradeFact(
             value=high_grade, evidence_ids=(EVIDENCE_ID,), triggering_authorities=authorities
+        ),
+        public_exploit=PublicExploitFact(
+            value=public_exploit,
+            evidence_ids=(EVIDENCE_ID,) if public_exploit != "unknown" else (),
+            reference_urls=(EXPLOIT_URL,) if public_exploit == "referenced" else (),
         ),
     )
     return asset, assessment, facts

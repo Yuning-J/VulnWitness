@@ -139,7 +139,9 @@ It also downloads both CIRCL CNVD Parquet files (about 25 MB) at the pinned revi
 `986160c9b1c910049f64a166ab4056de191f6de7`, verifying each SHA-256 against
 `src/vulnwitness/knowledge/cnvd_snapshots.yaml` ([ADR 0015](rebuild/adr/0015-cnvd-entries.md#8-fetching)).
 The NVD/KEV download is about 270 MB; retry interrupted fetches into a fresh directory.
-Only a complete fetch publishes `provenance.tsv` and `inputs.yaml`. Import uses a
+Each download stops once it exceeds the importer's cap for that input (NVD archive 256 MiB,
+KEV 16 MiB, CNVD file 64 MiB), so an oversized response fails while it arrives instead of
+after it has filled the disk. Only a complete fetch publishes `provenance.tsv` and `inputs.yaml`. Import uses a
 fresh store name; failures stop before activation. Activation verifies the store
 and preserves the previous store. Restart API/MCP after activation: there is no hot reload.
 Use `--inputs /data/feeds/inputs.yaml` instead of `--feeds-dir` to reuse local feeds
@@ -186,7 +188,8 @@ VULNWITNESS_STORE_ROOT=~/data/vulnwitness/stores-cnvd-raw \
 ```
 
 `base` streams one dump into a temporary file, validates its NDJSON and renames it only
-when complete. It refuses a directory that already holds a base. `increment` reads the
+when complete. A dump, API page or increment above the importer's 256 MiB raw CNVD cap is
+stopped and publishes nothing. It refuses a directory that already holds a base. `increment` reads the
 latest `openTime` recorded across the base and all earlier runs in `provenance.tsv`,
 queries from that date minus one day, and requests pages of 100 in ascending updated
 order until a short page. All attempts are spaced by at least one second. A 429 or 5xx
@@ -520,9 +523,13 @@ not compliance conclusions. GB 44495 status stays `basis_insufficient` for in-sc
 without authoritative-platform data: the platform record, grade, publication date,
 reference date and handling evidence remain required basis. CNVD grades are triage reference
 and do not substitute for that platform. KEV `not_listed_in_snapshot` means only that the CVE
-was not listed in the imported snapshot, never “not exploited”. The reference date does not
-reconstruct history; the artifact flags evidence retrieved after it. See
-[ADR 0016](rebuild/adr/0016-priority-decisions.md) for rule order and limits.
+was not listed in the imported snapshot, never “not exploited”. The `public_exploit` fact is
+`referenced` when the exact NVD record carries a reference tagged `Exploit`; the report cites
+those URLs and never fetches them. `not_referenced_in_record` means only that the record has
+no such tag, never “no public exploit”. The `cn-auto-demo` rules do not read it yet. The
+reference date does not reconstruct history; the artifact flags evidence retrieved after it.
+See [ADR 0016](rebuild/adr/0016-priority-decisions.md) for rule order and limits and
+[ADR 0019](rebuild/adr/0019-public-exploit-references.md) for the public-exploit fact.
 
 ## Workspace mode for agents
 

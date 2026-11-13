@@ -1,6 +1,7 @@
 """Present recorded policy decisions without evaluating policy or inferring compliance."""
 
 from vulnwitness.domain.priority_decision import PriorityArtifact, PriorityDecision
+from vulnwitness.domain.priority_facts import FACT_NAMES
 from vulnwitness.domain.priority_policy import PolicyCondition
 from vulnwitness.domain.session_report import ReportParagraph, ReportSection, ReportTable
 
@@ -16,7 +17,7 @@ def build_priority_decision(decision: PriorityDecision) -> ReportSection:
     for condition in decision.matched_rule.conditions:
         conditions.append(describe_condition(condition))
     fact_rows: list[tuple[str, ...]] = []
-    for fact_name in ("applicability", "system_category", "kev", "high_grade"):
+    for fact_name in FACT_NAMES:
         fact = getattr(decision.facts, fact_name)
         fact_rows.append((fact_name, fact.value, ", ".join(fact.evidence_ids) or "none"))
     fact_details: list[str] = []
@@ -29,6 +30,8 @@ def build_priority_decision(decision: PriorityDecision) -> ReportSection:
             "High-grade triggering authorities: "
             + ", ".join(decision.facts.high_grade.triggering_authorities)
         )
+    for url in decision.facts.public_exploit.reference_urls:
+        fact_details.append(f"Exploit-tagged reference (cited, not fetched): {url}")
     earlier_rules: list[ReportSection] = []
     for rule in decision.earlier_unmatched_rules:
         failures: list[str] = []
@@ -101,6 +104,10 @@ def build_priority_report(priority: PriorityArtifact) -> ReportSection:
             ),
             ReportParagraph(
                 'KEV not_listed_in_snapshot means not listed in that snapshot, not "not exploited".'
+            ),
+            ReportParagraph(
+                "public_exploit not_referenced_in_record means the record cites no "
+                'exploit-tagged reference, not "no public exploit exists".'
             ),
             ReportParagraph(
                 f"Policy: {priority.policy.name} · format_version: {priority.policy.format_version}"
