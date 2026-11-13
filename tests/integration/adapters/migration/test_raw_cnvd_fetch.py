@@ -10,6 +10,7 @@ import yaml
 from scripts.operator.fetch_raw_cnvd import (
     DUMP_URL,
     HttpDownload,
+    RawCnvdFetcher,
     main,
     read_provenance,
     write_manifest,
@@ -285,3 +286,53 @@ def test_increment_without_base_is_refused_before_http(tmp_path: Path) -> None:
 
     assert http.calls == []
     assert list(tmp_path.iterdir()) == []
+
+
+def capped_fetcher(http: RawCnvdHttp, clock: RawCnvdClock, max_bytes: int) -> RawCnvdFetcher:
+    return RawCnvdFetcher(http.get, clock.now, clock.monotonic, clock.sleep, max_bytes=max_bytes)
+
+
+@pytest.mark.parametrize("declared", [True, False], ids=["content-length", "streamed"])
+def test_base_above_the_byte_cap_stops_and_publishes_nothing(
+    tmp_path: Path, declared: bool
+) -> None:
+    download = build_download([build_raw_cnvd_record(1), build_raw_cnvd_record(2)], base=True)
+    size = len(download.body.getvalue())
+    if declared:
+        download = HttpDownload(200, {"content-length": str(size)}, download.body)
+    clock = RawCnvdClock()
+    http = RawCnvdHttp([download], clock)
+
+    with pytest.raises(ValueError, match="byte cap"):
+        capped_fetcher(http, clock, size - 1).fetch("base", tmp_path)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_base_at_exactly_the_byte_cap_is_published(tmp_path: Path) -> None:
+    download = build_download([build_raw_cnvd_record(1)], base=True)
+    clock = RawCnvdClock()
+    http = RawCnvdHttp([download], clock)
+
+    row = capped_fetcher(http, clock, len(download.body.getvalue())).fetch("base", tmp_path)
+
+    assert row["record_count"] == "1"
+
+
+def test_increment_page_above_the_byte_cap_stops_and_keeps_the_base(tmp_path: Path) -> None:
+    clock = RawCnvdClock()
+    base = build_download([build_raw_cnvd_record(1, openTime="2026-10-08")], base=True)
+    page = build_download([build_raw_cnvd_record(2, openTime="2026-10-10")])
+    cap = max(len(base.body.getvalue()), len(page.body.getvalue()) - 1)
+    assert len(page.body.getvalue()) > cap
+    http = RawCnvdHttp([base, page], clock)
+    fetcher = capped_fetcher(http, clock, cap)
+    fetcher.fetch("base", tmp_path)
+    clock.sleep(60)
+    before = (tmp_path / "provenance.tsv").read_bytes()
+
+    with pytest.raises(ValueError, match="byte cap"):
+        fetcher.fetch("increment", tmp_path)
+
+    assert (tmp_path / "provenance.tsv").read_bytes() == before
+    assert not list(tmp_path.glob("increment-*")) and not list(tmp_path.glob("*.partial"))

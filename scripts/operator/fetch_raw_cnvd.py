@@ -22,6 +22,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from vulnwitness.adapters.migration.inputs_manifest import load_inputs_manifest
+from vulnwitness.adapters.migration.migration_limits import MigrationLimits
 from vulnwitness.domain.corpus_store_manifest import StoreSource
 
 DUMP_URL = "https://vulnerability.circl.lu/dumps/cnvd.ndjson"
@@ -170,11 +171,15 @@ class RawCnvdFetcher:
         now: Callable[[], datetime],
         monotonic: Callable[[], float],
         sleep: Callable[[float], None],
+        max_bytes: int = MigrationLimits().max_raw_cnvd_bytes,
     ) -> None:
         self.get = get
         self.now = now
         self.monotonic = monotonic
         self.sleep = sleep
+        # The importer refuses a raw CNVD file above this size (ADR 0008 §6), so a larger
+        # download is stopped while it arrives instead of after it has filled the disk.
+        self.max_bytes = max_bytes
         self.last_request: float | None = None
         self.request_count = 0
         self.http_429_count = 0
@@ -232,22 +237,30 @@ class RawCnvdFetcher:
                         with self.request(DUMP_URL) as download:
                             row["last_modified"] = download.headers.get("last-modified", "")
                             row["etag"] = download.headers.get("etag", "")
+                            content_length = download.headers.get("content-length")
+                            if content_length is not None and int(content_length) > self.max_bytes:
+                                raise ValueError("dump exceeds the raw CNVD byte cap")
                             byte_count = 0
                             while chunk := download.body.read(65536):
+                                byte_count += len(chunk)
+                                if byte_count > self.max_bytes:
+                                    raise ValueError("dump exceeds the raw CNVD byte cap")
                                 stream.write(chunk)
                                 digest.update(chunk)
-                                byte_count += len(chunk)
-                            content_length = download.headers.get("content-length")
                             if content_length is not None and byte_count != int(content_length):
                                 raise ValueError("incomplete dump body")
                         row["url"] = DUMP_URL
                         row["page_count"] = "0"
                     else:
                         page_number = 1
+                        written = 0
                         while True:
                             url = QUERY_URL.format(since=since, page=page_number)
                             with self.request(url) as download:
-                                records = json.load(download.body)
+                                page = download.body.read(self.max_bytes + 1)
+                            if len(page) > self.max_bytes:
+                                raise ValueError("API page exceeds the raw CNVD byte cap")
+                            records = json.loads(page)
                             if not isinstance(records, list) or len(records) > 100:
                                 raise ValueError("expected an API page of at most 100 records")
                             for record in records:
@@ -255,6 +268,9 @@ class RawCnvdFetcher:
                                 line = (json.dumps(record, ensure_ascii=False) + "\n").encode(
                                     "utf-8"
                                 )
+                                written += len(line)
+                                if written > self.max_bytes:
+                                    raise ValueError("increment exceeds the raw CNVD byte cap")
                                 stream.write(line)
                                 digest.update(line)
                             if len(records) < 100:
