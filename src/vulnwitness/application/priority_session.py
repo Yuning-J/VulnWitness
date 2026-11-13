@@ -14,6 +14,9 @@ from vulnwitness.domain.priority_decision import (
     PriorityArtifact,
 )
 from vulnwitness.domain.priority_facts import (
+    EXPLOIT_REFERENCE_TAG,
+    FACT_NAMES,
+    MAX_EXPLOIT_REFERENCE_URLS,
     ApplicabilityFact,
     CnvdLinkToReview,
     GradeAuthority,
@@ -21,6 +24,7 @@ from vulnwitness.domain.priority_facts import (
     HighGradeStatus,
     KevFact,
     PriorityFacts,
+    PublicExploitFact,
     SystemCategoryFact,
 )
 from vulnwitness.domain.priority_policy import PriorityPolicy
@@ -157,6 +161,36 @@ def extract_high_grade_fact(
     )
 
 
+def extract_public_exploit_fact(
+    lookup: CveLookupResponse, cve_id: str, anchors: dict[str, EvidenceAnchor]
+) -> PublicExploitFact:
+    """Read exploit-tagged references on the exact record; an untagged record is not "none"."""
+    evidence_ids: list[str] = []
+    urls: list[str] = []
+    found_record = False
+    for candidate in lookup.candidates:
+        record = candidate.record
+        if record.cve_id != cve_id:
+            continue
+        record_ids = source_evidence_ids(
+            record, anchors, (SourceType.NVD_API_2, SourceType.NVD_JSON_11)
+        )
+        if not record_ids:
+            continue
+        found_record = True
+        evidence_ids.extend(record_ids)
+        for reference in record.references:
+            if EXPLOIT_REFERENCE_TAG in reference.tags and reference.url not in urls:
+                urls.append(reference.url)
+    if not found_record:
+        return PublicExploitFact(value="unknown", evidence_ids=())
+    return PublicExploitFact(
+        value="referenced" if urls else "not_referenced_in_record",
+        evidence_ids=tuple(sorted(set(evidence_ids))),
+        reference_urls=tuple(urls[:MAX_EXPLOIT_REFERENCE_URLS]),
+    )
+
+
 def uses_after_reference_date_information(
     facts: PriorityFacts,
     anchors: dict[str, EvidenceAnchor],
@@ -167,7 +201,10 @@ def uses_after_reference_date_information(
     after_reference_date = (
         snapshot_retrieved_at is not None and snapshot_retrieved_at > reference_date
     )
-    for evidence_id in (*facts.kev.evidence_ids, *facts.high_grade.evidence_ids):
+    used_ids: list[str] = []
+    for fact_name in FACT_NAMES:
+        used_ids.extend(getattr(facts, fact_name).evidence_ids)
+    for evidence_id in used_ids:
         used_anchor = anchors.get(evidence_id)
         if used_anchor is None:
             raise ValueError(f"used evidence {evidence_id} has no recorded anchor")
@@ -186,6 +223,7 @@ def extract_priority_facts(
     kev = KevFact(value="unknown", evidence_ids=())
     snapshot_retrieved_at = None
     high_grade = HighGradeFact(value="none_available", evidence_ids=())
+    public_exploit = PublicExploitFact(value="unknown", evidence_ids=())
     lookup_call = find_recorded_call(contents, ("lookup", "lookup_cve"), assessment.cve_id)
     if lookup_call is None:
         notes.append(f"{assessment.cve_id} has no recorded exact lookup; CVE facts are unknown.")
@@ -205,11 +243,13 @@ def extract_priority_facts(
             if kev.snapshot_retrieved_at is not None:
                 snapshot_retrieved_at = kev.snapshot_retrieved_at
         high_grade = extract_high_grade_fact(lookup, assessment.cve_id, anchors)
+        public_exploit = extract_public_exploit_fact(lookup, assessment.cve_id, anchors)
     facts = PriorityFacts(
         applicability=ApplicabilityFact(value=assessment.applicability, evidence_ids=()),
         system_category=SystemCategoryFact(value=asset.system_category, evidence_ids=()),
         kev=kev,
         high_grade=high_grade,
+        public_exploit=public_exploit,
     )
     after_reference_date = uses_after_reference_date_information(
         facts, anchors, reference_date, snapshot_retrieved_at

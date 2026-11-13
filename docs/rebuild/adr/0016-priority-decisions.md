@@ -102,6 +102,8 @@ grade.
 | KEV | `listed`, `not_listed_in_snapshot`, `unknown` | recorded lookup and the dataset's KEV input |
 | high grade | `present`, `absent`, `none_available` | NVD's own CVSS v3 and CNVD grades in the recorded lookup |
 
+ADR 0019 adds a fifth fact, `public_exploit`, from `Exploit`-tagged NVD references.
+
 - KEV is `unknown` when the dataset imported no KEV snapshot or the lookup does not say.
   `not_listed_in_snapshot` names the snapshot's retrieval date, and it is never read as
   "not exploited".

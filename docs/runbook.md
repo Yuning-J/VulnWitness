@@ -520,9 +520,13 @@ not compliance conclusions. GB 44495 status stays `basis_insufficient` for in-sc
 without authoritative-platform data: the platform record, grade, publication date,
 reference date and handling evidence remain required basis. CNVD grades are triage reference
 and do not substitute for that platform. KEV `not_listed_in_snapshot` means only that the CVE
-was not listed in the imported snapshot, never “not exploited”. The reference date does not
-reconstruct history; the artifact flags evidence retrieved after it. See
-[ADR 0016](rebuild/adr/0016-priority-decisions.md) for rule order and limits.
+was not listed in the imported snapshot, never “not exploited”. The `public_exploit` fact is
+`referenced` when the exact NVD record carries a reference tagged `Exploit`; the report cites
+those URLs and never fetches them. `not_referenced_in_record` means only that the record has
+no such tag, never “no public exploit”. The `cn-auto-demo` rules do not read it yet. The
+reference date does not reconstruct history; the artifact flags evidence retrieved after it.
+See [ADR 0016](rebuild/adr/0016-priority-decisions.md) for rule order and limits and
+[ADR 0019](rebuild/adr/0019-public-exploit-references.md) for the public-exploit fact.
 
 ## Workspace mode for agents
 

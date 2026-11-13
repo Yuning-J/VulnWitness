@@ -295,7 +295,8 @@
             "applicability",
             "system_category",
             "kev",
-            "high_grade"
+            "high_grade",
+            "public_exploit"
           ],
           "title": "Fact",
           "type": "string"
@@ -420,7 +421,8 @@
               "applicability",
               "system_category",
               "kev",
-              "high_grade"
+              "high_grade",
+              "public_exploit"
             ],
             "type": "string"
           },
@@ -455,6 +457,9 @@
         "kev": {
           "$ref": "#/$defs/KevFact"
         },
+        "public_exploit": {
+          "$ref": "#/$defs/PublicExploitFact"
+        },
         "system_category": {
           "$ref": "#/$defs/SystemCategoryFact"
         }
@@ -463,7 +468,8 @@
         "applicability",
         "system_category",
         "kev",
-        "high_grade"
+        "high_grade",
+        "public_exploit"
       ],
       "title": "PriorityFacts",
       "type": "object"
@@ -509,6 +515,70 @@
         "reason"
       ],
       "title": "PriorityRule",
+      "type": "object"
+    },
+    "PublicExploitFact": {
+      "additionalProperties": false,
+      "description": "Whether the looked-up record cites a reference its source tagged as an exploit.",
+      "else": {
+        "properties": {
+          "reference_urls": {
+            "maxItems": 0
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "value": {
+            "const": "referenced"
+          }
+        }
+      },
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "reference_urls": {
+          "default": [],
+          "description": "Exploit-tagged reference URLs in record order, deduplicated and capped; untrusted source text that is cited, never fetched.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Reference Urls",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "referenced",
+            "not_referenced_in_record",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids",
+        "reference_urls"
+      ],
+      "then": {
+        "properties": {
+          "reference_urls": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "reference_urls"
+        ]
+      },
+      "title": "PublicExploitFact",
       "type": "object"
     },
     "ServedDataset": {
@@ -725,8 +795,8 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "2.0.0-dev.58",
-      "default": "2.0.0-dev.58",
+      "const": "2.0.0-dev.59",
+      "default": "2.0.0-dev.59",
       "title": "Schema Version",
       "type": "string"
     },
