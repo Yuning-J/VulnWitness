@@ -1,12 +1,13 @@
 """Explicit product reads, grouped deterministically without a relevance ranking."""
 
+import re
 from collections.abc import Iterable
 from typing import Annotated, Literal, Self
 
 from pydantic import ConfigDict, Field, model_validator
 
 from vulnwitness.domain.contract_model import ContractModel
-from vulnwitness.domain.cve import AffectedProduct, CveRecord
+from vulnwitness.domain.cve import AffectedProduct, CveId, CveRecord
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.nvd_version_note import NvdVersionNote
 from vulnwitness.domain.search import (
@@ -91,6 +92,28 @@ class ProductVulnerability(ContractModel):
     applicability: Literal["unknown"] = "unknown"
 
 
+MAX_SOURCE_NAMED_CANDIDATES = 50
+SOURCE_NAMED_STATEMENT = (
+    "Records whose CNA or ADP affected data names the requested vendor and product, "
+    "compared case-folded with spaces, hyphens and underscores alike, that neither NVD's CPE "
+    "data nor a description mention matched. The names are the source's untrusted text; a "
+    "candidate is for review and is not part of the inventory or its count."
+)
+
+
+class SourceNamedCandidate(ContractModel):
+    cve_id: CveId
+    source: str = Field(description="The CNA or ADP whose affected data names the product.")
+    vendor: str | None = Field(description="The source's vendor text, verbatim; untrusted.")
+    product: str | None = Field(description="The source's product text, verbatim; untrusted.")
+    nvd_status: str | None = Field(description="NVD 2.0 vulnStatus verbatim.")
+
+
+def normalize_source_name(name: str) -> str:
+    """Case-folded, with runs of spaces, hyphens and underscores read as one underscore."""
+    return re.sub(r"[\s_-]+", "_", name.casefold()).strip("_")
+
+
 class ProductQueryResponse(ContractModel):
     schema_version: SchemaVersion = SCHEMA_VERSION
     vendor: str | None
@@ -120,6 +143,15 @@ class ProductQueryResponse(ContractModel):
         )
     )
     evidence: tuple[EvidenceAnchor, ...]
+    source_named_total: JsonInteger = Field(
+        default=0, ge=0, description="Source-named candidates across the whole corpus."
+    )
+    source_named_candidates: tuple[SourceNamedCandidate, ...] = Field(
+        default=(),
+        max_length=MAX_SOURCE_NAMED_CANDIDATES,
+        description=SOURCE_NAMED_STATEMENT + " Newest CVE IDs first, capped; identical on "
+        "every page.",
+    )
 
 
 def list_product_identities(entries: Iterable[AffectedProduct]) -> tuple[ProductIdentity, ...]:

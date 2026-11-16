@@ -2,7 +2,9 @@
 
 from collections.abc import Sequence
 
-from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.cpe import split_cpe
+from vulnwitness.domain.cve import CveRecord, SourceAffectedProduct
+from vulnwitness.domain.product_query import normalize_source_name
 from vulnwitness.domain.text import tokenize
 
 
@@ -18,11 +20,16 @@ class ProductQueryIndex:
         self._vendor_records: dict[str, set[str]] = {}
         self._product_records: dict[str, set[str]] = {}
         self._description_records: dict[str, set[str]] = {}
+        self._source_vendor_records: dict[str, set[str]] = {}
+        self._source_product_records: dict[str, set[str]] = {}
         for record in records:
             implicated_entries = record.list_implicated_products()
             for entry in implicated_entries:
                 self._vendor_records.setdefault(entry.vendor.casefold(), set()).add(record.cve_id)
                 self._product_records.setdefault(entry.product.casefold(), set()).add(record.cve_id)
+            for vendor_name, product_name in list_source_names(record):
+                self._source_vendor_records.setdefault(vendor_name, set()).add(record.cve_id)
+                self._source_product_records.setdefault(product_name, set()).add(record.cve_id)
             if not implicated_entries:
                 for description in record.descriptions:
                     for token in tokenize(description.value):
@@ -47,6 +54,47 @@ class ProductQueryIndex:
             description_postings.append(self._description_records.get(token, set()))
         candidates.update(intersect_postings(description_postings))
         return candidates
+
+    def find_source_named(self, vendor: str | None, product: str | None) -> set[str]:
+        """Records whose CNA/ADP affected data names the normalized vendor and product;
+        a superset, checked per product entry by the query."""
+        postings: list[set[str]] = []
+        if vendor is not None:
+            postings.append(self._source_vendor_records.get(normalize_source_name(vendor), set()))
+        if product is not None:
+            postings.append(self._source_product_records.get(normalize_source_name(product), set()))
+        return intersect_postings(postings)
+
+
+def list_source_names(record: CveRecord) -> list[tuple[str, str]]:
+    """Normalized (vendor, product) pairs each source-stated product names: its own vendor
+    and product text, and each of its CPEs' vendor and product."""
+    names: list[tuple[str, str]] = []
+    for block in record.source_affected:
+        for entry in block.products:
+            names.extend(list_entry_names(entry))
+    return names
+
+
+def list_entry_names(entry: SourceAffectedProduct) -> list[tuple[str, str]]:
+    names: list[tuple[str, str]] = []
+    if entry.vendor and entry.product:
+        names.append((normalize_source_name(entry.vendor), normalize_source_name(entry.product)))
+    for cpe in entry.cpes:
+        components = split_cpe(cpe)
+        if (
+            len(components) > 2
+            and "" not in components[1:3]
+            and not {"*", "-"}
+            & {
+                components[1],
+                components[2],
+            }
+        ):
+            names.append(
+                (normalize_source_name(components[1]), normalize_source_name(components[2]))
+            )
+    return names
 
 
 def intersect_postings(postings: list[set[str]]) -> set[str]:

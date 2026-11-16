@@ -70,6 +70,14 @@ uncheckable label explains the missing input. The label never changes a grade or
 See [ADR 0017](rebuild/adr/0017-cnvd-name-check.md#context) for the measured shares and
 sample findings; most differences are naming or scope differences, not wrong links.
 
+Format-4 stores add `source_named_candidates`: up to 50 CVEs, newest first, whose CNA or
+ADP `affected` entry names the requested vendor and product (case-folded; spaces, hyphens
+and underscores alike; own text or CPE components) but which neither NVD's CPE data nor a
+description mention matched, typically because NVD has not enriched them.
+`source_named_total` counts them all. They are review candidates, not inventory items:
+they are outside `total_available`, ordering, triage and exports
+([ADR 0023](rebuild/adr/0023-source-named-product-candidates.md)).
+
 `product --vendor democorp --all --limit 20` traverses one fixed corpus,
 printing a JSON array of unchanged `ProductQueryResponse` pages, each with its cursors
 and evidence. `--max-pages` defaults to 100; an unfinished traversal exits 2 without

@@ -1,7 +1,12 @@
 """Plain-text product vulnerabilities using the same field formatting as investigations."""
 
 from vulnwitness.application.investigation_presentation import format_severity
-from vulnwitness.domain.product_query import PRODUCT_ORDER_DESCRIPTION, ProductQueryResponse
+from vulnwitness.domain.nvd_status import describe_nvd_status
+from vulnwitness.domain.product_query import (
+    PRODUCT_ORDER_DESCRIPTION,
+    SOURCE_NAMED_STATEMENT,
+    ProductQueryResponse,
+)
 from vulnwitness.interfaces.investigation_summary import format_paragraph
 
 
@@ -52,6 +57,24 @@ def render_product_query_summary(vulnerabilities: ProductQueryResponse) -> str:
             lines.append(format_paragraph(vulnerability.nvd_version_note.wording))
     if not vulnerabilities.items:
         lines.append("None returned.")
+    if vulnerabilities.source_named_total:
+        lines.extend(
+            (
+                "",
+                format_paragraph(
+                    f"Source-named candidates (not in the inventory or its count): "
+                    f"{vulnerabilities.source_named_total}. {SOURCE_NAMED_STATEMENT}"
+                ),
+            )
+        )
+        for candidate in vulnerabilities.source_named_candidates:
+            lines.append(
+                format_paragraph(
+                    f"{candidate.cve_id} | named by {candidate.source} as "
+                    f"{candidate.vendor or '?'} / {candidate.product or '?'} | NVD status: "
+                    f"{describe_nvd_status(candidate.nvd_status)}"
+                )
+            )
     if vulnerabilities.next_cursor is not None:
         lines.extend(
             ("", "Next page: repeat the request with --cursor", vulnerabilities.next_cursor)

@@ -2,8 +2,8 @@
 
 from collections.abc import Sequence
 
-from vulnwitness.application.product_query_index import ProductQueryIndex
-from vulnwitness.domain.cve import AffectedProduct, CveRecord
+from vulnwitness.application.product_query_index import ProductQueryIndex, list_entry_names
+from vulnwitness.domain.cve import AffectedProduct, CveRecord, SourceAffectedProduct
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.evidence_catalog import EvidenceCatalog
 from vulnwitness.domain.nvd_version_note import (
@@ -12,13 +12,16 @@ from vulnwitness.domain.nvd_version_note import (
     build_nvd_version_note_for_entries,
 )
 from vulnwitness.domain.product_query import (
+    MAX_SOURCE_NAMED_CANDIDATES,
     DescriptionMentionBasis,
     ProductFieldBasis,
     ProductMatchBasis,
     ProductQueryRequest,
     ProductQueryResponse,
     ProductVulnerability,
+    SourceNamedCandidate,
     list_product_identities,
+    normalize_source_name,
 )
 from vulnwitness.domain.product_query_cursor import (
     InvalidProductCursor,
@@ -76,6 +79,27 @@ def annotate_product_version(
             "description mention only, with no implicated product version data."
         ),
     )
+
+
+def find_source_named_entry(
+    record: CveRecord, vendor: str | None, product: str | None
+) -> tuple[str, SourceAffectedProduct] | None:
+    """The first source-stated product entry naming both requested names, in feed order."""
+    for block in record.source_affected:
+        for entry in block.products:
+            for entry_vendor, entry_product in list_entry_names(entry):
+                if vendor is not None and entry_vendor != vendor:
+                    continue
+                if product is not None and entry_product != product:
+                    continue
+                return block.source, entry
+    return None
+
+
+def candidate_order(cve_id: str) -> tuple[int, int]:
+    """Newest CVE IDs first: year, then sequence number, both descending."""
+    _, year, number = cve_id.split("-")
+    return -int(year), -int(number)
 
 
 class ProductQueryService:
@@ -145,6 +169,8 @@ class ProductQueryService:
                 )
             )
         vulnerabilities.sort(key=group_product_vulnerability)
+        matched_ids = {vulnerability.record.cve_id for vulnerability in vulnerabilities}
+        source_named = self._find_source_named(vendor, product, matched_ids)
         if request.cursor is not None and offset >= len(vulnerabilities):
             raise InvalidProductCursor("Invalid product query cursor.")
         page_end = offset + request.limit
@@ -164,7 +190,34 @@ class ProductQueryService:
             description_mentions_vendor_unconfirmed=description_mentions_vendor_unconfirmed,
             matched_products=list_product_identities(matched_entries),
             evidence=self._collect_evidence(listed_vulnerabilities),
+            source_named_total=len(source_named),
+            source_named_candidates=tuple(source_named[:MAX_SOURCE_NAMED_CANDIDATES]),
         )
+
+    def _find_source_named(
+        self, vendor: str | None, product: str | None, matched_ids: set[str]
+    ) -> list[SourceNamedCandidate]:
+        """Records the inventory left out whose source-stated entry names both names."""
+        wanted_vendor = normalize_source_name(vendor) if vendor is not None else None
+        wanted_product = normalize_source_name(product) if product is not None else None
+        candidates: list[SourceNamedCandidate] = []
+        for cve_id in self._index.find_source_named(vendor, product) - matched_ids:
+            record = self._repository.get_cve(cve_id)
+            assert record is not None  # Index and repository share one immutable corpus.
+            match = find_source_named_entry(record, wanted_vendor, wanted_product)
+            if match is not None:
+                source, entry = match
+                candidates.append(
+                    SourceNamedCandidate(
+                        cve_id=cve_id,
+                        source=source,
+                        vendor=entry.vendor,
+                        product=entry.product,
+                        nvd_status=record.nvd_status,
+                    )
+                )
+        candidates.sort(key=lambda candidate: candidate_order(candidate.cve_id))
+        return candidates
 
     def _collect_evidence(
         self, vulnerabilities: tuple[ProductVulnerability, ...]

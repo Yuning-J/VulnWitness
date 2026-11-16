@@ -1332,6 +1332,67 @@
       "title": "SourceAffectedVersion",
       "type": "object"
     },
+    "SourceNamedCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "nvd_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "NVD 2.0 vulnStatus verbatim.",
+          "title": "Nvd Status"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The source's product text, verbatim; untrusted.",
+          "title": "Product"
+        },
+        "source": {
+          "description": "The CNA or ADP whose affected data names the product.",
+          "title": "Source",
+          "type": "string"
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The source's vendor text, verbatim; untrusted.",
+          "title": "Vendor"
+        }
+      },
+      "required": [
+        "cve_id",
+        "source",
+        "vendor",
+        "product",
+        "nvd_status"
+      ],
+      "title": "SourceNamedCandidate",
+      "type": "object"
+    },
     "SourceType": {
       "description": "Kind of source an evidence anchor points into. Values are added with their adapters.",
       "enum": [
@@ -1724,6 +1785,23 @@
       "title": "Schema Version",
       "type": "string"
     },
+    "source_named_candidates": {
+      "default": [],
+      "description": "Records whose CNA or ADP affected data names the requested vendor and product, compared case-folded with spaces, hyphens and underscores alike, that neither NVD's CPE data nor a description mention matched. The names are the source's untrusted text; a candidate is for review and is not part of the inventory or its count. Newest CVE IDs first, capped; identical on every page.",
+      "items": {
+        "$ref": "#/$defs/SourceNamedCandidate"
+      },
+      "maxItems": 50,
+      "title": "Source Named Candidates",
+      "type": "array"
+    },
+    "source_named_total": {
+      "default": 0,
+      "description": "Source-named candidates across the whole corpus.",
+      "minimum": 0,
+      "title": "Source Named Total",
+      "type": "integer"
+    },
     "total_available": {
       "description": "Matching CVEs across all pages.",
       "minimum": 0,
@@ -1765,7 +1843,9 @@
     "total_available",
     "description_mentions_vendor_unconfirmed",
     "matched_products",
-    "evidence"
+    "evidence",
+    "source_named_total",
+    "source_named_candidates"
   ],
   "title": "ProductQueryResponse",
   "type": "object"
