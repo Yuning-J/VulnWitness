@@ -284,7 +284,7 @@ async def test_ui_lookup_resolves_cnvd_ids_to_recorded_cve_details(
     assert f"NVD record gaps: {record_gaps} of 1" in facts[3]
     assert f"NVD score gaps: 0 of {compared}" in facts[4]
     assert f"NVD status awaiting_analysis: 0 of {compared}" in facts[5]
-    assert f"NVD status deferred: 0 of {compared}" in facts[6]
+    assert f"NVD status deferred (shown by NVD as Not Scheduled): 0 of {compared}" in facts[6]
     assert "disagree" not in exported.text
     assert "◇" not in exported.text
 
@@ -748,7 +748,7 @@ async def test_cnvd_lookup_details_and_export_share_recorded_comparisons(tmp_pat
     assert "NVD record gaps: 3 of 8 distinct CNVD-listed CVEs" in facts[3]
     assert "NVD score gaps: 1 of 5 distinct CNVD-listed CVEs" in facts[4]
     assert "NVD status awaiting_analysis: 1 of 5" in facts[5]
-    assert "NVD status deferred: 1 of 5" in facts[6]
+    assert "NVD status deferred (shown by NVD as Not Scheduled): 1 of 5" in facts[6]
     assert limits.count(attribution) == 1
     cards = report["sections"][2]["sections"]
     card_titles = []

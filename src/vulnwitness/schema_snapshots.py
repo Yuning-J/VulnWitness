@@ -32,6 +32,7 @@ from vulnwitness.domain.session_record import (
     SessionRecord,
 )
 from vulnwitness.domain.session_response import SessionResponse
+from vulnwitness.domain.store_coverage import StoreCoverage, StoreSemanticDiff
 from vulnwitness.domain.store_status import StoreStatus
 from vulnwitness.domain.timestamps import END_OF_VALUE
 from vulnwitness.domain.tool_contracts import (
@@ -106,6 +107,9 @@ RESPONSE_CONTRACTS: dict[str, type[BaseModel]] = {
     "pending_cnvd_entry": PendingCnvdEntry,
     "migration_report": MigrationReport,
     "store_status": StoreStatus,
+    # What `vulnwitness store coverage` and `vulnwitness store diff` print.
+    "store_coverage": StoreCoverage,
+    "store_semantic_diff": StoreSemanticDiff,
 }
 
 

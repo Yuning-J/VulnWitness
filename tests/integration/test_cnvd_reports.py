@@ -141,7 +141,9 @@ def test_recorded_key_facts_name_distinct_cve_denominators_and_dataset(
         "NVD score gaps: 1 of 5 distinct CNVD-listed CVEs with a servable NVD record"
     )
     assert facts[4].startswith("NVD status awaiting_analysis: 1 of 5 distinct CNVD-listed CVEs")
-    assert facts[5].startswith("NVD status deferred: 1 of 5 distinct CNVD-listed CVEs")
+    assert facts[5].startswith(
+        "NVD status deferred (shown by NVD as Not Scheduled): 1 of 5 distinct CNVD-listed CVEs"
+    )
     for fact in facts:
         assert literal(fact) in document
     assert "they are not a ranking" in document
@@ -217,7 +219,7 @@ def test_pending_only_lookup_counts_one_record_gap_and_no_score_or_status_gap(
     assert literal("cnvd_grade_vs_nvd_own_cvss3: 0 of 0") in document
     assert "NVD score gaps: 0 of 0" in document
     assert literal("NVD status awaiting_analysis: 0 of 0") in document
-    assert "NVD status deferred: 0 of 0" in document
+    assert "NVD status deferred (shown by NVD as Not Scheduled): 0 of 0" in document
     assert "CIRCL/Vulnerability-CNVD" in document
 
 

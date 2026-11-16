@@ -144,7 +144,7 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; }
 <li>NVD record gaps: 0 of 1 distinct CNVD-listed CVEs have no servable record in the snapshot.</li>
 <li>NVD score gaps: 0 of 1 distinct CNVD-listed CVEs with a servable NVD record have no NVD-owned CVSS v3.1 or v3.0 metric for comparison.</li>
 <li>NVD status awaiting_analysis: 0 of 1 distinct CNVD-listed CVEs with a servable NVD record.</li>
-<li>NVD status deferred: 0 of 1 distinct CNVD-listed CVEs with a servable NVD record.</li>
+<li>NVD status deferred (shown by NVD as Not Scheduled): 0 of 1 distinct CNVD-listed CVEs with a servable NVD record.</li>
 <li>These counts describe recorded lookups only; they are not a ranking and change no triage order, selection or checker verdict. NVD status is independent of score gaps; awaiting_analysis or deferred does not mean no score.</li>
 <li>CNVD name check: 2 of 2 distinct CNVD entries in recorded lookups show no name overlap with NVD&#x27;s CPE names. The denominator includes all linked entries and pending entries only when their name check is checkable; repeated CNVD IDs count once.</li>
 </ul>
@@ -166,7 +166,7 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; }
 <section class="columns"><h4>Recorded source facts</h4>
 <div class="two">
 <section><h5>NVD</h5>
-<p>NVD status: Analyzed</p>
+<p>NVD status: Enriched (API: Analyzed)</p>
 <section class="desc"><h6>NVD description · untrusted text</h6>
 <p>[SYNTHETIC] test record</p>
 <details class="inline"><summary>Full recorded NVD description · untrusted text</summary>
@@ -180,6 +180,10 @@ not recorded
 </dd></div>
 <div><dt>NVD version condition</dt><dd>
 not recorded
+</dd></div>
+<div><dt>NVD status</dt><dd>
+Enriched (API: Analyzed)
+<small class="muted">NVD&#x27;s enrichment is complete</small>
 </dd></div>
 <div><dt>Affectedness</dt><dd>
 <span class="tag warn">unknown</span>
@@ -298,7 +302,7 @@ none recorded
 <p>Goal: Synthetic priority decisions</p>
 <p>Scope: not recorded</p>
 <p>Created at: 2026-10-15T08:30:00+00:00</p>
-<p>Contract version: 2.0.0-dev.59</p>
+<p>Contract version: 2.0.0-dev.60</p>
 <div class="table-wrap"><table><thead><tr>
 <th scope="col">Identity</th>
 <th scope="col">Recorded value</th>
@@ -360,7 +364,7 @@ none recorded
 </details>
 <details class="appendix"><summary>Full check JSON</summary>
 <pre><code>{
-  &quot;schema_version&quot;: &quot;2.0.0-dev.59&quot;,
+  &quot;schema_version&quot;: &quot;2.0.0-dev.60&quot;,
   &quot;record&quot;: {
     &quot;consistent&quot;: true,
     &quot;calls_checked&quot;: 2,

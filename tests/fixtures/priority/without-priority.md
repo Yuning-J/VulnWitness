@@ -18,7 +18,7 @@ Dataset packaged demo data · session “inv\_hc2omuxejwt7enyntytg” · recorde
 - NVD record gaps: 0 of 1 distinct CNVD-listed CVEs have no servable record in the snapshot.
 - NVD score gaps: 0 of 1 distinct CNVD-listed CVEs with a servable NVD record have no NVD-owned CVSS v3.1 or v3.0 metric for comparison.
 - NVD status awaiting\_analysis: 0 of 1 distinct CNVD-listed CVEs with a servable NVD record.
-- NVD status deferred: 0 of 1 distinct CNVD-listed CVEs with a servable NVD record.
+- NVD status deferred (shown by NVD as Not Scheduled): 0 of 1 distinct CNVD-listed CVEs with a servable NVD record.
 - These counts describe recorded lookups only; they are not a ranking and change no triage order, selection or checker verdict. NVD status is independent of score gaps; awaiting\_analysis or deferred does not mean no score.
 - CNVD name check: 2 of 2 distinct CNVD entries in recorded lookups show no name overlap with NVD's CPE names. The denominator includes all linked entries and pending entries only when their name check is checkable; repeated CNVD IDs count once.
 
@@ -44,7 +44,7 @@ Why selected: Recorded lookup; selection reason not recorded.
 
 ##### NVD
 
-NVD status: Analyzed
+NVD status: Enriched (API: Analyzed)
 
 ###### NVD description · untrusted text
 
@@ -65,6 +65,7 @@ NVD status: Analyzed
 | --- | --- |
 | Match basis | not recorded |
 | NVD version condition | not recorded |
+| NVD status | Enriched (API: Analyzed) · NVD's enrichment is complete |
 | Affectedness | unknown · configuration and environment not evaluated |
 
 ##### CNVD · untrusted source text
@@ -196,7 +197,7 @@ Scope: not recorded
 
 Created at: 2026-10-15T08:30:00+00:00
 
-Contract version: 2.0.0-dev.59
+Contract version: 2.0.0-dev.60
 
 | Identity | Recorded value |
 | --- | --- |
@@ -244,7 +245,7 @@ None recorded.
 <summary>Full check JSON</summary>
 
     {
-      "schema_version": "2.0.0-dev.59",
+      "schema_version": "2.0.0-dev.60",
       "record": {
         "consistent": true,
         "calls_checked": 2,

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "added": {
+      "minimum": 0,
+      "title": "Added",
+      "type": "integer"
+    },
+    "added_ids": {
+      "items": {
+        "maxLength": 32,
+        "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+        "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Added Ids",
+      "type": "array"
+    },
+    "changed": {
+      "minimum": 0,
+      "title": "Changed",
+      "type": "integer"
+    },
+    "changed_fields": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "description": "Top-level record fields that differ, counted over changed records.",
+      "title": "Changed Fields",
+      "type": "object"
+    },
+    "changed_ids": {
+      "items": {
+        "maxLength": 32,
+        "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+        "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Changed Ids",
+      "type": "array"
+    },
+    "lists_truncated": {
+      "title": "Lists Truncated",
+      "type": "boolean"
+    },
+    "metadata_only": {
+      "minimum": 0,
+      "title": "Metadata Only",
+      "type": "integer"
+    },
+    "new_semantic_content_sha256": {
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "New Semantic Content Sha256",
+      "type": "string"
+    },
+    "new_store_name": {
+      "title": "New Store Name",
+      "type": "string"
+    },
+    "old_semantic_content_sha256": {
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Old Semantic Content Sha256",
+      "type": "string"
+    },
+    "old_store_name": {
+      "title": "Old Store Name",
+      "type": "string"
+    },
+    "removed": {
+      "minimum": 0,
+      "title": "Removed",
+      "type": "integer"
+    },
+    "removed_ids": {
+      "items": {
+        "maxLength": 32,
+        "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+        "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Removed Ids",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.60",
+      "default": "2.0.0-dev.60",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "statement": {
+      "const": "Records are compared by semantic digest, which leaves out last_modified and evidence IDs. metadata_only counts records whose last_modified or evidence IDs changed while their content did not.",
+      "default": "Records are compared by semantic digest, which leaves out last_modified and evidence IDs. metadata_only counts records whose last_modified or evidence IDs changed while their content did not.",
+      "title": "Statement",
+      "type": "string"
+    },
+    "unchanged": {
+      "minimum": 0,
+      "title": "Unchanged",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "old_store_name",
+    "new_store_name",
+    "old_semantic_content_sha256",
+    "new_semantic_content_sha256",
+    "added",
+    "removed",
+    "changed",
+    "metadata_only",
+    "unchanged",
+    "changed_fields",
+    "added_ids",
+    "removed_ids",
+    "changed_ids",
+    "lists_truncated",
+    "statement"
+  ],
+  "title": "StoreSemanticDiff",
+  "type": "object"
+}

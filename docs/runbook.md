@@ -56,7 +56,11 @@ VulnWitness mapping; same and lower grades stay plain text. Reports count distin
 from recorded lookups, naming the dataset and denominator: higher grades out of compared
 CVEs, NVD record gaps (no servable record), score gaps (a record without an NVD-owned CVSS
 v3 metric), and awaiting-analysis and deferred status separately. Status does not imply
-a missing score. These signals change no triage order, selection or checker verdict.
+a missing score. Lookup text and report cards show NVD's displayed status label beside the
+API value: NVD's 2.0 API and feeds still say `Deferred`, `Analyzed` and `Modified` where
+NVD's site now says "Not Scheduled", "Enriched" and "Modified After Enrichment"
+([NVD vulnerability status](https://nvd.nist.gov/vuln/vulnerability-status), read
+2026-11-16). These signals change no triage order, selection or checker verdict.
 CVSS measures severity, not risk. CNVD text stays in its original language; the core flow
 does no translation, and clients and browsers can translate it.
 
@@ -239,6 +243,28 @@ store is bad; it can verify both stores. Re-activating the active store re-verif
 it and preserves the previous store. Rollback verifies the recorded previous store,
 makes it active and clears the previous slot: only one level. Restart services.
 Unset `VULNWITNESS_STORE_ROOT` to serve synthetic fixtures again.
+
+### Check what a new store covers before activating it
+
+```sh
+vulnwitness store coverage nvd-2026-11-15
+vulnwitness store diff nvd-2026-10-31 nvd-2026-11-15
+```
+
+Both are read-only and load each named store as activation does, so allow the same
+memory. `coverage` counts, by publication month, NVD's statuses and how many records carry
+a vulnerable CPE, NVD's own CVSS v3 metric, any CVSS metric, a CVSS 4.0 metric, a CWE, an
+`Exploit`-tagged reference, a KEV listing and a CNVD entry. Since NVD's change of
+2026-04-15, most new CVEs stay `Deferred`, which NVD's site labels "Not Scheduled": exact
+CPE product matching cannot find them, and policy rules that read NVD's own score see no
+grade. A month with few CPE matches is a coverage gap of the snapshot, not a quiet month.
+
+`diff` compares the two stores record by record by a semantic digest that leaves out
+`last_modified` and evidence IDs. `changed` counts content changes and names the fields
+that changed; `metadata_only` counts records whose stored bytes differ only by timestamp or
+source provenance, as in NVD's 2026-06-17 refresh, which rewrote `lastModified` on about
+95% of records without changing content. Each output carries a `semantic_content_sha256`
+that stays the same across such refreshes, while the corpus content digest does not.
 
 ## Recovery and resource needs
 

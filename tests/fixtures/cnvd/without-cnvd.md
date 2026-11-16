@@ -50,6 +50,7 @@ Why selected: Recorded lookup; selection reason not recorded.
 | --- | --- |
 | Match basis | not recorded |
 | NVD version condition | not recorded |
+| NVD status | Enriched (API: Analyzed) · NVD's enrichment is complete |
 | Affectedness | unknown · configuration and environment not evaluated |
 
 #### Weakness associations
@@ -111,7 +112,7 @@ Scope: not recorded
 
 Created at: 2026-10-15T08:30:00+00:00
 
-Contract version: 2.0.0-dev.59
+Contract version: 2.0.0-dev.60
 
 | Identity | Recorded value |
 | --- | --- |
@@ -159,7 +160,7 @@ None recorded.
 <summary>Full check JSON</summary>
 
     {
-      "schema_version": "2.0.0-dev.59",
+      "schema_version": "2.0.0-dev.60",
       "record": {
         "consistent": true,
         "calls_checked": 1,

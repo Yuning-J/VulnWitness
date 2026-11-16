@@ -1,0 +1,189 @@
+{
+  "$defs": {
+    "EnrichmentCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "enriched": {
+          "minimum": 0,
+          "title": "Enriched",
+          "type": "integer"
+        },
+        "not_recorded": {
+          "minimum": 0,
+          "title": "Not Recorded",
+          "type": "integer"
+        },
+        "not_scheduled": {
+          "minimum": 0,
+          "title": "Not Scheduled",
+          "type": "integer"
+        },
+        "pending": {
+          "minimum": 0,
+          "title": "Pending",
+          "type": "integer"
+        },
+        "rejected": {
+          "minimum": 0,
+          "title": "Rejected",
+          "type": "integer"
+        },
+        "unrecognised": {
+          "minimum": 0,
+          "title": "Unrecognised",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "enriched",
+        "pending",
+        "not_scheduled",
+        "rejected",
+        "unrecognised",
+        "not_recorded"
+      ],
+      "title": "EnrichmentCounts",
+      "type": "object"
+    },
+    "MonthCoverage": {
+      "additionalProperties": false,
+      "properties": {
+        "enrichment": {
+          "$ref": "#/$defs/EnrichmentCounts"
+        },
+        "kev_listed": {
+          "minimum": 0,
+          "title": "Kev Listed",
+          "type": "integer"
+        },
+        "month": {
+          "description": "Publication month (UTC); unpublished when the record has no date; all for the store's total.",
+          "pattern": "^([0-9]{4}-[0-9]{2}|unpublished|all)$(?!\\n)",
+          "title": "Month",
+          "type": "string"
+        },
+        "nvd_status": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Verbatim NVD 2.0 API vulnStatus counts.",
+          "title": "Nvd Status",
+          "type": "object"
+        },
+        "records": {
+          "minimum": 0,
+          "title": "Records",
+          "type": "integer"
+        },
+        "with_any_cvss": {
+          "minimum": 0,
+          "title": "With Any Cvss",
+          "type": "integer"
+        },
+        "with_cnvd": {
+          "minimum": 0,
+          "title": "With Cnvd",
+          "type": "integer"
+        },
+        "with_cvss4": {
+          "minimum": 0,
+          "title": "With Cvss4",
+          "type": "integer"
+        },
+        "with_cwe": {
+          "minimum": 0,
+          "title": "With Cwe",
+          "type": "integer"
+        },
+        "with_exploit_reference": {
+          "minimum": 0,
+          "title": "With Exploit Reference",
+          "type": "integer"
+        },
+        "with_nvd_own_cvss3": {
+          "minimum": 0,
+          "title": "With Nvd Own Cvss3",
+          "type": "integer"
+        },
+        "with_vulnerable_cpe": {
+          "minimum": 0,
+          "title": "With Vulnerable Cpe",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "month",
+        "records",
+        "nvd_status",
+        "enrichment",
+        "with_vulnerable_cpe",
+        "with_nvd_own_cvss3",
+        "with_any_cvss",
+        "with_cvss4",
+        "with_cwe",
+        "with_exploit_reference",
+        "kev_listed",
+        "with_cnvd"
+      ],
+      "title": "MonthCoverage",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "corpus_content_sha256": {
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Corpus Content Sha256",
+      "type": "string"
+    },
+    "months": {
+      "items": {
+        "$ref": "#/$defs/MonthCoverage"
+      },
+      "title": "Months",
+      "type": "array"
+    },
+    "records": {
+      "minimum": 0,
+      "title": "Records",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "2.0.0-dev.60",
+      "default": "2.0.0-dev.60",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "semantic_content_sha256": {
+      "pattern": "^[0-9a-f]{64}$(?!\\n)",
+      "title": "Semantic Content Sha256",
+      "type": "string"
+    },
+    "statement": {
+      "const": "Counts of what each record carries in this store, by publication month. A missing CPE, score or CWE says NVD supplied none in the imported snapshot; it never says the CVE affects nothing or is not severe.",
+      "default": "Counts of what each record carries in this store, by publication month. A missing CPE, score or CWE says NVD supplied none in the imported snapshot; it never says the CVE affects nothing or is not severe.",
+      "title": "Statement",
+      "type": "string"
+    },
+    "store_name": {
+      "title": "Store Name",
+      "type": "string"
+    },
+    "total": {
+      "$ref": "#/$defs/MonthCoverage"
+    }
+  },
+  "required": [
+    "schema_version",
+    "store_name",
+    "corpus_content_sha256",
+    "semantic_content_sha256",
+    "records",
+    "months",
+    "total",
+    "statement"
+  ],
+  "title": "StoreCoverage",
+  "type": "object"
+}

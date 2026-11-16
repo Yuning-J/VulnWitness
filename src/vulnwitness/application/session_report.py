@@ -18,6 +18,11 @@ from vulnwitness.domain.cve_lookup import CveLookupResponse, LookupCandidate, Pe
 from vulnwitness.domain.cvss_ranking import rank_cvss_metric
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.investigation import KnowledgeEvidenceSet, NeedOutcome
+from vulnwitness.domain.nvd_status import (
+    classify_nvd_enrichment,
+    describe_nvd_status,
+    find_nvd_status,
+)
 from vulnwitness.domain.product_query import ProductQueryResponse, ProductVulnerability
 from vulnwitness.domain.search import Candidate, SearchResponse
 from vulnwitness.domain.served_dataset import ServedDatasetKind
@@ -198,6 +203,19 @@ def build_version_fact(vulnerability: ProductVulnerability | None) -> ReportFact
     return ReportFact("NVD version condition", comparison, ReportBadge(note.outcome), note.wording)
 
 
+def build_nvd_status_fact(record: CveRecord) -> ReportFact:
+    """NVD's displayed status beside the API value; a warning unless NVD enriched it."""
+    enrichment = classify_nvd_enrichment(record.nvd_status)
+    if enrichment is None:
+        return ReportFact("NVD status", "not recorded")
+    status = find_nvd_status(record.nvd_status)
+    detail = status.meaning if status else "not listed on NVD's status page"
+    badge = None
+    if enrichment != "enriched":
+        badge = ReportBadge(enrichment.replace("_", " "), "warn")
+    return ReportFact("NVD status", describe_nvd_status(record.nvd_status), badge, detail)
+
+
 def path_counts(associations: WeaknessAssociations) -> tuple[int, set[str]]:
     reaching = 0
     techniques: set[str] = set()
@@ -355,6 +373,7 @@ def build_card(
                     "Match basis", basis_label(vulnerability) if vulnerability else "not recorded"
                 ),
                 build_version_fact(vulnerability),
+                build_nvd_status_fact(record),
                 ReportFact(
                     "Affectedness",
                     badge=ReportBadge("unknown", "warn"),
@@ -383,7 +402,9 @@ def build_card(
                     ReportSection(
                         "NVD",
                         paragraphs=(
-                            ReportParagraph(f"NVD status: {record.nvd_status or 'not recorded'}"),
+                            ReportParagraph(
+                                f"NVD status: {describe_nvd_status(record.nvd_status)}"
+                            ),
                         ),
                         sections=tuple(sections),
                     ),

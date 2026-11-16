@@ -243,6 +243,7 @@ from vulnwitness.settings import (
     find_section_variable,
     load_settings,
 )
+from vulnwitness.store_report_cli import add_store_report_parsers, run_store_report_command
 from vulnwitness.triage_composition import preflight_triage, run_triage
 from vulnwitness.workspace_composition import build_workspace_investigations
 
@@ -675,6 +676,8 @@ def build_parser() -> argparse.ArgumentParser:
             "status as JSON, and exits 1 unless the active store is ok"
         ),
     )
+
+    add_store_report_parsers(store_commands, parse_store_name)
 
     add_triage_arguments(commands.add_parser("triage", help="run bounded product triage"))
     session_parser = commands.add_parser("session", help="check an investigation session")
@@ -1930,6 +1933,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     if arguments.command == "store":
         if settings.store_root is None:
             parser.error(STORE_ROOT_REQUIRED)
+        if arguments.store_command in ("coverage", "diff"):
+            return run_store_report_command(arguments, settings.store_root)
         return run_store_command(arguments, build_store_activation(settings.store_root))
     if arguments.command == "eval" and arguments.eval_command == "gold-sets":
         return run_gold_sets_command(parser, arguments, settings)

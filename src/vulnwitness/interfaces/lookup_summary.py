@@ -5,6 +5,7 @@ from textwrap import fill
 from vulnwitness.application.cnvd_presentation import describe_cnvd_comparison
 from vulnwitness.application.investigation_presentation import format_severity
 from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse
+from vulnwitness.domain.nvd_status import describe_nvd_status
 from vulnwitness.domain.search import SearchResponse
 from vulnwitness.domain.weakness_associations import WeaknessAssociationPath
 from vulnwitness.interfaces.record_summary import format_published, summarize_description
@@ -57,6 +58,7 @@ def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
                 fill(f"CWEs: {', '.join(record.cwe_ids) or 'unknown'}", width=width),
                 fill(f"Products: {', '.join(products) or 'unknown'}", width=width),
                 f"KEV: {kev}",
+                f"NVD status: {describe_nvd_status(record.nvd_status)}",
                 fill("NVD: " + summarize_description(record), width=width),
                 "",
             )

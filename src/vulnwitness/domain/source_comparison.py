@@ -33,6 +33,8 @@ PENDING_NVD_STATES: dict[PendingCnvdOutcome, NvdState] = {
     "cnvd_for_rejected_nvd_record": "rejected_by_nvd",
     "cnvd_for_excluded_nvd_record": "excluded_by_import",
 }
+# Keyed by the NVD 2.0 API value; NVD displays "Deferred" as "Not Scheduled" and
+# "Modified" as "Modified After Enrichment" (``vulnwitness.domain.nvd_status``).
 NVD_STATUS_STATES: dict[str, NvdState] = {
     "Analyzed": "analysed",
     "Modified": "analysed",
@@ -40,6 +42,7 @@ NVD_STATUS_STATES: dict[str, NvdState] = {
     "Awaiting Analysis": "awaiting_analysis",
     "Undergoing Analysis": "awaiting_analysis",
     "Deferred": "deferred",
+    "Rejected": "rejected_by_nvd",
 }
 
 

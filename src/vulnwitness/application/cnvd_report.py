@@ -175,7 +175,8 @@ def build_cnvd_facts(
         f"NVD score gaps: {len(score_gaps)} of {record_denominator} "
         "have no NVD-owned CVSS v3.1 or v3.0 metric for comparison.",
         f"NVD status awaiting_analysis: {len(awaiting)} of {record_denominator}.",
-        f"NVD status deferred: {len(deferred)} of {record_denominator}.",
+        f"NVD status deferred (shown by NVD as Not Scheduled): {len(deferred)} of "
+        f"{record_denominator}.",
         "These counts describe recorded lookups only; they are not a ranking and change no "
         "triage order, selection or checker verdict. NVD status is independent of score gaps; "
         "awaiting_analysis or deferred does not mean no score.",
