@@ -25,6 +25,11 @@ from vulnwitness.domain.kev import KevCapability
 from vulnwitness.domain.priority_decision import PolicyIdentity, PriorityArtifact, PriorityDecision
 from vulnwitness.domain.priority_facts import (
     ApplicabilityFact,
+    AutomatableFact,
+    AutomatableStatus,
+    ExploitationFact,
+    ExploitationStatus,
+    ForensicTriageFact,
     GradeAuthority,
     HighGradeFact,
     HighGradeStatus,
@@ -33,7 +38,10 @@ from vulnwitness.domain.priority_facts import (
     PriorityFacts,
     PublicExploitFact,
     PublicExploitStatus,
+    SourceHighGradeFact,
     SystemCategoryFact,
+    TechnicalImpactFact,
+    TechnicalImpactStatus,
 )
 from vulnwitness.domain.served_dataset import ServedDataset, ServedDatasetKind
 from vulnwitness.domain.session_record import SessionDatasetIdentity
@@ -63,6 +71,9 @@ def build_register_document() -> dict[str, Any]:
     }
 
 
+SSVC_ASSESSOR = "134c704f-9b21-4f2e-91b3-4a467353bcc0 (CISA Coordinator)"
+
+
 def build_priority_inputs(
     applicability: Applicability = "affected",
     system_category: SystemCategory = "external_connection",
@@ -71,6 +82,9 @@ def build_priority_inputs(
     authorities: tuple[GradeAuthority, ...] = (),
     markets: tuple[str, ...] = ("CN",),
     public_exploit: PublicExploitStatus = "not_referenced_in_record",
+    exploitation: ExploitationStatus = "unknown",
+    automatable: AutomatableStatus = "unknown",
+    technical_impact: TechnicalImpactStatus = "unknown",
 ) -> tuple[Asset, AssetAssessment, PriorityFacts]:
     asset = Asset(name="gateway", markets=markets, system_category=system_category)
     assessment = AssetAssessment(
@@ -97,6 +111,23 @@ def build_priority_inputs(
             evidence_ids=(EVIDENCE_ID,) if public_exploit != "unknown" else (),
             reference_urls=(EXPLOIT_URL,) if public_exploit == "referenced" else (),
         ),
+        exploitation=ExploitationFact(
+            value=exploitation,
+            evidence_ids=(EVIDENCE_ID,) if exploitation != "unknown" else (),
+            assessor=SSVC_ASSESSOR if exploitation != "unknown" else None,
+        ),
+        automatable=AutomatableFact(
+            value=automatable,
+            evidence_ids=(EVIDENCE_ID,) if automatable != "unknown" else (),
+            assessor=SSVC_ASSESSOR if automatable != "unknown" else None,
+        ),
+        technical_impact=TechnicalImpactFact(
+            value=technical_impact,
+            evidence_ids=(EVIDENCE_ID,) if technical_impact != "unknown" else (),
+            assessor=SSVC_ASSESSOR if technical_impact != "unknown" else None,
+        ),
+        source_high_grade=SourceHighGradeFact(value="none_available", evidence_ids=()),
+        forensic_triage=ForensicTriageFact(value="unknown", evidence_ids=()),
     )
     return asset, assessment, facts
 

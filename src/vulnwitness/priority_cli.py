@@ -9,7 +9,11 @@ from pathlib import Path
 from pydantic import TypeAdapter, ValidationError
 from yaml import YAMLError
 
-from vulnwitness.adapters.priority_policy import default_priority_policy_file, load_priority_policy
+from vulnwitness.adapters.priority_policy import (
+    PACKAGED_POLICY_NAMES,
+    load_priority_policy,
+    packaged_priority_policy_file,
+)
 from vulnwitness.adapters.session.check import SessionChecker
 from vulnwitness.adapters.session.files import check_session_path, read_session_file
 from vulnwitness.adapters.session.report_output import write_report
@@ -25,7 +29,7 @@ def add_priority_parser(commands: "argparse._SubParsersAction[argparse.ArgumentP
     parser = commands.add_parser("prioritise", help="apply a named policy to a recorded session")
     parser.add_argument("directory", type=Path)
     parser.add_argument("--assets", type=Path, required=True, metavar="FILE")
-    parser.add_argument("--policy", choices=("cn-auto-demo",), required=True)
+    parser.add_argument("--policy", choices=PACKAGED_POLICY_NAMES, required=True)
     parser.add_argument("--as-of", required=True, metavar="YYYY-MM-DD")
     parser.add_argument("--force", action="store_true")
 
@@ -55,7 +59,7 @@ def run_priority(arguments: argparse.Namespace, parser: argparse.ArgumentParser)
             raise ValueError("priority.json must be a regular file, not a symlink")
         if os.path.lexists(target) and not arguments.force:
             raise ValueError("priority.json already exists; use --force to overwrite")
-        loaded_policy = load_priority_policy(default_priority_policy_file())
+        loaded_policy = load_priority_policy(packaged_priority_policy_file(arguments.policy))
         artifact = build_session_priority(
             SessionChecker(arguments.directory, include_priority=False).check_with_contents(),
             register,

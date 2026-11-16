@@ -559,6 +559,20 @@ reference date does not reconstruct history; the artifact flags evidence retriev
 See [ADR 0016](rebuild/adr/0016-priority-decisions.md) for rule order and limits and
 [ADR 0019](rebuild/adr/0019-public-exploit-references.md) for the public-exploit fact.
 
+Stores in format 4 add five facts (ADR 0021), all from the recorded exact lookup.
+`exploitation`, `automatable` and `technical_impact` come from CISA's SSVC assessment (role
+"CISA Coordinator") that NVD mirrors; each names its assessor and time, and
+`exploitation none` is CISA's view at that time, never "no exploit exists".
+`source_high_grade` reads CVSS v3.x or v4.0 from scorers other than NVD and names each
+triggering scorer; it never stands in for NVD's own grade. `forensic_triage` is KEV's
+`forensicTriage` for a listed CVE. `--policy exploitation-demo` is a second packaged
+VulnWitness policy that reads them: KEV listing, active exploitation, or a proof of concept
+that CISA scores automatable gives `act`; a proof of concept alone, or total impact with
+automatable exploitation, gives `attend`. It is neither CISA's SSVC tree nor BOD 26-04's
+Table 1. `cn-auto-demo` is unchanged and lists the new facts among its unknowns when they
+are unknown. Artifacts written before this change no longer validate; rerun
+`prioritise --force`.
+
 ## Workspace mode for agents
 
 Start `vulnwitness mcp --workspace ROOT` for stdio, or add `--http` and the usual HTTP token

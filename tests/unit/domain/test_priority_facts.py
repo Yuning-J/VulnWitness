@@ -59,7 +59,17 @@ def test_high_grade_fact_rejects_missing_or_unsupported_triggering_authorities(
 def test_all_unknowns_are_listed_in_fact_order() -> None:
     _, _, facts = build_priority_inputs("unknown", "unknown", "unknown", "none_available")
 
-    assert facts.list_unknown_facts() == ("applicability", "system_category", "kev", "high_grade")
+    assert facts.list_unknown_facts() == (
+        "applicability",
+        "system_category",
+        "kev",
+        "high_grade",
+        "exploitation",
+        "automatable",
+        "technical_impact",
+        "source_high_grade",
+        "forensic_triage",
+    )
 
 
 @pytest.mark.parametrize(

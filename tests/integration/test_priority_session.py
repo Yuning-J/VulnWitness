@@ -281,7 +281,14 @@ def test_kev_listing_cites_only_the_listing_anchor_and_preserves_unknown_categor
         anchors[anchor["evidence_id"]] = anchor
 
     assert decision.matched_rule.id == "rule-4"
-    assert decision.unknown_facts == ("system_category",)
+    assert decision.unknown_facts == (
+        "system_category",
+        "exploitation",
+        "automatable",
+        "technical_impact",
+        "source_high_grade",
+        "forensic_triage",
+    )
     assert len(decision.facts.kev.evidence_ids) == 1
     assert anchors[decision.facts.kev.evidence_ids[0]]["authoritative_record_id"] == decision.cve_id
     assert len(artifact.response_digests) == 1

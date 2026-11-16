@@ -32,6 +32,16 @@ def build_priority_decision(decision: PriorityDecision) -> ReportSection:
         )
     for url in decision.facts.public_exploit.reference_urls:
         fact_details.append(f"Exploit-tagged reference (cited, not fetched): {url}")
+    for name in ("exploitation", "automatable", "technical_impact"):
+        ssvc_fact = getattr(decision.facts, name)
+        if ssvc_fact.assessor is not None:
+            when = ssvc_fact.assessed_at.isoformat() if ssvc_fact.assessed_at else "time not stated"
+            fact_details.append(f"SSVC {name} assessed by {ssvc_fact.assessor} at {when}")
+    if decision.facts.source_high_grade.triggering_scorers:
+        fact_details.append(
+            "Source high-grade scorers (not NVD's own grade): "
+            + ", ".join(decision.facts.source_high_grade.triggering_scorers)
+        )
     earlier_rules: list[ReportSection] = []
     for rule in decision.earlier_unmatched_rules:
         failures: list[str] = []
@@ -108,6 +118,10 @@ def build_priority_report(priority: PriorityArtifact) -> ReportSection:
             ReportParagraph(
                 "public_exploit not_referenced_in_record means the record cites no "
                 'exploit-tagged reference, not "no public exploit exists".'
+            ),
+            ReportParagraph(
+                "exploitation none is CISA's SSVC assessment at its stated time, not "
+                '"no exploit exists"; source_high_grade is a CNA or ADP score, never NVD\'s.'
             ),
             ReportParagraph(
                 f"Policy: {priority.policy.name} · format_version: {priority.policy.format_version}"

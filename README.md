@@ -13,7 +13,12 @@ reports and the local UI show recommendations separately from compliance status
 
 Priority facts include `public_exploit`: NVD references tagged `Exploit`, cited and never
 fetched; an untagged record is not "no exploit"
-([ADR 0019](docs/rebuild/adr/0019-public-exploit-references.md)).
+([ADR 0019](docs/rebuild/adr/0019-public-exploit-references.md)). Since most new CVEs are no
+longer enriched by NVD ("Not Scheduled"), stores also keep the CNA/ADP data NVD mirrors and
+CISA's SSVC; the `exploitation-demo` policy reads SSVC exploitation, automatable and
+technical-impact facts ([ADR 0020](docs/rebuild/adr/0020-nvd-mirrored-source-data.md),
+[ADR 0021](docs/rebuild/adr/0021-ssvc-and-source-grade-facts.md)). `vulnwitness store
+coverage` shows how much of a store NVD has enriched.
 
 CNVD links carry a name-overlap check for review without changing grades or links
 ([ADR 0017](docs/rebuild/adr/0017-cnvd-name-check.md)).

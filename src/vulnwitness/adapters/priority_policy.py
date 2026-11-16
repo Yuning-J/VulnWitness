@@ -22,8 +22,18 @@ class LoadedPriorityPolicy:
     content_sha256: str
 
 
+PACKAGED_POLICY_NAMES = ("cn-auto-demo", "exploitation-demo")
+
+
 def default_priority_policy_file() -> Traversable:
-    return files("vulnwitness").joinpath("knowledge", "policies", "cn-auto-demo.yaml")
+    return packaged_priority_policy_file("cn-auto-demo")
+
+
+def packaged_priority_policy_file(name: str) -> Traversable:
+    """The packaged policy named ``name``; raises ``ValueError`` for any other name."""
+    if name not in PACKAGED_POLICY_NAMES:
+        raise ValueError(f"no packaged policy is named {name!r}")
+    return files("vulnwitness").joinpath("knowledge", "policies", f"{name}.yaml")
 
 
 def load_priority_policy(policy_file: Traversable) -> LoadedPriorityPolicy:

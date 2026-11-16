@@ -89,12 +89,27 @@ def test_first_matching_rule_sets_the_recommendation(
     assert decision.facts == facts
 
 
+# ADR 0021's facts stay unknown in these inputs and are listed after ADR 0016's.
+NEW_UNKNOWNS = (
+    "exploitation",
+    "automatable",
+    "technical_impact",
+    "source_high_grade",
+    "forensic_triage",
+)
+
+
 @pytest.mark.parametrize(
     ("category", "kev", "grade", "expected_unknowns"),
     [
-        ("external_connection", "listed", "none_available", ("high_grade",)),
-        ("unknown", "listed", "none_available", ("system_category", "high_grade")),
-        ("external_connection", "unknown", "present", ("kev",)),
+        ("external_connection", "listed", "none_available", ("high_grade", *NEW_UNKNOWNS)),
+        (
+            "unknown",
+            "listed",
+            "none_available",
+            ("system_category", "high_grade", *NEW_UNKNOWNS),
+        ),
+        ("external_connection", "unknown", "present", ("kev", *NEW_UNKNOWNS)),
     ],
     ids=["rule-3-no-grade", "rule-4-category-and-grade", "rule-6-kev"],
 )

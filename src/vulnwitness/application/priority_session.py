@@ -14,18 +14,26 @@ from vulnwitness.domain.priority_decision import (
     PriorityArtifact,
 )
 from vulnwitness.domain.priority_facts import (
+    CISA_SSVC_ROLE,
     EXPLOIT_REFERENCE_TAG,
     FACT_NAMES,
     MAX_EXPLOIT_REFERENCE_URLS,
+    MAX_SOURCE_GRADE_SCORERS,
     ApplicabilityFact,
+    AutomatableFact,
     CnvdLinkToReview,
+    ExploitationFact,
+    ForensicTriageFact,
     GradeAuthority,
     HighGradeFact,
     HighGradeStatus,
     KevFact,
     PriorityFacts,
     PublicExploitFact,
+    SourceHighGradeFact,
     SystemCategoryFact,
+    TechnicalImpactFact,
+    unknown_ssvc_facts,
 )
 from vulnwitness.domain.priority_policy import PriorityPolicy
 from vulnwitness.domain.session_record import SessionCall
@@ -191,6 +199,97 @@ def extract_public_exploit_fact(
     )
 
 
+def find_exact_record(lookup: CveLookupResponse, cve_id: str) -> CveRecord | None:
+    for candidate in lookup.candidates:
+        if candidate.record.cve_id == cve_id:
+            return candidate.record
+    return None
+
+
+def extract_ssvc_facts(
+    record: CveRecord | None, anchors: dict[str, EvidenceAnchor]
+) -> tuple[ExploitationFact, AutomatableFact, TechnicalImpactFact]:
+    """The first CISA Coordinator SSVC assessment on the exact record (ADR 0021 §1)."""
+    if record is None:
+        return unknown_ssvc_facts()
+    assessment = next((entry for entry in record.ssvc if entry.role == CISA_SSVC_ROLE), None)
+    if assessment is None:
+        return unknown_ssvc_facts()
+    evidence_ids = source_evidence_ids(
+        record, anchors, (SourceType.NVD_API_2, SourceType.NVD_JSON_11)
+    )
+    if not evidence_ids:
+        raise ValueError("SSVC assessment has no recorded source anchor")
+    points = assessment.decision_points
+    assessor = f"{assessment.source} ({assessment.role})"
+    exploitation, automatable, technical_impact = unknown_ssvc_facts()
+    if points.exploitation is not None:
+        exploitation = ExploitationFact(
+            value=points.exploitation,
+            evidence_ids=evidence_ids,
+            assessor=assessor,
+            assessed_at=assessment.assessed_at,
+        )
+    if points.automatable is not None:
+        automatable = AutomatableFact(
+            value=points.automatable,
+            evidence_ids=evidence_ids,
+            assessor=assessor,
+            assessed_at=assessment.assessed_at,
+        )
+    if points.technical_impact is not None:
+        technical_impact = TechnicalImpactFact(
+            value=points.technical_impact,
+            evidence_ids=evidence_ids,
+            assessor=assessor,
+            assessed_at=assessment.assessed_at,
+        )
+    return exploitation, automatable, technical_impact
+
+
+def extract_source_high_grade_fact(
+    record: CveRecord | None, anchors: dict[str, EvidenceAnchor]
+) -> SourceHighGradeFact:
+    """CVSS v3.x or v4.0 from scorers other than NVD; NVD's own grade never counts here."""
+    if record is None:
+        return SourceHighGradeFact(value="none_available", evidence_ids=())
+    metrics = [
+        metric
+        for metric in record.cvss
+        if metric.scorer != "nvd@nist.gov"
+        and metric.version in ("3.0", "3.1", "4.0")
+        and metric.base_severity not in (None, "NONE")
+    ]
+    if not metrics:
+        return SourceHighGradeFact(value="none_available", evidence_ids=())
+    evidence_ids = source_evidence_ids(
+        record, anchors, (SourceType.NVD_API_2, SourceType.NVD_JSON_11)
+    )
+    if not evidence_ids:
+        raise ValueError("source CVSS metric has no recorded source anchor")
+    scorers: list[str] = []
+    for metric in metrics:
+        label = f"{metric.scorer} CVSS {metric.version}"
+        if metric.base_severity in ("HIGH", "CRITICAL") and label not in scorers:
+            scorers.append(label)
+    return SourceHighGradeFact(
+        value="present" if scorers else "absent",
+        evidence_ids=evidence_ids,
+        triggering_scorers=tuple(scorers[:MAX_SOURCE_GRADE_SCORERS]),
+    )
+
+
+def extract_forensic_triage_fact(
+    record: CveRecord | None, anchors: dict[str, EvidenceAnchor]
+) -> ForensicTriageFact:
+    if record is None or record.kev is None or record.kev.forensic_triage is None:
+        return ForensicTriageFact(value="unknown", evidence_ids=())
+    evidence_ids = source_evidence_ids(record, anchors, (SourceType.CISA_KEV,))
+    if not evidence_ids:
+        raise ValueError("KEV forensic triage has no recorded source anchor")
+    return ForensicTriageFact(value=record.kev.forensic_triage, evidence_ids=evidence_ids)
+
+
 def uses_after_reference_date_information(
     facts: PriorityFacts,
     anchors: dict[str, EvidenceAnchor],
@@ -224,6 +323,9 @@ def extract_priority_facts(
     snapshot_retrieved_at = None
     high_grade = HighGradeFact(value="none_available", evidence_ids=())
     public_exploit = PublicExploitFact(value="unknown", evidence_ids=())
+    exploitation, automatable, technical_impact = unknown_ssvc_facts()
+    source_high_grade = SourceHighGradeFact(value="none_available", evidence_ids=())
+    forensic_triage = ForensicTriageFact(value="unknown", evidence_ids=())
     lookup_call = find_recorded_call(contents, ("lookup", "lookup_cve"), assessment.cve_id)
     if lookup_call is None:
         notes.append(f"{assessment.cve_id} has no recorded exact lookup; CVE facts are unknown.")
@@ -244,12 +346,21 @@ def extract_priority_facts(
                 snapshot_retrieved_at = kev.snapshot_retrieved_at
         high_grade = extract_high_grade_fact(lookup, assessment.cve_id, anchors)
         public_exploit = extract_public_exploit_fact(lookup, assessment.cve_id, anchors)
+        record = find_exact_record(lookup, assessment.cve_id)
+        exploitation, automatable, technical_impact = extract_ssvc_facts(record, anchors)
+        source_high_grade = extract_source_high_grade_fact(record, anchors)
+        forensic_triage = extract_forensic_triage_fact(record, anchors)
     facts = PriorityFacts(
         applicability=ApplicabilityFact(value=assessment.applicability, evidence_ids=()),
         system_category=SystemCategoryFact(value=asset.system_category, evidence_ids=()),
         kev=kev,
         high_grade=high_grade,
         public_exploit=public_exploit,
+        exploitation=exploitation,
+        automatable=automatable,
+        technical_impact=technical_impact,
+        source_high_grade=source_high_grade,
+        forensic_triage=forensic_triage,
     )
     after_reference_date = uses_after_reference_date_information(
         facts, anchors, reference_date, snapshot_retrieved_at

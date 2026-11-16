@@ -28,6 +28,63 @@
       "title": "ApplicabilityFact",
       "type": "object"
     },
+    "AutomatableFact": {
+      "additionalProperties": false,
+      "properties": {
+        "assessed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assessed At"
+        },
+        "assessor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The assessment's source and role, as the record gives them.",
+          "title": "Assessor"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "yes",
+            "no",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_ids",
+        "assessor",
+        "assessed_at",
+        "value"
+      ],
+      "title": "AutomatableFact",
+      "type": "object"
+    },
     "CnvdLinkToReview": {
       "additionalProperties": false,
       "properties": {
@@ -118,6 +175,94 @@
         "response_sha256"
       ],
       "title": "DecisionResponseDigest",
+      "type": "object"
+    },
+    "ExploitationFact": {
+      "additionalProperties": false,
+      "description": "CISA's SSVC exploitation point; ``none`` is CISA's view at its time, not \"no exploit\".",
+      "properties": {
+        "assessed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assessed At"
+        },
+        "assessor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The assessment's source and role, as the record gives them.",
+          "title": "Assessor"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "active",
+            "poc",
+            "none",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_ids",
+        "assessor",
+        "assessed_at",
+        "value"
+      ],
+      "title": "ExploitationFact",
+      "type": "object"
+    },
+    "ForensicTriageFact": {
+      "additionalProperties": false,
+      "description": "CISA's KEV forensicTriage column for a listed CVE.",
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "yes",
+            "no",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids"
+      ],
+      "title": "ForensicTriageFact",
       "type": "object"
     },
     "HighGradeFact": {
@@ -296,7 +441,12 @@
             "system_category",
             "kev",
             "high_grade",
-            "public_exploit"
+            "public_exploit",
+            "exploitation",
+            "automatable",
+            "technical_impact",
+            "source_high_grade",
+            "forensic_triage"
           ],
           "title": "Fact",
           "type": "string"
@@ -422,7 +572,12 @@
               "system_category",
               "kev",
               "high_grade",
-              "public_exploit"
+              "public_exploit",
+              "exploitation",
+              "automatable",
+              "technical_impact",
+              "source_high_grade",
+              "forensic_triage"
             ],
             "type": "string"
           },
@@ -451,6 +606,15 @@
         "applicability": {
           "$ref": "#/$defs/ApplicabilityFact"
         },
+        "automatable": {
+          "$ref": "#/$defs/AutomatableFact"
+        },
+        "exploitation": {
+          "$ref": "#/$defs/ExploitationFact"
+        },
+        "forensic_triage": {
+          "$ref": "#/$defs/ForensicTriageFact"
+        },
         "high_grade": {
           "$ref": "#/$defs/HighGradeFact"
         },
@@ -460,8 +624,14 @@
         "public_exploit": {
           "$ref": "#/$defs/PublicExploitFact"
         },
+        "source_high_grade": {
+          "$ref": "#/$defs/SourceHighGradeFact"
+        },
         "system_category": {
           "$ref": "#/$defs/SystemCategoryFact"
+        },
+        "technical_impact": {
+          "$ref": "#/$defs/TechnicalImpactFact"
         }
       },
       "required": [
@@ -469,7 +639,12 @@
         "system_category",
         "kev",
         "high_grade",
-        "public_exploit"
+        "public_exploit",
+        "exploitation",
+        "automatable",
+        "technical_impact",
+        "source_high_grade",
+        "forensic_triage"
       ],
       "title": "PriorityFacts",
       "type": "object"
@@ -699,6 +874,46 @@
       "title": "SessionDatasetIdentity",
       "type": "object"
     },
+    "SourceHighGradeFact": {
+      "additionalProperties": false,
+      "description": "CVSS v3.x or v4.0 severity from scorers other than NVD; never NVD's own grade.",
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "triggering_scorers": {
+          "default": [],
+          "description": "Each scorer whose HIGH or CRITICAL metric triggered present, with its CVSS version, e.g. 'cna@example.org CVSS 4.0'.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Triggering Scorers",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "present",
+            "absent",
+            "none_available"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids",
+        "triggering_scorers"
+      ],
+      "title": "SourceHighGradeFact",
+      "type": "object"
+    },
     "SystemCategoryFact": {
       "additionalProperties": false,
       "properties": {
@@ -726,6 +941,63 @@
         "evidence_ids"
       ],
       "title": "SystemCategoryFact",
+      "type": "object"
+    },
+    "TechnicalImpactFact": {
+      "additionalProperties": false,
+      "properties": {
+        "assessed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assessed At"
+        },
+        "assessor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The assessment's source and role, as the record gives them.",
+          "title": "Assessor"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "value": {
+          "enum": [
+            "total",
+            "partial",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_ids",
+        "assessor",
+        "assessed_at",
+        "value"
+      ],
+      "title": "TechnicalImpactFact",
       "type": "object"
     },
     "UnmatchedRule": {

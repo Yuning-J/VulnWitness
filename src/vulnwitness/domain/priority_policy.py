@@ -20,6 +20,11 @@ FACT_VALUES: dict[FactName, tuple[str, ...]] = {
     "kev": ("listed", "not_listed_in_snapshot", "unknown"),
     "high_grade": ("present", "absent", "none_available"),
     "public_exploit": ("referenced", "not_referenced_in_record", "unknown"),
+    "exploitation": ("active", "poc", "none", "unknown"),
+    "automatable": ("yes", "no", "unknown"),
+    "technical_impact": ("total", "partial", "unknown"),
+    "source_high_grade": ("present", "absent", "none_available"),
+    "forensic_triage": ("yes", "no", "unknown"),
 }
 
 
