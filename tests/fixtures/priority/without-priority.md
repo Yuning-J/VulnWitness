@@ -264,6 +264,13 @@ None recorded.
         "count": 0,
         "finding_ids": []
       },
+      "narrative_identifiers": {
+        "identifiers_checked": 0,
+        "recorded": 0,
+        "unrecorded": [],
+        "unrecorded_count": 0,
+        "statement": "Identifiers named in finding statements are matched exactly against the session's successful recorded responses. A recorded identifier is not thereby supported by the statement's claim; an unrecorded one was not returned by any call in this session."
+      },
       "superseded_count": 0,
       "support_limitation": "Free narrative is not checked. This check does not establish that a statement is supported by cited evidence or prove real-world truth."
     }

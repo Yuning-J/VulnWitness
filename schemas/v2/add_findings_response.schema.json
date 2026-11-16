@@ -1,6 +1,49 @@
 {
   "$defs": {
     "JsonValue": {},
+    "NarrativeIdentifierCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "identifiers_checked": {
+          "minimum": 0,
+          "title": "Identifiers Checked",
+          "type": "integer"
+        },
+        "recorded": {
+          "minimum": 0,
+          "title": "Recorded",
+          "type": "integer"
+        },
+        "statement": {
+          "const": "Identifiers named in finding statements are matched exactly against the session's successful recorded responses. A recorded identifier is not thereby supported by the statement's claim; an unrecorded one was not returned by any call in this session.",
+          "default": "Identifiers named in finding statements are matched exactly against the session's successful recorded responses. A recorded identifier is not thereby supported by the statement's claim; an unrecorded one was not returned by any call in this session.",
+          "title": "Statement",
+          "type": "string"
+        },
+        "unrecorded": {
+          "items": {
+            "$ref": "#/$defs/UnrecordedIdentifier"
+          },
+          "maxItems": 200,
+          "title": "Unrecorded",
+          "type": "array"
+        },
+        "unrecorded_count": {
+          "minimum": 0,
+          "title": "Unrecorded Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "identifiers_checked",
+        "recorded",
+        "unrecorded",
+        "unrecorded_count",
+        "statement"
+      ],
+      "title": "NarrativeIdentifierCheck",
+      "type": "object"
+    },
     "SessionCheckReport": {
       "additionalProperties": false,
       "properties": {
@@ -9,6 +52,10 @@
         },
         "claims": {
           "$ref": "#/$defs/SessionClaimsCheck"
+        },
+        "narrative_identifiers": {
+          "$ref": "#/$defs/NarrativeIdentifierCheck",
+          "description": "CVE, CWE and CNVD IDs named in finding statements, matched against successful recorded responses; advisory, never part of the verdict."
         },
         "not_checked": {
           "$ref": "#/$defs/SessionNotChecked"
@@ -41,6 +88,7 @@
         "citations",
         "claims",
         "not_checked",
+        "narrative_identifiers",
         "superseded_count",
         "support_limitation"
       ],
@@ -224,6 +272,35 @@
         "message"
       ],
       "title": "SessionViolation",
+      "type": "object"
+    },
+    "UnrecordedIdentifier": {
+      "additionalProperties": false,
+      "properties": {
+        "finding_id": {
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "identifier": {
+          "title": "Identifier",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "cve",
+            "cwe",
+            "cnvd"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding_id",
+        "identifier",
+        "kind"
+      ],
+      "title": "UnrecordedIdentifier",
       "type": "object"
     }
   },

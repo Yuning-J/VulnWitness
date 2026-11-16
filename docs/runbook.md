@@ -506,6 +506,12 @@ The JSON report has separate `record`, `citations`, `claims`, and `not_checked` 
 Claims are `verified`, `contradicted` with the differing field, or `unverifiable` when the
 call failed or a field is absent. `not_checked` lists the count and IDs of model and analyst
 findings. Text output explains each layer and repeats that free narrative is not checked.
+`narrative_identifiers` is advisory: every CVE, CWE and CNVD ID a finding's statement names
+is matched exactly against the session's successful recorded responses, and IDs no
+recorded call returned are listed by finding. A model that names a CVE it never looked up,
+or one past its training data, shows up here. A recorded ID is not thereby supported by
+the statement, and the layer never changes the exit code
+([ADR 0022](rebuild/adr/0022-vex-export-and-narrative-identifiers.md)).
 Exit 0 requires record consistency, resolved citations and every deterministic claim
 verified; otherwise exit 1. A confirmed status supplies no verification. Agreement with
 saved fields does not establish source support or real-world truth. Treat session contents
@@ -572,6 +578,22 @@ automatable exploitation, gives `attend`. It is neither CISA's SSVC tree nor BOD
 Table 1. `cn-auto-demo` is unchanged and lists the new facts among its unknowns when they
 are unknown. Artifacts written before this change no longer validate; rerun
 `prioritise --force`.
+
+### Export the assessments as OpenVEX
+
+```sh
+vulnwitness vex --assets docs/examples/priority-assets.yaml --author "Example PSIRT" \
+  --as-of 2026-11-16 --session /data/vulnwitness/priority-session \
+  --output /data/vulnwitness/aster.vex.json
+```
+
+`vex` writes an OpenVEX v0.2.0 document, one statement per assessment in register order.
+The analyst's applicability is the status: `affected`, `not_affected` (the justification
+becomes the impact statement) or, for `unknown`, `under_investigation`. With `--session`,
+an affected statement's action statement quotes the checked `priority.json`
+recommendation and reason; without it, it says no action was recorded. Products are
+`urn:vulnwitness:asset:` IRIs of the asset names. Nothing is derived from source data, no
+clock is read, and the file is written atomically with mode 0600; `--force` overwrites.
 
 ## Workspace mode for agents
 

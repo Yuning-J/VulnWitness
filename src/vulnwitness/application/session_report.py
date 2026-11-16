@@ -567,6 +567,24 @@ def build_checks(contents: CheckedSession) -> ReportSection:
             "Free text is never checked.",
         )
     )
+    identifiers = check.narrative_identifiers
+    if identifiers.identifiers_checked:
+        rows.append(
+            (
+                "\u2013" if not identifiers.unrecorded_count else "!",
+                "Identifiers in statements",
+                f"{identifiers.recorded} of {identifiers.identifiers_checked} recorded",
+                "IDs a statement names, matched exactly against recorded responses; advisory.",
+            )
+        )
+        for unrecorded in identifiers.unrecorded:
+            paragraphs.append(
+                ReportParagraph(
+                    f"Finding {unrecorded.finding_id} names {unrecorded.identifier}, which no "
+                    "recorded call returned.",
+                    True,
+                )
+            )
     return ReportSection(
         "Check layers",
         paragraphs=tuple(paragraphs),

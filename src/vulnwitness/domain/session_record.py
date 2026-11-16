@@ -8,6 +8,7 @@ from pydantic import BeforeValidator, ConfigDict, Field, JsonValue, StrictBool, 
 from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CveId
 from vulnwitness.domain.evidence import SHA256_PATTERN, EvidenceId
+from vulnwitness.domain.narrative_ids import NarrativeIdentifierCheck
 from vulnwitness.domain.search import (
     SCHEMA_VERSION,
     JsonInteger,
@@ -266,6 +267,15 @@ class SessionCheckReport(ContractModel):
     citations: SessionCitationCheck
     claims: SessionClaimsCheck
     not_checked: SessionNotChecked
+    narrative_identifiers: NarrativeIdentifierCheck = Field(
+        default_factory=lambda: NarrativeIdentifierCheck(
+            identifiers_checked=0, recorded=0, unrecorded=(), unrecorded_count=0
+        ),
+        description=(
+            "CVE, CWE and CNVD IDs named in finding statements, matched against successful "
+            "recorded responses; advisory, never part of the verdict."
+        ),
+    )
     superseded_count: JsonInteger = Field(default=0, ge=0)
     support_limitation: Literal[
         "Free narrative is not checked. This check does not establish that a statement is "

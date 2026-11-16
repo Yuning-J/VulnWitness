@@ -245,6 +245,7 @@ from vulnwitness.settings import (
 )
 from vulnwitness.store_report_cli import add_store_report_parsers, run_store_report_command
 from vulnwitness.triage_composition import preflight_triage, run_triage
+from vulnwitness.vex_cli import add_vex_parser, run_vex
 from vulnwitness.workspace_composition import build_workspace_investigations
 
 DEMO_QUERIES = (
@@ -373,6 +374,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     add_report_parser(commands)
     add_priority_parser(commands)
+    add_vex_parser(commands)
     hook_parser = commands.add_parser("hook", help="run an advisory Claude Code hook from stdin")
     hook_commands = hook_parser.add_subparsers(dest="hook_command", required=True)
     hook_commands.add_parser("record-investigation", help="record returned investigation IDs")
@@ -1829,6 +1831,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         return run_report(arguments, parser)
     if arguments.command == "prioritise":
         return run_priority(arguments, parser)
+    if arguments.command == "vex":
+        return run_vex(arguments, parser)
     try:
         settings = load_settings(os.environ if environment is None else environment)
     except SettingsError as error:

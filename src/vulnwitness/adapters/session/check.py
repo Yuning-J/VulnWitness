@@ -12,6 +12,11 @@ from vulnwitness.adapters.session.validation import parse_session_document
 from vulnwitness.adapters.strict_yaml import load_declaration_yaml
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.hashing import sha256_hex
+from vulnwitness.domain.narrative_ids import (
+    NarrativeIdentifierCheck,
+    check_narrative_identifiers,
+    collect_recorded_identifiers,
+)
 from vulnwitness.domain.priority_decision import PriorityArtifact
 from vulnwitness.domain.priority_facts import FACT_NAMES
 from vulnwitness.domain.session_claim_check import check_session_claim
@@ -185,7 +190,20 @@ class SessionChecker:
             not_checked=SessionNotChecked(
                 count=len(self._not_checked), finding_ids=tuple(self._not_checked)
             ),
+            narrative_identifiers=self._check_narrative_identifiers(),
         )
+
+    def _check_narrative_identifiers(self) -> NarrativeIdentifierCheck:
+        """IDs named in effective findings' statements against successful responses."""
+        statements: list[tuple[str, str]] = []
+        if self._findings is not None:
+            for finding in self._findings.effective_findings():
+                if finding.statement is not None:
+                    statements.append((finding.id, finding.statement))
+        recorded = collect_recorded_identifiers(
+            answer.model_dump_json() for answer in self._responses.values()
+        )
+        return check_narrative_identifiers(statements, recorded)
 
     def _list_files(self, name: str) -> list[Path]:
         directory = self._directory / name
@@ -356,5 +374,16 @@ def render_session_check(report: SessionCheckReport) -> str:
         )
         + "."
     )
+    identifiers = report.narrative_identifiers
+    lines.append(
+        f"Identifiers named in statements: {identifiers.identifiers_checked}; recorded in the "
+        f"session: {identifiers.recorded}; not returned by any recorded call: "
+        f"{identifiers.unrecorded_count}."
+    )
+    for unrecorded in identifiers.unrecorded:
+        finding_id = json.dumps(unrecorded.finding_id, ensure_ascii=True)
+        lines.append(
+            f"{finding_id}: {unrecorded.identifier} was not returned by any recorded call."
+        )
     lines.append(report.support_limitation)
     return "\n".join(lines)
