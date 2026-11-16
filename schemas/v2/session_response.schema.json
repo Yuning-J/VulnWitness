@@ -1384,6 +1384,15 @@
           "title": "Cve Id",
           "type": "string"
         },
+        "cve_tags": {
+          "default": [],
+          "description": "CVE-format tags NVD 2.0 mirrors, in feed order (format 4).",
+          "items": {
+            "$ref": "#/$defs/CveTag"
+          },
+          "title": "Cve Tags",
+          "type": "array"
+        },
         "cvss": {
           "default": [],
           "items": {
@@ -1498,6 +1507,24 @@
           "title": "References",
           "type": "array"
         },
+        "source_affected": {
+          "default": [],
+          "description": "CNA and ADP affected data NVD 2.0 mirrors, one block per source in feed order; untrusted source statements, not NVD analysis (format 4).",
+          "items": {
+            "$ref": "#/$defs/SourceAffected"
+          },
+          "title": "Source Affected",
+          "type": "array"
+        },
+        "ssvc": {
+          "default": [],
+          "description": "SSVC assessments NVD 2.0 mirrors, in feed order (format 4).",
+          "items": {
+            "$ref": "#/$defs/SsvcAssessment"
+          },
+          "title": "Ssvc",
+          "type": "array"
+        },
         "vulnerability_origin": {
           "$ref": "#/$defs/VulnerabilityOrigin",
           "default": "unknown"
@@ -1515,6 +1542,9 @@
         "references",
         "kev",
         "nvd_status",
+        "source_affected",
+        "ssvc",
+        "cve_tags",
         "cnvd",
         "vulnerability_origin",
         "protocol_design_claim",
@@ -1544,6 +1574,33 @@
         "query"
       ],
       "title": "CveSearchCall",
+      "type": "object"
+    },
+    "CveTag": {
+      "additionalProperties": false,
+      "description": "A CVE-format ``cveTags`` entry, e.g. ``disputed`` or ``unsupported-when-assigned``.",
+      "properties": {
+        "source": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "tags"
+      ],
+      "title": "CveTag",
       "type": "object"
     },
     "CvssMetric": {
@@ -2521,6 +2578,17 @@
     "KevEntry": {
       "additionalProperties": false,
       "properties": {
+        "cwe_ids": {
+          "default": [],
+          "description": "CISA's cwes column, in catalog order (format 4).",
+          "items": {
+            "maxLength": 16,
+            "pattern": "^CWE-[0-9]+$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Cwe Ids",
+          "type": "array"
+        },
         "date_added": {
           "format": "date",
           "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
@@ -2541,6 +2609,23 @@
           "default": null,
           "title": "Due Date"
         },
+        "forensic_triage": {
+          "anyOf": [
+            {
+              "enum": [
+                "yes",
+                "no"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA's forensicTriage column, Yes or No as given; null when the consulted source does not carry it (format 4).",
+          "title": "Forensic Triage"
+        },
         "known_ransomware_campaign_use": {
           "anyOf": [
             {
@@ -2557,12 +2642,62 @@
           "default": null,
           "description": "CISA's own Known/Unknown assessment; null when the consulted source does not carry it.",
           "title": "Known Ransomware Campaign Use"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA's notes, usually URLs; verbatim, untrusted, never fetched (format 4).",
+          "title": "Notes"
+        },
+        "required_action": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA's requiredAction; verbatim, untrusted source text (format 4).",
+          "title": "Required Action"
+        },
+        "vulnerability_name": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CISA's vulnerabilityName; verbatim, untrusted source text (format 4).",
+          "title": "Vulnerability Name"
         }
       },
       "required": [
         "date_added",
         "due_date",
-        "known_ransomware_campaign_use"
+        "known_ransomware_campaign_use",
+        "vulnerability_name",
+        "required_action",
+        "notes",
+        "cwe_ids",
+        "forensic_triage"
       ],
       "title": "KevEntry",
       "type": "object"
@@ -3257,6 +3392,15 @@
           "title": "Cve Id",
           "type": "string"
         },
+        "cve_tags": {
+          "default": [],
+          "description": "CVE-format tags NVD 2.0 mirrors, in feed order (format 4).",
+          "items": {
+            "$ref": "#/$defs/CveTag"
+          },
+          "title": "Cve Tags",
+          "type": "array"
+        },
         "cvss": {
           "default": [],
           "items": {
@@ -3371,6 +3515,24 @@
           "title": "References",
           "type": "array"
         },
+        "source_affected": {
+          "default": [],
+          "description": "CNA and ADP affected data NVD 2.0 mirrors, one block per source in feed order; untrusted source statements, not NVD analysis (format 4).",
+          "items": {
+            "$ref": "#/$defs/SourceAffected"
+          },
+          "title": "Source Affected",
+          "type": "array"
+        },
+        "ssvc": {
+          "default": [],
+          "description": "SSVC assessments NVD 2.0 mirrors, in feed order (format 4).",
+          "items": {
+            "$ref": "#/$defs/SsvcAssessment"
+          },
+          "title": "Ssvc",
+          "type": "array"
+        },
         "vulnerability_origin": {
           "$ref": "#/$defs/VulnerabilityOrigin",
           "default": "unknown"
@@ -3388,6 +3550,9 @@
         "references",
         "kev",
         "nvd_status",
+        "source_affected",
+        "ssvc",
+        "cve_tags",
         "cnvd",
         "vulnerability_origin",
         "protocol_design_claim",
@@ -5497,6 +5662,268 @@
       "title": "SnapshotCoverage",
       "type": "string"
     },
+    "SourceAffected": {
+      "additionalProperties": false,
+      "description": "The affected data one CNA or ADP published, as NVD 2.0 mirrors it (\"CVE Affected\nv1.0\", since 2026-06-17). It is that source's statement, not NVD's analysis, and it\nnever sets affectedness.",
+      "properties": {
+        "omitted_products": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Products",
+          "type": "integer"
+        },
+        "products": {
+          "items": {
+            "$ref": "#/$defs/SourceAffectedProduct"
+          },
+          "maxItems": 64,
+          "title": "Products",
+          "type": "array"
+        },
+        "source": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "products",
+        "omitted_products"
+      ],
+      "title": "SourceAffected",
+      "type": "object"
+    },
+    "SourceAffectedProduct": {
+      "additionalProperties": false,
+      "description": "One CVE-format ``affected[]`` product; vendor and product are untrusted text.",
+      "properties": {
+        "collection_url": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Collection Url"
+        },
+        "cpes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Cpes",
+          "type": "array"
+        },
+        "default_status": {
+          "anyOf": [
+            {
+              "enum": [
+                "affected",
+                "unaffected",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Status"
+        },
+        "modules": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Modules",
+          "type": "array"
+        },
+        "omitted_versions": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Versions",
+          "type": "integer"
+        },
+        "package_name": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Package Name"
+        },
+        "package_url": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "pattern": "^pkg:",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Package Url"
+        },
+        "platforms": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Platforms",
+          "type": "array"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Product"
+        },
+        "repo": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repo"
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor"
+        },
+        "versions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SourceAffectedVersion"
+          },
+          "maxItems": 64,
+          "title": "Versions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "vendor",
+        "product",
+        "package_name",
+        "collection_url",
+        "repo",
+        "package_url",
+        "cpes",
+        "modules",
+        "platforms",
+        "default_status",
+        "versions",
+        "omitted_versions"
+      ],
+      "title": "SourceAffectedProduct",
+      "type": "object"
+    },
+    "SourceAffectedVersion": {
+      "additionalProperties": false,
+      "description": "One CVE-format ``versions[]`` entry as its author gave it; nothing is compared.",
+      "properties": {
+        "less_than": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Less Than"
+        },
+        "less_than_or_equal": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Less Than Or Equal"
+        },
+        "status": {
+          "enum": [
+            "affected",
+            "unaffected",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "version_type": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Type"
+        }
+      },
+      "required": [
+        "version",
+        "status",
+        "version_type",
+        "less_than",
+        "less_than_or_equal"
+      ],
+      "title": "SourceAffectedVersion",
+      "type": "object"
+    },
     "SourceCapability": {
       "additionalProperties": false,
       "allOf": [
@@ -6289,6 +6716,132 @@
       ],
       "title": "SourceType",
       "type": "string"
+    },
+    "SsvcAssessment": {
+      "additionalProperties": false,
+      "description": "One SSVC assessment NVD 2.0 mirrors in ``metrics.ssvcV203``; CISA's ADP container\nscores most CVEs in the role ``CISA Coordinator``.",
+      "properties": {
+        "assessed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assessed At"
+        },
+        "decision_points": {
+          "$ref": "#/$defs/SsvcDecisionPoints"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "source": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "source",
+        "role",
+        "version",
+        "assessed_at",
+        "decision_points"
+      ],
+      "title": "SsvcAssessment",
+      "type": "object"
+    },
+    "SsvcDecisionPoints": {
+      "additionalProperties": false,
+      "description": "SSVC v2.0.3 decision points as a source scored them; null when it gave none.",
+      "properties": {
+        "automatable": {
+          "anyOf": [
+            {
+              "enum": [
+                "yes",
+                "no"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Automatable"
+        },
+        "exploitation": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "poc",
+                "active"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exploitation"
+        },
+        "technical_impact": {
+          "anyOf": [
+            {
+              "enum": [
+                "partial",
+                "total"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Technical Impact"
+        }
+      },
+      "required": [
+        "exploitation",
+        "automatable",
+        "technical_impact"
+      ],
+      "title": "SsvcDecisionPoints",
+      "type": "object"
     },
     "StateTransition": {
       "additionalProperties": false,

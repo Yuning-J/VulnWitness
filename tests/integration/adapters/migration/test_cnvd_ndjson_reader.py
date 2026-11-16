@@ -55,7 +55,7 @@ def test_increment_replaces_whole_record_in_retrieval_order_and_keeps_source_pin
     corpus, report = import_scenario(scenario)
     lookup = build_search_service(corpus).lookup(build_cve_id(1))
 
-    assert corpus.manifest.store_format_version == 3
+    assert corpus.manifest.store_format_version == 4
     entry = lookup.candidates[0].record.cnvd[0]
     assert entry.title == "SYNTHETIC: 更新标题"
     assert entry.products == ()
@@ -230,7 +230,7 @@ def test_raw_fields_round_trip_and_serve_verbatim_with_research_attribution(
     assert "research use" in search.describe_cnvd_attribution()
     assert search.describe_cnvd().imported
     assert search.describe_cnvd().revision is None
-    assert verify_corpus_store(scenario.target).manifest.store_format_version == 3
+    assert verify_corpus_store(scenario.target).manifest.store_format_version == 4
 
 
 @pytest.mark.parametrize(

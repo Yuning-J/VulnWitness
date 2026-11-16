@@ -13,7 +13,7 @@ from vulnwitness.application.cnvd_report import (
 from vulnwitness.application.investigation_report import build_investigation_report
 from vulnwitness.application.priority_report import build_priority_report
 from vulnwitness.application.triage_workflow import triage_selection_key
-from vulnwitness.domain.cve import CveRecord, CvssMetric
+from vulnwitness.domain.cve import CveRecord, CvssMetric, SourceAffectedVersion
 from vulnwitness.domain.cve_lookup import CveLookupResponse, LookupCandidate, PendingCnvdLookup
 from vulnwitness.domain.cvss_ranking import rank_cvss_metric
 from vulnwitness.domain.evidence import EvidenceAnchor
@@ -216,6 +216,84 @@ def build_nvd_status_fact(record: CveRecord) -> ReportFact:
     return ReportFact("NVD status", describe_nvd_status(record.nvd_status), badge, detail)
 
 
+def describe_source_version(version: SourceAffectedVersion) -> str:
+    bounds = [version.version]
+    if version.less_than is not None:
+        bounds = [f"{version.version} to < {version.less_than}"]
+    elif version.less_than_or_equal is not None:
+        bounds = [f"{version.version} to ≤ {version.less_than_or_equal}"]
+    scheme = f" ({version.version_type})" if version.version_type else ""
+    return f"{version.status} {bounds[0]}{scheme}"
+
+
+def build_mirrored_section(record: CveRecord) -> ReportSection | None:
+    """KEV detail, SSVC, CVE tags and CNA/ADP affected data, each with its author; shown
+    only when the record carries any (store format 4). None of it sets affectedness."""
+    if not record.has_format4_fields():
+        return None
+    facts: list[ReportFact] = []
+    kev = record.kev
+    if kev is not None:
+        triage = {"yes": "forensic triage: yes", "no": "forensic triage: no"}.get(
+            kev.forensic_triage or "", "forensic triage not stated"
+        )
+        facts.append(
+            ReportFact(
+                "CISA KEV",
+                f"listed {kev.date_added.isoformat()} · {triage}",
+                detail=kev.required_action or "",
+            )
+        )
+    for assessment in record.ssvc:
+        points = assessment.decision_points
+        role = assessment.role or "role not stated"
+        facts.append(
+            ReportFact(
+                "SSVC",
+                f"exploitation {points.exploitation or 'not stated'} · automatable "
+                f"{points.automatable or 'not stated'} · technical impact "
+                f"{points.technical_impact or 'not stated'}",
+                detail=f"{role} · {assessment.source} · SSVC {assessment.version or '?'}",
+            )
+        )
+    for tag in record.cve_tags:
+        facts.append(ReportFact("CVE tags", ", ".join(tag.tags), detail=tag.source))
+    bullets: list[str] = []
+    for block in record.source_affected:
+        for product in block.products:
+            name = " ".join(part for part in (product.vendor, product.product) if part)
+            name = name or product.package_name or product.package_url or "unnamed product"
+            versions = "; ".join(describe_source_version(v) for v in product.versions)
+            if product.omitted_versions:
+                versions += f"; {product.omitted_versions} more not stored"
+            default = f" · default {product.default_status}" if product.default_status else ""
+            purl = f" · {product.package_url}" if product.package_url else ""
+            bullets.append(
+                f"{block.source}: {name}{purl}{default} · {versions or 'no versions stated'}"
+            )
+        if block.omitted_products:
+            bullets.append(f"{block.source}: {block.omitted_products} more products not stored")
+    sections: tuple[ReportSection, ...] = ()
+    if bullets:
+        sections = (
+            ReportSection(
+                "Source-stated affected versions · untrusted text",
+                (
+                    ReportParagraph(
+                        "What each CNA or ADP published, as NVD mirrors it. VulnWitness has not "
+                        "compared any version; affectedness stays unknown."
+                    ),
+                ),
+                bullets=tuple(bullets),
+                folded=True,
+                layout="inline",
+            ),
+        )
+    return ReportSection(
+        "Mirrored source data", facts=tuple(facts), sections=sections, layout="facts"
+    )
+
+
 def path_counts(associations: WeaknessAssociations) -> tuple[int, set[str]]:
     reaching = 0
     techniques: set[str] = set()
@@ -384,6 +462,9 @@ def build_card(
             layout="facts",
         ),
     ]
+    mirrored = build_mirrored_section(record)
+    if mirrored is not None:
+        sections.append(mirrored)
     if len(record.cvss) > 1:
         metrics: list[str] = []
         for metric in record.cvss:

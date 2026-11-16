@@ -147,3 +147,79 @@ sources:
     local_storage_policy: committed_excerpt
     terms_verified_on: 2026-10-17
     notes: "Its tools/list entries (tool names, descriptions and input schemas) only, as test data; no adapter ships (ADR 0003)."
+  # Candidate sources from the 2026-11 roadmap, registered before any importer exists
+  # (THIRD_PARTY_DATA.md). Only cisa-vulnrichment data is held today, inside NVD 2.0
+  # records (ADR 0020).
+  - name: cisa-vulnrichment
+    official_url: "https://github.com/cisagov/vulnrichment"
+    terms_or_license_url: "https://github.com/cisagov/vulnrichment/blob/develop/LICENSE"
+    version_strategy: "Mirrored by NVD 2.0 as metrics.ssvcV203 and affected[]; versioned with the NVD feed that carries it. A direct import would pin the repository commit."
+    attribution: null
+    redistribution_allowed: allowed
+    redistribution_conditions: "CC0 1.0 (LICENSE read 2026-11-16). The CVE records it annotates keep the CVE Program's terms."
+    local_storage_policy: operator_supplied
+    terms_verified_on: 2026-11-16
+    notes: "Held only as NVD-mirrored SSVC and affected data in store format 4 (ADR 0020)."
+  - name: first-epss
+    official_url: "https://www.first.org/epss/"
+    terms_or_license_url: null
+    version_strategy: "Daily score file date and EPSS model version."
+    attribution: null
+    redistribution_allowed: unknown
+    redistribution_conditions: "The data page says scores are published free of charge with no registration; no licence or redistribution terms were found on 2026-11-16. Not imported."
+    local_storage_policy: not_stored
+    terms_verified_on: null
+  - name: osv
+    official_url: "https://osv.dev"
+    terms_or_license_url: "https://google.github.io/osv.dev/data/"
+    version_strategy: "Per-ecosystem export date and record modified time."
+    attribution: null
+    redistribution_allowed: allowed_with_conditions
+    redistribution_conditions: "Licensed per upstream source as listed on the data page (read 2026-11-16): CC-BY 4.0, CC0 1.0, CC-BY-SA 4.0, MIT, Apache-2.0 and CC-BY-NC-ND 4.0 among them. An importer must select sources by licence and exclude CC-BY-NC-ND sources such as Chainguard. Not imported."
+    local_storage_policy: not_stored
+    terms_verified_on: 2026-11-16
+  - name: metasploit-modules
+    official_url: "https://github.com/rapid7/metasploit-framework"
+    terms_or_license_url: "https://github.com/rapid7/metasploit-framework/blob/master/LICENSE"
+    version_strategy: "Repository commit of db/modules_metadata_base.json."
+    attribution: null
+    redistribution_allowed: allowed_with_conditions
+    redistribution_conditions: "BSD-3-Clause under the LICENSE 'Files: *' stanza; that db/modules_metadata_base.json falls under it is an inference (read 2026-11-16). Keep the copyright notice; no Rapid7 endorsement. Not imported."
+    local_storage_policy: not_stored
+    terms_verified_on: 2026-11-16
+  - name: nuclei-templates
+    official_url: "https://github.com/projectdiscovery/nuclei-templates"
+    terms_or_license_url: "https://github.com/projectdiscovery/nuclei-templates/blob/main/LICENSE.md"
+    version_strategy: "Repository commit."
+    attribution: null
+    redistribution_allowed: allowed_with_conditions
+    redistribution_conditions: "MIT (read 2026-11-16): include the copyright and permission notice. Not imported."
+    local_storage_policy: not_stored
+    terms_verified_on: 2026-11-16
+  - name: exploit-db
+    official_url: "https://www.exploit-db.com"
+    terms_or_license_url: "https://gitlab.com/exploit-database/exploitdb/-/blob/main/LICENSE.md"
+    version_strategy: "Repository commit of files_exploits.csv."
+    attribution: null
+    redistribution_allowed: allowed_with_conditions
+    redistribution_conditions: "GPL-2.0-or-later for the GitLab repository (read 2026-11-16); the exploit-db.com site terms were not read. An importer would keep metadata only, never exploit code. Not imported."
+    local_storage_policy: not_stored
+    terms_verified_on: 2026-11-16
+  - name: vulncheck-kev
+    official_url: "https://www.vulncheck.com/kev"
+    terms_or_license_url: null
+    version_strategy: "API response time; requires the operator's own key."
+    attribution: "VulnCheck KEV"
+    redistribution_allowed: unknown
+    redistribution_conditions: "The community attribution page asks for prominent 'VulnCheck KEV' attribution; the website terms are stricter and whether they cover the feed is unconfirmed (2026-11-16). Not imported."
+    local_storage_policy: not_stored
+    terms_verified_on: null
+  - name: enisa-euvd
+    official_url: "https://euvd.enisa.europa.eu"
+    terms_or_license_url: null
+    version_strategy: "EUVD record date."
+    attribution: null
+    redistribution_allowed: unknown
+    redistribution_conditions: "Terms not read: the site was unavailable on 2026-11-16. Not imported."
+    local_storage_policy: not_stored
+    terms_verified_on: null

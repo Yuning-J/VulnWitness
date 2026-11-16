@@ -29,6 +29,8 @@ its safeguard.
 
 ### 1. Inputs
 
+- *Note (2026-11-16):* NVD retired the 1.1 feeds on 2025-08-20. 1.1 input stays readable
+  for archived files; current imports use 2.0, which ADR 0020 extends.
 - **Imported:** NVD JSON 1.1 and 2.0 feeds (year, `recent` and `modified` series), as
   plain JSON, gzip, or a zip holding exactly one non-directory member, unencrypted,
   stored or deflated; the cap applies to the bytes actually decompressed, never the

@@ -25,7 +25,11 @@ Store activation and snapshot changes require service restart.
 CNVD entries from the pinned CIRCL dataset join by CVE ID with their own evidence anchors;
 NVD's fields stay separate. Entries with a well-formed CVE ID but no servable NVD record
 remain pending beside the records. Records retain NVD's `nvd_status` verbatim (null when
-unavailable). Each authority retains its raw grade, scheme, assessing body and provenance.
+unavailable); reports show NVD's displayed label beside it ("Not Scheduled" for `Deferred`).
+Store format 4 also keeps what NVD 2.0 mirrors from other authors: each CNA or ADP's
+`affected[]` data (`source_affected`, capped and counted), SSVC assessments, CVE tags, and
+KEV detail including forensic triage, each attributed and never read as NVD analysis or
+affectedness ([ADR 0020](rebuild/adr/0020-nvd-mirrored-source-data.md)). Each authority retains its raw grade, scheme, assessing body and provenance.
 The comparison uses NVD's own CVSS v3.1, else v3.0, under the named VulnWitness mapping
 `cnvd_grade_vs_nvd_own_cvss3`; CNA scores remain separate. Reports mark only CNVD grading
 higher under that mapping and count distinct CVEs with explicit denominators and dataset
@@ -50,7 +54,8 @@ with deterministic CVE-ID tie-breaking. Filters add no relevance score.
 Graph expansion follows shared CWE, vendor, product, CPE or purl attributes; it is
 association expansion. Imported stores have no bound semantic collection: requests
 report `collection_not_bound`. This repository builds no semantic collection.
-NVD imports contain no purls; unsupported purl filters fail explicitly, never as empty success.
+NVD's CPE products carry no purls; a CNA's `packageURL` stays in `source_affected` and is not
+filtered on. Unsupported purl filters fail explicitly, never as empty success.
 
 ### Product vulnerabilities
 

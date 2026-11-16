@@ -4,7 +4,8 @@ The MIT licence of this repository covers its code only. Every data source is a
 separate provenance subject; the machine-readable registry is
 `src/vulnwitness/knowledge/sources.yaml`. Terms below were read from the official
 pages on 2026-10-14, the trustify-mcp licence on 2026-10-17, and CIRCL's declared
-CNVD licence on 2026-11-08. Where they could not be verified the entry says so, and
+CNVD licence on 2026-11-08; candidate sources from the 2026-11 roadmap were read on
+2026-11-16 and are registered before any importer exists. Where they could not be verified the entry says so, and
 this repository commits no data from that source.
 
 | Source | Terms | Redistribution | Stored here |
@@ -23,6 +24,15 @@ this repository commits no data from that source.
 | Trustify software | not verified; no adapter ships | unknown | nothing |
 | Data returned by Trustify | per upstream source; not verified; no adapter ships | unknown | nothing |
 | trustify-mcp tool schemas (commit ac8955f) | Apache-2.0 (LICENSE at that commit) | allowed with conditions | unmodified excerpt in `tests/contract/data/trustify_mcp_ac8955f/` |
+| CISA Vulnrichment (ADP SSVC, mirrored by NVD 2.0) | CC0 1.0 (https://github.com/cisagov/vulnrichment, LICENSE read 2026-11-16) | allowed | inside operator-supplied NVD stores only (ADR 0020) |
+| FIRST EPSS | no licence stated; "free of charge" access only (https://www.first.org/epss/data, read 2026-11-16) | unknown | nothing; not imported |
+| OSV.dev | per upstream source (https://google.github.io/osv.dev/data/); CC-BY 4.0, CC0, CC-BY-SA 4.0, MIT, Apache-2.0 and CC-BY-NC-ND 4.0 among them | per source | nothing; not imported |
+| Metasploit Framework module metadata | BSD-3-Clause, inferred from the LICENSE "Files: *" stanza (read 2026-11-16) | allowed with conditions | nothing; not imported |
+| Nuclei templates | MIT (LICENSE.md read 2026-11-16) | allowed with conditions | nothing; not imported |
+| Exploit-DB repository | GPL-2.0-or-later for the GitLab repository; site terms unread | allowed with conditions (repository) | nothing; not imported |
+| VulnCheck KEV | free use with prominent "VulnCheck KEV" attribution (docs.vulncheck.com attribution page); website terms stricter | unknown until confirmed in writing | nothing; not imported |
+| ENISA EUVD | not verified (site unavailable on 2026-11-16) | unknown | nothing; not imported |
+| Chainguard advisories (via OSV) | CC-BY-NC-ND 4.0 | restricted (non-commercial, no derivatives) | excluded by choice: normalisation is a derivative |
 | Synthetic CVE fixture | this repository (MIT) | allowed | `src/vulnwitness/fixtures/synthetic/` |
 | Format-1 compatibility store | this repository (MIT) | allowed | `tests/contract/data/corpus_store_format1_28e5b4d/` |
 

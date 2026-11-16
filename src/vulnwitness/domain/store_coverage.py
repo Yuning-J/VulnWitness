@@ -100,6 +100,17 @@ class MonthCoverage(ContractModel):
     with_exploit_reference: int = Field(ge=0)
     kev_listed: int = Field(ge=0)
     with_cnvd: int = Field(ge=0)
+    with_source_cvss: int = Field(ge=0, description="Records with a CVSS metric not NVD's own.")
+    with_source_affected: int = Field(
+        ge=0, description="Records carrying CNA or ADP affected data (store format 4)."
+    )
+    with_source_affected_versions: int = Field(
+        ge=0, description="Records whose CNA or ADP affected data names a version or range."
+    )
+    with_source_affected_purl: int = Field(ge=0)
+    with_ssvc: int = Field(ge=0)
+    ssvc_exploitation_poc: int = Field(ge=0)
+    ssvc_exploitation_active: int = Field(ge=0)
 
 
 class StoreCoverage(ContractModel):
@@ -154,6 +165,10 @@ def has_nvd_own_cvss3(record: CveRecord) -> bool:
     )
 
 
+def has_ssvc_exploitation(record: CveRecord, value: str) -> bool:
+    return any(assessment.decision_points.exploitation == value for assessment in record.ssvc)
+
+
 def count_month(month: str, records: list[CveRecord]) -> MonthCoverage:
     statuses: Counter[str] = Counter()
     enrichment: Counter[str] = Counter()
@@ -187,6 +202,25 @@ def count_month(month: str, records: list[CveRecord]) -> MonthCoverage:
         ),
         kev_listed=sum(record.kev is not None for record in records),
         with_cnvd=sum(bool(record.cnvd) for record in records),
+        with_source_cvss=sum(
+            any(metric.scorer != NVD_SCORER for metric in record.cvss) for record in records
+        ),
+        with_source_affected=sum(bool(record.source_affected) for record in records),
+        with_source_affected_versions=sum(
+            any(product.versions for block in record.source_affected for product in block.products)
+            for record in records
+        ),
+        with_source_affected_purl=sum(
+            any(
+                product.package_url is not None
+                for block in record.source_affected
+                for product in block.products
+            )
+            for record in records
+        ),
+        with_ssvc=sum(bool(record.ssvc) for record in records),
+        ssvc_exploitation_poc=sum(has_ssvc_exploitation(record, "poc") for record in records),
+        ssvc_exploitation_active=sum(has_ssvc_exploitation(record, "active") for record in records),
     )
 
 

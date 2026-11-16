@@ -4,6 +4,7 @@ from textwrap import fill
 
 from vulnwitness.application.cnvd_presentation import describe_cnvd_comparison
 from vulnwitness.application.investigation_presentation import format_severity
+from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse
 from vulnwitness.domain.nvd_status import describe_nvd_status
 from vulnwitness.domain.search import SearchResponse
@@ -38,6 +39,35 @@ def format_weakness_path(path: WeaknessAssociationPath) -> str:
     return notation + " " + path.technique.name
 
 
+def render_mirrored_lines(record: CveRecord, width: int) -> list[str]:
+    """KEV detail, SSVC, CVE tags and a count of source-stated affected products."""
+    lines: list[str] = []
+    if record.kev is not None and record.kev.required_action:
+        lines.append(fill(f"KEV required action: {record.kev.required_action}", width=width))
+    if record.kev is not None and record.kev.forensic_triage:
+        lines.append(f"KEV forensic triage: {record.kev.forensic_triage}")
+    for assessment in record.ssvc:
+        points = assessment.decision_points
+        lines.append(
+            f"SSVC: exploitation {points.exploitation or 'not stated'} · automatable "
+            f"{points.automatable or 'not stated'} · technical impact "
+            f"{points.technical_impact or 'not stated'} · {assessment.role or assessment.source}"
+        )
+    for tag in record.cve_tags:
+        lines.append(f"CVE tags: {', '.join(tag.tags)} · {tag.source}")
+    if record.source_affected:
+        products = sum(
+            len(block.products) + block.omitted_products for block in record.source_affected
+        )
+        lines.append(
+            f"Source-stated affected data: {products} products from "
+            f"{len(record.source_affected)} sources (untrusted; versions not evaluated)"
+        )
+    if lines:
+        lines.append("")
+    return lines
+
+
 def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
     """Render source fields and all supplied paths; source anchor IDs come last."""
     lines = [f"Lookup: {lookup.query}", f"Status: {lookup.status}"]
@@ -63,6 +93,7 @@ def render_lookup_summary(lookup: SearchResponse, width: int = 100) -> str:
                 "",
             )
         )
+        lines.extend(render_mirrored_lines(record, width))
         if record.cnvd:
             for metric in record.cvss:
                 lines.append(

@@ -46,6 +46,10 @@ CVE_RECORD_SOURCE_TEXT_FIELDS = (
     "affected",
     "references",
     "nvd_status",
+    "kev",
+    "source_affected",
+    "ssvc",
+    "cve_tags",
     "cnvd",
 )
 CNVD_LOOKUP_SOURCE_TEXT_FIELDS = ("pending_cnvd",)

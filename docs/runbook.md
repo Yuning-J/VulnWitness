@@ -153,7 +153,9 @@ without fetching. Omit `--activate` to keep `ACTIVE`; the command prints activat
 For a hand-managed manifest, `vulnwitness migrate legacy --inputs /data/feeds/inputs.yaml
 --target /srv/vulnwitness/stores/nvd-2026-10-31 --dry-run` checks before importing;
 remove `--dry-run` to write. Manifests declare raw NVD 1.1/2.0, KEV CSV and each CNVD
-Parquet file with acquisition times. CNVD declarations must cover both files of one
+Parquet file with acquisition times. NVD retired its 1.1 feeds on 2025-08-20; the importer
+still reads archived 1.1 files, but current data comes only from the 2.0 feeds, and only
+2.0 carries the status, mirrored CNA/ADP data and SSVC that store format 4 keeps. CNVD declarations must cover both files of one
 catalogued revision. Import never overwrites targets or writes beside inputs; derived exports are refused.
 
 The migration report counts each CNVD row under one of six join outcomes:

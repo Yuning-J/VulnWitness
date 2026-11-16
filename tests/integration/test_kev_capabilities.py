@@ -6,6 +6,7 @@ import pytest
 
 from vulnwitness.cli import main
 from vulnwitness.composition import load_packaged_fixture
+from vulnwitness.domain.search import SCHEMA_VERSION
 
 
 def test_fixture_capabilities_report_no_imported_cisa_snapshot(
@@ -16,5 +17,5 @@ def test_fixture_capabilities_report_no_imported_cisa_snapshot(
     assert main(["capabilities"], environment={}) == 0
     capabilities = json.loads(capsys.readouterr().out)
 
-    assert capabilities["schema_version"] == "2.0.0-dev.59"
+    assert capabilities["schema_version"] == SCHEMA_VERSION
     assert capabilities["kev"] == {"imported": False, "retrieved_at": None, "source_version": None}

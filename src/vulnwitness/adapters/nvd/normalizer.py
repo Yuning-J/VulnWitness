@@ -24,12 +24,18 @@ from pydantic import ValidationError
 from vulnwitness.domain.cpe import split_cpe
 from vulnwitness.domain.cve import (
     CWE_ID_PATTERN,
+    MAX_SOURCE_AFFECTED_NAMES,
+    MAX_SOURCE_AFFECTED_PRODUCTS,
+    MAX_SOURCE_AFFECTED_VERSIONS,
     AffectedProduct,
     CveRecord,
+    CveTag,
     CvssMetric,
     KevEntry,
     LocalizedText,
     Reference,
+    SourceAffected,
+    SsvcAssessment,
     VersionRange,
 )
 from vulnwitness.domain.evidence import UNSEALED_EVIDENCE_ID, EvidenceAnchor, seal_evidence_anchor
@@ -266,6 +272,152 @@ def _cwe_ids(weaknesses: Iterable[object]) -> tuple[str, ...]:
     return tuple(cwe_ids)
 
 
+def _text_list(container: Mapping[str, Any], key: str) -> tuple[str, ...]:
+    """A list of strings; empty strings are dropped and at most the stored cap is kept."""
+    values: list[str] = []
+    for value in _optional_list(container, key):
+        if not isinstance(value, str):
+            raise NvdNormalizationError(
+                NormalizationFailureCode.WRONG_JSON_TYPE, f"{key} item is not a string"
+            )
+        if value and value not in values:
+            values.append(value)
+    return tuple(values[:MAX_SOURCE_AFFECTED_NAMES])
+
+
+def _status(container: Mapping[str, Any], key: str) -> str | None:
+    """A CVE-format product status; the format allows only these three."""
+    text = _optional_text(container, key)
+    if text is None:
+        return None
+    status = text.casefold()
+    if status not in ("affected", "unaffected", "unknown"):
+        raise NvdNormalizationError(
+            NormalizationFailureCode.WRONG_JSON_TYPE, f"{key} is not a CVE affected status"
+        )
+    return status
+
+
+def _required_status(version: Mapping[str, Any]) -> str:
+    status = _status(version, "status")
+    if status is None:
+        raise NvdNormalizationError(NormalizationFailureCode.MISSING_FIELD, "status is missing")
+    return status
+
+
+def _source_affected(entries: Iterable[object]) -> tuple[SourceAffected, ...]:
+    """NVD 2.0 ``affected[]``: each CNA or ADP block of ``affectedData`` products, capped,
+    with the products and versions beyond the caps counted. ``changes``, ``programFiles``
+    and ``programRoutines`` are not kept."""
+    blocks: list[SourceAffected] = []
+    for entry in entries:
+        block = _as_mapping(entry, "affected")
+        products: list[dict[str, object]] = []
+        affected_data = _optional_list(block, "affectedData")
+        for item in affected_data[:MAX_SOURCE_AFFECTED_PRODUCTS]:
+            product = _as_mapping(item, "affectedData")
+            versions: list[dict[str, object]] = []
+            version_entries = _optional_list(product, "versions")
+            for version_item in version_entries[:MAX_SOURCE_AFFECTED_VERSIONS]:
+                version = _as_mapping(version_item, "versions")
+                versions.append(
+                    {
+                        "version": _required_text(version, "version"),
+                        "status": _required_status(version),
+                        "version_type": _optional_text(version, "versionType"),
+                        "less_than": _optional_text(version, "lessThan"),
+                        "less_than_or_equal": _optional_text(version, "lessThanOrEqual"),
+                    }
+                )
+            products.append(
+                {
+                    "vendor": _optional_text(product, "vendor"),
+                    "product": _optional_text(product, "product"),
+                    "package_name": _optional_text(product, "packageName"),
+                    "collection_url": _optional_text(product, "collectionURL"),
+                    "repo": _optional_text(product, "repo"),
+                    "package_url": _optional_text(product, "packageURL"),
+                    "cpes": _text_list(product, "cpes"),
+                    "modules": _text_list(product, "modules"),
+                    "platforms": _text_list(product, "platforms"),
+                    "default_status": _status(product, "defaultStatus"),
+                    "versions": versions,
+                    "omitted_versions": max(0, len(version_entries) - len(versions)),
+                }
+            )
+        blocks.append(
+            SourceAffected.model_validate(
+                {
+                    "source": _required_text(block, "source"),
+                    "products": products,
+                    "omitted_products": max(0, len(affected_data) - len(products)),
+                }
+            )
+        )
+    return tuple(blocks)
+
+
+SSVC_DECISION_POINTS = {
+    "exploitation": "exploitation",
+    "automatable": "automatable",
+    "technicalimpact": "technical_impact",
+}
+
+
+def _ssvc(metrics: Mapping[str, Any]) -> tuple[SsvcAssessment, ...]:
+    """NVD 2.0 ``metrics.ssvcV203``; decision points other than the three SSVC names CISA
+    scores are not kept, and a repeated point is a malformed entry."""
+    assessments: list[SsvcAssessment] = []
+    for entry in _optional_list(metrics, "ssvcV203"):
+        metric = _as_mapping(entry, "ssvcV203")
+        data = _optional_mapping(metric, "ssvcData")
+        points: dict[str, str] = {}
+        for option in _optional_list(data, "options"):
+            for name, value in _as_mapping(option, "options").items():
+                field = SSVC_DECISION_POINTS.get(str(name).casefold())
+                if field is None:
+                    continue
+                if not isinstance(value, str) or field in points:
+                    raise NvdNormalizationError(
+                        NormalizationFailureCode.WRONG_JSON_TYPE, f"SSVC {name} is malformed"
+                    )
+                points[field] = value.casefold()
+        assessments.append(
+            SsvcAssessment.model_validate(
+                {
+                    "source": _required_text(metric, "source"),
+                    "role": _optional_text(data, "role"),
+                    "version": _optional_text(data, "version"),
+                    "assessed_at": _optional_datetime(data, "timestamp"),
+                    "decision_points": points,
+                }
+            )
+        )
+    return tuple(assessments)
+
+
+def _cve_tags(entries: Iterable[object]) -> tuple[CveTag, ...]:
+    tags: list[CveTag] = []
+    for entry in entries:
+        tag = _as_mapping(entry, "cveTags")
+        values = _text_list(tag, "tags")
+        if values:
+            tags.append(
+                CveTag(source=_optional_text(tag, "sourceIdentifier") or "unknown", tags=values)
+            )
+    return tuple(tags)
+
+
+def _kev_cwe_ids(text: str | None) -> tuple[str, ...]:
+    """CISA's ``cwes`` column: comma-separated CWE IDs; anything else is not kept."""
+    cwe_ids: list[str] = []
+    for part in (text or "").split(","):
+        value = part.strip().upper()
+        if re.fullmatch(CWE_ID_PATTERN, value) is not None and value not in cwe_ids:
+            cwe_ids.append(value)
+    return tuple(cwe_ids)
+
+
 def _references(entries: Iterable[object], source_key: str) -> tuple[Reference, ...]:
     references: list[Reference] = []
     for entry in entries:
@@ -366,7 +518,12 @@ def _inline_kev(vulnerability: Mapping[str, Any]) -> KevEntry | None:
     date_added = _optional_date(vulnerability, "cisaExploitAdd")
     if date_added is None:
         return None
-    return KevEntry(date_added=date_added, due_date=_optional_date(vulnerability, "cisaActionDue"))
+    return KevEntry(
+        date_added=date_added,
+        due_date=_optional_date(vulnerability, "cisaActionDue"),
+        vulnerability_name=_optional_text(vulnerability, "cisaVulnerabilityName"),
+        required_action=_optional_text(vulnerability, "cisaRequiredAction"),
+    )
 
 
 def _anchor(
@@ -423,6 +580,12 @@ def _kev_entry(cve_id: str, kev: KevSource, terms: str) -> tuple[KevEntry, Evide
             "date_added": date_added,
             "due_date": _optional_date(kev.entry, "dueDate"),
             "known_ransomware_campaign_use": ransomware_use,
+            "vulnerability_name": _optional_text(kev.entry, "vulnerabilityName"),
+            "required_action": _optional_text(kev.entry, "requiredAction"),
+            "notes": _optional_text(kev.entry, "notes"),
+            "cwe_ids": _kev_cwe_ids(_optional_text(kev.entry, "cwes")),
+            "forensic_triage": (_optional_text(kev.entry, "forensicTriage") or "").casefold()
+            or None,
         }
     )
     anchor = _anchor(
@@ -540,6 +703,9 @@ class NvdNormalizer:
             "references": _references(_optional_list(vulnerability, "references"), "source"),
             "kev": _inline_kev(vulnerability),
             "nvd_status": vulnerability.get("vulnStatus"),
+            "source_affected": _source_affected(_optional_list(vulnerability, "affected")),
+            "ssvc": _ssvc(_optional_mapping(vulnerability, "metrics")),
+            "cve_tags": _cve_tags(_optional_list(vulnerability, "cveTags")),
         }
         return _assemble(cve_id, record_fields, nvd_anchor, kev, self._terms.cisa_kev)
 

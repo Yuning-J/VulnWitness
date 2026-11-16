@@ -24,6 +24,7 @@ PURL_PATTERN = r"^pkg:"
 # The CVE and CWE programs assign numbers far shorter than these bounds.
 MAX_CVE_ID_CHARS = 32
 MAX_CWE_ID_CHARS = 16
+MAX_SOURCE_TEXT_CHARS = 8000
 
 CveId = Annotated[str, Field(pattern=CVE_ID_PATTERN, max_length=MAX_CVE_ID_CHARS)]
 CweId = Annotated[str, Field(pattern=CWE_ID_PATTERN, max_length=MAX_CWE_ID_CHARS)]
@@ -122,6 +123,122 @@ class KevEntry(ContractModel):
             "CISA's own Known/Unknown assessment; null when the consulted source does not carry it."
         ),
     )
+    vulnerability_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_SOURCE_TEXT_CHARS,
+        description="CISA's vulnerabilityName; verbatim, untrusted source text (format 4).",
+    )
+    required_action: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_SOURCE_TEXT_CHARS,
+        description="CISA's requiredAction; verbatim, untrusted source text (format 4).",
+    )
+    notes: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_SOURCE_TEXT_CHARS,
+        description="CISA's notes, usually URLs; verbatim, untrusted, never fetched (format 4).",
+    )
+    cwe_ids: tuple[CweId, ...] = Field(
+        default=(), description="CISA's cwes column, in catalog order (format 4)."
+    )
+    forensic_triage: Literal["yes", "no"] | None = Field(
+        default=None,
+        description=(
+            "CISA's forensicTriage column, Yes or No as given; null when the consulted source "
+            "does not carry it (format 4)."
+        ),
+    )
+
+    def has_format4_fields(self) -> bool:
+        return any(
+            value not in (None, ())
+            for value in (
+                self.vulnerability_name,
+                self.required_action,
+                self.notes,
+                self.cwe_ids,
+                self.forensic_triage,
+            )
+        )
+
+
+AffectedStatus = Literal["affected", "unaffected", "unknown"]
+# NVD mirrors CNA and ADP affected data unbounded; one 2026 record lists 1,468 products and
+# another 376 versions of one product. A stored block keeps these many and counts the rest.
+MAX_SOURCE_AFFECTED_PRODUCTS = 64
+MAX_SOURCE_AFFECTED_VERSIONS = 64
+MAX_SOURCE_AFFECTED_NAMES = 16
+MAX_SOURCE_NAME_CHARS = 2048
+
+
+class SourceAffectedVersion(ContractModel):
+    """One CVE-format ``versions[]`` entry as its author gave it; nothing is compared."""
+
+    version: str = Field(min_length=1, max_length=MAX_SOURCE_NAME_CHARS)
+    status: AffectedStatus
+    version_type: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    less_than: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    less_than_or_equal: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+
+
+class SourceAffectedProduct(ContractModel):
+    """One CVE-format ``affected[]`` product; vendor and product are untrusted text."""
+
+    vendor: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    product: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    package_name: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    collection_url: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    repo: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    package_url: str | None = Field(
+        default=None, pattern=PURL_PATTERN, max_length=MAX_SOURCE_NAME_CHARS
+    )
+    cpes: tuple[str, ...] = Field(default=(), max_length=MAX_SOURCE_AFFECTED_NAMES)
+    modules: tuple[str, ...] = Field(default=(), max_length=MAX_SOURCE_AFFECTED_NAMES)
+    platforms: tuple[str, ...] = Field(default=(), max_length=MAX_SOURCE_AFFECTED_NAMES)
+    default_status: AffectedStatus | None = None
+    versions: tuple[SourceAffectedVersion, ...] = Field(
+        default=(), max_length=MAX_SOURCE_AFFECTED_VERSIONS
+    )
+    omitted_versions: int = Field(default=0, ge=0)
+
+
+class SourceAffected(ContractModel):
+    """The affected data one CNA or ADP published, as NVD 2.0 mirrors it ("CVE Affected
+    v1.0", since 2026-06-17). It is that source's statement, not NVD's analysis, and it
+    never sets affectedness."""
+
+    source: str = Field(min_length=1, max_length=MAX_SOURCE_NAME_CHARS)
+    products: tuple[SourceAffectedProduct, ...] = Field(max_length=MAX_SOURCE_AFFECTED_PRODUCTS)
+    omitted_products: int = Field(default=0, ge=0)
+
+
+class SsvcDecisionPoints(ContractModel):
+    """SSVC v2.0.3 decision points as a source scored them; null when it gave none."""
+
+    exploitation: Literal["none", "poc", "active"] | None = None
+    automatable: Literal["yes", "no"] | None = None
+    technical_impact: Literal["partial", "total"] | None = None
+
+
+class SsvcAssessment(ContractModel):
+    """One SSVC assessment NVD 2.0 mirrors in ``metrics.ssvcV203``; CISA's ADP container
+    scores most CVEs in the role ``CISA Coordinator``."""
+
+    source: str = Field(min_length=1, max_length=MAX_SOURCE_NAME_CHARS)
+    role: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    version: str | None = Field(default=None, max_length=32)
+    assessed_at: Timestamp | None = None
+    decision_points: SsvcDecisionPoints
+
+
+class CveTag(ContractModel):
+    """A CVE-format ``cveTags`` entry, e.g. ``disputed`` or ``unsupported-when-assigned``."""
+
+    source: str = Field(min_length=1, max_length=MAX_SOURCE_NAME_CHARS)
+    tags: tuple[str, ...] = Field(min_length=1, max_length=MAX_SOURCE_AFFECTED_NAMES)
 
 
 class CnvdEntry(ContractModel):
@@ -172,6 +289,19 @@ class CveRecord(ContractModel):
         description="NVD 2.0 vulnStatus verbatim, untrusted source text; "
         "null for NVD 1.1 and synthetic data.",
     )
+    source_affected: tuple[SourceAffected, ...] = Field(
+        default=(),
+        description=(
+            "CNA and ADP affected data NVD 2.0 mirrors, one block per source in feed order; "
+            "untrusted source statements, not NVD analysis (format 4)."
+        ),
+    )
+    ssvc: tuple[SsvcAssessment, ...] = Field(
+        default=(), description="SSVC assessments NVD 2.0 mirrors, in feed order (format 4)."
+    )
+    cve_tags: tuple[CveTag, ...] = Field(
+        default=(), description="CVE-format tags NVD 2.0 mirrors, in feed order (format 4)."
+    )
     cnvd: tuple[CnvdEntry, ...] = Field(
         default=(), description="CNVD entries ordered by CNVD ID; Chinese text is untrusted data."
     )
@@ -188,6 +318,11 @@ class CveRecord(ContractModel):
                 raise ValueError("CNVD entries must be in strict CNVD ID order")
             previous_cnvd_id = entry.cnvd_id
         return self
+
+    def has_format4_fields(self) -> bool:
+        """Whether the record holds data only store format 4 persists."""
+        kev_detail = self.kev is not None and self.kev.has_format4_fields()
+        return kev_detail or bool(self.source_affected or self.ssvc or self.cve_tags)
 
     def list_implicated_products(self) -> tuple[AffectedProduct, ...]:
         """Products a source lists as affected or of unknown status, never ``unaffected`` ones."""

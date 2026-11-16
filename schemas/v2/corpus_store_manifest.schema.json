@@ -274,12 +274,13 @@
       "type": "string"
     },
     "store_format_version": {
-      "default": 3,
-      "description": "What decides whether a reader can read the store; a reader refuses integers other than 1, 2 and 3.",
+      "default": 4,
+      "description": "What decides whether a reader can read the store; a reader refuses integers other than 1, 2, 3 and 4.",
       "enum": [
         1,
         2,
-        3
+        3,
+        4
       ],
       "title": "Store Format Version",
       "type": "integer"

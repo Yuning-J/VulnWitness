@@ -583,3 +583,150 @@ def test_anchors_cite_the_terms_the_source_registry_verifies() -> None:
 
     assert nvd_anchor.license_or_terms_ref == source_registry.require_terms("nvd")
     assert kev_anchor.license_or_terms_ref == source_registry.require_terms("cisa-kev")
+
+
+def test_kev_catalog_detail_is_kept_verbatim() -> None:
+    kev = KevSource(
+        entry={
+            "cveID": "CVE-9999-0201",
+            "dateAdded": "2026-10-01",
+            "vulnerabilityName": "SYNTHETIC Democorp Gateway Path Traversal",
+            "requiredAction": "Apply mitigations per vendor instructions.",
+            "notes": "https://democorp.example/advisory ; https://nvd.nist.gov/vuln/detail/x",
+            "cwes": "CWE-22, CWE-78, not-a-cwe",
+            "forensicTriage": "Yes",
+        },
+        snapshot=KEV_SNAPSHOT,
+    )
+
+    record = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT, kev).record
+
+    assert record.kev is not None
+    assert record.kev.vulnerability_name == "SYNTHETIC Democorp Gateway Path Traversal"
+    assert record.kev.required_action == "Apply mitigations per vendor instructions."
+    assert record.kev.notes is not None and record.kev.notes.startswith("https://democorp")
+    assert record.kev.cwe_ids == ("CWE-22", "CWE-78")
+    assert record.kev.forensic_triage == "yes"
+    assert record.has_format4_fields()
+
+
+def test_v2_inline_cisa_listing_keeps_name_and_required_action() -> None:
+    vulnerability = build_v2(
+        cisaExploitAdd="2026-10-01",
+        cisaVulnerabilityName="SYNTHETIC Gateway Flaw",
+        cisaRequiredAction="Apply mitigations.",
+    )
+
+    kev = build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT).record.kev
+
+    assert kev is not None
+    assert (kev.vulnerability_name, kev.required_action) == (
+        "SYNTHETIC Gateway Flaw",
+        "Apply mitigations.",
+    )
+    assert kev.forensic_triage is None
+
+
+def test_v2_mirrored_affected_ssvc_and_tags_are_kept_per_source() -> None:
+    versions = [{"version": f"1.{n}", "status": "affected"} for n in range(70)]
+    vulnerability = build_v2(
+        affected=[
+            {
+                "source": "cna@democorp.example",
+                "affectedData": [
+                    {
+                        "vendor": "Democorp",
+                        "product": "Gateway",
+                        "packageURL": "pkg:generic/democorp/gateway",
+                        "cpes": ["cpe:2.3:a:democorp:gateway:*:*:*:*:*:*:*:*"],
+                        "defaultStatus": "unaffected",
+                        "versions": [
+                            {
+                                "version": "2.0",
+                                "lessThan": "2.7.3",
+                                "status": "affected",
+                                "versionType": "semver",
+                                "changes": [{"at": "2.7.1", "status": "unaffected"}],
+                            }
+                        ],
+                    },
+                    {"vendor": "Democorp", "product": "Agent", "versions": versions},
+                ],
+            }
+        ],
+        metrics={
+            "ssvcV203": [
+                {
+                    "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+                    "ssvcData": {
+                        "timestamp": "2026-10-01T14:22:56.680757Z",
+                        "id": "CVE-9999-0201",
+                        "options": [
+                            {"Exploitation": "poc"},
+                            {"Automatable": "yes"},
+                            {"technicalImpact": "total"},
+                            {"mission": "not-in-ssvc-2.0.3"},
+                        ],
+                        "role": "CISA Coordinator",
+                        "version": "2.0.3",
+                    },
+                }
+            ]
+        },
+        cveTags=[{"sourceIdentifier": "cna@democorp.example", "tags": ["disputed"]}],
+    )
+
+    record = build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT).record
+
+    (block,) = record.source_affected
+    gateway, agent = block.products
+    assert block.source == "cna@democorp.example"
+    assert gateway.package_url == "pkg:generic/democorp/gateway"
+    assert gateway.default_status == "unaffected"
+    assert gateway.versions[0].less_than == "2.7.3"
+    assert gateway.versions[0].version_type == "semver"
+    assert (len(agent.versions), agent.omitted_versions) == (64, 6)
+    (assessment,) = record.ssvc
+    assert assessment.role == "CISA Coordinator"
+    assert assessment.decision_points.exploitation == "poc"
+    assert assessment.decision_points.automatable == "yes"
+    assert assessment.decision_points.technical_impact == "total"
+    assert record.cve_tags[0].tags == ("disputed",)
+    assert record.has_format4_fields()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"affected": [{"source": "cna@x", "affectedData": [{"versions": [{"version": "1"}]}]}]},
+        {
+            "affected": [
+                {"source": "cna@x", "affectedData": [{"versions": [{"status": "affected"}]}]}
+            ]
+        },
+        {"affected": [{"source": "cna@x", "affectedData": [{"defaultStatus": "vulnerable"}]}]},
+        {
+            "metrics": {
+                "ssvcV203": [
+                    {"source": "s", "ssvcData": {"options": [{"exploitation": "rumoured"}]}}
+                ]
+            }
+        },
+        {
+            "metrics": {
+                "ssvcV203": [
+                    {
+                        "source": "s",
+                        "ssvcData": {
+                            "options": [{"exploitation": "poc"}, {"exploitation": "none"}]
+                        },
+                    }
+                ]
+            }
+        },
+    ],
+    ids=["status-missing", "version-missing", "unknown-status", "unknown-ssvc", "ssvc-repeated"],
+)
+def test_malformed_mirrored_data_rejects_the_entry(overrides: dict[str, Any]) -> None:
+    with pytest.raises(NvdNormalizationError):
+        build_normalizer().normalize_v2(build_v2(**overrides), NVD_SNAPSHOT)

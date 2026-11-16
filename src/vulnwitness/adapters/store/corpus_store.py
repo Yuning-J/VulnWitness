@@ -15,7 +15,8 @@ A store has three identities (ADR 0009 §2): the SHA-256 of the manifest bytes t
 parsed names the physical store; the manifest's import identity names the import; and the
 corpus content digest, derived from all verified content file pins, names the dataset
 served. Format 1 holds records and anchors; formats 2 and 3 also hold pending CNVD
-entries. Format 3 supports raw CNVD product text, dates and handling advice.
+entries. Format 3 supports raw CNVD product text, dates and handling advice. Format 4 also holds
+NVD 2.0's mirrored CNA/ADP affected data, SSVC assessments and CVE tags, and KEV detail.
 """
 
 import hashlib
@@ -243,7 +244,7 @@ def check_store_format(manifest_bytes: bytes) -> None:
     is_integer = isinstance(format_version, int) and not isinstance(format_version, bool)
     if not is_integer:
         raise CorpusStoreIntegrityError("manifest.json is not a corpus store manifest")
-    if format_version not in (1, 2, 3):
+    if format_version not in (1, 2, 3, 4):
         raise UnsupportedStoreFormatError(
             "the store's format version is not one this release reads"
         )
@@ -365,6 +366,10 @@ def verify_store_files(
         previous_cve_id = record.cve_id
         if manifest.store_format_version == 1 and (record.nvd_status is not None or record.cnvd):
             raise CorpusStoreIntegrityError("format 1 holds no NVD status or CNVD entries")
+        if manifest.store_format_version < 4 and record.has_format4_fields():
+            raise CorpusStoreIntegrityError(
+                "only format 4 holds mirrored affected data, SSVC, CVE tags or KEV detail"
+            )
         check_record_evidence(record, anchors_by_id)
         for entry in record.cnvd:
             if entry.evidence_id not in record.evidence_ids:

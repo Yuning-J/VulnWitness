@@ -1446,6 +1446,9 @@ def test_kev_row_supersedes_the_kev_fields_nvd_mirrors(layout: ImportLayout) -> 
         date_added=date(2099, 1, 5),
         due_date=date(2099, 1, 26),
         known_ransomware_campaign_use="unknown",
+        vulnerability_name="Democorp Gateway Input Flaw",
+        required_action="Apply the vendor update.",
+        forensic_triage="no",
     )
 
 
