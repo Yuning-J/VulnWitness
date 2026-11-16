@@ -517,6 +517,25 @@ verified; otherwise exit 1. A confirmed status supplies no verification. Agreeme
 saved fields does not establish source support or real-world truth. Treat session contents
 and source text as untrusted input.
 
+### Seal a session for hand-over
+
+```sh
+head -c 32 /dev/urandom > ~/.vulnwitness/seal.key && chmod 600 ~/.vulnwitness/seal.key
+vulnwitness session seal /data/vulnwitness/priority-session --key-file ~/.vulnwitness/seal.key
+vulnwitness session verify-seal /data/vulnwitness/priority-session \
+  --key-file ~/.vulnwitness/seal.key
+```
+
+`session check` proves a session agrees with itself; it cannot tell whether someone rewrote
+a response together with its recorded digest. `seal` writes `seal.json`: the SHA-256 of
+`session.json` and of every file under `calls/` and `responses/`, and an HMAC-SHA256 over
+that list under your key. `verify-seal` names every sealed file that changed, appeared or
+disappeared, and exits 1 if any did or the MAC does not match. `findings.yaml`,
+`triage.json` and `priority.json` are not sealed and stay editable. The key must hold 32 to
+4096 bytes and live outside the session; the seal names it only by a digest prefix. Anyone
+holding the key can reseal, so share it only with those who must verify
+([ADR 0022](rebuild/adr/0022-vex-export-and-narrative-identifiers.md)).
+
 ## Prioritise a session
 
 Record one capabilities call and exact CVE lookups, then supply an analyst-authored asset

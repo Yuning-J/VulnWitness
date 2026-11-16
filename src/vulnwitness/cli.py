@@ -229,6 +229,7 @@ from vulnwitness.ports.sources import FightSource
 from vulnwitness.priority_cli import add_priority_parser, run_priority
 from vulnwitness.report_cli import add_report_parser, run_report
 from vulnwitness.schema_snapshots import find_schema_drift, write_contract_schemas
+from vulnwitness.seal_cli import SEAL_COMMANDS, add_seal_parsers, run_seal_command
 from vulnwitness.settings import (
     HTTP_VARIABLES,
     PLANNER_ENABLED_VARIABLE,
@@ -689,6 +690,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     session_check_parser.add_argument("directory", type=Path)
     session_check_parser.add_argument("--format", choices=("json", "text"), default="json")
+    add_seal_parsers(session_commands)
     for command_name in (*SESSION_CLI_COMMANDS, "mcp"):
         command_parser = commands.choices[command_name]
         if command_name == "mcp":
@@ -1837,6 +1839,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         settings = load_settings(os.environ if environment is None else environment)
     except SettingsError as error:
         parser.error(str(error))
+    if arguments.command == "session" and arguments.session_command in SEAL_COMMANDS:
+        return run_seal_command(arguments)
     if arguments.command == "session":
         report = SessionChecker(arguments.directory).check()
         print(

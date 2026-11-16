@@ -1,4 +1,4 @@
-# ADR 0022 — OpenVEX export and narrative identifier checks
+# ADR 0022 — OpenVEX export, narrative identifier checks and session seals
 
 Status: proposed (2026-11-16). Builds on ADR 0010 (sessions and checks) and ADR 0016
 (priority decisions).
@@ -42,6 +42,19 @@ Two gaps from the November 2026 survey of comparable tools and research:
   full count). Text output and the HTML/Markdown report show them as warnings.
 - It is advisory: it never changes `verified`, the exit code or a claim status, and a
   recorded ID is not evidence that the sentence is right.
+
+### 3. `session seal` and `session verify-seal`
+
+- OWASP's MCP Top 10 (MCP08) names the absence of audit integrity. A session's own digests
+  show consistency, not that no one rewrote a response and its digest together.
+- `seal` writes `seal.json`: format version, `hmac-sha256`, a 16-hex-digit key ID derived
+  from the key, the SHA-256 of `session.json` and of every regular file under `calls/` and
+  `responses/`, and an HMAC over the canonical list. `verify-seal` recomputes both and
+  names changed, added and removed files.
+- Editable files (`findings.yaml`, `triage.json`, `priority.json`) are not sealed. The key
+  is read from a file outside the session, 32 to 4096 bytes, and never written anywhere.
+- An HMAC proves integrity only to key holders; a public signature (e.g. Sigstore) is not
+  built.
 
 ## Consequences
 
