@@ -408,3 +408,19 @@ def test_search_outcome_names_the_snapshot_its_anchors_come_from() -> None:
 
     assert outcome.snapshot is not None
     assert outcome.evidence[0].source_version == outcome.snapshot.source_version
+
+
+def test_british_and_american_spellings_match_each_other() -> None:
+    source = load_source(
+        [
+            build_scored_technique(
+                "FGT9001", "Signaling storm", "Floods signaling.", "Overloads the core."
+            )
+        ]
+    )
+
+    outcome = source.search(["signalling", "signaling", "behaviour"], 5)
+
+    assert list_technique_ids(outcome.items) == ["FGT9001"]
+    assert outcome.items[0].matched_terms == ("signalling",)
+    assert outcome.unindexed_terms == ("behaviour",)

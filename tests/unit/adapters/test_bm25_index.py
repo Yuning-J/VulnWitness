@@ -257,3 +257,19 @@ def test_search_orders_scores_equal_to_six_decimals_by_cve_id() -> None:
         "CVE-9999-0003",
     ]
     assert matches[1].score == matches[2].score
+
+
+def test_british_spellings_fold_to_american_ones_and_keep_the_query_spelling() -> None:
+    index = Bm25LexicalIndex(
+        [
+            build_record("CVE-9999-0011", "authorization bypass in signaling gateway"),
+            build_record("CVE-9999-0012", "authorisation bypass in signalling gateway"),
+        ]
+    )
+
+    outcome = index.search("signalling authorisation colour", limit=10, allowed_cve_ids=None)
+
+    assert list_cve_ids(outcome.matches) == ["CVE-9999-0011", "CVE-9999-0012"]
+    assert outcome.matches[0].matched_terms == ("authorisation", "signalling")
+    assert outcome.matches[0].score == outcome.matches[1].score
+    assert outcome.unindexed_terms == ("colour",)

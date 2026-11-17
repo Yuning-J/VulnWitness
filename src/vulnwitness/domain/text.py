@@ -119,6 +119,64 @@ def normalize_query(text: str) -> str:
     return " ".join(folded.split())
 
 
+# British spellings folded to American ones for matching only, so ``signalling`` finds
+# FiGHT's ``signaling``. Each British form is a substring replaced inside a word
+# (``authorisation`` → ``authorization``), and no American form contains its British
+# form, so folding twice changes nothing. Forms where either spelling is also another
+# word are left out: ``analyses``, ``fulfil``/``fulfill``, ``programme``/``program``.
+SPELLING_FOLDS = (
+    ("signall", "signal"),
+    ("labell", "label"),
+    ("modell", "model"),
+    ("travell", "travel"),
+    ("cancell", "cancel"),
+    ("tunnell", "tunnel"),
+    ("behaviour", "behavior"),
+    ("neighbour", "neighbor"),
+    ("colour", "color"),
+    ("honour", "honor"),
+    ("favour", "favor"),
+    ("licence", "license"),
+    ("defence", "defense"),
+    ("offence", "offense"),
+    ("catalogue", "catalog"),
+    ("centre", "center"),
+    ("authoris", "authoriz"),
+    ("organis", "organiz"),
+    ("recognis", "recogniz"),
+    ("initialis", "initializ"),
+    ("serialis", "serializ"),
+    ("sanitis", "sanitiz"),
+    ("normalis", "normaliz"),
+    ("utilis", "utiliz"),
+    ("minimis", "minimiz"),
+    ("maximis", "maximiz"),
+    ("prioritis", "prioritiz"),
+    ("virtualis", "virtualiz"),
+    ("synchronis", "synchroniz"),
+    ("customis", "customiz"),
+    ("optimis", "optimiz"),
+    ("randomis", "randomiz"),
+    ("tokenis", "tokeniz"),
+    ("standardis", "standardiz"),
+    ("categoris", "categoriz"),
+    ("characteris", "characteriz"),
+    ("summaris", "summariz"),
+    ("visualis", "visualiz"),
+)
+
+
+def fold_spelling(word: str) -> str:
+    """``word`` with each British spelling in ``SPELLING_FOLDS`` replaced by the American
+    one; used for matching only, never for what is shown."""
+    if not word.isascii():
+        return word
+    for british, american in SPELLING_FOLDS:
+        if british in word:
+            word = word.replace(british, american)
+    return word
+
+
 def tokenize(text: str) -> list[str]:
     """Split normalized text into alphanumeric tokens, dropping stopwords.
 

@@ -46,6 +46,7 @@ from vulnwitness.domain.taxonomy import (
     SourceType,
     TrustLevel,
 )
+from vulnwitness.domain.text import fold_spelling
 from vulnwitness.domain.threat_context import (
     FIGHT_SOURCE_NAME,
     FIGHT_TECHNIQUE_ID_PATTERN,
@@ -59,7 +60,7 @@ from vulnwitness.domain.threat_context import (
     ThreatContextOutcome,
     format_fight_locator,
 )
-from vulnwitness.topics.normalization import TERM_BOUNDARY, alias_key, find_spans, split_terms
+from vulnwitness.topics.normalization import TERM_BOUNDARY, find_spans, split_terms
 
 # Every status text published at FiGHT 3.1.0. A new value fails the load so its
 # meaning is reviewed before it is served.
@@ -201,11 +202,18 @@ def check_catalogued_contents(
 
 
 def split_field_terms(texts: Sequence[str]) -> list[str]:
+    """Each word spelling-folded for matching (``fold_spelling``); boundaries kept."""
     field_terms: list[str] = []
     for text in texts:
-        field_terms.extend(split_terms(text))
+        field_terms.extend(fold_spelling(term) for term in split_terms(text))
         field_terms.append(TERM_BOUNDARY)
     return field_terms
+
+
+def folded_key(term: str) -> str:
+    """``alias_key`` with each word spelling-folded, so ``signalling`` and ``signaling``
+    share one key."""
+    return "".join(fold_spelling(word) for word in split_terms(term) if word != TERM_BOUNDARY)
 
 
 def count_words(terms_by_field: Mapping[TechniqueField, list[str]]) -> int:
@@ -218,12 +226,13 @@ def count_words(terms_by_field: Mapping[TechniqueField, list[str]]) -> int:
 
 
 def list_term_keys(terms: Sequence[str]) -> list[tuple[str, str]]:
-    """Each sent term with its ``alias_key``; spellings with one key (5G-AKA, 5G AKA,
-    5gaka) count once, as the first given, and a term with no words is dropped."""
+    """Each sent term with its spelling-folded ``alias_key``; spellings with one key
+    (5G-AKA, 5G AKA, 5gaka; signalling, signaling) count once, as the first given, and a
+    term with no words is dropped."""
     term_keys: list[tuple[str, str]] = []
     known_keys: set[str] = set()
     for term in terms:
-        term_key = alias_key(term)
+        term_key = folded_key(term)
         if term_key and term_key not in known_keys:
             known_keys.add(term_key)
             term_keys.append((term, term_key))

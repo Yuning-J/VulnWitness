@@ -26,7 +26,7 @@ from vulnwitness.domain.bm25 import (
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.search import RetrievalMatch, RetrievalOutcome
 from vulnwitness.domain.taxonomy import BackendStatus
-from vulnwitness.domain.text import tokenize
+from vulnwitness.domain.text import fold_spelling, tokenize
 
 INDEXED_FIELDS = ("description", "vendor", "product", "cwe_ids")
 
@@ -62,7 +62,7 @@ def count_record_terms(record: CveRecord) -> tuple[Counter[str], dict[str, int]]
     field_masks: dict[str, int] = {}
     field_texts = extract_field_texts(record)
     for field_number, field_name in enumerate(INDEXED_FIELDS):
-        field_tokens = tokenize(" ".join(field_texts[field_name]))
+        field_tokens = [fold_spelling(t) for t in tokenize(" ".join(field_texts[field_name]))]
         term_counts.update(field_tokens)
         for token in field_tokens:
             field_masks[token] = field_masks.get(token, 0) | (1 << field_number)
@@ -103,8 +103,10 @@ class Bm25LexicalIndex:
         self, query_text: str, limit: int, allowed_cve_ids: Set[str] | None
     ) -> RetrievalOutcome:
         # Terms are scored in sorted order so a record's score sums the same terms in the
-        # same order whatever the query's word order.
-        query_terms = sorted(set(tokenize(query_text)))
+        # same order whatever the query's word order. A British spelling is scored as its
+        # American fold, once, and reported in the query's own spelling.
+        query_words = sorted(set(tokenize(query_text)))
+        query_terms = sorted({fold_spelling(word) for word in query_words})
         record_scores: dict[int, float] = {}
         for term in query_terms:
             postings = self._postings.get(term)
@@ -141,19 +143,19 @@ class Bm25LexicalIndex:
         matches: list[RetrievalMatch] = []
         for record_position in ranked_positions:
             matches.append(
-                self._build_match(record_position, record_scores[record_position], query_terms)
+                self._build_match(record_position, record_scores[record_position], query_words)
             )
         return RetrievalOutcome(
             status=BackendStatus.OK,
             matches=tuple(matches),
-            unindexed_terms=self._list_unindexed_terms(query_terms),
+            unindexed_terms=self._list_unindexed_terms(query_words),
         )
 
-    def _list_unindexed_terms(self, query_terms: list[str]) -> tuple[str, ...]:
+    def _list_unindexed_terms(self, query_words: list[str]) -> tuple[str, ...]:
         unindexed_terms: list[str] = []
-        for term in query_terms:
-            if term not in self._postings:
-                unindexed_terms.append(term)
+        for word in query_words:
+            if fold_spelling(word) not in self._postings:
+                unindexed_terms.append(word)
         return tuple(unindexed_terms)
 
     def _add_posting(
@@ -168,12 +170,12 @@ class Bm25LexicalIndex:
         postings.field_masks.append(field_mask)
 
     def _build_match(
-        self, record_position: int, score: float, query_terms: list[str]
+        self, record_position: int, score: float, query_words: list[str]
     ) -> RetrievalMatch:
         matched_terms: list[str] = []
         field_mask = 0
-        for term in query_terms:
-            postings = self._postings.get(term)
+        for term in query_words:
+            postings = self._postings.get(fold_spelling(term))
             if postings is None:
                 continue
             posting_number = bisect_left(postings.record_positions, record_position)
