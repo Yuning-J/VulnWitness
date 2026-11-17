@@ -42,4 +42,11 @@ strings are not indexed as BM25 fields.
 - Rankings change only for queries or records containing a folded word. The M7b gold sets
   were not re-run here; the next evaluation run should record their Coverage@20 and
   `false_gap` against the 2026-10-30 figures.
-- A cross-encoder reranker (P1-9's second half) is not part of this ADR.
+- A cross-encoder reranker (P1-9's second half) is not built. The 2026-10-31 recall
+  diagnosis of the six baseline cases found 127 of 130 required misses ranked beyond the
+  answer limit, but 117 belong to free5gc and open5gs-amf, whose required sets exceed the
+  limit of 20 (the `product` inventory lists them all). In gtp-mobile-core the top 20 are
+  filled by records labelled allowed; only oai-cn5g loses places to records matching
+  generic words alone, which a lexical rule can address without a model. The relevance
+  assessor experiment, which judged returned candidates, moved Coverage@20 from 0.768 to
+  0.753.
