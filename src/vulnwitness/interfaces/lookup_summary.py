@@ -3,6 +3,7 @@
 from textwrap import fill
 
 from vulnwitness.application.cnvd_presentation import describe_cnvd_comparison
+from vulnwitness.application.configuration_presentation import summarize_configurations
 from vulnwitness.application.investigation_presentation import format_severity
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse
@@ -63,6 +64,13 @@ def render_mirrored_lines(record: CveRecord, width: int) -> list[str]:
             f"Source-stated affected data: {products} products from "
             f"{len(record.source_affected)} sources (untrusted; versions not evaluated)"
         )
+    if record.configurations or record.omitted_configurations:
+        heading, configurations = summarize_configurations(
+            record.configurations, record.omitted_configurations
+        )
+        lines.append(fill(heading, width=width))
+        for configuration in configurations:
+            lines.append(fill(f"- {configuration}", width=width, subsequent_indent="  "))
     if lines:
         lines.append("")
     return lines

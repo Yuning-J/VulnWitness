@@ -10,6 +10,7 @@ from vulnwitness.application.cnvd_report import (
     build_cnvd_facts,
     build_pending_cnvd_card,
 )
+from vulnwitness.application.configuration_presentation import summarize_configurations
 from vulnwitness.application.investigation_report import build_investigation_report
 from vulnwitness.application.priority_report import build_priority_report
 from vulnwitness.application.triage_workflow import triage_selection_key
@@ -227,7 +228,7 @@ def describe_source_version(version: SourceAffectedVersion) -> str:
 
 
 def build_mirrored_section(record: CveRecord) -> ReportSection | None:
-    """KEV detail, SSVC, CVE tags and CNA/ADP affected data, each with its author; shown
+    """KEV detail, SSVC, CVE tags, CNA/ADP affected data and NVD configurations; shown
     only when the record carries any (store format 4). None of it sets affectedness."""
     if not record.has_format4_fields():
         return None
@@ -285,6 +286,19 @@ def build_mirrored_section(record: CveRecord) -> ReportSection | None:
                     ),
                 ),
                 bullets=tuple(bullets),
+                folded=True,
+                layout="inline",
+            ),
+        )
+    if record.configurations or record.omitted_configurations:
+        heading, lines = summarize_configurations(
+            record.configurations, record.omitted_configurations
+        )
+        sections += (
+            ReportSection(
+                "NVD configurations beyond the product list",
+                (ReportParagraph(heading),),
+                bullets=tuple(lines),
                 folded=True,
                 layout="inline",
             ),

@@ -3,7 +3,7 @@
 import pytest
 
 from tests.support.builders import build_cve_record, build_versioned_product
-from vulnwitness.domain.cve import VersionRange
+from vulnwitness.domain.cve import VersionRange, find_range_gaps
 from vulnwitness.domain.nvd_version_note import build_nvd_version_note, list_nvd_version_notes
 
 
@@ -63,10 +63,11 @@ def test_numeric_conditions_report_hits_or_no_hits_at_their_boundaries(
     if note.outcome == "hit":
         assert note.matched_entry == entry
         assert note.matched_condition == condition
-        assert note.wording == (
+        assert note.wording.startswith(
             f"Version {version} matches an NVD CPE version condition for democorp:demo_gateway; "
             "the full configuration and environment conditions were not evaluated."
         )
+        assert note.range_gaps == find_range_gaps(condition)
     else:
         assert note.wording == (
             f"Version {version} matches none of the NVD CPE version conditions listed for "

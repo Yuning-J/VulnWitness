@@ -241,6 +241,66 @@ class CveTag(ContractModel):
     tags: tuple[str, ...] = Field(min_length=1, max_length=MAX_SOURCE_AFFECTED_NAMES)
 
 
+# Measured on 4,616 NVD 2.0 records from 2026: one record kept 299 configurations, one
+# node 101 matches, and no 2.0 configuration more than two nodes.
+MAX_CONFIGURATIONS = 512
+MAX_CONFIGURATION_NODES = 8
+MAX_CONFIGURATION_MATCHES = 128
+RangeGap = Literal["no_lower_bound", "no_upper_bound"]
+
+
+def find_range_gaps(condition: VersionRange) -> tuple[RangeGap, ...]:
+    """Where an NVD range leaves a side open. ``no_lower_bound`` (only an end) states every
+    earlier version is affected, which NVD often sets when the first affected version is
+    unknown; ``no_upper_bound`` (only a start) states no fixed version."""
+    if condition.exact is not None:
+        return ()
+    has_start = condition.start_including is not None or condition.start_excluding is not None
+    has_end = condition.end_including is not None or condition.end_excluding is not None
+    gaps: list[RangeGap] = []
+    if has_end and not has_start:
+        gaps.append("no_lower_bound")
+    if has_start and not has_end:
+        gaps.append("no_upper_bound")
+    return tuple(gaps)
+
+
+class ConfigurationMatch(ContractModel):
+    """One NVD CPE match as given. ``vulnerable`` false names a platform the vulnerable
+    product runs on; NVD states nothing about that platform's own affectedness."""
+
+    cpe: str = Field(pattern=r"^cpe:2\.3:", max_length=MAX_SOURCE_NAME_CHARS)
+    vulnerable: bool
+    version_range: VersionRange | None = None
+
+
+class ConfigurationNode(ContractModel):
+    operator: Literal["AND", "OR"]
+    negate: bool = False
+    matches: tuple[ConfigurationMatch, ...] = Field(max_length=MAX_CONFIGURATION_MATCHES)
+    omitted_matches: int = Field(default=0, ge=0)
+
+
+class Configuration(ContractModel):
+    """One NVD 2.0 configuration, kept only when it says more than ``affected``: an AND of
+    nodes, a negated node, a running-on platform, or a vulnerable CPE that names no vendor
+    or product. Nothing here is evaluated."""
+
+    operator: Literal["AND", "OR"] = "OR"
+    negate: bool = False
+    nodes: tuple[ConfigurationNode, ...] = Field(min_length=1, max_length=MAX_CONFIGURATION_NODES)
+    omitted_nodes: int = Field(default=0, ge=0)
+
+    def list_platforms(self, cpe: str) -> tuple[str, ...]:
+        """The running-on CPEs an AND configuration pairs with vulnerable ``cpe``."""
+        if self.operator != "AND" or self.negate:
+            return ()
+        matches = [match for node in self.nodes if not node.negate for match in node.matches]
+        if not any(match.vulnerable and match.cpe == cpe for match in matches):
+            return ()
+        return tuple(match.cpe for match in matches if not match.vulnerable)
+
+
 class CnvdEntry(ContractModel):
     cnvd_id: str = Field(pattern=CNVD_ID_PATTERN)
     title: str = Field(min_length=1, description="CNVD's Chinese title; untrusted source text.")
@@ -302,6 +362,17 @@ class CveRecord(ContractModel):
     cve_tags: tuple[CveTag, ...] = Field(
         default=(), description="CVE-format tags NVD 2.0 mirrors, in feed order (format 4)."
     )
+    configurations: tuple[Configuration, ...] = Field(
+        default=(),
+        max_length=MAX_CONFIGURATIONS,
+        description=(
+            "NVD 2.0 configurations that say more than affected (AND, negation, running-on "
+            "platforms, unnamed CPEs), in feed order; not evaluated (format 4)."
+        ),
+    )
+    omitted_configurations: int = Field(
+        default=0, ge=0, description="Such configurations beyond the stored cap (format 4)."
+    )
     cnvd: tuple[CnvdEntry, ...] = Field(
         default=(), description="CNVD entries ordered by CNVD ID; Chinese text is untrusted data."
     )
@@ -322,7 +393,22 @@ class CveRecord(ContractModel):
     def has_format4_fields(self) -> bool:
         """Whether the record holds data only store format 4 persists."""
         kev_detail = self.kev is not None and self.kev.has_format4_fields()
-        return kev_detail or bool(self.source_affected or self.ssvc or self.cve_tags)
+        return kev_detail or bool(
+            self.source_affected
+            or self.ssvc
+            or self.cve_tags
+            or self.configurations
+            or self.omitted_configurations
+        )
+
+    def list_platforms(self, cpe: str) -> tuple[str, ...]:
+        """Running-on CPEs any kept AND configuration pairs with vulnerable ``cpe``."""
+        platforms: list[str] = []
+        for configuration in self.configurations:
+            for platform in configuration.list_platforms(cpe):
+                if platform not in platforms:
+                    platforms.append(platform)
+        return tuple(platforms)
 
     def list_implicated_products(self) -> tuple[AffectedProduct, ...]:
         """Products a source lists as affected or of unknown status, never ``unaffected`` ones."""

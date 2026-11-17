@@ -153,10 +153,10 @@ Recorded when M6 closed; none blocks M7b unless it says so.
   at three limits and filters each).
   Detailed serving measurements from `scripts/operator/measure_serving.py` stay in the
   operator's external run directory under `~/data/vulnwitness/runs/`.
-- 18 NVD records are excluded at import because a vulnerable CPE names no concrete
-  vendor or product (`cpe:2.3:h:qualcomm:-:-:…`, `cpe:2.3:o:-:-:-:…`). An alternative
-  is keeping the record and dropping only that CPE match; decide it if a gold case turns
-  out to need one of them.
+- 18 NVD records were excluded at import because a vulnerable CPE names no concrete
+  vendor or product (`cpe:2.3:h:qualcomm:-:-:…`, `cpe:2.3:o:-:-:-:…`). Since ADR 0024
+  the record is kept, that match is left out of `affected` and kept under
+  `configurations`; a re-import brings them in.
 - `graph_expand` passed the bounded real-store release check on 2026-10-31, using
   `scripts/operator/measure_graph_expand.py` with one store load and no model or network.
   The 396,211-record store's `corpus_content_sha256` is

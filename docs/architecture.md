@@ -29,7 +29,9 @@ unavailable); reports show NVD's displayed label beside it ("Not Scheduled" for 
 Store format 4 also keeps what NVD 2.0 mirrors from other authors: each CNA or ADP's
 `affected[]` data (`source_affected`, capped and counted), SSVC assessments, CVE tags, and
 KEV detail including forensic triage, each attributed and never read as NVD analysis or
-affectedness ([ADR 0020](rebuild/adr/0020-nvd-mirrored-source-data.md)). Each authority retains its raw grade, scheme, assessing body and provenance.
+affectedness ([ADR 0020](rebuild/adr/0020-nvd-mirrored-source-data.md)), and the NVD
+configurations that say more than the product list
+([ADR 0024](rebuild/adr/0024-nvd-configurations.md)). Each authority retains its raw grade, scheme, assessing body and provenance.
 The comparison uses NVD's own CVSS v3.1, else v3.0, under the named VulnWitness mapping
 `cnvd_grade_vs_nvd_own_cvss3`; CNA scores remain separate. Reports mark only CNVD grading
 higher under that mapping and count distinct CVEs with explicit denominators and dataset
@@ -87,8 +89,9 @@ conditions: `hit` means a condition matched, `no_hit` never means unaffected, an
 Version does not filter CVEs or become lexical text for a recognized product version.
 Dotted numeric segments compare numerically, ignoring trailing zeroes; non-digit
 segments are uncomparable except trimmed exact-condition string equality.
-Full configuration/environment trees and non-vulnerable CPE conditions are not retained
-or evaluated. NVD may omit product/version information. Notes never change evidence
+NVD 2.0 configurations that say more than the product list (AND with a running-on
+platform, negation, unnamed CPEs) are retained as given and shown, never evaluated; a hit
+names its range's open sides and any running-on platform NVD pairs it with (ADR 0024). NVD may omit product/version information. Notes never change evidence
 needs, stopping or applicability. Affectedness always returns `unknown` /
 `blocked_unverified` (CLI 1); a missing match never establishes safety.
 

@@ -3,7 +3,8 @@
 Versions are split on dots into ASCII numeric segments and compared numerically,
 with missing trailing segments equal to zero: 5.10 > 5.9 and 2.7 == 2.7.0.
 Any non-digit segment is uncomparable; an exact condition alone may also match by
-trimmed string equality. No SemVer or configuration/environment evaluation is done.
+trimmed string equality. No SemVer or configuration/environment evaluation is done; a hit
+names the open sides of its range and any running-on platform NVD pairs it with.
 For each mention, the first hit in record order wins. Without a hit, any missing
 condition or uncomparable version keeps the note unknown rather than asserting a miss.
 """
@@ -15,7 +16,15 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from vulnwitness.domain.contract_model import ContractModel
-from vulnwitness.domain.cve import AffectedProduct, CveRecord, VersionRange
+from vulnwitness.domain.cve import (
+    AffectedProduct,
+    CveRecord,
+    RangeGap,
+    VersionRange,
+    find_range_gaps,
+)
+
+MAX_NOTED_PLATFORMS = 16
 
 UnknownVersionReason = Literal[
     "no_matching_product",
@@ -31,6 +40,15 @@ class NvdVersionHit(ContractModel):
     wording: str
     matched_entry: AffectedProduct
     matched_condition: VersionRange
+    range_gaps: tuple[RangeGap, ...] = Field(
+        default=(), description="Open sides of the matched condition; see find_range_gaps."
+    )
+    required_platforms: tuple[str, ...] = Field(
+        default=(),
+        max_length=MAX_NOTED_PLATFORMS,
+        description="Running-on CPEs an NVD AND configuration pairs with the matched CPE.",
+    )
+    omitted_platforms: int = Field(default=0, ge=0)
 
 
 class NvdVersionNoHit(ContractModel):
@@ -112,11 +130,35 @@ def build_nvd_version_note(record: CveRecord, mention: str) -> NvdVersionNote:
     for entry in record.list_implicated_products():
         if product_name.casefold() in (entry.vendor.casefold(), entry.product.casefold()):
             matching_entries.append(entry)
-    return build_nvd_version_note_for_entries(matching_entries, mention, version)
+    return build_nvd_version_note_for_entries(matching_entries, mention, version, record)
+
+
+def describe_hit_conditions(
+    gaps: Sequence[RangeGap], platforms: Sequence[str], omitted: int
+) -> str:
+    """What the matched condition leaves open or requires, as NVD states it."""
+    parts: list[str] = []
+    if "no_lower_bound" in gaps:
+        parts.append(
+            " NVD gives this range no lower bound, so it states every earlier version; "
+            "the first affected version is not stated."
+        )
+    if "no_upper_bound" in gaps:
+        parts.append(" NVD gives this range no upper bound; no fixed version is stated.")
+    if platforms:
+        more = f" and {omitted} more" if omitted else ""
+        parts.append(
+            " NVD lists it as vulnerable only together with a running-on platform: "
+            f"{', '.join(platforms)}{more}."
+        )
+    return "".join(parts)
 
 
 def build_nvd_version_note_for_entries(
-    entries: Sequence[AffectedProduct], mention: str, version: str
+    entries: Sequence[AffectedProduct],
+    mention: str,
+    version: str,
+    record: CveRecord | None = None,
 ) -> NvdVersionNote:
     """Apply the NVD condition rule and wording to explicitly matched product entries.
 
@@ -135,15 +177,25 @@ def build_nvd_version_note_for_entries(
         for condition in entry.version_ranges:
             matches_condition = matches_version_condition(version, condition)
             if matches_condition:
+                gaps = find_range_gaps(condition)
+                platforms: tuple[str, ...] = ()
+                if record is not None and entry.cpe is not None:
+                    platforms = record.list_platforms(entry.cpe)
+                omitted = max(0, len(platforms) - MAX_NOTED_PLATFORMS)
+                platforms = platforms[:MAX_NOTED_PLATFORMS]
                 return NvdVersionHit(
                     mention=mention,
                     wording=(
                         f"Version {version} matches an NVD CPE version condition for "
                         f"{product_identity}; the full configuration and environment "
                         "conditions were not evaluated."
+                        + describe_hit_conditions(gaps, platforms, omitted)
                     ),
                     matched_entry=entry,
                     matched_condition=condition,
+                    range_gaps=gaps,
+                    required_platforms=platforms,
+                    omitted_platforms=omitted,
                 )
             if matches_condition is None:
                 has_uncomparable_version = True

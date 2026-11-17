@@ -1117,6 +1117,123 @@
       "title": "ConceptResolution",
       "type": "object"
     },
+    "Configuration": {
+      "additionalProperties": false,
+      "description": "One NVD 2.0 configuration, kept only when it says more than ``affected``: an AND of\nnodes, a negated node, a running-on platform, or a vulnerable CPE that names no vendor\nor product. Nothing here is evaluated.",
+      "properties": {
+        "negate": {
+          "default": false,
+          "title": "Negate",
+          "type": "boolean"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/ConfigurationNode"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Nodes",
+          "type": "array"
+        },
+        "omitted_nodes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Nodes",
+          "type": "integer"
+        },
+        "operator": {
+          "default": "OR",
+          "enum": [
+            "AND",
+            "OR"
+          ],
+          "title": "Operator",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operator",
+        "negate",
+        "nodes",
+        "omitted_nodes"
+      ],
+      "title": "Configuration",
+      "type": "object"
+    },
+    "ConfigurationMatch": {
+      "additionalProperties": false,
+      "description": "One NVD CPE match as given. ``vulnerable`` false names a platform the vulnerable\nproduct runs on; NVD states nothing about that platform's own affectedness.",
+      "properties": {
+        "cpe": {
+          "maxLength": 2048,
+          "pattern": "^cpe:2\\.3:",
+          "title": "Cpe",
+          "type": "string"
+        },
+        "version_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "vulnerable": {
+          "title": "Vulnerable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cpe",
+        "vulnerable",
+        "version_range"
+      ],
+      "title": "ConfigurationMatch",
+      "type": "object"
+    },
+    "ConfigurationNode": {
+      "additionalProperties": false,
+      "properties": {
+        "matches": {
+          "items": {
+            "$ref": "#/$defs/ConfigurationMatch"
+          },
+          "maxItems": 128,
+          "title": "Matches",
+          "type": "array"
+        },
+        "negate": {
+          "default": false,
+          "title": "Negate",
+          "type": "boolean"
+        },
+        "omitted_matches": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Matches",
+          "type": "integer"
+        },
+        "operator": {
+          "enum": [
+            "AND",
+            "OR"
+          ],
+          "title": "Operator",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operator",
+        "negate",
+        "matches",
+        "omitted_matches"
+      ],
+      "title": "ConfigurationNode",
+      "type": "object"
+    },
     "CoverageAssessment": {
       "additionalProperties": false,
       "properties": {
@@ -1378,6 +1495,16 @@
           "title": "Cnvd",
           "type": "array"
         },
+        "configurations": {
+          "default": [],
+          "description": "NVD 2.0 configurations that say more than affected (AND, negation, running-on platforms, unnamed CPEs), in feed order; not evaluated (format 4).",
+          "items": {
+            "$ref": "#/$defs/Configuration"
+          },
+          "maxItems": 512,
+          "title": "Configurations",
+          "type": "array"
+        },
         "cve_id": {
           "maxLength": 32,
           "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
@@ -1473,6 +1600,13 @@
           "description": "NVD 2.0 vulnStatus verbatim, untrusted source text; null for NVD 1.1 and synthetic data.",
           "title": "Nvd Status"
         },
+        "omitted_configurations": {
+          "default": 0,
+          "description": "Such configurations beyond the stored cap (format 4).",
+          "minimum": 0,
+          "title": "Omitted Configurations",
+          "type": "integer"
+        },
         "protocol_design_claim": {
           "const": "not_established",
           "default": "not_established",
@@ -1545,6 +1679,8 @@
         "source_affected",
         "ssvc",
         "cve_tags",
+        "configurations",
+        "omitted_configurations",
         "cnvd",
         "vulnerability_origin",
         "protocol_design_claim",
@@ -3386,6 +3522,16 @@
           "title": "Cnvd",
           "type": "array"
         },
+        "configurations": {
+          "default": [],
+          "description": "NVD 2.0 configurations that say more than affected (AND, negation, running-on platforms, unnamed CPEs), in feed order; not evaluated (format 4).",
+          "items": {
+            "$ref": "#/$defs/Configuration"
+          },
+          "maxItems": 512,
+          "title": "Configurations",
+          "type": "array"
+        },
         "cve_id": {
           "maxLength": 32,
           "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
@@ -3481,6 +3627,13 @@
           "description": "NVD 2.0 vulnStatus verbatim, untrusted source text; null for NVD 1.1 and synthetic data.",
           "title": "Nvd Status"
         },
+        "omitted_configurations": {
+          "default": 0,
+          "description": "Such configurations beyond the stored cap (format 4).",
+          "minimum": 0,
+          "title": "Omitted Configurations",
+          "type": "integer"
+        },
         "protocol_design_claim": {
           "const": "not_established",
           "default": "not_established",
@@ -3553,6 +3706,8 @@
         "source_affected",
         "ssvc",
         "cve_tags",
+        "configurations",
+        "omitted_configurations",
         "cnvd",
         "vulnerability_origin",
         "protocol_design_claim",
@@ -3874,11 +4029,40 @@
           "title": "Mention",
           "type": "string"
         },
+        "omitted_platforms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Platforms",
+          "type": "integer"
+        },
         "outcome": {
           "const": "hit",
           "default": "hit",
           "title": "Outcome",
           "type": "string"
+        },
+        "range_gaps": {
+          "default": [],
+          "description": "Open sides of the matched condition; see find_range_gaps.",
+          "items": {
+            "enum": [
+              "no_lower_bound",
+              "no_upper_bound"
+            ],
+            "type": "string"
+          },
+          "title": "Range Gaps",
+          "type": "array"
+        },
+        "required_platforms": {
+          "default": [],
+          "description": "Running-on CPEs an NVD AND configuration pairs with the matched CPE.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Required Platforms",
+          "type": "array"
         },
         "wording": {
           "title": "Wording",
@@ -3890,7 +4074,10 @@
         "outcome",
         "wording",
         "matched_entry",
-        "matched_condition"
+        "matched_condition",
+        "range_gaps",
+        "required_platforms",
+        "omitted_platforms"
       ],
       "title": "NvdVersionHit",
       "type": "object"

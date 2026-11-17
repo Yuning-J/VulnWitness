@@ -63,14 +63,14 @@ def group_product_vulnerability(candidate: ProductVulnerability) -> tuple[int, i
 
 
 def annotate_product_version(
-    entries: Sequence[AffectedProduct], name: str, version: str | None
+    entries: Sequence[AffectedProduct], name: str, version: str | None, record: CveRecord
 ) -> NvdVersionNote | None:
     """Reuse the NVD note for field matches; mention-only evidence cannot decide a condition."""
     if version is None:
         return None
     mention = f"{name} {version}"
     if entries:
-        return build_nvd_version_note_for_entries(entries, mention, version)
+        return build_nvd_version_note_for_entries(entries, mention, version, record)
     return NvdVersionUnknown(
         mention=mention,
         reason_code="description_mention_only",
@@ -164,7 +164,7 @@ class ProductQueryService:
                     record=record,
                     basis=basis,
                     nvd_version_note=annotate_product_version(
-                        matching_entries, name, request.version
+                        matching_entries, name, request.version, record
                     ),
                 )
             )

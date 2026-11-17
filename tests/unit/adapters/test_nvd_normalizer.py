@@ -438,13 +438,8 @@ def test_v2_scorer_type_is_case_folded() -> None:
             }
         ),
         build_v2(id="CVE-99-1"),
-        build_v2(
-            configurations=[
-                {"nodes": [{"cpeMatch": [build_cpe_match("cpe:2.3:a:*:*:*:*:*:*:*:*:*:*", True)]}]}
-            ]
-        ),
     ],
-    ids=["upper_case_language", "score_above_ten", "malformed_cve_id", "wildcard_vendor"],
+    ids=["upper_case_language", "score_above_ten", "malformed_cve_id"],
 )
 def test_v2_contract_violation_raises_the_normalization_error(
     vulnerability: dict[str, Any],

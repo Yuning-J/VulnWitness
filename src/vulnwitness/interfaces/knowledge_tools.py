@@ -50,6 +50,7 @@ CVE_RECORD_SOURCE_TEXT_FIELDS = (
     "source_affected",
     "ssvc",
     "cve_tags",
+    "configurations",
     "cnvd",
 )
 CNVD_LOOKUP_SOURCE_TEXT_FIELDS = ("pending_cnvd",)

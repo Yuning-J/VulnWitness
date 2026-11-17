@@ -7,10 +7,12 @@ boundary. A field present with the wrong JSON type raises
 Every error carries a ``NormalizationFailureCode``; its message may quote the entry, so
 only the code may be reported to anyone but the developer.
 
-Only CPE matches NVD marks ``vulnerable`` become affected products. The other
-matches in a configuration name the platform a vulnerable product runs on, and
-NVD states nothing about whether that platform is affected. Matches under a
-``negate`` node are a NOT condition and are skipped too.
+Only CPE matches NVD marks ``vulnerable`` and that name a vendor and product become
+affected products. The other matches in a configuration name the platform a vulnerable
+product runs on, and NVD states nothing about whether that platform is affected. Matches
+under a ``negate`` node are a NOT condition and are skipped too. For NVD 2.0, every
+configuration that says more than those products (AND, negation, platforms, unnamed CPEs)
+is also kept verbatim under ``configurations``; nothing evaluates it.
 """
 
 import re
@@ -24,6 +26,9 @@ from pydantic import ValidationError
 from vulnwitness.domain.cpe import split_cpe
 from vulnwitness.domain.cve import (
     CWE_ID_PATTERN,
+    MAX_CONFIGURATION_MATCHES,
+    MAX_CONFIGURATION_NODES,
+    MAX_CONFIGURATIONS,
     MAX_SOURCE_AFFECTED_NAMES,
     MAX_SOURCE_AFFECTED_PRODUCTS,
     MAX_SOURCE_AFFECTED_VERSIONS,
@@ -230,10 +235,8 @@ def _affected_products(nodes: Iterable[object]) -> tuple[AffectedProduct, ...]:
                 NormalizationFailureCode.INVALID_CPE, f"not a CPE 2.3 formatted string: {cpe!r}"
             )
         if components[1] in CPE_LOGICAL_VALUES or components[2] in CPE_LOGICAL_VALUES:
-            raise NvdNormalizationError(
-                NormalizationFailureCode.INVALID_CPE,
-                f"CPE names no concrete vendor and product: {cpe!r}",
-            )
+            # Not a product; the record keeps it under ``configurations`` instead.
+            continue
         version_range = _version_range(cpe_match, components[3])
         affected_product = AffectedProduct(
             vendor=components[1],
@@ -246,6 +249,97 @@ def _affected_products(nodes: Iterable[object]) -> tuple[AffectedProduct, ...]:
             known_products.add(affected_product)
             affected_products.append(affected_product)
     return tuple(affected_products)
+
+
+def _is_unnamed_cpe(cpe: str) -> bool:
+    components = split_cpe(cpe)
+    return len(components) != 11 or bool({components[1], components[2]} & CPE_LOGICAL_VALUES)
+
+
+def _negate(node: Mapping[str, Any]) -> bool:
+    negate = node.get("negate", False)
+    if not isinstance(negate, bool):
+        raise NvdNormalizationError(
+            NormalizationFailureCode.INVALID_CONFIGURATION,
+            "configuration node negate is not a boolean",
+        )
+    return negate
+
+
+def _operator(node: Mapping[str, Any], default: str) -> str:
+    operator = node.get("operator", default)
+    if operator not in ("AND", "OR"):
+        raise NvdNormalizationError(
+            NormalizationFailureCode.INVALID_CONFIGURATION,
+            "configuration operator is not AND or OR",
+        )
+    return cast(str, operator)
+
+
+def _configuration_node(node: Mapping[str, Any]) -> tuple[dict[str, object], bool]:
+    """A stored node and whether it holds anything ``affected`` lacks."""
+    matches: list[dict[str, object]] = []
+    omitted = 0
+    says_more = _negate(node)
+    for value in _optional_list(node, "cpeMatch"):
+        cpe_match = _as_mapping(value, "CPE match")
+        is_vulnerable = cpe_match.get("vulnerable")
+        cpe = _optional_text(cpe_match, "criteria")
+        if not isinstance(is_vulnerable, bool) or cpe is None or not cpe.startswith("cpe:2.3:"):
+            raise NvdNormalizationError(
+                NormalizationFailureCode.INVALID_CPE, "CPE match lacks a criteria or flag"
+            )
+        says_more = says_more or not is_vulnerable or _is_unnamed_cpe(cpe)
+        if len(matches) == MAX_CONFIGURATION_MATCHES:
+            omitted += 1
+            continue
+        components = split_cpe(cpe)
+        version = components[3] if len(components) == 11 else ""
+        matches.append(
+            {
+                "cpe": cpe,
+                "vulnerable": is_vulnerable,
+                "version_range": _version_range(cpe_match, version),
+            }
+        )
+    stored: dict[str, object] = {
+        "operator": _operator(node, "OR"),
+        "negate": _negate(node),
+        "matches": matches,
+        "omitted_matches": omitted,
+    }
+    return stored, says_more
+
+
+def _configurations(entries: Iterable[object]) -> dict[str, object]:
+    """NVD 2.0 configurations that say more than ``affected``, capped and counted. A plain
+    OR of vulnerable, named CPEs is already ``affected`` and is not repeated here."""
+    kept: list[dict[str, object]] = []
+    omitted = 0
+    for entry in entries:
+        configuration = _as_mapping(entry, "configuration")
+        operator = _operator(configuration, "OR")
+        says_more = operator == "AND" or _negate(configuration)
+        nodes: list[dict[str, object]] = []
+        node_entries = _optional_list(configuration, "nodes")
+        for value in node_entries:
+            node, node_says_more = _configuration_node(_as_mapping(value, "configuration node"))
+            says_more = says_more or node_says_more
+            nodes.append(node)
+        if not says_more or not nodes:
+            continue
+        if len(kept) == MAX_CONFIGURATIONS:
+            omitted += 1
+            continue
+        kept.append(
+            {
+                "operator": operator,
+                "negate": _negate(configuration),
+                "nodes": nodes[:MAX_CONFIGURATION_NODES],
+                "omitted_nodes": max(0, len(nodes) - MAX_CONFIGURATION_NODES),
+            }
+        )
+    return {"configurations": kept, "omitted_configurations": omitted}
 
 
 def _descriptions(entries: Iterable[object], source: str) -> tuple[LocalizedText, ...]:
@@ -706,6 +800,7 @@ class NvdNormalizer:
             "source_affected": _source_affected(_optional_list(vulnerability, "affected")),
             "ssvc": _ssvc(_optional_mapping(vulnerability, "metrics")),
             "cve_tags": _cve_tags(_optional_list(vulnerability, "cveTags")),
+            **_configurations(_optional_list(vulnerability, "configurations")),
         }
         return _assemble(cve_id, record_fields, nvd_anchor, kev, self._terms.cisa_kev)
 
