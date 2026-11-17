@@ -19,6 +19,11 @@ class EvidenceCatalog(Protocol):
     sources.
     """
 
+    @property
+    def store_format_version(self) -> int:
+        """The served record format; controls availability of source version notes."""
+        ...
+
     def get_evidence(self, evidence_id: str) -> EvidenceAnchor | None:
         """The anchor with this ID, or ``None`` when the catalog has none."""
         ...

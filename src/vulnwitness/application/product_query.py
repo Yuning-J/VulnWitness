@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from vulnwitness.application.product_query_index import ProductQueryIndex, list_entry_names
+from vulnwitness.application.product_query_index import ProductQueryIndex
 from vulnwitness.domain.cve import AffectedProduct, CveRecord, SourceAffectedProduct
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.evidence_catalog import EvidenceCatalog
@@ -21,13 +21,14 @@ from vulnwitness.domain.product_query import (
     ProductVulnerability,
     SourceNamedCandidate,
     list_product_identities,
-    normalize_source_name,
 )
 from vulnwitness.domain.product_query_cursor import (
     InvalidProductCursor,
     build_product_cursor,
     read_product_cursor,
 )
+from vulnwitness.domain.source_product import list_entry_names, normalize_source_name
+from vulnwitness.domain.source_version_note import build_source_version_notes
 from vulnwitness.domain.text import tokenize
 from vulnwitness.domain.validation import (
     EvidenceValidationError,
@@ -163,6 +164,18 @@ class ProductQueryService:
                 ProductVulnerability(
                     record=record,
                     basis=basis,
+                    source_version_notes=(
+                        build_source_version_notes(
+                            record,
+                            f"{name} {request.version}",
+                            request.version,
+                            vendor=vendor,
+                            product=product,
+                            store_format_version=self._evidence_catalog.store_format_version,
+                        )
+                        if request.version is not None
+                        else None
+                    ),
                     nvd_version_note=annotate_product_version(
                         matching_entries, name, request.version, record
                     ),

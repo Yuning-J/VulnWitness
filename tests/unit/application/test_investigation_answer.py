@@ -481,9 +481,10 @@ def test_annotations_preserve_every_existing_answer_field_and_admitted_step(
         strict=True,
     ):
         assert set(candidate_without_notes.model_dump(mode="json")) == candidate_fields
-        assert candidate_with_notes.model_dump(mode="json", exclude={"nvd_version_notes"}) == (
-            candidate_without_notes.model_dump(mode="json")
-        )
+        assert candidate_with_notes.model_dump(
+            mode="json", exclude={"nvd_version_notes", "source_version_notes"}
+        ) == candidate_without_notes.model_dump(mode="json")
+        assert candidate_with_notes.source_version_notes == ()
     assert admitted_steps == steps_before
     assert annotated_answer.evidence == unannotated_answer.evidence
     assert annotated_answer.excluded_candidates == unannotated_answer.excluded_candidates

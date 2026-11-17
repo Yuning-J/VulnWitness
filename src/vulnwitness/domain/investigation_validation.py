@@ -177,6 +177,7 @@ from vulnwitness.domain.search import (
     SearchWarningCode,
     SemanticUnavailableDetail,
 )
+from vulnwitness.domain.source_version_note import list_source_version_notes
 from vulnwitness.domain.taxonomy import (
     BACKEND_FAILURE_DETAILS,
     AssertionKind,
@@ -348,7 +349,9 @@ def find_investigation_scope_violations(evidence_set: KnowledgeEvidenceSet) -> l
     return violations
 
 
-def find_nvd_version_note_violations(evidence_set: KnowledgeEvidenceSet) -> list[str]:
+def find_nvd_version_note_violations(
+    evidence_set: KnowledgeEvidenceSet, store_format_version: int
+) -> list[str]:
     """Notes are exactly those derived from each candidate and the recorded mentions."""
     violations: list[str] = []
     mentions = list_version_mentions(
@@ -363,6 +366,14 @@ def find_nvd_version_note_violations(evidence_set: KnowledgeEvidenceSet) -> list
         if candidate.nvd_version_notes != expected_notes:
             violations.append(
                 f"{candidate.candidate.record.cve_id}: NVD version notes do not match "
+                "the record and affectedness mentions"
+            )
+        expected_source_notes = list_source_version_notes(
+            candidate.candidate.record, mentions, store_format_version
+        )
+        if candidate.source_version_notes != expected_source_notes:
+            violations.append(
+                f"{candidate.candidate.record.cve_id}: source version notes do not match "
                 "the record and affectedness mentions"
             )
     return violations
@@ -1797,7 +1808,9 @@ def validate_knowledge_evidence_set(
     violations.extend(find_relevance_violations(evidence_set, evidence_catalog))
     violations.extend(find_identity_violations(evidence_set))
     violations.extend(find_investigation_scope_violations(evidence_set))
-    violations.extend(find_nvd_version_note_violations(evidence_set))
+    violations.extend(
+        find_nvd_version_note_violations(evidence_set, evidence_catalog.store_format_version)
+    )
     violations.extend(find_citation_violations(evidence_set))
     violations.extend(find_step_evidence_violations(evidence_set, evidence_catalog))
     violations.extend(find_step_observation_violations(evidence_set, evidence_catalog))

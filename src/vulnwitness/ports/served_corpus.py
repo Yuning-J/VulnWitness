@@ -12,6 +12,11 @@ from vulnwitness.domain.session_record import SessionCorpusIdentity
 
 class ServedCorpus(Protocol):
     @property
+    def store_format_version(self) -> int:
+        """Persisted format, or the current format for synthetic records."""
+        ...
+
+    @property
     def records(self) -> tuple[CveRecord, ...]:
         """Every record, ordered by CVE ID; each cites anchors of ``evidence``."""
         ...

@@ -196,8 +196,8 @@
           "$ref": "#/$defs/SessionRecordCheck"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },
@@ -460,8 +460,8 @@
           "type": "integer"
         },
         "contract_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Contract Version",
           "type": "string"
         },
@@ -843,8 +843,8 @@
           "type": "array"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },

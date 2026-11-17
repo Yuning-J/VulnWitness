@@ -107,6 +107,10 @@ class CorpusStore:
 
     store_name: str
 
+    @property
+    def store_format_version(self) -> int:
+        return self.manifest.store_format_version
+
     def describe_kev(self) -> KevCapability:
         for store_input in self.manifest.inputs:
             if store_input.source is StoreSource.CISA_KEV:

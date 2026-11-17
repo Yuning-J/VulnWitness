@@ -55,6 +55,8 @@ def render_product_query_summary(vulnerabilities: ProductQueryResponse) -> str:
         lines.append(format_paragraph(f"Basis: {basis.kind} ({basis_text})"))
         if vulnerability.nvd_version_note is not None:
             lines.append(format_paragraph(vulnerability.nvd_version_note.wording))
+        for source_note in vulnerability.source_version_notes or ():
+            lines.append(format_paragraph(source_note.wording))
     if not vulnerabilities.items:
         lines.append("None returned.")
     if vulnerabilities.source_named_total:

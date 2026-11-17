@@ -9,6 +9,7 @@ from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CveId, CweId, KevEntry, Severity
 from vulnwitness.domain.investigation import EvidenceNeedKind, NeedOutcome
 from vulnwitness.domain.search import require_json_number
+from vulnwitness.domain.source_version_note import SourceVersionOutcome
 from vulnwitness.domain.timestamps import Timestamp
 from vulnwitness.domain.weakness_associations import AssociationHop, CapecId, TechniqueId
 
@@ -39,6 +40,15 @@ class VersionNoteClaim(ContractModel):
     mention: ClaimText
     outcome: Literal["hit", "unknown", "no_hit"]
     applicability: Literal["unknown"] = "unknown"
+
+
+class SourceVersionNoteClaim(ContractModel):
+    kind: Literal["source_version_note"]
+    call: SessionSequence
+    cve_id: CveId
+    mention: ClaimText
+    source: ClaimText
+    outcome: SourceVersionOutcome
 
 
 class CatalogueAssociationClaim(ContractModel):
@@ -101,6 +111,7 @@ SessionClaim = Annotated[
     ProductFieldClaim
     | DescriptionMentionClaim
     | VersionNoteClaim
+    | SourceVersionNoteClaim
     | CatalogueAssociationClaim
     | NeedStatusClaim
     | RecordFactClaim,
@@ -131,6 +142,12 @@ def render_claim(claim: SessionClaim) -> str:
         return (
             f"{prefix}an NVD version note for {claim.cve_id}, version "
             f"{quote_claim_value(claim.version)}, mention {quote_claim_value(claim.mention)}: "
+            f"{claim.outcome}. Applicability remains unknown."
+        )
+    if isinstance(claim, SourceVersionNoteClaim):
+        return (
+            f"{prefix}a source version note for {claim.cve_id}, mention "
+            f"{quote_claim_value(claim.mention)}, source {quote_claim_value(claim.source)}: "
             f"{claim.outcome}. Applicability remains unknown."
         )
     if isinstance(claim, CatalogueAssociationClaim):

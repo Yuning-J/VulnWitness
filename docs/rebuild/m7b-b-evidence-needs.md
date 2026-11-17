@@ -55,8 +55,18 @@ segments compare numerically (5.10 > 5.9), padding trailing segments with zero
 (2.7 == 2.7.0); a non-digit segment is uncomparable, except an exact condition may match
 by trimmed string equality. Any hit wins; without one, a missing or uncomparable
 condition keeps the note unknown. The full configuration and environment conditions
-were not evaluated because the configuration tree and non-vulnerable CPE conditions
-are not retained. The note changes no need, stop rule, retrieval or Trustify behavior.
+were not evaluated. Retained configuration trees are shown as source data (ADR 0024).
+Beside these annotations, `source_version_notes` reads each matching CNA/ADP block in
+mention then feed order (ADR 0028), reading a block's matching products together.
+Notes carry verbatim `matched_products` and direct `covering_entries` with sorted applied
+changes, worded `CNA/ADP <source>`. Commit entries are skipped; commit-only data gives
+`unknown/no_version_data`. Release ranges support open `0`/`unspecified`/`*` lower bounds,
+open `*` upper bounds and `.*` prefixes in bounds or exact versions. A covering `unknown`
+status gives `no_statement`; differing defaults without a covering entry give
+`unknown/conflicting`. Outcomes `states_affected`, `states_unaffected`, `no_statement` and
+`unknown` remain source statements. Stores before format 4 omit the field; a format-4
+record with no matching block returns an empty array. Both kinds of note are recomputed
+by validation and change no need, stop rule, retrieval or Trustify behavior.
 
 So "Is Open5GS 2.7.2 affected by CVE-X" needs the named CVE and affectedness; adding "and
 which 5G-AKA threats apply" resolves a topic, which also adds `implementation_cves` and,

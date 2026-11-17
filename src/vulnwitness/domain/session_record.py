@@ -99,6 +99,7 @@ def describe_finding_shape() -> dict[str, JsonValue]:
         "description_mention",
         "catalogue_association",
         "version_note",
+        "source_version_note",
         "need_status",
         "record_fact",
     ):
@@ -147,6 +148,7 @@ class SessionFinding(ContractModel):
         "description_mention",
         "catalogue_association",
         "version_note",
+        "source_version_note",
         "need_status",
         "record_fact",
         "model_judgement",

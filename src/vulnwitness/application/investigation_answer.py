@@ -65,6 +65,7 @@ from vulnwitness.domain.nvd_version_note import list_nvd_version_notes
 from vulnwitness.domain.planning import CveExactLookupCall, ProductQueryCall
 from vulnwitness.domain.relevance import LABEL_ORDER, RelevanceLabel
 from vulnwitness.domain.search import Candidate, ChannelOutcome, SearchFilters
+from vulnwitness.domain.source_version_note import list_source_version_notes
 from vulnwitness.domain.taxonomy import (
     AssertionKind,
     BackendFailureDetail,
@@ -346,6 +347,7 @@ def assemble_answer(
     max_results: int,
     affectedness_mentions: Sequence[str] = (),
     relevance_labels: dict[str, RelevanceLabel] | None = None,
+    store_format_version: int = 4,
 ) -> AssembledAnswer:
     collected_sightings = collect_sightings(topic, admitted_executions)
     sightings = collected_sightings.sightings
@@ -361,6 +363,9 @@ def assemble_answer(
                 candidate=sighting.candidate,
                 relevance=sighting.relevance,
                 found_by_steps=tuple(sighting.found_by_steps),
+                source_version_notes=list_source_version_notes(
+                    sighting.candidate.record, affectedness_mentions, store_format_version
+                ),
                 nvd_version_notes=list_nvd_version_notes(
                     sighting.candidate.record, affectedness_mentions
                 ),
@@ -584,6 +589,7 @@ def assemble_returned_answer(
     basis: DecisionBasis,
     affectedness_detail: AffectednessDetail,
     relevance_labels: dict[str, RelevanceLabel] | None = None,
+    store_format_version: int = 4,
 ) -> ReturnedAnswer:
     """What a run that stopped for ``stop_reason`` on ``basis`` returns from its steps and
     their executions (one per step, in order). An ``invalid_evidence`` run returns nothing
@@ -602,6 +608,7 @@ def assemble_returned_answer(
             interpretation.affectedness_mentions, interpretation.product_recognition
         ),
         relevance_labels,
+        store_format_version,
     )
     admitted_steps: list[ToolStep] = []
     for step, _ in admitted_executions:

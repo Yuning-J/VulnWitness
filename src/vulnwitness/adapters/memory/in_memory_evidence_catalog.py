@@ -47,7 +47,9 @@ class InMemoryEvidenceCatalog:
         records: Iterable[CveRecord],
         techniques: Iterable[ThreatContextItem] = (),
         weakness_mapping: WeaknessMapping | None = None,
+        store_format_version: int = 4,
     ) -> None:
+        self._store_format_version = store_format_version
         self._weakness_mapping = weakness_mapping
         violations: list[str] = []
         self._anchors_by_id = index_entries(
@@ -69,6 +71,10 @@ class InMemoryEvidenceCatalog:
         self._identities_by_name: dict[str, tuple[ProductIdentity, ...]] = {}
         for name, named_identities in identities_by_name.items():
             self._identities_by_name[name] = tuple(named_identities)
+
+    @property
+    def store_format_version(self) -> int:
+        return self._store_format_version
 
     def get_evidence(self, evidence_id: str) -> EvidenceAnchor | None:
         return self._anchors_by_id.get(evidence_id)

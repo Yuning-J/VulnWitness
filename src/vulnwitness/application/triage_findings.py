@@ -15,6 +15,7 @@ from vulnwitness.domain.session_claim import (
     RecordFact,
     RecordFactClaim,
     SessionClaim,
+    SourceVersionNoteClaim,
     VersionNoteClaim,
 )
 from vulnwitness.domain.session_record import SessionCitation, SessionFinding
@@ -81,6 +82,18 @@ def build_page_findings(page: ProductQueryResponse, call: int) -> list[SessionFi
                 applicability=vulnerability.applicability,
             )
             findings.append(make_workflow_finding(claim, record, page.evidence, "version"))
+        for index, source_note in enumerate(vulnerability.source_version_notes or (), start=1):
+            claim = SourceVersionNoteClaim(
+                kind="source_version_note",
+                call=call,
+                cve_id=record.cve_id,
+                mention=source_note.mention,
+                source=source_note.source,
+                outcome=source_note.outcome,
+            )
+            findings.append(
+                make_workflow_finding(claim, record, page.evidence, f"source-version-{index}")
+            )
     return findings
 
 

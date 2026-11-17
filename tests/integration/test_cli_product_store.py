@@ -98,3 +98,67 @@ def test_product_text_reports_excluded_mentions_even_when_no_cves_match(
     assert exit_code == 1
     assert "Showing 0 of 0 matching CVEs" in summary
     assert "Description mentions left out because the requested vendor was not named: 2." in summary
+
+
+@pytest.mark.parametrize("output_format", ["json", "text"], ids=["json", "text"])
+def test_product_version_reads_mirrored_source_backport_after_import(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], output_format: str
+) -> None:
+    entry = build_v2_entry(
+        8081,
+        configurations=[],
+        affected=[
+            {
+                "source": "cna@democorp.example",
+                "affectedData": [
+                    {
+                        "vendor": "Democorp",
+                        "product": "Gateway",
+                        "versions": [
+                            {
+                                "version": "5.0",
+                                "lessThan": "5.4.3",
+                                "status": "affected",
+                                "versionType": "semver",
+                                "changes": [{"at": "5.4.1", "status": "unaffected"}],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    )
+    feed_name = "nvdcve-2.0-2099.json.gz"
+    write_gzip_feed(tmp_path / feed_name, build_v2_feed([entry]))
+    manifest_path = write_inputs_manifest(tmp_path, [build_declaration(feed_name)])
+    store_root = tmp_path / "stores"
+    store_root.mkdir()
+    report = run_test_migration(manifest_path, store_root / "backport", store_root=store_root)
+    assert report.outcome is MigrationOutcome.IMPORTED, report.failure
+    environment = {"VULNWITNESS_STORE_ROOT": str(store_root)}
+    assert main(["store", "activate", "backport"], environment=environment) == 0
+    capsys.readouterr()
+
+    assert (
+        main(
+            ["product", "--product", "gateway", "--version", "5.4.1", "--format", output_format],
+            environment=environment,
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    if output_format == "json":
+        page = json.loads(output)
+        vulnerability = page["items"][0]
+        assert vulnerability["nvd_version_note"]["reason_code"] == "description_mention_only"
+        assert vulnerability["source_version_notes"][0]["outcome"] == "states_unaffected"
+        assert vulnerability["source_version_notes"][0]["source"] == "cna@democorp.example"
+        assert vulnerability["applicability"] == "unknown"
+    else:
+        text = " ".join(output.split())
+        assert text.index("NVD CPE version condition unknown") < text.index("CNA/ADP")
+        assert "states version 5.4.1 is unaffected" in text
+        assert (
+            "This is cna@democorp.example's statement; VulnWitness has not set applicability."
+            in text
+        )

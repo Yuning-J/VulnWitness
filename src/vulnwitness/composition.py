@@ -207,7 +207,10 @@ def build_search_service(
     return SearchService(
         cve_repository=repository,
         evidence_catalog=InMemoryEvidenceCatalog(
-            served_corpus.evidence, served_corpus.records, weakness_mapping=weakness_mapping
+            served_corpus.evidence,
+            served_corpus.records,
+            weakness_mapping=weakness_mapping,
+            store_format_version=served_corpus.store_format_version,
         ),
         lexical_retriever=Bm25LexicalIndex(repository.list_cves()),
         structured_retriever=InMemoryStructuredIndex(repository.list_cves()),
@@ -225,7 +228,11 @@ def build_product_query_service(served_corpus: ServedCorpus) -> ProductQueryServ
     """The product entry over the same corpus records and evidence every surface serves."""
     return ProductQueryService(
         InMemoryKnowledgeRepository(served_corpus.records, served_corpus.evidence),
-        InMemoryEvidenceCatalog(served_corpus.evidence, served_corpus.records),
+        InMemoryEvidenceCatalog(
+            served_corpus.evidence,
+            served_corpus.records,
+            store_format_version=served_corpus.store_format_version,
+        ),
     )
 
 
@@ -294,6 +301,7 @@ def build_evidence_catalog(
         served_corpus.records,
         fight_source.list_techniques(),
         weakness_mapping=weakness_mapping,
+        store_format_version=served_corpus.store_format_version,
     )
 
 

@@ -126,6 +126,7 @@ def test_csv_exports_every_cve_without_description_text_and_with_private_permiss
             "basis_kind",
             "matched_products",
             "nvd_version_note_outcome",
+            "source_version_notes",
             "applicability",
             "published",
             "evidence_ids",
@@ -134,6 +135,7 @@ def test_csv_exports_every_cve_without_description_text_and_with_private_permiss
     assert len(rows) == 3
     assert rows[0]["cve_id"] == "CVE-9999-0001"
     assert rows[0]["nvd_version_note_outcome"] == "hit"
+    assert all(json.loads(row["source_version_notes"]) == [] for row in rows)
     assert rows[1]["nvd_version_note_outcome"] == "unknown"
     assert rows[2]["nvd_version_note_outcome"] == "no_hit"
     assert json.loads(rows[0]["matched_products"]) == [

@@ -1,7 +1,8 @@
 """Explicit product reads, grouped deterministically without a relevance ranking."""
 
-import re
 from collections.abc import Iterable
+from functools import partial
+from operator import is_
 from typing import Annotated, Literal, Self
 
 from pydantic import ConfigDict, Field, model_validator
@@ -17,6 +18,7 @@ from vulnwitness.domain.search import (
     JsonInteger,
     SchemaVersion,
 )
+from vulnwitness.domain.source_version_note import SourceVersionNote
 
 PRODUCT_ORDER_DESCRIPTION = (
     "Grouping, not ranking: with a version, hit, unknown, then no_hit; "
@@ -89,6 +91,12 @@ class ProductVulnerability(ContractModel):
     record: CveRecord
     basis: ProductMatchBasis
     nvd_version_note: NvdVersionNote | None = None
+    source_version_notes: tuple[SourceVersionNote, ...] | None = Field(
+        default=None,
+        exclude_if=partial(is_, None),
+        description="Source statements in feed order; omitted without a version or before "
+        "store format 4, empty when no source product matches. Never applicability.",
+    )
     applicability: Literal["unknown"] = "unknown"
 
 
@@ -107,11 +115,6 @@ class SourceNamedCandidate(ContractModel):
     vendor: str | None = Field(description="The source's vendor text, verbatim; untrusted.")
     product: str | None = Field(description="The source's product text, verbatim; untrusted.")
     nvd_status: str | None = Field(description="NVD 2.0 vulnStatus verbatim.")
-
-
-def normalize_source_name(name: str) -> str:
-    """Case-folded, with runs of spaces, hyphens and underscores read as one underscore."""
-    return re.sub(r"[\s_-]+", "_", name.casefold()).strip("_")
 
 
 class ProductQueryResponse(ContractModel):

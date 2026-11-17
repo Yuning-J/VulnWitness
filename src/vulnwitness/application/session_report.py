@@ -209,6 +209,23 @@ def build_version_fact(vulnerability: ProductVulnerability | None) -> ReportFact
     return ReportFact("NVD version condition", comparison, ReportBadge(note.outcome), note.wording)
 
 
+def build_source_version_facts(
+    vulnerability: ProductVulnerability | None,
+) -> tuple[ReportFact, ...]:
+    facts: list[ReportFact] = []
+    if vulnerability is not None:
+        for note in vulnerability.source_version_notes or ():
+            facts.append(
+                ReportFact(
+                    f"Source version statement · {note.source}",
+                    note.mention,
+                    ReportBadge(note.outcome),
+                    note.wording,
+                )
+            )
+    return tuple(facts)
+
+
 def build_nvd_status_fact(record: CveRecord) -> ReportFact:
     """NVD's displayed status beside the API value; a warning unless NVD enriched it."""
     enrichment = classify_nvd_enrichment(record.nvd_status)
@@ -264,8 +281,8 @@ def build_mirrored_section(record: CveRecord) -> ReportSection | None:
                 "Source-stated affected versions · untrusted text",
                 (
                     ReportParagraph(
-                        "What each CNA or ADP published, as NVD mirrors it. VulnWitness has not "
-                        "compared any version; affectedness stays unknown."
+                        "What each CNA or ADP published, as NVD mirrors it. Any source version "
+                        "notes appear separately; affectedness stays unknown."
                     ),
                 ),
                 bullets=tuple(bullets),
@@ -448,6 +465,7 @@ def build_card(
                     "Match basis", basis_label(vulnerability) if vulnerability else "not recorded"
                 ),
                 build_version_fact(vulnerability),
+                *build_source_version_facts(vulnerability),
                 build_nvd_status_fact(record),
                 ReportFact(
                     "Affectedness",
@@ -931,6 +949,9 @@ def build_session_report(
     for index, (sequence, vulnerability) in enumerate(inventory, 1):
         record = vulnerability.record
         note = vulnerability.nvd_version_note
+        version_notes: list[str] = [note.outcome if note else "not recorded"]
+        for source_note in vulnerability.source_version_notes or ():
+            version_notes.append(source_note.wording)
         rows.append(
             (
                 str(index),
@@ -938,7 +959,7 @@ def build_session_report(
                 published_date(record),
                 format_severity(record),
                 basis_label(vulnerability),
-                note.outcome if note else "not recorded",
+                "; ".join(version_notes),
                 str(sequence),
             )
         )

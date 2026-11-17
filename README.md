@@ -98,7 +98,7 @@ family: a GTP-U question can return GTP-C records.
 | "What does this CVE mean?" | `lookup` / `search` | Source-backed records; lookup adds weakness paths |
 | "Which CVEs are recorded for Open5GS?" | `triage` → `report` | The match inventory read within its caps, a deeper look at selected CVEs, and a report |
 | "What vulnerabilities and threats relate to GTP?" | `investigate` | Implementation CVEs, separate FiGHT context, open needs and the steps taken |
-| "Does this affect my deployed version?" | `product --version` | NVD version notes; verified affectedness stays `unknown` |
+| "Does this affect my deployed version?" | `product --version` | NVD and attributed CNA/ADP version notes; verified affectedness stays `unknown` |
 
 ## Real data
 
@@ -146,6 +146,11 @@ core flow does no translation; clients and browsers can translate the original s
   completed run with such matches ends `needs_unmet`, while budget or source failures can
   set another stop reason. Read matched terms and warnings.
 - NVD may lack product or version data. A missing match or `no_hit` never establishes safety.
+  Format-4 stores also show one note per matching source block, worded `CNA/ADP <source>`,
+  reading the block's matching products together. Commit entries are skipped; commit-only
+  data stays unknown. Release ranges support open `0`/`unspecified`/`*` lower bounds,
+  open `*` upper bounds and `.*` prefixes. Even `states_unaffected` leaves VulnWitness
+  applicability unknown ([ADR 0028](docs/rebuild/adr/0028-source-version-notes.md)).
 - No verified affectedness source is available. Weakness paths are derived catalogue
   associations, not attack paths, and "no ATT&CK mapping" describes the loaded snapshot only.
 - Triage selection is an order, not a risk ranking.

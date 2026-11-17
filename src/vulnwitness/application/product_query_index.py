@@ -2,9 +2,8 @@
 
 from collections.abc import Sequence
 
-from vulnwitness.domain.cpe import cpe_product_identity
-from vulnwitness.domain.cve import CveRecord, SourceAffectedProduct
-from vulnwitness.domain.product_query import normalize_source_name
+from vulnwitness.domain.cve import CveRecord
+from vulnwitness.domain.source_product import list_entry_names, normalize_source_name
 from vulnwitness.domain.text import tokenize
 
 
@@ -73,18 +72,6 @@ def list_source_names(record: CveRecord) -> list[tuple[str, str]]:
     for block in record.source_affected:
         for entry in block.products:
             names.extend(list_entry_names(entry))
-    return names
-
-
-def list_entry_names(entry: SourceAffectedProduct) -> list[tuple[str, str]]:
-    names: list[tuple[str, str]] = []
-    if entry.vendor and entry.product:
-        names.append((normalize_source_name(entry.vendor), normalize_source_name(entry.product)))
-    for cpe in entry.cpes:
-        identity = cpe_product_identity(cpe)
-        if identity is not None:
-            vendor, product = identity
-            names.append((normalize_source_name(vendor), normalize_source_name(product)))
     return names
 
 

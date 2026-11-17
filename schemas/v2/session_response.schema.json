@@ -85,8 +85,8 @@
           "$ref": "#/$defs/AffectednessRequest"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         }
@@ -1104,8 +1104,8 @@
           "$ref": "#/$defs/TopicResolution"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         }
@@ -1443,8 +1443,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },
@@ -2063,8 +2063,8 @@
           "$ref": "#/$defs/EvidenceAnchor"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         }
@@ -2553,6 +2553,38 @@
             }
           ],
           "default": null
+        },
+        "source_version_notes": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "no_statement": "#/$defs/SourceVersionStatement",
+                    "states_affected": "#/$defs/SourceVersionStatement",
+                    "states_unaffected": "#/$defs/SourceVersionStatement",
+                    "unknown": "#/$defs/SourceVersionUnknown"
+                  },
+                  "propertyName": "outcome"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/SourceVersionStatement"
+                  },
+                  {
+                    "$ref": "#/$defs/SourceVersionUnknown"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source statements in mention then feed order; omitted without mentions or before store format 4, empty when no source product matches. Recomputed by validation.",
+          "title": "Source Version Notes"
         }
       },
       "required": [
@@ -2880,8 +2912,8 @@
           "type": "boolean"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },
@@ -3281,8 +3313,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },
@@ -4753,8 +4785,8 @@
           "title": "Product"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },
@@ -4909,6 +4941,38 @@
         },
         "record": {
           "$ref": "#/$defs/CveRecord"
+        },
+        "source_version_notes": {
+          "anyOf": [
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "no_statement": "#/$defs/SourceVersionStatement",
+                    "states_affected": "#/$defs/SourceVersionStatement",
+                    "states_unaffected": "#/$defs/SourceVersionStatement",
+                    "unknown": "#/$defs/SourceVersionUnknown"
+                  },
+                  "propertyName": "outcome"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/SourceVersionStatement"
+                  },
+                  {
+                    "$ref": "#/$defs/SourceVersionUnknown"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source statements in feed order; omitted without a version or before store format 4, empty when no source product matches. Never applicability.",
+          "title": "Source Version Notes"
         }
       },
       "required": [
@@ -5864,8 +5928,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },
@@ -7126,6 +7190,150 @@
       "title": "SourceVersionChange",
       "type": "object"
     },
+    "SourceVersionMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "applied_changes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SourceVersionChange"
+          },
+          "title": "Applied Changes",
+          "type": "array"
+        },
+        "entry": {
+          "$ref": "#/$defs/SourceAffectedVersion"
+        },
+        "status": {
+          "enum": [
+            "affected",
+            "unaffected",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry",
+        "applied_changes",
+        "status"
+      ],
+      "title": "SourceVersionMatch",
+      "type": "object"
+    },
+    "SourceVersionStatement": {
+      "additionalProperties": false,
+      "properties": {
+        "covering_entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SourceVersionMatch"
+          },
+          "title": "Covering Entries",
+          "type": "array"
+        },
+        "matched_products": {
+          "items": {
+            "$ref": "#/$defs/SourceAffectedProduct"
+          },
+          "minItems": 1,
+          "title": "Matched Products",
+          "type": "array"
+        },
+        "mention": {
+          "title": "Mention",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "states_affected",
+            "states_unaffected",
+            "no_statement"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "wording": {
+          "title": "Wording",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mention",
+        "source",
+        "outcome",
+        "matched_products",
+        "covering_entries",
+        "wording"
+      ],
+      "title": "SourceVersionStatement",
+      "type": "object"
+    },
+    "SourceVersionUnknown": {
+      "additionalProperties": false,
+      "properties": {
+        "covering_entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SourceVersionMatch"
+          },
+          "title": "Covering Entries",
+          "type": "array"
+        },
+        "matched_products": {
+          "items": {
+            "$ref": "#/$defs/SourceAffectedProduct"
+          },
+          "minItems": 1,
+          "title": "Matched Products",
+          "type": "array"
+        },
+        "mention": {
+          "title": "Mention",
+          "type": "string"
+        },
+        "outcome": {
+          "const": "unknown",
+          "default": "unknown",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason_code": {
+          "enum": [
+            "conflicting",
+            "truncated",
+            "version_not_comparable",
+            "no_version_data"
+          ],
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "wording": {
+          "title": "Wording",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mention",
+        "source",
+        "outcome",
+        "reason_code",
+        "matched_products",
+        "covering_entries",
+        "wording"
+      ],
+      "title": "SourceVersionUnknown",
+      "type": "object"
+    },
     "SsvcAssessment": {
       "additionalProperties": false,
       "description": "One SSVC assessment NVD 2.0 mirrors in ``metrics.ssvcV203``; CISA's ADP container\nscores most CVEs in the role ``CISA Coordinator``.",
@@ -7886,8 +8094,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },
@@ -8349,8 +8557,8 @@
           "type": "string"
         },
         "schema_version": {
-          "const": "2.0.0-dev.60",
-          "default": "2.0.0-dev.60",
+          "const": "2.0.0-dev.61",
+          "default": "2.0.0-dev.61",
           "title": "Schema Version",
           "type": "string"
         },

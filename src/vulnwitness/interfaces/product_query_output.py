@@ -91,6 +91,11 @@ def build_export_row(vulnerability: ProductVulnerability) -> dict[str, object]:
     }
     if vulnerability.nvd_version_note is not None:
         row["nvd_version_note_outcome"] = vulnerability.nvd_version_note.outcome
+    if vulnerability.source_version_notes is not None:
+        notes: list[dict[str, object]] = []
+        for note in vulnerability.source_version_notes:
+            notes.append(note.model_dump(mode="json"))
+        row["source_version_notes"] = notes
     return row
 
 
@@ -101,6 +106,12 @@ def write_export_rows(
     columns = list(EXPORT_COLUMNS)
     if pages[0].version is not None:
         columns.insert(3, "nvd_version_note_outcome")
+        if any(
+            vulnerability.source_version_notes is not None
+            for page in pages
+            for vulnerability in page.items
+        ):
+            columns.insert(4, "source_version_notes")
     csv_writer = csv.DictWriter(export_file, fieldnames=columns)
     if export == "csv":
         csv_writer.writeheader()
@@ -116,6 +127,10 @@ def write_export_rows(
             else:
                 row["matched_products"] = json.dumps(row["matched_products"], ensure_ascii=False)
                 row["evidence_ids"] = json.dumps(row["evidence_ids"])
+                if "source_version_notes" in row:
+                    row["source_version_notes"] = json.dumps(
+                        row["source_version_notes"], ensure_ascii=False
+                    )
                 csv_writer.writerow(row)
 
 

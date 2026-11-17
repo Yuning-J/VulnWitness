@@ -28,7 +28,7 @@ def build_investigation_report(
         record = candidate.candidate.record
         steps = ", ".join(str(index) for index in candidate.found_by_steps)
         notes: list[str] = []
-        for note in candidate.nvd_version_notes or ():
+        for note in (*(candidate.nvd_version_notes or ()), *(candidate.source_version_notes or ())):
             notes.append(f"{note.mention}: {note.outcome} · {note.wording}")
         candidates.append(
             (
@@ -104,7 +104,7 @@ def build_investigation_report(
                             "Severity",
                             "Relevance",
                             "Found by",
-                            "NVD version note",
+                            "NVD and source version notes",
                         ),
                         tuple(candidates),
                         tuple(links),

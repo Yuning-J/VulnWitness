@@ -21,9 +21,11 @@ from vulnwitness.domain.session_claim import (
     ProductFieldClaim,
     RecordFactClaim,
     SessionClaim,
+    SourceVersionNoteClaim,
     VersionNoteClaim,
 )
 from vulnwitness.domain.session_record import SessionClaimCheck
+from vulnwitness.domain.source_version_note import SourceVersionNote
 
 
 def unavailable_claim(finding_id: str, claim: SessionClaim, field: str) -> SessionClaimCheck:
@@ -118,6 +120,45 @@ def check_product_claim(
             "nvd_version_note.mention": note.mention,
             "nvd_version_note.outcome": note.outcome,
             "applicability": item.applicability,
+        },
+    )
+
+
+def check_source_version_claim(
+    finding_id: str, claim: SourceVersionNoteClaim, answer: BaseModel
+) -> SessionClaimCheck:
+    notes: list[SourceVersionNote] = []
+    item = find_product_item(answer, claim.cve_id)
+    if item is not None:
+        notes.extend(item.source_version_notes or ())
+    if isinstance(answer, KnowledgeEvidenceSet):
+        candidates = list(answer.implementation_candidates)
+        for excluded in answer.excluded_implementation_candidates:
+            candidates.append(excluded.candidate)
+        for candidate in candidates:
+            if candidate.candidate.record.cve_id == claim.cve_id:
+                notes.extend(candidate.source_version_notes or ())
+    if not notes:
+        return unavailable_claim(finding_id, claim, "source_version_notes")
+    nearest_note = notes[0]
+    nearest_score = -1
+    for note in notes:
+        score = (note.mention == claim.mention) + (note.source == claim.source)
+        score = score * 2 + (note.outcome == claim.outcome)
+        if score > nearest_score:
+            nearest_note, nearest_score = note, score
+    return compare_claim_fields(
+        finding_id,
+        claim,
+        {
+            "source_version_notes.mention": claim.mention,
+            "source_version_notes.source": claim.source,
+            "source_version_notes.outcome": claim.outcome,
+        },
+        {
+            "source_version_notes.mention": nearest_note.mention,
+            "source_version_notes.source": nearest_note.source,
+            "source_version_notes.outcome": nearest_note.outcome,
         },
     )
 
@@ -226,6 +267,8 @@ def check_session_claim(
 ) -> SessionClaimCheck:
     if answer is None:
         return unavailable_claim(finding_id, claim, "call")
+    if isinstance(claim, SourceVersionNoteClaim):
+        return check_source_version_claim(finding_id, claim, answer)
     if isinstance(claim, ProductFieldClaim | DescriptionMentionClaim | VersionNoteClaim):
         return check_product_claim(finding_id, claim, answer)
     if isinstance(claim, CatalogueAssociationClaim):

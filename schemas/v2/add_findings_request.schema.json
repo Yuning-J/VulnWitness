@@ -103,6 +103,30 @@
           "if": {
             "properties": {
               "kind": {
+                "const": "source_version_note"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "claim": {
+                "properties": {
+                  "kind": {
+                    "const": "source_version_note"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "claim"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
                 "const": "need_status"
               }
             }
@@ -222,6 +246,7 @@
                   "need_status": "#/$defs/NeedStatusClaim",
                   "product_field_match": "#/$defs/ProductFieldClaim",
                   "record_fact": "#/$defs/RecordFactClaim",
+                  "source_version_note": "#/$defs/SourceVersionNoteClaim",
                   "version_note": "#/$defs/VersionNoteClaim"
                 },
                 "propertyName": "kind"
@@ -235,6 +260,9 @@
                 },
                 {
                   "$ref": "#/$defs/VersionNoteClaim"
+                },
+                {
+                  "$ref": "#/$defs/SourceVersionNoteClaim"
                 },
                 {
                   "$ref": "#/$defs/CatalogueAssociationClaim"
@@ -266,6 +294,7 @@
             "description_mention",
             "catalogue_association",
             "version_note",
+            "source_version_note",
             "need_status",
             "record_fact",
             "model_judgement",
@@ -962,6 +991,58 @@
         "evidence_id"
       ],
       "title": "SessionCitation",
+      "type": "object"
+    },
+    "SourceVersionNoteClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "call": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Call",
+          "type": "integer"
+        },
+        "cve_id": {
+          "maxLength": 32,
+          "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$(?!\\n)",
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "source_version_note",
+          "title": "Kind",
+          "type": "string"
+        },
+        "mention": {
+          "minLength": 1,
+          "title": "Mention",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "states_affected",
+            "states_unaffected",
+            "no_statement",
+            "unknown"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "call",
+        "cve_id",
+        "mention",
+        "source",
+        "outcome"
+      ],
+      "title": "SourceVersionNoteClaim",
       "type": "object"
     },
     "VersionNoteClaim": {

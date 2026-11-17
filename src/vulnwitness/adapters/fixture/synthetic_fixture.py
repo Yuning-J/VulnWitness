@@ -66,6 +66,10 @@ class FixtureBundle:
     cnvd_index: CnvdIndex = field(default_factory=CnvdIndex)
     kev_snapshot: KevCapability = field(default_factory=lambda: KevCapability(imported=False))
 
+    @property
+    def store_format_version(self) -> int:
+        return 4
+
     def describe_kev(self) -> KevCapability:
         """The declared synthetic snapshot state; packaged fields import no CISA snapshot."""
         return self.kev_snapshot

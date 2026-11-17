@@ -738,6 +738,7 @@ class InvestigationService:
             basis,
             self._affectedness_detail,
             self._relevance_labels(run),
+            self._evidence_catalog.store_format_version,
         )
         answer = returned_answer.answer
         warnings = list_interpretation_warnings(

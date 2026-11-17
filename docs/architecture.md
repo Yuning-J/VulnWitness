@@ -81,7 +81,7 @@ Pages default to 10, maximum 20; repeat vendor, product, version and limit with
 traversal. Invalid/mismatched/out-of-range cursors fail (CLI 2, REST 422, MCP failure);
 wrong types fail validation. CLI exits 0 for records, 1 for empty, without a sufficiency claim.
 
-### NVD version facts and affectedness
+### NVD and source version facts and affectedness
 
 Product version notes and recognized investigation versions annotate retained NVD
 conditions: `hit` means a condition matched, `no_hit` never means unaffected, and
@@ -94,6 +94,35 @@ platform, negation, unnamed CPEs) are retained as given and shown, never evaluat
 names its range's open sides and any running-on platform NVD pairs it with (ADR 0024). NVD may omit product/version information. Notes never change evidence
 needs, stopping or applicability. Affectedness always returns `unknown` /
 `blocked_unverified` (CLI 1); a missing match never establishes safety.
+
+Source notes (ADR 0028) read each matching CNA/ADP block independently using the
+shared source-name normalization, including CPE 2.2/2.3 names. Product queries require
+their explicit vendor/product pair; investigations match a mentioned whole vendor or
+product name. All matching products within a block are read together as one product,
+so a noncovering sibling says nothing against a covering entry. Numeric ranges honor
+inclusive/exclusive bounds, open lower `0`/`unspecified`/`*` and upper `*` bounds,
+version-sorted changes and `defaultStatus`. Bounds and exact versions ending in `.*`
+match a numeric prefix: `lessThanOrEqual: 5.10.*` covers all of 5.10, while
+`lessThan: 5.10.*` excludes that prefix. Commit entries are skipped (`versionType` `git`
+or `original_commit_for_fix`, or all bounds hexadecimal hashes of 7–40 characters,
+each containing a nondigit); commit-only data gives `unknown/no_version_data`.
+Any matching product's omitted versions or changes, or any uncomparable release entry,
+keeps its block unknown. Conflicts between covering statuses, or between defaults when
+no entry covers, take precedence over truncation, then uncomparable versions, then
+missing version data. A covering `unknown` status gives `no_statement`; a comparable
+miss with absent/unknown default also gives `no_statement`. Notes carry verbatim
+`matched_products` and `covering_entries` with their applied changes directly.
+
+The served corpus exposes its store format through the evidence catalog, so both
+production and validation know whether source data was available. Formats 1–3 omit
+`source_version_notes`; format 4 returns an empty array when no block matches. Synthetic
+fixtures use the current format. Investigations flatten notes in mention then source
+feed order and validation recomputes them from the cataloged records. A
+`source_version_note` session claim checks mention, source and outcome. The retained
+affected blocks do not identify whether their author is a CNA or ADP, so wording labels
+the author as `CNA/ADP <source>`.
+These notes do not feed applicability, priority, OpenVEX, the asset register, affectedness
+checks or triage ordering; the asset register has no deployed-version field.
 
 ## Topics and protocol context
 

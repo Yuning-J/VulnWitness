@@ -11,7 +11,8 @@ affectedness source is available to establish it.
 
 from collections.abc import Iterable, Mapping, Sequence
 from enum import StrEnum
-from operator import not_
+from functools import partial
+from operator import is_, not_
 from typing import Annotated, Literal, Self
 
 from pydantic import ConfigDict, Field, JsonValue, StrictBool, model_validator
@@ -53,6 +54,7 @@ from vulnwitness.domain.search import (
     SearchWarningCode,
     SemanticUnavailableDetail,
 )
+from vulnwitness.domain.source_version_note import SourceVersionNote
 from vulnwitness.domain.taxonomy import ResultStatus, RetrievalChannel
 from vulnwitness.domain.threat_context import SnapshotCoverage, ThreatContextItem
 from vulnwitness.domain.timestamps import Timestamp
@@ -995,6 +997,12 @@ class InvestigationCandidate(ContractModel):
         )
     )
     found_by_steps: tuple[int, ...] = Field(min_length=1)
+    source_version_notes: tuple[SourceVersionNote, ...] | None = Field(
+        default=None,
+        exclude_if=partial(is_, None),
+        description="Source statements in mention then feed order; omitted without mentions "
+        "or before store format 4, empty when no source product matches. Recomputed by validation.",
+    )
     nvd_version_notes: tuple[NvdVersionNote, ...] | None = Field(
         default=None,
         exclude_if=not_,

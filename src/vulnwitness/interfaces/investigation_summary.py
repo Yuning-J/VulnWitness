@@ -92,6 +92,8 @@ def format_candidates(evidence_set: KnowledgeEvidenceSet) -> str:
             outcome = note.outcome.replace("_", " ")
             reason = f" [{note.reason_code}]" if note.outcome == "unknown" else ""
             lines.append(format_paragraph(f"  NVD ({note.mention}): {outcome}{reason}."))
+        for source_note in candidate.source_version_notes or ():
+            lines.append(format_paragraph(source_note.wording))
     lines.append(
         format_paragraph(
             "Weakness associations (derived catalogue context): "

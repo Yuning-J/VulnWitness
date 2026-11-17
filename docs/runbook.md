@@ -78,13 +78,35 @@ description mention matched, typically because NVD has not enriched them.
 they are outside `total_available`, ordering, triage and exports
 ([ADR 0023](rebuild/adr/0023-source-named-product-candidates.md)).
 
+With `--version`, each inventory item also carries `source_version_notes` after its
+NVD note: one per matching CNA/ADP block, in feed order. The outcomes are
+`states_affected`, `states_unaffected`, `no_statement` and `unknown`; the last gives
+`conflicting`, `truncated`, `version_not_comparable` or `no_version_data`, in that
+precedence. A block's matching products are read together; a noncovering sibling does
+not contradict a covering entry. Backport changes apply in version order. Lower bounds
+`0`, `unspecified` and `*`, and upper `*`, are open; bounds or exact versions ending
+in `.*` match a numeric prefix (`lessThanOrEqual: 5.10.*` includes all of 5.10,
+`lessThan: 5.10.*` excludes it). Commit entries are skipped: `versionType` `git` or
+`original_commit_for_fix`, or all bounds hexadecimal hashes of 7–40 characters, each
+with a nondigit. Commit-only data gives `unknown/no_version_data`; nonnumeric release
+suffixes give `unknown/version_not_comparable`. A covering `unknown` status gives
+`no_statement`. Without a covering entry, differing defaults give `unknown/conflicting`;
+otherwise an absent or `unknown` default with comparable release entries gives
+`no_statement`. Notes carry `matched_products` verbatim and `covering_entries` with
+applied changes directly. Wording names the author as `CNA/ADP <source>`.
+These are each source's statements, never applicability.
+The field is omitted for stores before format 4 and without a requested version; an
+empty array means no matching source product in a format-4 store. Investigations and
+triage findings retain the same notes; session claims check mention, source and outcome.
+Re-import an older store to obtain source data ([ADR 0028](rebuild/adr/0028-source-version-notes.md)).
+
 `product --vendor democorp --all --limit 20` traverses one fixed corpus,
 printing a JSON array of unchanged `ProductQueryResponse` pages, each with its cursors
 and evidence. `--max-pages` defaults to 100; an unfinished traversal exits 2 without
 printing pages or publishing an export. `--output FILE --export csv|jsonl` exports every
 matching CVE even without `--all`;
 CSV excludes descriptions, JSONL keeps them. Multi-valued CSV cells contain JSON arrays;
-version-note outcomes appear with `--version`. Exports publish atomically as 0600 files;
+NVD outcomes and full source version notes appear with `--version`. Exports publish atomically as 0600 files;
 overwriting requires `--force`. Full traversal rejects `--cursor`; `--format text` cannot
 accompany `--all` or `--output`.
 
