@@ -22,7 +22,7 @@ from vulnwitness.domain.migration_report import (
     MigrationReport,
     build_migration_failure,
 )
-from vulnwitness.domain.normalization import NormalizationFailureCode
+from vulnwitness.domain.normalization import DroppedMirroredBlocks, NormalizationFailureCode
 
 
 class ReportTally:
@@ -36,9 +36,18 @@ class ReportTally:
         )
         self.cnvd_outcomes: dict[CnvdOutcome, int] = dict.fromkeys(CnvdOutcome, 0)
         self.kev_outcomes: dict[KevOutcome, int] = dict.fromkeys(KevOutcome, 0)
+        self.dropped_mirrored_blocks = DroppedMirroredBlocks()
         self.skipped_entries: list[EntryLocator] = []
         self.legacy_root_findings: dict[LegacyFileKind, int] | None = None
         self.import_identity_sha256: str | None = None
+
+    def add_dropped_mirrored_blocks(self, dropped_block_counts: DroppedMirroredBlocks) -> None:
+        self.dropped_mirrored_blocks = DroppedMirroredBlocks(
+            source_affected=self.dropped_mirrored_blocks.source_affected
+            + dropped_block_counts.source_affected,
+            ssvc=self.dropped_mirrored_blocks.ssvc + dropped_block_counts.ssvc,
+            cve_tags=self.dropped_mirrored_blocks.cve_tags + dropped_block_counts.cve_tags,
+        )
 
     def add_malformed_entry(
         self, input_position: int, entry_index: int, code: NormalizationFailureCode
@@ -76,6 +85,7 @@ class ReportTally:
             cve_outcomes=self.cve_outcomes,
             candidate_outcomes=self.candidate_outcomes,
             normalization_failures=self.normalization_failures,
+            dropped_mirrored_blocks=self.dropped_mirrored_blocks,
             kev_outcomes=self.kev_outcomes,
             cnvd_outcomes=self.cnvd_outcomes,
             kev_advice=KEV_WITHOUT_NVD_RECORD_ADVICE if has_kev_without_nvd else None,

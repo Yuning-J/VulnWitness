@@ -9,6 +9,7 @@ from vulnwitness.domain.cnvd import PendingCnvdOutcome
 from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CnvdEntry, CveRecord, Severity
 from vulnwitness.domain.nvd_metrics import is_nvd_own_metric
+from vulnwitness.domain.nvd_status import NVD_STATUSES, NvdEnrichment
 
 NvdState = Literal[
     "analysed",
@@ -34,17 +35,23 @@ PENDING_NVD_STATES: dict[PendingCnvdOutcome, NvdState] = {
     "cnvd_for_rejected_nvd_record": "rejected_by_nvd",
     "cnvd_for_excluded_nvd_record": "excluded_by_import",
 }
-# Keyed by the NVD 2.0 API value; NVD displays "Deferred" as "Not Scheduled" and
-# "Modified" as "Modified After Enrichment" (``vulnwitness.domain.nvd_status``).
-NVD_STATUS_STATES: dict[str, NvdState] = {
-    "Analyzed": "analysed",
-    "Modified": "analysed",
-    "Received": "awaiting_analysis",
-    "Awaiting Analysis": "awaiting_analysis",
-    "Undergoing Analysis": "awaiting_analysis",
-    "Deferred": "deferred",
-    "Rejected": "rejected_by_nvd",
-}
+
+
+def build_nvd_status_states() -> dict[str, NvdState]:
+    enrichment_states: dict[NvdEnrichment, NvdState] = {
+        "enriched": "analysed",
+        "pending": "awaiting_analysis",
+        "not_scheduled": "deferred",
+        "rejected": "rejected_by_nvd",
+        "unrecognised": "status_unknown",
+    }
+    states: dict[str, NvdState] = {}
+    for api_value, status in NVD_STATUSES.items():
+        states[api_value] = enrichment_states[status.enrichment]
+    return states
+
+
+NVD_STATUS_STATES = build_nvd_status_states()
 
 
 class ComparedNvdSeverity(ContractModel):

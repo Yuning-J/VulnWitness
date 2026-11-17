@@ -146,6 +146,7 @@ class NvdEntryStager:
                 return
             state = CandidateState.MALFORMED
         else:
+            self.tally.add_dropped_mirrored_blocks(normalized.dropped_mirrored_blocks)
             semantic_sha256 = canonical_sha256(
                 normalized.record.model_dump(mode="json", exclude={"evidence_ids"})
             )

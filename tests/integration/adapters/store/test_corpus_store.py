@@ -1112,3 +1112,31 @@ def test_verify_corpus_store_whose_manifest_is_exactly_at_its_cap_passes(
 
     # Assert
     assert verified_store.manifest == imported_contents.manifest
+
+
+@pytest.mark.parametrize("format_version", [1, 2, 3])
+@pytest.mark.parametrize("reader", [load_corpus_store, verify_corpus_store])
+def test_manifest_below_format_4_with_format_4_fields_is_refused(
+    imported_store: Path,
+    format_version: int,
+    reader: StoreReader,
+) -> None:
+    contents = read_store_contents(imported_store)
+    records: list[CveRecord] = []
+    for record in contents.records:
+        records.append(record.model_copy(update={"nvd_status": None}))
+    earlier_store = imported_store.with_name("earlier-store")
+    manifest = write_store(earlier_store, contents.manifest, records, contents.anchors)
+    manifest_fields = manifest.model_dump(mode="json")
+    manifest_fields["store_format_version"] = format_version
+    if format_version == 1:
+        (earlier_store / PENDING_CNVD_FILE).unlink()
+        files: list[dict[str, Any]] = []
+        for store_file in manifest_fields["files"]:
+            if store_file["path"] != PENDING_CNVD_FILE:
+                files.append(store_file)
+        manifest_fields["files"] = files
+    (earlier_store / STORE_MANIFEST_FILE).write_text(json.dumps(manifest_fields))
+
+    with pytest.raises(CorpusStoreIntegrityError, match="only format 4 holds"):
+        reader(earlier_store)

@@ -48,9 +48,9 @@ def test_coverage_counts_each_month_and_the_total() -> None:
     )
     undated = build_cve_record(cve_id="CVE-2026-0003", nvd_status=None)
 
-    coverage = measure_store_coverage("store", DIGEST, (enriched, not_scheduled, undated))
+    coverage = measure_store_coverage("store", DIGEST, (enriched, not_scheduled, undated), 4)
 
-    months = []
+    months: list[str] = []
     for month in coverage.months:
         months.append(month.month)
     assert months == ["2026-03", "2026-10", "unpublished"]
@@ -93,7 +93,7 @@ def test_diff_tells_timestamp_refreshes_from_content_changes() -> None:
         ("CVE-2026-0003",),
     )
     assert diff.changed_fields == {"cwe_ids": 1}
-    assert diff.old_semantic_content_sha256 != diff.new_semantic_content_sha256
+    assert diff.old_semantic_records_sha256 != diff.new_semantic_records_sha256
     assert not diff.lists_truncated
 
 
@@ -101,7 +101,28 @@ def test_diff_tells_timestamp_refreshes_from_content_changes() -> None:
 def test_nvd_owned_metrics_count_as_nvd_coverage_and_not_source_coverage(scorer: str) -> None:
     record = build_cve_record(cvss=(build_cvss_metric(scorer=scorer),))
 
-    coverage = measure_store_coverage("store", DIGEST, (record,))
+    coverage = measure_store_coverage("store", DIGEST, (record,), 4)
 
     assert coverage.total.with_nvd_own_cvss3 == 1
     assert coverage.total.with_source_cvss == 0
+
+
+@pytest.mark.parametrize("store_format_version", [1, 2, 3, 4])
+def test_coverage_uses_null_for_fields_the_store_format_cannot_hold(
+    store_format_version: int,
+) -> None:
+    record = build_cve_record(cvss=(build_cvss_metric(scorer="cna@example.test"),))
+
+    coverage = measure_store_coverage("store", DIGEST, (record,), store_format_version)
+
+    assert coverage.store_format_version == store_format_version
+    for counts in (*coverage.months, coverage.total):
+        assert counts.with_source_cvss == 1
+        expected = 0 if store_format_version == 4 else None
+        assert counts.with_source_affected == expected
+        assert counts.with_source_affected_versions == expected
+        assert counts.with_source_affected_purl == expected
+        assert counts.with_ssvc == expected
+        assert counts.ssvc_exploitation_poc == expected
+        assert counts.ssvc_exploitation_active == expected
+    assert "null means the store format cannot record it" in coverage.statement

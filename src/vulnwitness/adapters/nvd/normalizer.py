@@ -3,7 +3,8 @@
 The normalizer is pure: callers supply each source's identity, retrieval time and terms,
 and no network or filesystem access occurs here. Input is validated at this
 boundary. A field present with the wrong JSON type raises
-``NvdNormalizationError`` rather than being dropped; an absent field stays absent.
+``NvdNormalizationError``; an absent field stays absent. Malformed mirrored CNA/ADP,
+SSVC and CVE-tag blocks are dropped independently and counted on ``NormalizedCve``.
 Every error carries a ``NormalizationFailureCode``; its message may quote the entry, so
 only the code may be reported to anyone but the developer.
 
@@ -16,10 +17,10 @@ is also kept verbatim under ``configurations``; nothing evaluates it.
 """
 
 import re
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from pydantic import ValidationError
 
@@ -33,6 +34,7 @@ from vulnwitness.domain.cve import (
     MAX_SOURCE_AFFECTED_NAMES,
     MAX_SOURCE_AFFECTED_PRODUCTS,
     MAX_SOURCE_AFFECTED_VERSIONS,
+    MAX_SOURCE_VERSION_CHANGES,
     AffectedProduct,
     CveRecord,
     CveTag,
@@ -47,7 +49,7 @@ from vulnwitness.domain.cve import (
 )
 from vulnwitness.domain.evidence import UNSEALED_EVIDENCE_ID, EvidenceAnchor, seal_evidence_anchor
 from vulnwitness.domain.hashing import canonical_sha256
-from vulnwitness.domain.normalization import NormalizationFailureCode
+from vulnwitness.domain.normalization import DroppedMirroredBlocks, NormalizationFailureCode
 from vulnwitness.domain.taxonomy import (
     AssertionKind,
     KnowledgeScope,
@@ -106,6 +108,7 @@ class KevSource:
 class NormalizedCve:
     record: CveRecord
     evidence: tuple[EvidenceAnchor, ...]
+    dropped_mirrored_blocks: DroppedMirroredBlocks = field(default_factory=DroppedMirroredBlocks)
 
 
 def _optional_mapping(container: Mapping[str, Any], key: str) -> Mapping[str, Any]:
@@ -430,8 +433,8 @@ def _cwe_ids(weaknesses: Iterable[object]) -> tuple[str, ...]:
     return tuple(cwe_ids)
 
 
-def _text_list(container: Mapping[str, Any], key: str) -> tuple[str, ...]:
-    """A list of strings; empty strings are dropped and at most the stored cap is kept."""
+def _text_list(container: Mapping[str, Any], key: str) -> tuple[tuple[str, ...], int]:
+    """Distinct nonempty strings up to the stored cap, plus the number beyond it."""
     values: list[str] = []
     for value in _optional_list(container, key):
         if not isinstance(value, str):
@@ -440,7 +443,9 @@ def _text_list(container: Mapping[str, Any], key: str) -> tuple[str, ...]:
             )
         if value and value not in values:
             values.append(value)
-    return tuple(values[:MAX_SOURCE_AFFECTED_NAMES])
+    return tuple(values[:MAX_SOURCE_AFFECTED_NAMES]), max(
+        0, len(values) - MAX_SOURCE_AFFECTED_NAMES
+    )
 
 
 def _status(container: Mapping[str, Any], key: str) -> str | None:
@@ -463,56 +468,85 @@ def _required_status(version: Mapping[str, Any]) -> str:
     return status
 
 
-def _source_affected(entries: Iterable[object]) -> tuple[SourceAffected, ...]:
-    """NVD 2.0 ``affected[]``: each CNA or ADP block of ``affectedData`` products, capped,
-    with the products and versions beyond the caps counted. ``changes``, ``programFiles``
-    and ``programRoutines`` are not kept."""
-    blocks: list[SourceAffected] = []
+MirroredBlock = TypeVar("MirroredBlock", SourceAffected, SsvcAssessment, CveTag)
+
+
+def _mirrored_blocks(
+    container: Mapping[str, Any], key: str, parse_block: Callable[[object], MirroredBlock]
+) -> tuple[tuple[MirroredBlock, ...], int]:
+    """Validate each block independently; a malformed collection counts as one drop."""
+    try:
+        entries = _optional_list(container, key)
+    except NvdNormalizationError:
+        return (), 1
+    blocks: list[MirroredBlock] = []
+    blocks_dropped = 0
     for entry in entries:
-        block = _as_mapping(entry, "affected")
-        products: list[dict[str, object]] = []
-        affected_data = _optional_list(block, "affectedData")
-        for item in affected_data[:MAX_SOURCE_AFFECTED_PRODUCTS]:
-            product = _as_mapping(item, "affectedData")
-            versions: list[dict[str, object]] = []
-            version_entries = _optional_list(product, "versions")
-            for version_item in version_entries[:MAX_SOURCE_AFFECTED_VERSIONS]:
-                version = _as_mapping(version_item, "versions")
-                versions.append(
-                    {
-                        "version": _required_text(version, "version"),
-                        "status": _required_status(version),
-                        "version_type": _optional_text(version, "versionType"),
-                        "less_than": _optional_text(version, "lessThan"),
-                        "less_than_or_equal": _optional_text(version, "lessThanOrEqual"),
-                    }
+        try:
+            blocks.append(parse_block(entry))
+        except (NvdNormalizationError, ValidationError):
+            blocks_dropped += 1
+    return tuple(blocks), blocks_dropped
+
+
+def _source_affected(entry: object) -> SourceAffected:
+    """One CNA/ADP block with capped products, versions, changes and name lists."""
+    block = _as_mapping(entry, "affected")
+    products: list[dict[str, object]] = []
+    affected_data = _optional_list(block, "affectedData")
+    for item in affected_data[:MAX_SOURCE_AFFECTED_PRODUCTS]:
+        product = _as_mapping(item, "affectedData")
+        versions: list[dict[str, object]] = []
+        version_entries = _optional_list(product, "versions")
+        for version_item in version_entries[:MAX_SOURCE_AFFECTED_VERSIONS]:
+            version = _as_mapping(version_item, "versions")
+            changes: list[dict[str, str]] = []
+            change_entries = _optional_list(version, "changes")
+            for change_item in change_entries[:MAX_SOURCE_VERSION_CHANGES]:
+                change = _as_mapping(change_item, "changes")
+                changes.append(
+                    {"at": _required_text(change, "at"), "status": _required_status(change)}
                 )
-            products.append(
+            versions.append(
                 {
-                    "vendor": _optional_text(product, "vendor"),
-                    "product": _optional_text(product, "product"),
-                    "package_name": _optional_text(product, "packageName"),
-                    "collection_url": _optional_text(product, "collectionURL"),
-                    "repo": _optional_text(product, "repo"),
-                    "package_url": _optional_text(product, "packageURL"),
-                    "cpes": _text_list(product, "cpes"),
-                    "modules": _text_list(product, "modules"),
-                    "platforms": _text_list(product, "platforms"),
-                    "default_status": _status(product, "defaultStatus"),
-                    "versions": versions,
-                    "omitted_versions": max(0, len(version_entries) - len(versions)),
+                    "version": _required_text(version, "version"),
+                    "status": _required_status(version),
+                    "version_type": _optional_text(version, "versionType"),
+                    "less_than": _optional_text(version, "lessThan"),
+                    "less_than_or_equal": _optional_text(version, "lessThanOrEqual"),
+                    "changes": changes,
+                    "omitted_changes": max(0, len(change_entries) - len(changes)),
                 }
             )
-        blocks.append(
-            SourceAffected.model_validate(
-                {
-                    "source": _required_text(block, "source"),
-                    "products": products,
-                    "omitted_products": max(0, len(affected_data) - len(products)),
-                }
-            )
+        cpes, omitted_cpes = _text_list(product, "cpes")
+        modules, omitted_modules = _text_list(product, "modules")
+        platforms, omitted_platforms = _text_list(product, "platforms")
+        products.append(
+            {
+                "vendor": _optional_text(product, "vendor"),
+                "product": _optional_text(product, "product"),
+                "package_name": _optional_text(product, "packageName"),
+                "collection_url": _optional_text(product, "collectionURL"),
+                "repo": _optional_text(product, "repo"),
+                "package_url": _optional_text(product, "packageURL"),
+                "cpes": cpes,
+                "omitted_cpes": omitted_cpes,
+                "modules": modules,
+                "omitted_modules": omitted_modules,
+                "platforms": platforms,
+                "omitted_platforms": omitted_platforms,
+                "default_status": _status(product, "defaultStatus"),
+                "versions": versions,
+                "omitted_versions": max(0, len(version_entries) - len(versions)),
+            }
         )
-    return tuple(blocks)
+    return SourceAffected.model_validate(
+        {
+            "source": _required_text(block, "source"),
+            "products": products,
+            "omitted_products": max(0, len(affected_data) - len(products)),
+        }
+    )
 
 
 SSVC_DECISION_POINTS = {
@@ -522,48 +556,38 @@ SSVC_DECISION_POINTS = {
 }
 
 
-def _ssvc(metrics: Mapping[str, Any]) -> tuple[SsvcAssessment, ...]:
-    """NVD 2.0 ``metrics.ssvcV203``; decision points other than the three SSVC names CISA
-    scores are not kept, and a repeated point is a malformed entry."""
-    assessments: list[SsvcAssessment] = []
-    for entry in _optional_list(metrics, "ssvcV203"):
-        metric = _as_mapping(entry, "ssvcV203")
-        data = _optional_mapping(metric, "ssvcData")
-        points: dict[str, str] = {}
-        for option in _optional_list(data, "options"):
-            for name, value in _as_mapping(option, "options").items():
-                field = SSVC_DECISION_POINTS.get(str(name).casefold())
-                if field is None:
-                    continue
-                if not isinstance(value, str) or field in points:
-                    raise NvdNormalizationError(
-                        NormalizationFailureCode.WRONG_JSON_TYPE, f"SSVC {name} is malformed"
-                    )
-                points[field] = value.casefold()
-        assessments.append(
-            SsvcAssessment.model_validate(
-                {
-                    "source": _required_text(metric, "source"),
-                    "role": _optional_text(data, "role"),
-                    "version": _optional_text(data, "version"),
-                    "assessed_at": _optional_datetime(data, "timestamp"),
-                    "decision_points": points,
-                }
-            )
-        )
-    return tuple(assessments)
+def _ssvc(entry: object) -> SsvcAssessment:
+    """One SSVC assessment; repeated decision points make the block malformed."""
+    metric = _as_mapping(entry, "ssvcV203")
+    assessment_fields = _optional_mapping(metric, "ssvcData")
+    points: dict[str, str] = {}
+    for option in _optional_list(assessment_fields, "options"):
+        for name, value in _as_mapping(option, "options").items():
+            field_name = SSVC_DECISION_POINTS.get(str(name).casefold())
+            if field_name is None:
+                continue
+            if not isinstance(value, str) or field_name in points:
+                raise NvdNormalizationError(
+                    NormalizationFailureCode.WRONG_JSON_TYPE, f"SSVC {name} is malformed"
+                )
+            points[field_name] = value.casefold()
+    return SsvcAssessment.model_validate(
+        {
+            "source": _required_text(metric, "source"),
+            "role": _optional_text(assessment_fields, "role"),
+            "version": _optional_text(assessment_fields, "version"),
+            "assessed_at": _optional_datetime(assessment_fields, "timestamp"),
+            "decision_points": points,
+        }
+    )
 
 
-def _cve_tags(entries: Iterable[object]) -> tuple[CveTag, ...]:
-    tags: list[CveTag] = []
-    for entry in entries:
-        tag = _as_mapping(entry, "cveTags")
-        values = _text_list(tag, "tags")
-        if values:
-            tags.append(
-                CveTag(source=_optional_text(tag, "sourceIdentifier") or "unknown", tags=values)
-            )
-    return tuple(tags)
+def _cve_tags(entry: object) -> CveTag:
+    tag = _as_mapping(entry, "cveTags")
+    values, omitted_tags = _text_list(tag, "tags")
+    return CveTag(
+        source=_required_text(tag, "sourceIdentifier"), tags=values, omitted_tags=omitted_tags
+    )
 
 
 def _kev_cwe_ids(text: str | None) -> tuple[str, ...]:
@@ -764,6 +788,7 @@ def _assemble(
     nvd_anchor: EvidenceAnchor,
     kev: KevSource | None,
     kev_terms: str,
+    dropped_mirrored_blocks: DroppedMirroredBlocks | None = None,
 ) -> NormalizedCve:
     """Attach evidence; an explicit KEV catalog entry supersedes NVD's mirrored listing."""
     if not record_fields["descriptions"]:
@@ -781,13 +806,13 @@ def _assemble(
     record = CveRecord.model_validate(
         {**record_fields, "cve_id": cve_id, "evidence_ids": evidence_ids}
     )
-    return NormalizedCve(record, tuple(anchors))
+    return NormalizedCve(record, tuple(anchors), dropped_mirrored_blocks or DroppedMirroredBlocks())
 
 
 class NvdNormalizer:
-    """Every malformed entry raises ``NvdNormalizationError``, including values the
-    canonical models reject, so a batch import can skip one entry and continue. Each
-    anchor cites ``terms``, which composition reads from the source registry."""
+    """Malformed core record fields raise ``NvdNormalizationError``. Malformed mirrored
+    blocks are dropped independently and counted. Each anchor cites ``terms``, which
+    composition reads from the source registry."""
 
     def __init__(self, terms: SourceTerms) -> None:
         self._terms = terms
@@ -848,6 +873,13 @@ class NvdNormalizer:
         )
         # Descriptions come from the CNA named in sourceIdentifier.
         description_source = _optional_text(vulnerability, "sourceIdentifier") or "NVD"
+        source_affected, dropped_affected_blocks = _mirrored_blocks(
+            vulnerability, "affected", _source_affected
+        )
+        ssvc, dropped_ssvc_blocks = _mirrored_blocks(
+            _optional_mapping(vulnerability, "metrics"), "ssvcV203", _ssvc
+        )
+        cve_tags, dropped_tag_blocks = _mirrored_blocks(vulnerability, "cveTags", _cve_tags)
         record_fields: dict[str, object] = {
             "descriptions": _descriptions(
                 _optional_list(vulnerability, "descriptions"), description_source
@@ -863,15 +895,26 @@ class NvdNormalizer:
             "references": _references(_optional_list(vulnerability, "references"), "source"),
             "kev": _inline_kev(vulnerability),
             "nvd_status": vulnerability.get("vulnStatus"),
-            "source_affected": _source_affected(_optional_list(vulnerability, "affected")),
-            "ssvc": _ssvc(_optional_mapping(vulnerability, "metrics")),
-            "cve_tags": _cve_tags(_optional_list(vulnerability, "cveTags")),
+            "source_affected": source_affected,
+            "ssvc": ssvc,
+            "cve_tags": cve_tags,
             **_configurations(_optional_list(vulnerability, "configurations")),
             "platform_conditions": _platform_conditions(
                 _optional_list(vulnerability, "configurations")
             ),
         }
-        return _assemble(cve_id, record_fields, nvd_anchor, kev, self._terms.cisa_kev)
+        return _assemble(
+            cve_id,
+            record_fields,
+            nvd_anchor,
+            kev,
+            self._terms.cisa_kev,
+            DroppedMirroredBlocks(
+                source_affected=dropped_affected_blocks,
+                ssvc=dropped_ssvc_blocks,
+                cve_tags=dropped_tag_blocks,
+            ),
+        )
 
     def _normalize_v1(
         self,

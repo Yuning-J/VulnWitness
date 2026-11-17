@@ -139,7 +139,10 @@ def test_v2_keeps_every_cvss_scorer_vendor_and_version_range() -> None:
     normalized = build_normalizer().normalize_v2(build_v2(), NVD_SNAPSHOT)
 
     record = normalized.record
-    assert [metric.scorer for metric in record.cvss] == [
+    scorers: list[str] = []
+    for metric in record.cvss:
+        scorers.append(metric.scorer)
+    assert scorers == [
         "nvd@nist.gov",
         "psirt@democorp.example",
     ]
@@ -623,7 +626,9 @@ def test_v2_inline_cisa_listing_keeps_name_and_required_action() -> None:
 
 
 def test_v2_mirrored_affected_ssvc_and_tags_are_kept_per_source() -> None:
-    versions = [{"version": f"1.{n}", "status": "affected"} for n in range(70)]
+    versions = []
+    for version_number in range(70):
+        versions.append({"version": f"1.{version_number}", "status": "affected"})
     vulnerability = build_v2(
         affected=[
             {
@@ -680,6 +685,8 @@ def test_v2_mirrored_affected_ssvc_and_tags_are_kept_per_source() -> None:
     assert gateway.default_status == "unaffected"
     assert gateway.versions[0].less_than == "2.7.3"
     assert gateway.versions[0].version_type == "semver"
+    assert gateway.versions[0].changes[0].at == "2.7.1"
+    assert gateway.versions[0].changes[0].status == "unaffected"
     assert (len(agent.versions), agent.omitted_versions) == (64, 6)
     (assessment,) = record.ssvc
     assert assessment.role == "CISA Coordinator"
@@ -722,6 +729,59 @@ def test_v2_mirrored_affected_ssvc_and_tags_are_kept_per_source() -> None:
     ],
     ids=["status-missing", "version-missing", "unknown-status", "unknown-ssvc", "ssvc-repeated"],
 )
-def test_malformed_mirrored_data_rejects_the_entry(overrides: dict[str, Any]) -> None:
-    with pytest.raises(NvdNormalizationError):
-        build_normalizer().normalize_v2(build_v2(**overrides), NVD_SNAPSHOT)
+def test_malformed_mirrored_block_is_counted_and_nvd_record_is_kept(
+    overrides: dict[str, Any],
+) -> None:
+    vulnerability = build_v2()
+    for name, value in overrides.items():
+        if name == "metrics":
+            vulnerability["metrics"].update(value)
+        else:
+            vulnerability[name] = value
+
+    normalized = build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
+
+    assert normalized.record.cvss
+    assert normalized.record.affected
+    assert normalized.record.source_affected == ()
+    assert normalized.record.ssvc == ()
+    assert sum(normalized.dropped_mirrored_blocks.model_dump().values()) == 1
+
+
+def test_malformed_mirrored_blocks_leave_valid_siblings_in_feed_order() -> None:
+    vulnerability = build_v2(
+        affected=[
+            {"source": "first", "affectedData": []},
+            {"affectedData": []},
+            {"source": "last", "affectedData": []},
+        ],
+        cveTags=[
+            {"sourceIdentifier": "first", "tags": ["disputed"]},
+            {"tags": ["disputed"]},
+            {"sourceIdentifier": "last", "tags": ["disputed"]},
+        ],
+    )
+    vulnerability["metrics"]["ssvcV203"] = [
+        {"source": "first", "ssvcData": {"options": [{"exploitation": "none"}]}},
+        {"source": "bad", "ssvcData": {"options": [{"exploitation": "public poc"}]}},
+        {"source": "last", "ssvcData": {"options": [{"exploitation": "poc"}]}},
+    ]
+
+    normalized = build_normalizer().normalize_v2(vulnerability, NVD_SNAPSHOT)
+
+    for blocks in (
+        normalized.record.source_affected,
+        normalized.record.ssvc,
+        normalized.record.cve_tags,
+    ):
+        sources: list[str] = []
+        for block in blocks:
+            sources.append(block.source)
+        assert sources == ["first", "last"]
+    assert normalized.dropped_mirrored_blocks.model_dump() == {
+        "source_affected": 1,
+        "ssvc": 1,
+        "cve_tags": 1,
+    }
+    assert normalized.record.cvss
+    assert normalized.record.affected

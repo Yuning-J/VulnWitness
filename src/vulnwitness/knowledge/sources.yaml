@@ -22,6 +22,7 @@ sources:
     redistribution_conditions: "Copies must reproduce MITRE's copyright designation and the license. The exact wording of the designation is not stated on the terms page (unverified)."
     local_storage_policy: operator_supplied
     terms_verified_on: 2026-10-14
+    notes: "CNA containers are held as NVD-mirrored source_affected and CVE tags in store format 4 under the CVE Program's terms (ADR 0020); they are not all Vulnrichment data."
   - name: cisa-kev
     official_url: "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
     terms_or_license_url: "https://www.cisa.gov/sites/default/files/licenses/kev/license.txt"
@@ -148,8 +149,8 @@ sources:
     terms_verified_on: 2026-10-17
     notes: "Its tools/list entries (tool names, descriptions and input schemas) only, as test data; no adapter ships (ADR 0003)."
   # Candidate sources from the 2026-11 roadmap, registered before any importer exists
-  # (THIRD_PARTY_DATA.md). Only cisa-vulnrichment data is held today, inside NVD 2.0
-  # records (ADR 0020).
+  # (THIRD_PARTY_DATA.md). NVD 2.0 mirrors CISA Vulnrichment's ADP data alongside
+  # CNA containers governed by the CVE Program's terms (ADR 0020).
   - name: cisa-vulnrichment
     official_url: "https://github.com/cisagov/vulnrichment"
     terms_or_license_url: "https://github.com/cisagov/vulnrichment/blob/develop/LICENSE"
@@ -159,7 +160,7 @@ sources:
     redistribution_conditions: "CC0 1.0 (LICENSE read 2026-11-16). The CVE records it annotates keep the CVE Program's terms."
     local_storage_policy: operator_supplied
     terms_verified_on: 2026-11-16
-    notes: "Held only as NVD-mirrored SSVC and affected data in store format 4 (ADR 0020)."
+    notes: "Held only as NVD-mirrored ADP SSVC and affected data in store format 4; CNA containers in source_affected are attributed separately to the CVE Program (ADR 0020)."
   - name: first-epss
     official_url: "https://www.first.org/epss/"
     terms_or_license_url: null

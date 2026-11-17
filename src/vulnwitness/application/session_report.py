@@ -12,9 +12,13 @@ from vulnwitness.application.cnvd_report import (
 )
 from vulnwitness.application.configuration_presentation import summarize_configurations
 from vulnwitness.application.investigation_report import build_investigation_report
+from vulnwitness.application.mirrored_presentation import (
+    describe_source_product,
+    describe_ssvc_decision_points,
+)
 from vulnwitness.application.priority_report import build_priority_report
 from vulnwitness.application.triage_workflow import triage_selection_key
-from vulnwitness.domain.cve import CveRecord, CvssMetric, SourceAffectedVersion
+from vulnwitness.domain.cve import CveRecord, CvssMetric
 from vulnwitness.domain.cve_lookup import CveLookupResponse, LookupCandidate, PendingCnvdLookup
 from vulnwitness.domain.cvss_ranking import rank_cvss_metric
 from vulnwitness.domain.evidence import EvidenceAnchor
@@ -218,16 +222,6 @@ def build_nvd_status_fact(record: CveRecord) -> ReportFact:
     return ReportFact("NVD status", describe_nvd_status(record.nvd_status), badge, detail)
 
 
-def describe_source_version(version: SourceAffectedVersion) -> str:
-    bounds = [version.version]
-    if version.less_than is not None:
-        bounds = [f"{version.version} to < {version.less_than}"]
-    elif version.less_than_or_equal is not None:
-        bounds = [f"{version.version} to ≤ {version.less_than_or_equal}"]
-    scheme = f" ({version.version_type})" if version.version_type else ""
-    return f"{version.status} {bounds[0]}{scheme}"
-
-
 def build_mirrored_section(record: CveRecord) -> ReportSection | None:
     """KEV detail, SSVC, CVE tags, CNA/ADP affected data and NVD configurations; shown
     only when the record carries any (store format 4). None of it sets affectedness."""
@@ -247,14 +241,11 @@ def build_mirrored_section(record: CveRecord) -> ReportSection | None:
             )
         )
     for assessment in record.ssvc:
-        points = assessment.decision_points
         role = assessment.role or "role not stated"
         facts.append(
             ReportFact(
                 "SSVC",
-                f"exploitation {points.exploitation or 'not stated'} · automatable "
-                f"{points.automatable or 'not stated'} · technical impact "
-                f"{points.technical_impact or 'not stated'}",
+                describe_ssvc_decision_points(assessment.decision_points),
                 detail=f"{role} · {assessment.source} · SSVC {assessment.version or '?'}",
             )
         )
@@ -263,16 +254,7 @@ def build_mirrored_section(record: CveRecord) -> ReportSection | None:
     bullets: list[str] = []
     for block in record.source_affected:
         for product in block.products:
-            name = " ".join(part for part in (product.vendor, product.product) if part)
-            name = name or product.package_name or product.package_url or "unnamed product"
-            versions = "; ".join(describe_source_version(v) for v in product.versions)
-            if product.omitted_versions:
-                versions += f"; {product.omitted_versions} more not stored"
-            default = f" · default {product.default_status}" if product.default_status else ""
-            purl = f" · {product.package_url}" if product.package_url else ""
-            bullets.append(
-                f"{block.source}: {name}{purl}{default} · {versions or 'no versions stated'}"
-            )
+            bullets.append(f"{block.source}: {describe_source_product(product)}")
         if block.omitted_products:
             bullets.append(f"{block.source}: {block.omitted_products} more products not stored")
     sections: tuple[ReportSection, ...] = ()

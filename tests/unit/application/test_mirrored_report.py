@@ -12,9 +12,11 @@ from vulnwitness.domain.cve import (
     SourceAffected,
     SourceAffectedProduct,
     SourceAffectedVersion,
+    SourceVersionChange,
     SsvcAssessment,
     SsvcDecisionPoints,
 )
+from vulnwitness.interfaces.lookup_summary import render_mirrored_lines
 from vulnwitness.interfaces.report_html import render_html_section
 from vulnwitness.interfaces.report_markdown import render_markdown_section
 
@@ -51,6 +53,8 @@ def build_format4_record() -> CveRecord:
                                 status="affected",
                                 less_than="2.7.3",
                                 version_type="semver",
+                                changes=(SourceVersionChange(at="2.7.1", status="unaffected"),),
+                                omitted_changes=2,
                             ),
                         ),
                         omitted_versions=3,
@@ -83,3 +87,19 @@ def test_mirrored_section_names_each_author_and_keeps_affectedness_unknown() -> 
         assert "3 more not stored" in rendered
         assert "2 more products not stored" in rendered
         assert "affectedness stays unknown" in rendered
+
+
+def test_report_and_lookup_show_status_changes_and_omitted_changes() -> None:
+    record = build_format4_record()
+
+    section = build_mirrored_section(record)
+    assert section is not None
+    markdown = render_markdown_section(section, 3)
+    html = render_html_section(section, 3)
+    lookup = "\n".join(render_mirrored_lines(record, 1000))
+
+    for rendered in (markdown, html, lookup):
+        assert "at 2.7.1 → unaffected" in rendered
+        assert "2 more status changes not stored" in rendered
+        assert "cna@democorp.example" in rendered
+        assert "exploitation poc · automatable yes · technical impact total" in rendered

@@ -5,6 +5,10 @@ from textwrap import fill
 from vulnwitness.application.cnvd_presentation import describe_cnvd_comparison
 from vulnwitness.application.configuration_presentation import summarize_configurations
 from vulnwitness.application.investigation_presentation import format_severity
+from vulnwitness.application.mirrored_presentation import (
+    describe_source_product,
+    describe_ssvc_decision_points,
+)
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse
 from vulnwitness.domain.nvd_status import describe_nvd_status
@@ -41,18 +45,16 @@ def format_weakness_path(path: WeaknessAssociationPath) -> str:
 
 
 def render_mirrored_lines(record: CveRecord, width: int) -> list[str]:
-    """KEV detail, SSVC, CVE tags and a count of source-stated affected products."""
+    """KEV detail, SSVC, tags and source-stated products with their version conditions."""
     lines: list[str] = []
     if record.kev is not None and record.kev.required_action:
         lines.append(fill(f"KEV required action: {record.kev.required_action}", width=width))
     if record.kev is not None and record.kev.forensic_triage:
         lines.append(f"KEV forensic triage: {record.kev.forensic_triage}")
     for assessment in record.ssvc:
-        points = assessment.decision_points
         lines.append(
-            f"SSVC: exploitation {points.exploitation or 'not stated'} · automatable "
-            f"{points.automatable or 'not stated'} · technical impact "
-            f"{points.technical_impact or 'not stated'} · {assessment.role or assessment.source}"
+            f"SSVC: {describe_ssvc_decision_points(assessment.decision_points)} "
+            f"· {assessment.role or assessment.source}"
         )
     for tag in record.cve_tags:
         lines.append(f"CVE tags: {', '.join(tag.tags)} · {tag.source}")
@@ -64,6 +66,11 @@ def render_mirrored_lines(record: CveRecord, width: int) -> list[str]:
             f"Source-stated affected data: {products} products from "
             f"{len(record.source_affected)} sources (untrusted; versions not evaluated)"
         )
+    for block in record.source_affected:
+        for product in block.products:
+            lines.append(fill(f"{block.source}: {describe_source_product(product)}", width=width))
+        if block.omitted_products:
+            lines.append(f"{block.source}: {block.omitted_products} more products not stored")
     if record.configurations or record.omitted_configurations:
         heading, configurations = summarize_configurations(
             record.configurations, record.omitted_configurations

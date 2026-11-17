@@ -23,8 +23,8 @@ class NvdStatus:
     meaning: str
 
 
-NVD_STATUSES: Final[dict[str, NvdStatus]] = {
-    status.api_value: status
+def build_nvd_statuses() -> dict[str, NvdStatus]:
+    statuses: dict[str, NvdStatus] = {}
     for status in (
         NvdStatus(
             "Received",
@@ -59,9 +59,12 @@ NVD_STATUSES: Final[dict[str, NvdStatus]] = {
             "not scheduled for NVD enrichment; NVD CPE, CVSS and CWE are not expected",
         ),
         NvdStatus("Rejected", "Rejected", "rejected", "rejected in the CVE List"),
-    )
-}
-NVD_STATUS_PAGE: Final = "https://nvd.nist.gov/vuln/vulnerability-status"
+    ):
+        statuses[status.api_value] = status
+    return statuses
+
+
+NVD_STATUSES: Final = build_nvd_statuses()
 
 
 def find_nvd_status(api_value: str | None) -> NvdStatus | None:

@@ -1,15 +1,15 @@
 """What a corpus store's records carry, by publication month, and how two stores differ in
 meaning rather than in bytes.
 
-Coverage counts what NVD enrichment supplies and VulnWitness relies on: vulnerable CPE
-matches, NVD's own CVSS v3 metric, CWE IDs and ``Exploit``-tagged references, beside NVD's
-status. Since NVD's 2026-04-15 change most new records stay "Not Scheduled", so these
-counts say how much of a store exact CPE matching and NVD-score rules can see at all.
+Coverage counts vulnerable CPE matches, NVD's own CVSS v3 metric, CWE IDs and
+``Exploit``-tagged references beside NVD's status, plus source CVSS, mirrored CNA/ADP
+affected data, purls and SSVC. Counts for fields a store format cannot persist are null.
 
 A record's semantic digest hashes its content without ``last_modified`` and without
 evidence IDs, which hash the source bytes. NVD rewrote ``lastModified`` on about 95% of
 records on 2026-06-17 with no change of content; the semantic diff tells such a refresh
-from a real one. Both are deterministic over the store's records.
+from a real one. The semantic identities cover records only; pending CNVD entries are
+excluded. Both are deterministic over the store's records.
 """
 
 from collections import Counter
@@ -24,18 +24,16 @@ from vulnwitness.domain.evidence import SHA256_PATTERN
 from vulnwitness.domain.hashing import canonical_sha256
 from vulnwitness.domain.nvd_metrics import is_nvd_own_metric
 from vulnwitness.domain.nvd_status import classify_nvd_enrichment
+from vulnwitness.domain.priority_facts import EXPLOIT_REFERENCE_TAG
 from vulnwitness.domain.search import SCHEMA_VERSION, SchemaVersion
 from vulnwitness.domain.source_comparison import select_nvd_cvss3
 
-EXPLOIT_REFERENCE_TAG: Final = "Exploit"
 SEMANTIC_DIGEST_VERSION: Final = 1
-# Fields that change when a source re-serialises a record without changing its meaning.
-VOLATILE_RECORD_FIELDS: Final = frozenset({"last_modified", "evidence_ids"})
 MAX_LISTED_CHANGES = 200
 COVERAGE_STATEMENT: Final = (
-    "Counts of what each record carries in this store, by publication month. A missing CPE, "
-    "score or CWE says NVD supplied none in the imported snapshot; it never says the CVE "
-    "affects nothing or is not severe."
+    "Counts of what each record carries in this store, by publication month. Zero means "
+    "no record carries the field in this snapshot; null means the store format cannot "
+    "record it. Missing data never says the CVE affects nothing or is not severe."
 )
 DIFF_STATEMENT: Final = (
     "Records are compared by semantic digest, which leaves out last_modified and evidence "
@@ -46,20 +44,10 @@ DIFF_STATEMENT: Final = (
 
 def semantic_record_payload(record: CveRecord) -> dict[str, object]:
     """The record as JSON without volatile fields; CNVD entries lose their evidence IDs."""
-    payload = record.model_dump(mode="json", exclude=set(VOLATILE_RECORD_FIELDS))
-    cnvd_entries = payload.get("cnvd")
-    if isinstance(cnvd_entries, list):
-        semantic_entries = []
-        for entry in cnvd_entries:
-            if not isinstance(entry, dict):
-                continue
-            semantic_entry = {}
-            for key, value in entry.items():
-                if key != "evidence_id":
-                    semantic_entry[key] = value
-            semantic_entries.append(semantic_entry)
-        payload["cnvd"] = semantic_entries
-    return payload
+    return record.model_dump(
+        mode="json",
+        exclude={"last_modified": True, "evidence_ids": True, "cnvd": {"__all__": {"evidence_id"}}},
+    )
 
 
 def semantic_record_sha256(record: CveRecord) -> str:
@@ -68,9 +56,9 @@ def semantic_record_sha256(record: CveRecord) -> str:
     )
 
 
-def semantic_content_sha256(record_digests: dict[str, str]) -> str:
+def semantic_records_sha256(record_digests: dict[str, str]) -> str:
     """One digest over every record's semantic digest, in CVE ID order."""
-    ordered_digests = []
+    ordered_digests: list[list[str]] = []
     for cve_id in sorted(record_digests):
         ordered_digests.append([cve_id, record_digests[cve_id]])
     return canonical_sha256({"version": SEMANTIC_DIGEST_VERSION, "records": ordered_digests})
@@ -105,30 +93,31 @@ class MonthCoverage(ContractModel):
     kev_listed: int = Field(ge=0)
     with_cnvd: int = Field(ge=0)
     with_source_cvss: int = Field(ge=0, description="Records with a CVSS metric not NVD's own.")
-    with_source_affected: int = Field(
+    with_source_affected: int | None = Field(
         ge=0, description="Records carrying CNA or ADP affected data (store format 4)."
     )
-    with_source_affected_versions: int = Field(
+    with_source_affected_versions: int | None = Field(
         ge=0, description="Records whose CNA or ADP affected data names a version or range."
     )
-    with_source_affected_purl: int = Field(ge=0)
-    with_ssvc: int = Field(ge=0)
-    ssvc_exploitation_poc: int = Field(ge=0)
-    ssvc_exploitation_active: int = Field(ge=0)
+    with_source_affected_purl: int | None = Field(ge=0)
+    with_ssvc: int | None = Field(ge=0)
+    ssvc_exploitation_poc: int | None = Field(ge=0)
+    ssvc_exploitation_active: int | None = Field(ge=0)
 
 
 class StoreCoverage(ContractModel):
     schema_version: SchemaVersion = SCHEMA_VERSION
     store_name: str
+    store_format_version: int = Field(ge=1, le=4)
     corpus_content_sha256: str = Field(pattern=SHA256_PATTERN)
-    semantic_content_sha256: str = Field(pattern=SHA256_PATTERN)
+    semantic_records_sha256: str = Field(pattern=SHA256_PATTERN)
     records: int = Field(ge=0)
     months: tuple[MonthCoverage, ...]
     total: MonthCoverage
     statement: Literal[
-        "Counts of what each record carries in this store, by publication month. A missing "
-        "CPE, score or CWE says NVD supplied none in the imported snapshot; it never says "
-        "the CVE affects nothing or is not severe."
+        "Counts of what each record carries in this store, by publication month. Zero means "
+        "no record carries the field in this snapshot; null means the store format cannot "
+        "record it. Missing data never says the CVE affects nothing or is not severe."
     ] = COVERAGE_STATEMENT
 
 
@@ -136,8 +125,8 @@ class StoreSemanticDiff(ContractModel):
     schema_version: SchemaVersion = SCHEMA_VERSION
     old_store_name: str
     new_store_name: str
-    old_semantic_content_sha256: str = Field(pattern=SHA256_PATTERN)
-    new_semantic_content_sha256: str = Field(pattern=SHA256_PATTERN)
+    old_semantic_records_sha256: str = Field(pattern=SHA256_PATTERN)
+    new_semantic_records_sha256: str = Field(pattern=SHA256_PATTERN)
     added: int = Field(ge=0)
     removed: int = Field(ge=0)
     changed: int = Field(ge=0)
@@ -171,7 +160,7 @@ def has_ssvc_exploitation(record: CveRecord, value: str) -> bool:
     return any(assessment.decision_points.exploitation == value for assessment in record.ssvc)
 
 
-def count_month(month: str, records: list[CveRecord]) -> MonthCoverage:
+def count_month(month: str, records: list[CveRecord], store_format_version: int) -> MonthCoverage:
     statuses: Counter[str] = Counter()
     enrichment: Counter[str] = Counter()
     for record in records:
@@ -207,11 +196,15 @@ def count_month(month: str, records: list[CveRecord]) -> MonthCoverage:
         with_source_cvss=sum(
             any(not is_nvd_own_metric(metric) for metric in record.cvss) for record in records
         ),
-        with_source_affected=sum(bool(record.source_affected) for record in records),
+        with_source_affected=sum(bool(record.source_affected) for record in records)
+        if store_format_version >= 4
+        else None,
         with_source_affected_versions=sum(
             any(product.versions for block in record.source_affected for product in block.products)
             for record in records
-        ),
+        )
+        if store_format_version >= 4
+        else None,
         with_source_affected_purl=sum(
             any(
                 product.package_url is not None
@@ -219,15 +212,26 @@ def count_month(month: str, records: list[CveRecord]) -> MonthCoverage:
                 for product in block.products
             )
             for record in records
-        ),
-        with_ssvc=sum(bool(record.ssvc) for record in records),
-        ssvc_exploitation_poc=sum(has_ssvc_exploitation(record, "poc") for record in records),
-        ssvc_exploitation_active=sum(has_ssvc_exploitation(record, "active") for record in records),
+        )
+        if store_format_version >= 4
+        else None,
+        with_ssvc=sum(bool(record.ssvc) for record in records)
+        if store_format_version >= 4
+        else None,
+        ssvc_exploitation_poc=sum(has_ssvc_exploitation(record, "poc") for record in records)
+        if store_format_version >= 4
+        else None,
+        ssvc_exploitation_active=sum(has_ssvc_exploitation(record, "active") for record in records)
+        if store_format_version >= 4
+        else None,
     )
 
 
 def measure_store_coverage(
-    store_name: str, corpus_content_sha256: str, records: Iterable[CveRecord]
+    store_name: str,
+    corpus_content_sha256: str,
+    records: Iterable[CveRecord],
+    store_format_version: int,
 ) -> StoreCoverage:
     by_month: dict[str, list[CveRecord]] = {}
     all_records: list[CveRecord] = []
@@ -236,16 +240,17 @@ def measure_store_coverage(
         by_month.setdefault(publication_month(record), []).append(record)
         all_records.append(record)
         digests[record.cve_id] = semantic_record_sha256(record)
-    months = []
+    months: list[MonthCoverage] = []
     for month in sorted(by_month):
-        months.append(count_month(month, by_month[month]))
+        months.append(count_month(month, by_month[month], store_format_version))
     return StoreCoverage(
         store_name=store_name,
+        store_format_version=store_format_version,
         corpus_content_sha256=corpus_content_sha256,
-        semantic_content_sha256=semantic_content_sha256(digests),
+        semantic_records_sha256=semantic_records_sha256(digests),
         records=len(all_records),
         months=tuple(months),
-        total=count_month("all", all_records),
+        total=count_month("all", all_records, store_format_version),
     )
 
 
@@ -255,13 +260,13 @@ def diff_store_semantics(
     new_store_name: str,
     new_records: Iterable[CveRecord],
 ) -> StoreSemanticDiff:
-    old_by_id = {}
-    old_digests = {}
+    old_by_id: dict[str, CveRecord] = {}
+    new_by_id: dict[str, CveRecord] = {}
+    old_digests: dict[str, str] = {}
+    new_digests: dict[str, str] = {}
     for record in old_records:
         old_by_id[record.cve_id] = record
         old_digests[record.cve_id] = semantic_record_sha256(record)
-    new_by_id = {}
-    new_digests = {}
     for record in new_records:
         new_by_id[record.cve_id] = record
         new_digests[record.cve_id] = semantic_record_sha256(record)
@@ -289,8 +294,8 @@ def diff_store_semantics(
     return StoreSemanticDiff(
         old_store_name=old_store_name,
         new_store_name=new_store_name,
-        old_semantic_content_sha256=semantic_content_sha256(old_digests),
-        new_semantic_content_sha256=semantic_content_sha256(new_digests),
+        old_semantic_records_sha256=semantic_records_sha256(old_digests),
+        new_semantic_records_sha256=semantic_records_sha256(new_digests),
         added=len(added),
         removed=len(removed),
         changed=len(changed),

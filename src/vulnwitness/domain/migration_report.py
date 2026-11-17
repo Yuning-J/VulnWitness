@@ -20,7 +20,7 @@ from vulnwitness.domain.corpus_store_manifest import (
     RollbackScope,
 )
 from vulnwitness.domain.evidence import SHA256_PATTERN
-from vulnwitness.domain.normalization import NormalizationFailureCode
+from vulnwitness.domain.normalization import DroppedMirroredBlocks, NormalizationFailureCode
 from vulnwitness.domain.search import SCHEMA_VERSION, SchemaVersion
 
 MAX_REPORTED_LOCATORS = 100
@@ -395,6 +395,14 @@ class MigrationReport(ContractModel):
     cve_outcomes: dict[CveOutcome, int]
     candidate_outcomes: dict[CandidateOutcome, int]
     normalization_failures: dict[NormalizationFailureCode, int]
+    dropped_mirrored_blocks: DroppedMirroredBlocks = Field(
+        default_factory=DroppedMirroredBlocks,
+        description=(
+            "Malformed mirrored blocks in successfully normalized input entries, counted once "
+            "per entry, including superseded candidates; a malformed collection counts as "
+            "one block."
+        ),
+    )
     kev_outcomes: dict[KevOutcome, int]
     cnvd_outcomes: dict[CnvdOutcome, int]
     skipped_entries: tuple[EntryLocator, ...] = Field(

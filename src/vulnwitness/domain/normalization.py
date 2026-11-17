@@ -6,6 +6,18 @@ skipped without its message, which may quote the entry.
 
 from enum import StrEnum
 
+from pydantic import Field
+
+from vulnwitness.domain.contract_model import ContractModel
+
+
+class DroppedMirroredBlocks(ContractModel):
+    """Malformed blocks dropped from successfully normalized NVD input entries."""
+
+    source_affected: int = Field(default=0, ge=0)
+    ssvc: int = Field(default=0, ge=0)
+    cve_tags: int = Field(default=0, ge=0)
+
 
 class NormalizationFailureCode(StrEnum):
     WRONG_JSON_TYPE = "wrong_json_type"

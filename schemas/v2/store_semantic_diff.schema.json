@@ -49,18 +49,18 @@
       "title": "Metadata Only",
       "type": "integer"
     },
-    "new_semantic_content_sha256": {
+    "new_semantic_records_sha256": {
       "pattern": "^[0-9a-f]{64}$(?!\\n)",
-      "title": "New Semantic Content Sha256",
+      "title": "New Semantic Records Sha256",
       "type": "string"
     },
     "new_store_name": {
       "title": "New Store Name",
       "type": "string"
     },
-    "old_semantic_content_sha256": {
+    "old_semantic_records_sha256": {
       "pattern": "^[0-9a-f]{64}$(?!\\n)",
-      "title": "Old Semantic Content Sha256",
+      "title": "Old Semantic Records Sha256",
       "type": "string"
     },
     "old_store_name": {
@@ -104,8 +104,8 @@
     "schema_version",
     "old_store_name",
     "new_store_name",
-    "old_semantic_content_sha256",
-    "new_semantic_content_sha256",
+    "old_semantic_records_sha256",
+    "new_semantic_records_sha256",
     "added",
     "removed",
     "changed",

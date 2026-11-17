@@ -76,14 +76,28 @@
           "type": "integer"
         },
         "ssvc_exploitation_active": {
-          "minimum": 0,
-          "title": "Ssvc Exploitation Active",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ssvc Exploitation Active"
         },
         "ssvc_exploitation_poc": {
-          "minimum": 0,
-          "title": "Ssvc Exploitation Poc",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ssvc Exploitation Poc"
         },
         "with_any_cvss": {
           "minimum": 0,
@@ -116,21 +130,42 @@
           "type": "integer"
         },
         "with_source_affected": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "description": "Records carrying CNA or ADP affected data (store format 4).",
-          "minimum": 0,
-          "title": "With Source Affected",
-          "type": "integer"
+          "title": "With Source Affected"
         },
         "with_source_affected_purl": {
-          "minimum": 0,
-          "title": "With Source Affected Purl",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "With Source Affected Purl"
         },
         "with_source_affected_versions": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "description": "Records whose CNA or ADP affected data names a version or range.",
-          "minimum": 0,
-          "title": "With Source Affected Versions",
-          "type": "integer"
+          "title": "With Source Affected Versions"
         },
         "with_source_cvss": {
           "description": "Records with a CVSS metric not NVD's own.",
@@ -139,9 +174,16 @@
           "type": "integer"
         },
         "with_ssvc": {
-          "minimum": 0,
-          "title": "With Ssvc",
-          "type": "integer"
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "With Ssvc"
         },
         "with_vulnerable_cpe": {
           "minimum": 0,
@@ -200,16 +242,22 @@
       "title": "Schema Version",
       "type": "string"
     },
-    "semantic_content_sha256": {
+    "semantic_records_sha256": {
       "pattern": "^[0-9a-f]{64}$(?!\\n)",
-      "title": "Semantic Content Sha256",
+      "title": "Semantic Records Sha256",
       "type": "string"
     },
     "statement": {
-      "const": "Counts of what each record carries in this store, by publication month. A missing CPE, score or CWE says NVD supplied none in the imported snapshot; it never says the CVE affects nothing or is not severe.",
-      "default": "Counts of what each record carries in this store, by publication month. A missing CPE, score or CWE says NVD supplied none in the imported snapshot; it never says the CVE affects nothing or is not severe.",
+      "const": "Counts of what each record carries in this store, by publication month. Zero means no record carries the field in this snapshot; null means the store format cannot record it. Missing data never says the CVE affects nothing or is not severe.",
+      "default": "Counts of what each record carries in this store, by publication month. Zero means no record carries the field in this snapshot; null means the store format cannot record it. Missing data never says the CVE affects nothing or is not severe.",
       "title": "Statement",
       "type": "string"
+    },
+    "store_format_version": {
+      "maximum": 4,
+      "minimum": 1,
+      "title": "Store Format Version",
+      "type": "integer"
     },
     "store_name": {
       "title": "Store Name",
@@ -222,8 +270,9 @@
   "required": [
     "schema_version",
     "store_name",
+    "store_format_version",
     "corpus_content_sha256",
-    "semantic_content_sha256",
+    "semantic_records_sha256",
     "records",
     "months",
     "total",

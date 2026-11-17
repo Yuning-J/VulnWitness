@@ -170,8 +170,16 @@ AffectedStatus = Literal["affected", "unaffected", "unknown"]
 # another 376 versions of one product. A stored block keeps these many and counts the rest.
 MAX_SOURCE_AFFECTED_PRODUCTS = 64
 MAX_SOURCE_AFFECTED_VERSIONS = 64
+MAX_SOURCE_VERSION_CHANGES = 64
 MAX_SOURCE_AFFECTED_NAMES = 16
 MAX_SOURCE_NAME_CHARS = 2048
+
+
+class SourceVersionChange(ContractModel):
+    """A source-stated status change at a version inside a range; never evaluated."""
+
+    at: str = Field(min_length=1, max_length=MAX_SOURCE_NAME_CHARS)
+    status: AffectedStatus
 
 
 class SourceAffectedVersion(ContractModel):
@@ -182,6 +190,10 @@ class SourceAffectedVersion(ContractModel):
     version_type: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
     less_than: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
     less_than_or_equal: str | None = Field(default=None, max_length=MAX_SOURCE_NAME_CHARS)
+    changes: tuple[SourceVersionChange, ...] = Field(
+        default=(), max_length=MAX_SOURCE_VERSION_CHANGES
+    )
+    omitted_changes: int = Field(default=0, ge=0)
 
 
 class SourceAffectedProduct(ContractModel):
@@ -196,8 +208,11 @@ class SourceAffectedProduct(ContractModel):
         default=None, pattern=PURL_PATTERN, max_length=MAX_SOURCE_NAME_CHARS
     )
     cpes: tuple[str, ...] = Field(default=(), max_length=MAX_SOURCE_AFFECTED_NAMES)
+    omitted_cpes: int = Field(default=0, ge=0)
     modules: tuple[str, ...] = Field(default=(), max_length=MAX_SOURCE_AFFECTED_NAMES)
+    omitted_modules: int = Field(default=0, ge=0)
     platforms: tuple[str, ...] = Field(default=(), max_length=MAX_SOURCE_AFFECTED_NAMES)
+    omitted_platforms: int = Field(default=0, ge=0)
     default_status: AffectedStatus | None = None
     versions: tuple[SourceAffectedVersion, ...] = Field(
         default=(), max_length=MAX_SOURCE_AFFECTED_VERSIONS
@@ -239,6 +254,7 @@ class CveTag(ContractModel):
 
     source: str = Field(min_length=1, max_length=MAX_SOURCE_NAME_CHARS)
     tags: tuple[str, ...] = Field(min_length=1, max_length=MAX_SOURCE_AFFECTED_NAMES)
+    omitted_tags: int = Field(default=0, ge=0)
 
 
 # Measured on 4,616 NVD 2.0 records from 2026: one record kept 299 configurations, one

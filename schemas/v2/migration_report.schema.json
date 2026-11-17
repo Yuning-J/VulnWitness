@@ -38,6 +38,37 @@
       "title": "CveOutcome",
       "type": "string"
     },
+    "DroppedMirroredBlocks": {
+      "additionalProperties": false,
+      "description": "Malformed blocks dropped from successfully normalized NVD input entries.",
+      "properties": {
+        "cve_tags": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Cve Tags",
+          "type": "integer"
+        },
+        "source_affected": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Source Affected",
+          "type": "integer"
+        },
+        "ssvc": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Ssvc",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_affected",
+        "ssvc",
+        "cve_tags"
+      ],
+      "title": "DroppedMirroredBlocks",
+      "type": "object"
+    },
     "EntryLocator": {
       "additionalProperties": false,
       "description": "Where a skipped NVD entry sits: never its content.",
@@ -1328,6 +1359,10 @@
       "title": "Cve Outcomes",
       "type": "object"
     },
+    "dropped_mirrored_blocks": {
+      "$ref": "#/$defs/DroppedMirroredBlocks",
+      "description": "Malformed mirrored blocks in successfully normalized input entries, counted once per entry, including superseded candidates; a malformed collection counts as one block."
+    },
     "failure": {
       "anyOf": [
         {
@@ -1492,6 +1527,7 @@
     "cve_outcomes",
     "candidate_outcomes",
     "normalization_failures",
+    "dropped_mirrored_blocks",
     "kev_outcomes",
     "cnvd_outcomes",
     "skipped_entries",

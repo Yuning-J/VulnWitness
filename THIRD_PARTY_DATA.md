@@ -11,7 +11,7 @@ this repository commits no data from that source.
 | Source | Terms | Redistribution | Stored here |
 |---|---|---|---|
 | NVD | https://nvd.nist.gov/developers/terms-of-use | allowed with conditions | operator-supplied feeds and the corpus stores imported from them only |
-| CVE Program | https://www.cve.org/Legal/TermsOfUse | allowed with conditions | operator-supplied only |
+| CVE Program (including CNA containers mirrored by NVD) | https://www.cve.org/Legal/TermsOfUse | allowed with conditions | operator-supplied NVD stores, including source_affected and CVE tags (ADR 0020) |
 | CISA KEV | https://www.cisa.gov/sites/default/files/licenses/kev/license.txt | allowed (CC0 1.0) | operator-supplied catalogs and the corpus stores imported from them only |
 | CIRCL/Vulnerability-CNVD | https://creativecommons.org/licenses/by/4.0/ (as declared by CIRCL) | allowed with conditions | operator-supplied only; no CNVD data committed |
 | CIRCL Vulnerability-Lookup CNVD raw records | licence unverified (https://vulnerability.circl.lu) | unknown | opt-in, operator-supplied research input only; no CNVD data committed |
@@ -24,7 +24,7 @@ this repository commits no data from that source.
 | Trustify software | not verified; no adapter ships | unknown | nothing |
 | Data returned by Trustify | per upstream source; not verified; no adapter ships | unknown | nothing |
 | trustify-mcp tool schemas (commit ac8955f) | Apache-2.0 (LICENSE at that commit) | allowed with conditions | unmodified excerpt in `tests/contract/data/trustify_mcp_ac8955f/` |
-| CISA Vulnrichment (ADP SSVC, mirrored by NVD 2.0) | CC0 1.0 (https://github.com/cisagov/vulnrichment, LICENSE read 2026-11-16) | allowed | inside operator-supplied NVD stores only (ADR 0020) |
+| CISA Vulnrichment (ADP SSVC and affected data, mirrored by NVD 2.0) | CC0 1.0 (https://github.com/cisagov/vulnrichment, LICENSE read 2026-11-16) | allowed | inside operator-supplied NVD stores only (ADR 0020) |
 | FIRST EPSS | no licence stated; "free of charge" access only (https://www.first.org/epss/data, read 2026-11-16) | unknown | nothing committed; operator-supplied daily files are read by `prioritise --epss-dir` and only their scores for the register's CVEs, names and SHA-256 enter `priority.json` |
 | OSV.dev | per upstream source (https://google.github.io/osv.dev/data/); CC-BY 4.0, CC0, CC-BY-SA 4.0, MIT, Apache-2.0 and CC-BY-NC-ND 4.0 among them | per source | nothing; not imported |
 | Metasploit Framework module metadata | BSD-3-Clause, inferred from the LICENSE "Files: *" stanza (read 2026-11-16) | allowed with conditions | nothing committed; `exploit-index build` keeps CVE IDs, module paths and the commit of an operator's checkout |
@@ -35,6 +35,10 @@ this repository commits no data from that source.
 | Chainguard advisories (via OSV) | CC-BY-NC-ND 4.0 | restricted (non-commercial, no derivatives) | excluded by choice: normalisation is a derivative |
 | Synthetic CVE fixture | this repository (MIT) | allowed | `src/vulnwitness/fixtures/synthetic/` |
 | Format-1 compatibility store | this repository (MIT) | allowed | `tests/contract/data/corpus_store_format1_28e5b4d/` |
+
+NVD-mirrored `source_affected` holds both CNA containers under the CVE Program's terms
+and ADP containers, including CISA Vulnrichment under CC0. Each block retains its author's
+source identifier; the mirrored collection is not attributed solely to Vulnrichment.
 
 ## Conditions, quoted
 

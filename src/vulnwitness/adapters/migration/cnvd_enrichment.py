@@ -1,6 +1,6 @@
 """CNVD entries and their row anchors, joined only after NVD candidate resolution."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from vulnwitness.adapters.migration.cnvd_types import CnvdRow
@@ -72,7 +72,7 @@ def build_cnvd_entry(source: SourcedCnvdRow, terms: str) -> tuple[CnvdEntry, Evi
 def enrich_cnvd(
     normalized: NormalizedCve, sources: list[SourcedCnvdRow], terms: str
 ) -> NormalizedCve:
-    """Attach all the CVE's CNVD entries in CNVD ID order, with their evidence."""
+    """Attach CNVD entries in ID order with their evidence, preserving normalization metadata."""
     entries: list[CnvdEntry] = []
     anchors = list(normalized.evidence)
     evidence_ids = list(normalized.record.evidence_ids)
@@ -84,4 +84,4 @@ def enrich_cnvd(
     record = normalized.record.model_copy(
         update={"cnvd": tuple(entries), "evidence_ids": tuple(evidence_ids)}
     )
-    return NormalizedCve(record, tuple(anchors))
+    return replace(normalized, record=record, evidence=tuple(anchors))

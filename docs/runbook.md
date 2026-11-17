@@ -261,11 +261,17 @@ vulnwitness store coverage nvd-2026-11-15
 vulnwitness store diff nvd-2026-10-31 nvd-2026-11-15
 ```
 
-Both are read-only and load each named store as activation does, so allow the same
-memory. `coverage` counts, by publication month, NVD's statuses and how many records carry
+Both are read-only and load each named store as activation does. `coverage` needs
+memory for one store; `diff` holds both stores in memory at once, about 10.5 GB for two
+full real stores, plus headroom for comparison. `coverage` counts, by publication month,
+NVD's statuses and how many records carry
 a vulnerable CPE, NVD's own CVSS v3 metric, any CVSS metric, a CVSS 4.0 metric, a CWE, an
-`Exploit`-tagged reference, a KEV listing and a CNVD entry. Since NVD's change of
-2026-04-15, most new CVEs stay `Deferred`, which NVD's site labels "Not Scheduled": exact
+`Exploit`-tagged reference, a KEV listing and a CNVD entry. It also counts records with
+source-CVSS metrics, source-stated affected products and versions, package URLs (purls), SSVC, and
+SSVC exploitation `poc` and `active`. The output declares `store_format_version`;
+format-4-only counters are null for formats 1–3 because those stores cannot hold the
+fields. Zero means no record carries a field that the format supports. Since NVD's
+change of 2026-04-15, most new CVEs stay `Deferred`, which NVD's site labels "Not Scheduled": exact
 CPE product matching cannot find them, and policy rules that read NVD's own score see no
 grade. A month with few CPE matches is a coverage gap of the snapshot, not a quiet month.
 
@@ -273,8 +279,11 @@ grade. A month with few CPE matches is a coverage gap of the snapshot, not a qui
 `last_modified` and evidence IDs. `changed` counts content changes and names the fields
 that changed; `metadata_only` counts records whose stored bytes differ only by timestamp or
 source provenance, as in NVD's 2026-06-17 refresh, which rewrote `lastModified` on about
-95% of records without changing content. Each output carries a `semantic_content_sha256`
-that stays the same across such refreshes, while the corpus content digest does not.
+95% of records without changing content. Coverage carries `semantic_records_sha256`;
+diff carries `old_semantic_records_sha256` and `new_semantic_records_sha256`. These
+identify record semantics only, excluding pending CNVD entries, `last_modified` and
+evidence IDs; they stay the same across such refreshes. `corpus_content_sha256` identifies all
+verified store content, including pending CNVD entries and source provenance.
 
 ## Recovery and resource needs
 

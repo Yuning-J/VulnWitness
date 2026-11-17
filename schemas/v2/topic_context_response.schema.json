@@ -895,6 +895,12 @@
       "additionalProperties": false,
       "description": "A CVE-format ``cveTags`` entry, e.g. ``disputed`` or ``unsupported-when-assigned``.",
       "properties": {
+        "omitted_tags": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Tags",
+          "type": "integer"
+        },
         "source": {
           "maxLength": 2048,
           "minLength": 1,
@@ -913,7 +919,8 @@
       },
       "required": [
         "source",
-        "tags"
+        "tags",
+        "omitted_tags"
       ],
       "title": "CveTag",
       "type": "object"
@@ -1746,6 +1753,24 @@
           "title": "Modules",
           "type": "array"
         },
+        "omitted_cpes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Cpes",
+          "type": "integer"
+        },
+        "omitted_modules": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Modules",
+          "type": "integer"
+        },
+        "omitted_platforms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Platforms",
+          "type": "integer"
+        },
         "omitted_versions": {
           "default": 0,
           "minimum": 0,
@@ -1845,8 +1870,11 @@
         "repo",
         "package_url",
         "cpes",
+        "omitted_cpes",
         "modules",
+        "omitted_modules",
         "platforms",
+        "omitted_platforms",
         "default_status",
         "versions",
         "omitted_versions"
@@ -1858,6 +1886,15 @@
       "additionalProperties": false,
       "description": "One CVE-format ``versions[]`` entry as its author gave it; nothing is compared.",
       "properties": {
+        "changes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SourceVersionChange"
+          },
+          "maxItems": 64,
+          "title": "Changes",
+          "type": "array"
+        },
         "less_than": {
           "anyOf": [
             {
@@ -1883,6 +1920,12 @@
           ],
           "default": null,
           "title": "Less Than Or Equal"
+        },
+        "omitted_changes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Changes",
+          "type": "integer"
         },
         "status": {
           "enum": [
@@ -1918,7 +1961,9 @@
         "status",
         "version_type",
         "less_than",
-        "less_than_or_equal"
+        "less_than_or_equal",
+        "changes",
+        "omitted_changes"
       ],
       "title": "SourceAffectedVersion",
       "type": "object"
@@ -2173,6 +2218,33 @@
       ],
       "title": "SourceType",
       "type": "string"
+    },
+    "SourceVersionChange": {
+      "additionalProperties": false,
+      "description": "A source-stated status change at a version inside a range; never evaluated.",
+      "properties": {
+        "at": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "At",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "affected",
+            "unaffected",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "status"
+      ],
+      "title": "SourceVersionChange",
+      "type": "object"
     },
     "SsvcAssessment": {
       "additionalProperties": false,
