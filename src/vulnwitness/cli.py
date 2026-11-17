@@ -202,6 +202,7 @@ from vulnwitness.evaluation.planner_runner import (
     run_planner_evaluation,
 )
 from vulnwitness.evaluation.result_directory import ResultDirectory
+from vulnwitness.exploit_index_cli import add_exploit_index_parser, run_exploit_index
 from vulnwitness.hook_composition import run_plugin_hook
 from vulnwitness.interfaces.cli_session import (
     SESSION_CLI_COMMANDS,
@@ -376,6 +377,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_report_parser(commands)
     add_priority_parser(commands)
     add_vex_parser(commands)
+    add_exploit_index_parser(commands)
     hook_parser = commands.add_parser("hook", help="run an advisory Claude Code hook from stdin")
     hook_commands = hook_parser.add_subparsers(dest="hook_command", required=True)
     hook_commands.add_parser("record-investigation", help="record returned investigation IDs")
@@ -1835,6 +1837,8 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         return run_priority(arguments, parser)
     if arguments.command == "vex":
         return run_vex(arguments, parser)
+    if arguments.command == "exploit-index":
+        return run_exploit_index(arguments)
     try:
         settings = load_settings(os.environ if environment is None else environment)
     except SettingsError as error:

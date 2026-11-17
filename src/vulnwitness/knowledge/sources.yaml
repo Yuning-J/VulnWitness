@@ -166,7 +166,7 @@ sources:
     version_strategy: "Daily score file date and EPSS model version."
     attribution: null
     redistribution_allowed: unknown
-    redistribution_conditions: "The data page says scores are published free of charge with no registration; no licence or redistribution terms were found on 2026-11-16. Not imported."
+    redistribution_conditions: "The data page says scores are published free of charge with no registration; no licence or redistribution terms were found on 2026-11-16. Never committed or imported into a store; operators may supply their own daily files to prioritise --epss-dir (ADR 0025)."
     local_storage_policy: not_stored
     terms_verified_on: null
   - name: osv
@@ -181,10 +181,10 @@ sources:
   - name: metasploit-modules
     official_url: "https://github.com/rapid7/metasploit-framework"
     terms_or_license_url: "https://github.com/rapid7/metasploit-framework/blob/master/LICENSE"
-    version_strategy: "Repository commit of db/modules_metadata_base.json."
+    version_strategy: "Repository commit of the operator's checkout, read from .git."
     attribution: null
     redistribution_allowed: allowed_with_conditions
-    redistribution_conditions: "BSD-3-Clause under the LICENSE 'Files: *' stanza; that db/modules_metadata_base.json falls under it is an inference (read 2026-11-16). Keep the copyright notice; no Rapid7 endorsement. Not imported."
+    redistribution_conditions: "BSD-3-Clause under the LICENSE 'Files: *' stanza; that db/modules_metadata_base.json falls under it is an inference (read 2026-11-16). Keep the copyright notice; no Rapid7 endorsement. Nothing committed; 'exploit-index build' reads an operator's checkout and keeps only CVE IDs, module paths and the commit (ADR 0026)."
     local_storage_policy: not_stored
     terms_verified_on: 2026-11-16
   - name: nuclei-templates
@@ -193,7 +193,7 @@ sources:
     version_strategy: "Repository commit."
     attribution: null
     redistribution_allowed: allowed_with_conditions
-    redistribution_conditions: "MIT (read 2026-11-16): include the copyright and permission notice. Not imported."
+    redistribution_conditions: "MIT (read 2026-11-16): include the copyright and permission notice. Nothing committed; 'exploit-index build' reads an operator's checkout and keeps only CVE IDs, template paths and the commit (ADR 0026)."
     local_storage_policy: not_stored
     terms_verified_on: 2026-11-16
   - name: exploit-db

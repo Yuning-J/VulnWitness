@@ -29,6 +29,8 @@ from vulnwitness.domain.priority_facts import (
     AutomatableStatus,
     ExploitationFact,
     ExploitationStatus,
+    ExploitModuleFact,
+    ExploitProbabilityFact,
     ForensicTriageFact,
     GradeAuthority,
     HighGradeFact,
@@ -128,6 +130,8 @@ def build_priority_inputs(
         ),
         source_high_grade=SourceHighGradeFact(value="none_available", evidence_ids=()),
         forensic_triage=ForensicTriageFact(value="unknown", evidence_ids=()),
+        exploit_probability=ExploitProbabilityFact(value="unknown"),
+        exploit_module=ExploitModuleFact(value="unknown"),
     )
     return asset, assessment, facts
 

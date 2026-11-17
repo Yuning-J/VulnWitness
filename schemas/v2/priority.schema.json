@@ -177,6 +177,308 @@
       "title": "DecisionResponseDigest",
       "type": "object"
     },
+    "EpssSnapshotIdentity": {
+      "additionalProperties": false,
+      "description": "One supplied daily EPSS file, identified by content.",
+      "properties": {
+        "file_name": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "File Name",
+          "type": "string"
+        },
+        "model_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Model Version",
+          "type": "string"
+        },
+        "rows": {
+          "minimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "score_date": {
+          "format": "date",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+          "title": "Score Date",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_name",
+        "sha256",
+        "score_date",
+        "model_version",
+        "rows"
+      ],
+      "title": "EpssSnapshotIdentity",
+      "type": "object"
+    },
+    "ExploitIndexIdentity": {
+      "additionalProperties": false,
+      "description": "What ``priority.json`` records about the index it read.",
+      "properties": {
+        "built_on": {
+          "format": "date",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+          "title": "Built On",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$(?!\\n)",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/ExploitIndexSource"
+          },
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "sha256",
+        "built_on",
+        "sources"
+      ],
+      "title": "ExploitIndexIdentity",
+      "type": "object"
+    },
+    "ExploitIndexSource": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The checkout's HEAD commit when it is a git checkout; the working tree is not checked against it.",
+          "title": "Commit"
+        },
+        "files_read": {
+          "minimum": 0,
+          "title": "Files Read",
+          "type": "integer"
+        },
+        "source": {
+          "enum": [
+            "metasploit",
+            "nuclei"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "commit",
+        "files_read"
+      ],
+      "title": "ExploitIndexSource",
+      "type": "object"
+    },
+    "ExploitModuleFact": {
+      "additionalProperties": false,
+      "description": "Whether the supplied exploit-module index names the CVE. ``not_in_index`` means\nonly that the indexed checkouts name no module for it, never \"no exploit exists\".",
+      "properties": {
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "modules": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ExploitModuleRef"
+          },
+          "maxItems": 16,
+          "title": "Modules",
+          "type": "array"
+        },
+        "omitted_modules": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Modules",
+          "type": "integer"
+        },
+        "value": {
+          "enum": [
+            "present",
+            "not_in_index",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids",
+        "modules",
+        "omitted_modules"
+      ],
+      "title": "ExploitModuleFact",
+      "type": "object"
+    },
+    "ExploitModuleRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "Path in its repository.",
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "metasploit",
+            "nuclei"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "path"
+      ],
+      "title": "ExploitModuleRef",
+      "type": "object"
+    },
+    "ExploitProbabilityFact": {
+      "additionalProperties": false,
+      "description": "EPSS and NIST's LEV from operator-supplied snapshots, banded by the policy's\nthreshold on their larger value. ``below_threshold`` is a low probability estimate,\nnever evidence that the CVE is not exploited.",
+      "properties": {
+        "epss": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Epss"
+        },
+        "evidence_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^ev:[0-9a-f]{24}$(?!\\n)",
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "lev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LevEstimate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A lower bound over the supplied snapshots only."
+        },
+        "model_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Version"
+        },
+        "percentile": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Percentile"
+        },
+        "score_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score Date"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        },
+        "value": {
+          "enum": [
+            "at_or_above_threshold",
+            "below_threshold",
+            "unknown"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "evidence_ids",
+        "epss",
+        "percentile",
+        "score_date",
+        "model_version",
+        "lev",
+        "threshold"
+      ],
+      "title": "ExploitProbabilityFact",
+      "type": "object"
+    },
     "ExploitationFact": {
       "additionalProperties": false,
       "description": "CISA's SSVC exploitation point; ``none`` is CISA's view at its time, not \"no exploit\".",
@@ -432,6 +734,43 @@
       "title": "KevFact",
       "type": "object"
     },
+    "LevEstimate": {
+      "additionalProperties": false,
+      "properties": {
+        "covered_days": {
+          "minimum": 0,
+          "title": "Covered Days",
+          "type": "integer"
+        },
+        "first_scored": {
+          "description": "The earliest supplied snapshot that scores the CVE; EPSS may have scored it earlier.",
+          "format": "date",
+          "pattern": "^(?:(?!0000)[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?!0000)(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29)$(?!\\n)",
+          "title": "First Scored",
+          "type": "string"
+        },
+        "lev": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Lev",
+          "type": "number"
+        },
+        "span_days": {
+          "description": "Days from first_scored to the reference date.",
+          "minimum": 1,
+          "title": "Span Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lev",
+        "first_scored",
+        "covered_days",
+        "span_days"
+      ],
+      "title": "LevEstimate",
+      "type": "object"
+    },
     "PolicyCondition": {
       "additionalProperties": false,
       "properties": {
@@ -446,7 +785,9 @@
             "automatable",
             "technical_impact",
             "source_high_grade",
-            "forensic_triage"
+            "forensic_triage",
+            "exploit_probability",
+            "exploit_module"
           ],
           "title": "Fact",
           "type": "string"
@@ -577,7 +918,9 @@
               "automatable",
               "technical_impact",
               "source_high_grade",
-              "forensic_triage"
+              "forensic_triage",
+              "exploit_probability",
+              "exploit_module"
             ],
             "type": "string"
           },
@@ -608,6 +951,12 @@
         },
         "automatable": {
           "$ref": "#/$defs/AutomatableFact"
+        },
+        "exploit_module": {
+          "$ref": "#/$defs/ExploitModuleFact"
+        },
+        "exploit_probability": {
+          "$ref": "#/$defs/ExploitProbabilityFact"
         },
         "exploitation": {
           "$ref": "#/$defs/ExploitationFact"
@@ -644,7 +993,9 @@
         "automatable",
         "technical_impact",
         "source_high_grade",
-        "forensic_triage"
+        "forensic_triage",
+        "exploit_probability",
+        "exploit_module"
       ],
       "title": "PriorityFacts",
       "type": "object"
@@ -1039,6 +1390,27 @@
       "title": "Decisions",
       "type": "array"
     },
+    "epss_snapshots": {
+      "default": [],
+      "description": "The operator-supplied EPSS files scored on or before the reference date, in score-date order; empty when none were supplied.",
+      "items": {
+        "$ref": "#/$defs/EpssSnapshotIdentity"
+      },
+      "title": "Epss Snapshots",
+      "type": "array"
+    },
+    "exploit_index": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExploitIndexIdentity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The operator-built exploit-module index read, if any."
+    },
     "policy": {
       "$ref": "#/$defs/PolicyIdentity"
     },
@@ -1086,6 +1458,8 @@
     "register_sha256",
     "reference_date",
     "used_after_reference_date_information",
+    "epss_snapshots",
+    "exploit_index",
     "decisions"
   ],
   "title": "PriorityArtifact",

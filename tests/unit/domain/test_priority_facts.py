@@ -69,6 +69,8 @@ def test_all_unknowns_are_listed_in_fact_order() -> None:
         "technical_impact",
         "source_high_grade",
         "forensic_triage",
+        "exploit_probability",
+        "exploit_module",
     )
 
 

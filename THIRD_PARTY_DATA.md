@@ -25,10 +25,10 @@ this repository commits no data from that source.
 | Data returned by Trustify | per upstream source; not verified; no adapter ships | unknown | nothing |
 | trustify-mcp tool schemas (commit ac8955f) | Apache-2.0 (LICENSE at that commit) | allowed with conditions | unmodified excerpt in `tests/contract/data/trustify_mcp_ac8955f/` |
 | CISA Vulnrichment (ADP SSVC, mirrored by NVD 2.0) | CC0 1.0 (https://github.com/cisagov/vulnrichment, LICENSE read 2026-11-16) | allowed | inside operator-supplied NVD stores only (ADR 0020) |
-| FIRST EPSS | no licence stated; "free of charge" access only (https://www.first.org/epss/data, read 2026-11-16) | unknown | nothing; not imported |
+| FIRST EPSS | no licence stated; "free of charge" access only (https://www.first.org/epss/data, read 2026-11-16) | unknown | nothing committed; operator-supplied daily files are read by `prioritise --epss-dir` and only their scores for the register's CVEs, names and SHA-256 enter `priority.json` |
 | OSV.dev | per upstream source (https://google.github.io/osv.dev/data/); CC-BY 4.0, CC0, CC-BY-SA 4.0, MIT, Apache-2.0 and CC-BY-NC-ND 4.0 among them | per source | nothing; not imported |
-| Metasploit Framework module metadata | BSD-3-Clause, inferred from the LICENSE "Files: *" stanza (read 2026-11-16) | allowed with conditions | nothing; not imported |
-| Nuclei templates | MIT (LICENSE.md read 2026-11-16) | allowed with conditions | nothing; not imported |
+| Metasploit Framework module metadata | BSD-3-Clause, inferred from the LICENSE "Files: *" stanza (read 2026-11-16) | allowed with conditions | nothing committed; `exploit-index build` keeps CVE IDs, module paths and the commit of an operator's checkout |
+| Nuclei templates | MIT (LICENSE.md read 2026-11-16) | allowed with conditions | nothing committed; `exploit-index build` keeps CVE IDs, template paths and the commit of an operator's checkout |
 | Exploit-DB repository | GPL-2.0-or-later for the GitLab repository; site terms unread | allowed with conditions (repository) | nothing; not imported |
 | VulnCheck KEV | free use with prominent "VulnCheck KEV" attribution (docs.vulncheck.com attribution page); website terms stricter | unknown until confirmed in writing | nothing; not imported |
 | ENISA EUVD | not verified (site unavailable on 2026-11-16) | unknown | nothing; not imported |

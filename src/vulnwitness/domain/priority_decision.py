@@ -7,6 +7,8 @@ from pydantic import Field, StrictBool, model_validator
 from vulnwitness.domain.asset_register import NonblankText
 from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CveId
+from vulnwitness.domain.epss import EpssSnapshotIdentity
+from vulnwitness.domain.exploit_index import ExploitIndexIdentity
 from vulnwitness.domain.hashing import canonical_json_bytes
 from vulnwitness.domain.priority_facts import FactName, PriorityFacts
 from vulnwitness.domain.priority_policy import (
@@ -66,6 +68,14 @@ class PriorityArtifact(ContractModel):
     register_sha256: Digest
     reference_date: CalendarDate
     used_after_reference_date_information: StrictBool
+    epss_snapshots: tuple[EpssSnapshotIdentity, ...] = Field(
+        default=(),
+        description="The operator-supplied EPSS files scored on or before the reference "
+        "date, in score-date order; empty when none were supplied.",
+    )
+    exploit_index: ExploitIndexIdentity | None = Field(
+        default=None, description="The operator-built exploit-module index read, if any."
+    )
     decisions: tuple[PriorityDecision, ...]
 
     @model_validator(mode="after")

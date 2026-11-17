@@ -163,7 +163,7 @@ For a hand-managed manifest, `vulnwitness migrate legacy --inputs /data/feeds/in
 remove `--dry-run` to write. Manifests declare raw NVD 1.1/2.0, KEV CSV and each CNVD
 Parquet file with acquisition times. NVD retired its 1.1 feeds on 2025-08-20; the importer
 still reads archived 1.1 files, but current data comes only from the 2.0 feeds, and only
-2.0 carries the status, mirrored CNA/ADP data and SSVC that store format 4 keeps. CNVD declarations must cover both files of one
+2.0 carries the status, mirrored CNA/ADP data, SSVC and the configuration trees that store format 4 keeps. CNVD declarations must cover both files of one
 catalogued revision. Import never overwrites targets or writes beside inputs; derived exports are refused.
 
 The migration report counts each CNVD row under one of six join outcomes:
@@ -605,6 +605,33 @@ automatable exploitation, gives `attend`. It is neither CISA's SSVC tree nor BOD
 Table 1. `cn-auto-demo` is unchanged and lists the new facts among its unknowns when they
 are unknown. Artifacts written before this change no longer validate; rerun
 `prioritise --force`.
+
+`--epss-dir DIR` adds the `exploit_probability` fact (ADR 0025) from FIRST EPSS daily files
+you download yourself (`epss_scores-YYYY-MM-DD.csv.gz` from https://www.first.org/epss/data);
+VulnWitness ships none, because FIRST states no licence. Files scored after `--as-of` are
+ignored. The fact keeps the latest EPSS score and percentile, the model version, and NIST
+CSWP 41's LEV over the supplied files. LEV is a lower bound: days no file covers add nothing,
+and the report states covered and spanned days. One file per 30 days gives LEV and one per
+day gives LEV2. The policy's `exploit_probability_threshold` bands max(EPSS, LEV) as
+`at_or_above_threshold` or `below_threshold`. Only `exploitation-demo` declares one (0.1, a
+demonstration value), and a policy without one refuses `--epss-dir`. `below_threshold` is
+a low estimate, never "not exploited". `priority.json` records each used file's name, score
+date, model version and SHA-256.
+
+`--exploit-index FILE` adds the `exploit_module` fact (ADR 0026). Build the file from your
+own checkouts of Metasploit Framework and nuclei-templates:
+
+```bash
+vulnwitness exploit-index build --metasploit ~/src/metasploit-framework \
+  --nuclei ~/src/nuclei-templates --output ~/data/vulnwitness/exploit-index.json
+```
+
+It reads `['CVE', '…']` references in `modules/**/*.rb` and `cve-id:` classifications in
+template YAML as text, never running or parsing module code, and keeps each CVE's module
+paths and each checkout's HEAD commit. `present` names up to 16 modules; `not_in_index`
+means only that neither checkout names one, never "no exploit exists". An index built after
+`--as-of` sets `used_after_reference_date_information`. `exploitation-demo` gives `attend`
+for an affected asset whose CVE has a module (`rule-6b`).
 
 ### Export the assessments as OpenVEX
 

@@ -7,7 +7,9 @@ from pydantic import ConfigDict, Field, model_validator
 from vulnwitness.domain.asset_register import Applicability, SystemCategory
 from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CNVD_ID_PATTERN
+from vulnwitness.domain.epss import LevEstimate
 from vulnwitness.domain.evidence import EvidenceId
+from vulnwitness.domain.exploit_index import ExploitModuleRef
 from vulnwitness.domain.timestamps import CalendarDate, Timestamp
 
 FactName = Literal[
@@ -21,6 +23,8 @@ FactName = Literal[
     "technical_impact",
     "source_high_grade",
     "forensic_triage",
+    "exploit_probability",
+    "exploit_module",
 ]
 FACT_NAMES: tuple[FactName, ...] = (
     "applicability",
@@ -33,6 +37,8 @@ FACT_NAMES: tuple[FactName, ...] = (
     "technical_impact",
     "source_high_grade",
     "forensic_triage",
+    "exploit_probability",
+    "exploit_module",
 )
 KevStatus = Literal["listed", "not_listed_in_snapshot", "unknown"]
 HighGradeStatus = Literal["present", "absent", "none_available"]
@@ -42,6 +48,8 @@ ExploitationStatus = Literal["active", "poc", "none", "unknown"]
 AutomatableStatus = Literal["yes", "no", "unknown"]
 TechnicalImpactStatus = Literal["total", "partial", "unknown"]
 ForensicTriageStatus = Literal["yes", "no", "unknown"]
+ExploitModuleStatus = Literal["present", "not_in_index", "unknown"]
+ExploitProbabilityStatus = Literal["at_or_above_threshold", "below_threshold", "unknown"]
 # The SSVC role CISA's ADP container scores in; ADR 0021 reads only its assessment.
 CISA_SSVC_ROLE = "CISA Coordinator"
 MAX_SOURCE_GRADE_SCORERS = 16
@@ -49,6 +57,7 @@ MAX_SOURCE_GRADE_SCORERS = 16
 EXPLOIT_REFERENCE_TAG = "Exploit"
 # The fact keeps a bounded, ordered sample of URLs; evidence IDs lead to the full record.
 MAX_EXPLOIT_REFERENCE_URLS = 20
+MAX_FACT_MODULES = 16
 
 
 class ApplicabilityFact(ContractModel):
@@ -250,6 +259,60 @@ class ForensicTriageFact(ContractModel):
         return self
 
 
+class ExploitProbabilityFact(ContractModel):
+    """EPSS and NIST's LEV from operator-supplied snapshots, banded by the policy's
+    threshold on their larger value. ``below_threshold`` is a low probability estimate,
+    never evidence that the CVE is not exploited."""
+
+    value: ExploitProbabilityStatus
+    evidence_ids: tuple[EvidenceId, ...] = ()
+    epss: float | None = Field(default=None, ge=0, le=1)
+    percentile: float | None = Field(default=None, ge=0, le=1)
+    score_date: CalendarDate | None = None
+    model_version: str | None = None
+    lev: LevEstimate | None = Field(
+        default=None, description="A lower bound over the supplied snapshots only."
+    )
+    threshold: float | None = Field(default=None, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def check_scores(self) -> Self:
+        known = self.value != "unknown"
+        fields = (self.epss, self.percentile, self.score_date, self.model_version, self.lev)
+        if known != all(field is not None for field in fields) or known != (
+            self.threshold is not None
+        ):
+            raise ValueError("a known exploit probability needs its scores and threshold")
+        if any(field is not None for field in fields) and not known:
+            raise ValueError("an unknown exploit probability carries no scores")
+        if known and self.epss is not None and self.lev is not None and self.threshold:
+            above = max(self.epss, self.lev.lev) >= self.threshold
+            if above != (self.value == "at_or_above_threshold"):
+                raise ValueError("the band does not match the scores and threshold")
+        return self
+
+    def composite(self) -> float | None:
+        if self.epss is None or self.lev is None:
+            return None
+        return max(self.epss, self.lev.lev)
+
+
+class ExploitModuleFact(ContractModel):
+    """Whether the supplied exploit-module index names the CVE. ``not_in_index`` means
+    only that the indexed checkouts name no module for it, never "no exploit exists"."""
+
+    value: ExploitModuleStatus
+    evidence_ids: tuple[EvidenceId, ...] = ()
+    modules: tuple[ExploitModuleRef, ...] = Field(default=(), max_length=MAX_FACT_MODULES)
+    omitted_modules: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def check_modules(self) -> Self:
+        if (self.value == "present") != bool(self.modules):
+            raise ValueError("only present names its modules")
+        return self
+
+
 def unknown_ssvc_facts() -> tuple[ExploitationFact, AutomatableFact, TechnicalImpactFact]:
     return (
         ExploitationFact(value="unknown", evidence_ids=()),
@@ -269,6 +332,8 @@ class PriorityFacts(ContractModel):
     technical_impact: TechnicalImpactFact
     source_high_grade: SourceHighGradeFact
     forensic_triage: ForensicTriageFact
+    exploit_probability: ExploitProbabilityFact
+    exploit_module: ExploitModuleFact
 
     def list_unknown_facts(self) -> tuple[FactName, ...]:
         """Unknowns in the ADR's fact order, including unavailable grades."""

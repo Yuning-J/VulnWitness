@@ -89,13 +89,15 @@ def test_first_matching_rule_sets_the_recommendation(
     assert decision.facts == facts
 
 
-# ADR 0021's facts stay unknown in these inputs and are listed after ADR 0016's.
+# ADR 0021's and ADR 0025's facts stay unknown in these inputs, after ADR 0016's.
 NEW_UNKNOWNS = (
     "exploitation",
     "automatable",
     "technical_impact",
     "source_high_grade",
     "forensic_triage",
+    "exploit_probability",
+    "exploit_module",
 )
 
 

@@ -42,6 +42,21 @@ def build_priority_decision(decision: PriorityDecision) -> ReportSection:
             "Source high-grade scorers (not NVD's own grade): "
             + ", ".join(decision.facts.source_high_grade.triggering_scorers)
         )
+    probability = decision.facts.exploit_probability
+    if probability.lev is not None and probability.score_date is not None:
+        lev = probability.lev
+        fact_details.append(
+            f"EPSS {probability.epss:.5f} (percentile {probability.percentile:.5f}) scored "
+            f"{probability.score_date.isoformat()} by model {probability.model_version}; "
+            f"LEV lower bound {lev.lev:.5f} over {lev.covered_days} of {lev.span_days} days "
+            f"since {lev.first_scored.isoformat()}; threshold {probability.threshold:g}"
+        )
+    for module in decision.facts.exploit_module.modules:
+        fact_details.append(f"Exploit module ({module.source}, not run): {module.path}")
+    if decision.facts.exploit_module.omitted_modules:
+        fact_details.append(
+            f"{decision.facts.exploit_module.omitted_modules} more exploit modules not listed"
+        )
     earlier_rules: list[ReportSection] = []
     for rule in decision.earlier_unmatched_rules:
         failures: list[str] = []
@@ -101,6 +116,19 @@ def build_priority_decision(decision: PriorityDecision) -> ReportSection:
     )
 
 
+def describe_exploit_index(priority: PriorityArtifact) -> list[str]:
+    index = priority.exploit_index
+    if index is None:
+        return []
+    sources = ", ".join(
+        f"{source.source} at {source.commit or 'an unrecorded commit'}" for source in index.sources
+    )
+    return [
+        f"Exploit-module index built {index.built_on.isoformat()} from {sources} · "
+        f"SHA-256 {index.sha256}"
+    ]
+
+
 def build_priority_report(priority: PriorityArtifact) -> ReportSection:
     """Render the checked artifact's identities and explanations in fixed recorded order."""
     decisions: list[ReportSection] = []
@@ -124,6 +152,14 @@ def build_priority_report(priority: PriorityArtifact) -> ReportSection:
                 '"no exploit exists"; source_high_grade is a CNA or ADP score, never NVD\'s.'
             ),
             ReportParagraph(
+                "exploit_probability below_threshold is a low EPSS/LEV estimate, not "
+                '"not exploited"; LEV covers only the EPSS files the operator supplied.'
+            ),
+            ReportParagraph(
+                "exploit_module not_in_index means the indexed Metasploit and nuclei-templates "
+                'checkouts name no module for the CVE, not "no exploit exists".'
+            ),
+            ReportParagraph(
                 f"Policy: {priority.policy.name} · format_version: {priority.policy.format_version}"
             ),
             ReportParagraph(f"Policy digest (SHA-256): {priority.policy.content_sha256}"),
@@ -133,6 +169,12 @@ def build_priority_report(priority: PriorityArtifact) -> ReportSection:
                 "Used after-reference-date information: "
                 + str(priority.used_after_reference_date_information).lower()
             ),
+        ),
+        bullets=tuple(describe_exploit_index(priority))
+        + tuple(
+            f"EPSS file {snapshot.file_name} · scored {snapshot.score_date.isoformat()} · "
+            f"model {snapshot.model_version} · SHA-256 {snapshot.sha256}"
+            for snapshot in priority.epss_snapshots
         ),
         sections=tuple(decisions),
         anchor="priority-decisions",

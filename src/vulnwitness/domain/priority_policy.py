@@ -25,6 +25,8 @@ FACT_VALUES: dict[FactName, tuple[str, ...]] = {
     "technical_impact": ("total", "partial", "unknown"),
     "source_high_grade": ("present", "absent", "none_available"),
     "forensic_triage": ("yes", "no", "unknown"),
+    "exploit_probability": ("at_or_above_threshold", "below_threshold", "unknown"),
+    "exploit_module": ("present", "not_in_index", "unknown"),
 }
 
 
@@ -87,6 +89,13 @@ class PriorityPolicy(ContractModel):
     format_version: FormatVersion
     rules: tuple[PriorityRule, ...] = Field(min_length=1)
     regulations: tuple[Regulation, ...]
+    exploit_probability_threshold: float | None = Field(
+        default=None,
+        gt=0,
+        le=1,
+        description="Bands max(EPSS, LEV) for the exploit_probability fact; required when a "
+        "rule reads that fact or EPSS snapshots are supplied.",
+    )
 
     @model_validator(mode="after")
     def check_ordered_table(self) -> Self:
@@ -99,6 +108,13 @@ class PriorityPolicy(ContractModel):
                 raise ValueError("only the final rule may be unconditional")
         if self.rules[-1].conditions:
             raise ValueError("the final rule must be unconditional")
+        reads_probability = any(
+            condition.fact == "exploit_probability"
+            for rule in self.rules
+            for condition in rule.conditions
+        )
+        if reads_probability and self.exploit_probability_threshold is None:
+            raise ValueError("a rule reads exploit_probability without a declared threshold")
         regulation_ids: set[str] = set()
         for regulation in self.regulations:
             if regulation.id in regulation_ids:

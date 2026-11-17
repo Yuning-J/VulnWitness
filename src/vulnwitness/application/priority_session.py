@@ -7,7 +7,14 @@ from vulnwitness.application.priority_decision import evaluate_priority
 from vulnwitness.domain.asset_register import Asset, AssetAssessment, AssetRegister
 from vulnwitness.domain.cve import CveRecord
 from vulnwitness.domain.cve_lookup import ComparedCnvdEntry, CveLookupResponse
+from vulnwitness.domain.epss import (
+    EpssObservation,
+    EpssSnapshotIdentity,
+    compute_lev,
+    latest_observation,
+)
 from vulnwitness.domain.evidence import EvidenceAnchor
+from vulnwitness.domain.exploit_index import ExploitIndex, ExploitIndexIdentity
 from vulnwitness.domain.priority_decision import (
     DecisionResponseDigest,
     PolicyIdentity,
@@ -18,11 +25,14 @@ from vulnwitness.domain.priority_facts import (
     EXPLOIT_REFERENCE_TAG,
     FACT_NAMES,
     MAX_EXPLOIT_REFERENCE_URLS,
+    MAX_FACT_MODULES,
     MAX_SOURCE_GRADE_SCORERS,
     ApplicabilityFact,
     AutomatableFact,
     CnvdLinkToReview,
     ExploitationFact,
+    ExploitModuleFact,
+    ExploitProbabilityFact,
     ForensicTriageFact,
     GradeAuthority,
     HighGradeFact,
@@ -41,6 +51,21 @@ from vulnwitness.domain.session_report import CheckedSession
 from vulnwitness.domain.source_comparison import select_nvd_cvss3
 from vulnwitness.domain.taxonomy import SourceType
 from vulnwitness.domain.tool_contracts import KnowledgeCapabilities
+
+
+@dataclass(frozen=True)
+class EpssInput:
+    """Supplied EPSS files scored on or before the reference date, and their rows for the
+    register's CVEs."""
+
+    snapshots: tuple[EpssSnapshotIdentity, ...]
+    observations: dict[str, tuple[EpssObservation, ...]]
+
+
+@dataclass(frozen=True)
+class ExploitIndexInput:
+    index: ExploitIndex
+    identity: ExploitIndexIdentity
 
 
 @dataclass(frozen=True)
@@ -290,6 +315,51 @@ def extract_forensic_triage_fact(
     return ForensicTriageFact(value=record.kev.forensic_triage, evidence_ids=evidence_ids)
 
 
+def extract_exploit_probability_fact(
+    cve_id: str, epss: EpssInput | None, threshold: float | None, reference_date: date
+) -> ExploitProbabilityFact:
+    """Unknown without supplied snapshots or when none scores the CVE."""
+    if epss is None:
+        return ExploitProbabilityFact(value="unknown")
+    observations = epss.observations.get(cve_id, ())
+    latest = latest_observation(observations, reference_date)
+    if latest is None:
+        return ExploitProbabilityFact(value="unknown")
+    if threshold is None:
+        raise ValueError("EPSS files need a policy with exploit_probability_threshold")
+    lev = compute_lev(observations, reference_date)
+    model_version = next(
+        snapshot.model_version
+        for snapshot in epss.snapshots
+        if snapshot.score_date == latest.score_date
+    )
+    above = max(latest.epss, lev.lev) >= threshold
+    return ExploitProbabilityFact(
+        value="at_or_above_threshold" if above else "below_threshold",
+        epss=latest.epss,
+        percentile=latest.percentile,
+        score_date=latest.score_date,
+        model_version=model_version,
+        lev=lev,
+        threshold=threshold,
+    )
+
+
+def extract_exploit_module_fact(
+    cve_id: str, exploit_index: ExploitIndexInput | None
+) -> ExploitModuleFact:
+    if exploit_index is None:
+        return ExploitModuleFact(value="unknown")
+    entry = exploit_index.index.find(cve_id)
+    if entry is None:
+        return ExploitModuleFact(value="not_in_index")
+    return ExploitModuleFact(
+        value="present",
+        modules=entry.modules[:MAX_FACT_MODULES],
+        omitted_modules=max(0, len(entry.modules) - MAX_FACT_MODULES),
+    )
+
+
 def uses_after_reference_date_information(
     facts: PriorityFacts,
     anchors: dict[str, EvidenceAnchor],
@@ -313,7 +383,13 @@ def uses_after_reference_date_information(
 
 
 def extract_priority_facts(
-    contents: CheckedSession, asset: Asset, assessment: AssetAssessment, reference_date: date
+    contents: CheckedSession,
+    asset: Asset,
+    assessment: AssetAssessment,
+    reference_date: date,
+    epss: EpssInput | None = None,
+    probability_threshold: float | None = None,
+    exploit_index: ExploitIndexInput | None = None,
 ) -> ExtractedPriorityFacts:
     """Extract exact-lookup grades and KEV state; missing lookups remain explicit unknowns."""
     calls: list[SessionCall] = []
@@ -361,6 +437,10 @@ def extract_priority_facts(
         technical_impact=technical_impact,
         source_high_grade=source_high_grade,
         forensic_triage=forensic_triage,
+        exploit_probability=extract_exploit_probability_fact(
+            assessment.cve_id, epss, probability_threshold, reference_date
+        ),
+        exploit_module=extract_exploit_module_fact(assessment.cve_id, exploit_index),
     )
     after_reference_date = uses_after_reference_date_information(
         facts, anchors, reference_date, snapshot_retrieved_at
@@ -375,6 +455,8 @@ def build_session_priority(
     policy_sha256: str,
     reference_date: date,
     program_version: str,
+    epss: EpssInput | None = None,
+    exploit_index: ExploitIndexInput | None = None,
 ) -> PriorityArtifact:
     """Refuse failed session checks and use only checker-verified response digests."""
     check = contents.check
@@ -382,6 +464,8 @@ def build_session_priority(
         raise ValueError("session checks failed; priority decisions refused")
     if contents.session is None:
         raise ValueError("session metadata is unavailable")
+    if epss is not None and policy.exploit_probability_threshold is None:
+        raise ValueError("EPSS files need a policy with exploit_probability_threshold")
     assets: dict[str, Asset] = {}
     for asset in register.assets:
         assets[asset.name] = asset
@@ -390,7 +474,15 @@ def build_session_priority(
     after_reference_date = False
     for assessment in register.assessments:
         asset = assets[assessment.asset]
-        extracted = extract_priority_facts(contents, asset, assessment, reference_date)
+        extracted = extract_priority_facts(
+            contents,
+            asset,
+            assessment,
+            reference_date,
+            epss,
+            policy.exploit_probability_threshold,
+            exploit_index,
+        )
         decision = evaluate_priority(policy, asset, assessment, extracted.facts)
         decisions.append(decision.model_copy(update={"notes": extracted.notes}))
         after_reference_date |= extracted.used_after_reference_date_information
@@ -410,6 +502,9 @@ def build_session_priority(
         response_digests=tuple(used_calls.values()),
         register_sha256=register.compute_content_sha256(),
         reference_date=reference_date,
-        used_after_reference_date_information=after_reference_date,
+        used_after_reference_date_information=after_reference_date
+        or (exploit_index is not None and exploit_index.identity.built_on > reference_date),
+        epss_snapshots=() if epss is None else epss.snapshots,
+        exploit_index=None if exploit_index is None else exploit_index.identity,
         decisions=tuple(decisions),
     )
