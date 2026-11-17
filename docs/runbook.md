@@ -516,8 +516,9 @@ call failed or a field is absent. `not_checked` lists the count and IDs of model
 findings. Text output explains each layer and repeats that free narrative is not checked.
 `narrative_identifiers` is advisory: every CVE, CWE and CNVD ID a finding's statement names
 is matched exactly against the session's successful recorded responses, and IDs no
-recorded call returned are listed by finding. A model that names a CVE it never looked up,
-or one past its training data, shows up here. A recorded ID is not thereby supported by
+recorded call returned are listed by finding. Query text, product filters, request echoes
+and execution diagnostics do not count as returned knowledge; looking up a made-up CVE
+with a `no_match` answer leaves it unrecorded. A recorded ID is not thereby supported by
 the statement, and the layer never changes the exit code
 ([ADR 0022](rebuild/adr/0022-vex-export-and-narrative-identifiers.md)).
 Exit 0 requires record consistency, resolved citations and every deterministic claim
@@ -536,10 +537,14 @@ vulnwitness session verify-seal /data/vulnwitness/priority-session \
 
 `session check` proves a session agrees with itself; it cannot tell whether someone rewrote
 a response together with its recorded digest. `seal` writes `seal.json`: the SHA-256 of
-`session.json` and of every file under `calls/` and `responses/`, and an HMAC-SHA256 over
-that list under your key. `verify-seal` names every sealed file that changed, appeared or
-disappeared, and exits 1 if any did or the MAC does not match. `findings.yaml`,
-`triage.json` and `priority.json` are not sealed and stay editable. The key must hold 32 to
+`session.json`, `priority.json` when present and every entry under `calls/` and `responses/`,
+and an HMAC-SHA256 over that list under your key. Every selected entry must be a regular
+file; links and other file types are refused. `verify-seal` names every sealed file that
+changed, appeared or disappeared, and exits 1 if any did or the MAC does not match.
+Adding, editing or removing `priority.json` after sealing invalidates the seal, including
+regeneration that changes its bytes; run `prioritise` before sealing, or verify or reseal
+after it. `findings.yaml` and
+`triage.json` are not sealed and stay editable. The key must hold 32 to
 4096 bytes and live outside the session; the seal names it only by a digest prefix. Anyone
 holding the key can reseal, so share it only with those who must verify
 ([ADR 0022](rebuild/adr/0022-vex-export-and-narrative-identifiers.md)).
@@ -646,7 +651,13 @@ The analyst's applicability is the status: `affected`, `not_affected` (the justi
 becomes the impact statement) or, for `unknown`, `under_investigation`. With `--session`,
 an affected statement's action statement quotes the checked `priority.json`
 recommendation and reason; without it, it says no action was recorded. Products are
-`urn:vulnwitness:asset:` IRIs of the asset names. Nothing is derived from source data, no
+`urn:vulnwitness:asset:` IRIs of the asset names. Tools that match SBOM components by purl
+or CPE need a separate mapping from these local asset identifiers. With `--session`,
+the session check must pass and `priority.json` must name the supplied register's digest;
+otherwise export exits 1. An assessment dated after `--as-of` also causes exit 1.
+The analyst's justification for `affected` and `unknown` is included in `status_notes`;
+without a justification, an unknown assessment says applicability remains unknown.
+Nothing is derived from source data, no
 clock is read, and the file is written atomically with mode 0600; `--force` overwrites.
 
 ## Workspace mode for agents

@@ -9,15 +9,15 @@ import errno
 import fcntl
 import os
 import stat
+from io import BufferedReader
 from pathlib import Path
-from typing import IO
 
 
 class NotARegularFileError(OSError):
     """The path names a directory, a device, a FIFO, a socket or a symbolic link."""
 
 
-def open_regular_file(path: Path) -> IO[bytes]:
+def open_regular_file(path: Path) -> BufferedReader:
     """``path`` opened for reading; raises ``NotARegularFileError`` for anything but a
     regular file, and any other ``OSError`` the open raises."""
     try:
@@ -34,4 +34,4 @@ def open_regular_file(path: Path) -> IO[bytes]:
     except BaseException:
         os.close(file_descriptor)
         raise
-    return os.fdopen(file_descriptor, "rb")
+    return open(file_descriptor, "rb")

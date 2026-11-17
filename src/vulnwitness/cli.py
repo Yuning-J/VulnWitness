@@ -1839,12 +1839,12 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
         return run_vex(arguments, parser)
     if arguments.command == "exploit-index":
         return run_exploit_index(arguments)
+    if arguments.command == "session" and arguments.session_command in SEAL_COMMANDS:
+        return run_seal_command(arguments)
     try:
         settings = load_settings(os.environ if environment is None else environment)
     except SettingsError as error:
         parser.error(str(error))
-    if arguments.command == "session" and arguments.session_command in SEAL_COMMANDS:
-        return run_seal_command(arguments)
     if arguments.command == "session":
         report = SessionChecker(arguments.directory).check()
         print(

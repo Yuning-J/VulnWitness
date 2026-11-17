@@ -10,12 +10,12 @@ deterministic: no clock is read and statements follow register order.
 """
 
 from datetime import date
-from typing import Final
+from typing import Final, TypedDict
 from urllib.parse import quote
 
 from vulnwitness.domain.asset_register import AssetRegister
 from vulnwitness.domain.hashing import canonical_sha256
-from vulnwitness.domain.priority_decision import PriorityArtifact, PriorityDecision
+from vulnwitness.domain.priority_decision import PriorityArtifact
 
 OPENVEX_CONTEXT: Final = "https://openvex.dev/ns/v0.2.0"
 VEX_STATUSES: Final = {
@@ -25,6 +25,19 @@ VEX_STATUSES: Final = {
 }
 NO_ACTION_RECORDED: Final = (
     "No action statement recorded; the analyst assessed the asset as affected."
+)
+
+OpenVexDocument = TypedDict(
+    "OpenVexDocument",
+    {
+        "@context": str,
+        "@id": str,
+        "author": str,
+        "timestamp": str,
+        "version": int,
+        "tooling": str,
+        "statements": list[dict[str, object]],
+    },
 )
 
 
@@ -37,17 +50,26 @@ def build_openvex(
     author: str,
     issued_on: date,
     priority: PriorityArtifact | None = None,
-) -> dict[str, object]:
+) -> OpenVexDocument:
     """The document as JSON-ready data; its ``@id`` hashes the register and priority."""
     if not author.strip():
         raise ValueError("an OpenVEX document needs an author")
-    decisions: dict[tuple[str, str], PriorityDecision] = {}
+    actions: dict[tuple[str, str], str] = {}
     if priority is not None:
+        if priority.register_sha256 != register.compute_content_sha256():
+            raise ValueError("priority.json was built from a different asset register")
         for decision in priority.decisions:
-            decisions[(decision.asset, decision.cve_id)] = decision
+            actions[(decision.asset, decision.cve_id)] = (
+                f"VulnWitness policy {priority.policy.name} recommends "
+                f"{decision.recommendation}: {decision.reason}"
+            )
     timestamp = f"{issued_on.isoformat()}T00:00:00Z"
     statements: list[dict[str, object]] = []
     for assessment in register.assessments:
+        if assessment.assessed_at > issued_on:
+            raise ValueError(
+                f"assessment for {assessment.asset} / {assessment.cve_id} is dated after --as-of"
+            )
         statement: dict[str, object] = {
             "vulnerability": {"name": assessment.cve_id},
             "products": [{"@id": asset_product_id(assessment.asset)}],
@@ -57,16 +79,16 @@ def build_openvex(
         if assessment.applicability == "not_affected":
             statement["impact_statement"] = assessment.justification
         if assessment.applicability == "affected":
-            recorded = decisions.get((assessment.asset, assessment.cve_id))
-            if recorded is None or priority is None:
+            recorded = actions.get((assessment.asset, assessment.cve_id))
+            if recorded is None:
                 statement["action_statement"] = NO_ACTION_RECORDED
             else:
-                statement["action_statement"] = (
-                    f"VulnWitness policy {priority.policy.name} recommends "
-                    f"{recorded.recommendation}: {recorded.reason}"
-                )
-        if assessment.applicability == "unknown":
-            statement["status_notes"] = "Applicability has not been assessed."
+                statement["action_statement"] = recorded
+        if assessment.applicability in ("unknown", "affected"):
+            if assessment.justification is not None:
+                statement["status_notes"] = assessment.justification
+            elif assessment.applicability == "unknown":
+                statement["status_notes"] = "Applicability remains unknown."
         statements.append(statement)
     identity = canonical_sha256(
         {

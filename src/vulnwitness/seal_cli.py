@@ -19,7 +19,7 @@ def add_seal_parsers(
 ) -> None:
     seal_parser = session_commands.add_parser(
         "seal",
-        help="write seal.json: an HMAC over session.json, calls/ and responses/ under a key",
+        help="seal session.json, calls/, responses/ and priority.json when present under a key",
     )
     seal_parser.add_argument("directory", type=Path)
     seal_parser.add_argument("--key-file", type=Path, required=True, metavar="FILE")
@@ -39,9 +39,7 @@ def run_seal_command(arguments: argparse.Namespace) -> int:
         key = read_key(arguments.key_file, arguments.directory)
         if command == "seal":
             seal = seal_session(arguments.directory, key, arguments.force)
-            files = seal["files"]
-            assert isinstance(files, dict)
-            print(f"sealed {len(files)} files with key {seal['key_id']}")
+            print(f"sealed {len(seal.files)} files with key {seal.key_id}")
             return 0
         verification = verify_session_seal(arguments.directory, key)
     except (OSError, ValueError) as error:

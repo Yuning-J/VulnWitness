@@ -55,6 +55,12 @@ def run_vex(arguments: argparse.Namespace, parser: argparse.ArgumentParser) -> i
         priority = None
         if arguments.session is not None:
             contents = SessionChecker(arguments.session).check_with_contents()
+            if not (
+                contents.check.record.consistent
+                and contents.check.citations.resolved
+                and contents.check.claims.verified
+            ):
+                raise ValueError("the session check did not pass; run session check for details")
             if contents.priority is None:
                 raise ValueError("the session has no valid priority.json")
             priority = contents.priority
@@ -69,6 +75,5 @@ def run_vex(arguments: argparse.Namespace, parser: argparse.ArgumentParser) -> i
         print(f"vulnwitness vex: {error}", file=sys.stderr)
         return 1
     statements = document["statements"]
-    assert isinstance(statements, list)
     print(f"wrote {len(statements)} OpenVEX statements")
     return 0

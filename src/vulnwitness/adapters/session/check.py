@@ -8,6 +8,7 @@ from pydantic import BaseModel, ValidationError
 from yaml import YAMLError
 
 from vulnwitness.adapters.session.files import check_session_path, read_session_file
+from vulnwitness.adapters.session.narrative_identifiers import returned_identifier_texts
 from vulnwitness.adapters.session.validation import parse_session_document
 from vulnwitness.adapters.strict_yaml import load_declaration_yaml
 from vulnwitness.domain.evidence import EvidenceAnchor
@@ -200,9 +201,10 @@ class SessionChecker:
             for finding in self._findings.effective_findings():
                 if finding.statement is not None:
                     statements.append((finding.id, finding.statement))
-        recorded = collect_recorded_identifiers(
-            answer.model_dump_json() for answer in self._responses.values()
-        )
+        response_texts: list[str] = []
+        for answer in self._responses.values():
+            response_texts.extend(returned_identifier_texts(answer))
+        recorded = collect_recorded_identifiers(response_texts)
         return check_narrative_identifiers(statements, recorded)
 
     def _list_files(self, name: str) -> list[Path]:

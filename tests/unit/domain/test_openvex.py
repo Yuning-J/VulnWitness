@@ -29,15 +29,7 @@ def build_register() -> AssetRegister:
             "applicability": "not_affected",
             "justification": "The component is not present.",
         },
-        {
-            key: value
-            for key, value in {
-                **first,
-                "cve_id": "CVE-2026-0003",
-                "applicability": "unknown",
-            }.items()
-            if key != "justification"
-        },
+        {**first, "cve_id": "CVE-2026-0003", "applicability": "unknown"},
     ]
     return AssetRegister.model_validate(document)
 
@@ -57,6 +49,8 @@ def test_statuses_follow_the_analyst_and_unknown_is_under_investigation() -> Non
     assert not_affected["status"] == "not_affected"
     assert not_affected["impact_statement"] == "The component is not present."
     assert unknown["status"] == "under_investigation"
+    assert affected["status_notes"] == "The deployed version is affected."
+    assert unknown["status_notes"] == "The deployed version is affected."
     asset = register.assessments[0].asset
     assert affected["products"] == [{"@id": asset_product_id(asset)}]
     assert " " not in asset_product_id("Aster head unit")
@@ -70,7 +64,9 @@ def test_affected_statement_quotes_the_recorded_recommendation() -> None:
     decision = decision.model_copy(
         update={"asset": register.assessments[0].asset, "cve_id": "CVE-2026-0001"}
     )
-    priority = build_priority_artifact((decision,))
+    priority = build_priority_artifact((decision,)).model_copy(
+        update={"register_sha256": register.compute_content_sha256()}
+    )
 
     document = build_openvex(register, "Example PSIRT", date(2026, 11, 16), priority)
 
