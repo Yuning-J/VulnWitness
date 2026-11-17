@@ -1039,7 +1039,7 @@
           "type": "string"
         },
         "reason": {
-          "description": "Fixed policy text; may interpolate justification or high_grade_reasons.",
+          "description": "Fixed policy text; may interpolate justification, high_grade_reasons or source_high_grade_reasons.",
           "minLength": 1,
           "pattern": "\\S",
           "title": "Reason",

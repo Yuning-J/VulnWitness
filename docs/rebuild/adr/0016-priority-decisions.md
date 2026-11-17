@@ -133,6 +133,13 @@ first rule whose conditions all hold wins:
 A grade alone never produces `act`. When positive evidence escalates a pair (rules 3, 4
 and 6), the result still lists every input that remained unknown.
 
+The packaged `cn-auto-source-grade` policy uses these same rules and regulation basis,
+with `rule-6-source-grade` directly after rule 6. For an affected asset in category
+`external_connection` or `software_update`, it recommends `attend` when `high_grade` is
+`none_available` and `source_high_grade` is `present` (ADR 0021). Its reason names the
+scorer and states that NVD and CNVD give no usable grade. The source grade is the scorer's
+own view; it never overrides a usable NVD or CNVD grade. `cn-auto-demo` does not read it.
+
 ### 5. Identity, explanation and determinism
 
 The decision artifact (`priority.json`) carries:

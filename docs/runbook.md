@@ -611,14 +611,21 @@ Stores in format 4 add five facts (ADR 0021), all from the recorded exact lookup
 "CISA Coordinator") that NVD mirrors; each names its assessor and time, and
 `exploitation none` is CISA's view at that time, never "no exploit exists".
 `source_high_grade` reads CVSS v3.x or v4.0 from scorers other than NVD and names each
-triggering scorer; it never stands in for NVD's own grade. `forensic_triage` is KEV's
-`forensicTriage` for a listed CVE. `--policy exploitation-demo` is a second packaged
-VulnWitness policy that reads them: KEV listing, active exploitation, or a proof of concept
+triggering scorer; it never stands in for NVD's own grade. `--policy cn-auto-source-grade`
+opts into that scorer's own view, using `cn-auto-demo`'s rules with one rule directly after
+rule 6: an affected asset in category `external_connection` or `software_update`, with no
+usable NVD or CNVD grade and a HIGH/CRITICAL source grade, receives `attend`. The reason
+names the scorer and the absence of a usable NVD or CNVD grade. A usable NVD or CNVD grade,
+including one below HIGH, prevents this rule from matching. `cn-auto-demo` does not read
+`source_high_grade`.
+
+`forensic_triage` is KEV's `forensicTriage` for a listed CVE. `--policy exploitation-demo`
+is a packaged VulnWitness policy that reads SSVC facts: KEV listing, active exploitation,
+or a proof of concept
 that CISA scores automatable gives `act`; a proof of concept alone, or total impact with
 automatable exploitation, gives `attend`. It is neither CISA's SSVC tree nor BOD 26-04's
-Table 1. `cn-auto-demo` is unchanged and lists the new facts among its unknowns when they
-are unknown. Artifacts written before this change no longer validate; rerun
-`prioritise --force`.
+Table 1. `cn-auto-demo` lists these facts among its unknowns when they are unknown.
+Regenerate artifacts that fail validation with `prioritise --force`.
 
 `--epss-dir DIR` adds the `exploit_probability` fact (ADR 0025) from FIRST EPSS daily files
 you download yourself (`epss_scores-YYYY-MM-DD.csv.gz` from https://www.first.org/epss/data);

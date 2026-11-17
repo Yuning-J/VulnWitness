@@ -52,7 +52,8 @@ class PriorityRule(ContractModel):
     conditions: tuple[PolicyCondition, ...]
     outcome: Recommendation
     reason: NonblankText = Field(
-        description="Fixed policy text; may interpolate justification or high_grade_reasons."
+        description="Fixed policy text; may interpolate justification, high_grade_reasons "
+        "or source_high_grade_reasons."
     )
 
     @model_validator(mode="after")
@@ -61,7 +62,12 @@ class PriorityRule(ContractModel):
             if field_name is None:
                 continue
             if (
-                field_name not in ("justification", "high_grade_reasons")
+                field_name
+                not in (
+                    "justification",
+                    "high_grade_reasons",
+                    "source_high_grade_reasons",
+                )
                 or format_spec
                 or conversion
             ):

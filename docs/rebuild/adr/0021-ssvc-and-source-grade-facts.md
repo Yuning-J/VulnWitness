@@ -24,7 +24,7 @@ KEV also has a `forensicTriage` column (ADR 0020), which BOD 26-04 ties to remed
 
 ## Decisions
 
-### 1. Five new facts, from the recorded exact lookup only
+### 1. Five facts, from the recorded exact lookup only
 
 | Fact | Values | Source |
 |---|---|---|
@@ -42,14 +42,14 @@ KEV also has a `forensicTriage` column (ADR 0020), which BOD 26-04 ties to remed
   HIGH or CRITICAL, and names each triggering scorer with its CVSS version. It is `absent`
   when such metrics exist and none is high, and `none_available` when none exists. It is a
   separate fact: `high_grade` keeps ADR 0016's meaning, and `cn-auto-demo` does not read
-  the new fact.
+  `source_high_grade`. The opt-in `cn-auto-source-grade` policy reads it.
 - `forensic_triage` is `unknown` when the CVE is not KEV-listed or the KEV source did not
   carry the column.
 - Every known value cites the record's NVD (or KEV) evidence IDs; nothing is fetched.
 
-### 2. A second demonstration policy, `exploitation-demo`
+### 2. The demonstration policy `exploitation-demo`
 
-A packaged VulnWitness policy that reads the new facts. It is not CISA's SSVC decision
+A packaged VulnWitness policy that reads the SSVC facts. It is not CISA's SSVC decision
 tree and not BOD 26-04's Table 1, whose final text VulnWitness has not encoded. The rules
 are ordered; the first match wins:
 
@@ -63,18 +63,28 @@ are ordered; the first match wins:
 8. `affected`, exploitation `unknown`, KEV `unknown` → `manual_triage_required`;
 9. otherwise → `track`.
 
-`cn-auto-demo` is unchanged and still decides from ADR 0016's facts; its decisions list
-the new facts as inputs and, when unknown, among the unknown facts.
+`cn-auto-demo` decides from ADR 0016's facts; its decisions list the additional facts as
+inputs and, when unknown, among the unknown facts.
 
-### 3. Reports
+### 3. The opt-in source-grade policy `cn-auto-source-grade`
 
-The priority report adds the new facts to its fact table, names the SSVC assessor and time,
+This packaged policy uses `cn-auto-demo`'s rules and regulation basis with one rule,
+`rule-6-source-grade`, directly after rule 6. It recommends `attend` when applicability
+is `affected`, system category is `external_connection` or `software_update`, `high_grade`
+is `none_available`, and `source_high_grade` is `present`. Its reason names every triggering
+scorer with its CVSS version using `{source_high_grade_reasons}`, identifies the grade as
+the scorer's own view, and states that NVD and CNVD give no usable grade. A usable NVD or
+CNVD grade prevents this rule from matching, including a grade below HIGH.
+
+### 4. Reports
+
+The priority report includes these facts in its fact table, names the SSVC assessor and time,
 and the source-grade scorers, and states that `exploitation none` is not "no exploit".
 
 ## Consequences
 
 - Policies can tell a CVE with a public proof of concept from one with none known even when
   NVD never enriches it.
-- A pre-release contract change: `priority.json` artifacts written before this change no
-  longer validate and are regenerated with `prioritise --force`.
+- `priority.json` requires all five facts; artifacts missing them fail validation and
+  can be regenerated with `prioritise --force`.
 - `source_high_grade` uses the scorer's own label; a CNA's high score is that CNA's view.

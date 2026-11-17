@@ -20,6 +20,12 @@ technical-impact facts ([ADR 0020](docs/rebuild/adr/0020-nvd-mirrored-source-dat
 [ADR 0021](docs/rebuild/adr/0021-ssvc-and-source-grade-facts.md)). `vulnwitness store
 coverage` shows how much of a store NVD has enriched.
 
+`--policy cn-auto-source-grade` opts into the CNA or other scorer's own CVSS v3.x/v4.0
+HIGH/CRITICAL grade when neither NVD nor CNVD gives a usable grade. It extends
+`cn-auto-demo` with an `attend` rule for affected assets in the external-connection or
+software-update categories and names the scorer in its reason. `cn-auto-demo` does not
+read source grades.
+
 CNVD links carry a name-overlap check for review without changing grades or links
 ([ADR 0017](docs/rebuild/adr/0017-cnvd-name-check.md)).
 

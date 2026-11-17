@@ -28,7 +28,7 @@
     "list_investigations_response.schema.json": "4beed21b773de0b81ef5a19fa14362fd49c97ae4f0e4d34d98d3f855522056fb",
     "migration_report.schema.json": "e916ecb8c18e4d0b301fc864ae6979b2dae0091989af6a6c9c72b68d02dcdc4e",
     "pending_cnvd_entry.schema.json": "3ce63d928ad49d31bacdbc2629a58f3bd4061f7f1d8dca873ce7f8f1cdd0d85a",
-    "priority.schema.json": "a66b2f243ac0586c2fb5c1819f2bd65148e33536d870dd564b846c02e4351571",
+    "priority.schema.json": "d25dea1e63a60f6204f83e21243e93e705d5a826aa05a7c96e6df4b8de29fa8a",
     "product_query_request.schema.json": "af1ed234390d2776cac7003246e8d384dd2001c3a34e66d91f1aea731cab4521",
     "product_query_response.schema.json": "2bb758236857dd90738b978d08ab0ada1f1939421c53855f5bca9f8b0bcd0f5a",
     "protocol_topic.schema.json": "a39c8686f58070d93fb2e3e85aa77056911a12b5ac694478c62b5dacf85df2c5",

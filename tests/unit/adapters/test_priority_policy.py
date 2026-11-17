@@ -90,3 +90,14 @@ def test_policy_digest_ignores_yaml_formatting_and_changes_with_content(tmp_path
     assert load_priority_policy(policy_file).content_sha256 == loaded_policy.content_sha256
     assert load_priority_policy(changed_file).content_sha256 != loaded_policy.content_sha256
     assert len(loaded_policy.content_sha256) == 64
+
+
+def test_source_grade_policy_preserves_demo_rules_and_adds_one_rule_after_rule_6() -> None:
+    demo = load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
+    source_grade = load_priority_policy(packaged_priority_policy_file("cn-auto-source-grade"))
+
+    rules = source_grade.policy.rules
+
+    assert rules[:6] + rules[7:] == demo.rules
+    assert rules[6].id == "rule-6-source-grade"
+    assert source_grade.policy.regulations == demo.regulations

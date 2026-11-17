@@ -22,7 +22,7 @@ class LoadedPriorityPolicy:
     content_sha256: str
 
 
-PACKAGED_POLICY_NAMES = ("cn-auto-demo", "exploitation-demo")
+PACKAGED_POLICY_NAMES = ("cn-auto-demo", "cn-auto-source-grade", "exploitation-demo")
 
 
 def packaged_priority_policy_file(name: str) -> Traversable:

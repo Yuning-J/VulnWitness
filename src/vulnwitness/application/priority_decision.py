@@ -56,9 +56,15 @@ def render_rule_reason(
     grade_reasons: list[str] = []
     for authority in sorted(facts.high_grade.triggering_authorities):
         grade_reasons.append(f"the {authority} high grade triggered this policy rule")
+    source_grade_reasons: list[str] = []
+    for scorer in sorted(facts.source_high_grade.triggering_scorers):
+        source_grade_reasons.append(
+            f"the {scorer} high grade (the scorer's own view) triggered this policy rule"
+        )
     reason = rule.reason.format(
         justification=assessment.justification,
         high_grade_reasons="; ".join(grade_reasons),
+        source_high_grade_reasons="; ".join(source_grade_reasons),
     )
     if any(condition.fact == "high_grade" for condition in rule.conditions):
         for link in facts.high_grade.cnvd_links_to_review:
