@@ -17,15 +17,20 @@ operator supplies are read, and only what a decision needs is recorded.
 
 1. **`prioritise --epss-dir DIR`** reads FIRST's daily files (`.csv` or `.csv.gz`, with the
    `#model_version:…,score_date:…` line and the `cve,epss,percentile` header) from a
-   directory the operator fills. Only rows for the register's CVEs are kept, while the files
-   stream past. Files scored after `--as-of` are ignored, so no later information is used.
+   directory the operator fills. Only regular files are read; directories, symbolic links
+   and other non-regular entries are skipped. Eligible files are read whole, with memory
+   bounded per file by the 64 MiB compressed and decompressed size caps; only rows for the
+   register's CVEs are retained. Files scored after `--as-of` are ignored after the
+   score-date header, before row parsing and duplicate-date checks.
    The artifact records each used file's name, score date, model version, row count and
    SHA-256.
 2. **LEV is computed as NIST defines it, over the supplied files only.** Each file's score
    covers the days from its date to the next file or 30 days, whichever comes first, and
    never past the reference date. The product runs over `1 − epss × days/30`. A file every
    30 days gives LEV, and a file every day gives LEV2. Days that no file covers add nothing,
-   so the value is a lower bound; `covered_days` and `span_days` say how much it rests on.
+   while `covered_days` and `span_days` say how much of the span is covered. Sparse files
+   carry a score forward for up to 30 days and can exceed LEV from the full history; this
+   estimate is not a general lower bound.
    `first_scored` is the earliest supplied file that scores the CVE, which can be later
    than EPSS's own first score.
 3. **One categorical fact, `exploit_probability`**, keeps policies a decision table:
@@ -38,17 +43,20 @@ operator supplies are read, and only what a decision needs is recorded.
    composite folds it. A policy whose rules read the fact must declare a threshold. A
    policy without a threshold refuses `--epss-dir`, so the band is never set by a hidden
    default.
-4. **`exploitation-demo` declares 0.1 and adds `rule-7b`**. An affected asset whose
-   probability reaches the threshold gets `attend`. The rule comes after KEV and SSVC
-   evidence, which give `act`. 0.1 is a demonstration value, not a FIRST, NIST or
+4. **`exploitation-demo` declares 0.1 and uses `rule-7b`**. An affected asset whose
+   probability reaches the threshold gets `attend` only after the missing-evidence gate
+   (`rule-8`). KEV and SSVC evidence and module presence (`rule-6b`) are checked first.
+   EPSS is a probability, not exploitation evidence, so it does not pass the gate when
+   both KEV and SSVC exploitation are unknown. A public module is concrete evidence and
+   can give `attend` before that gate. 0.1 is a demonstration value, not a FIRST, NIST or
    VulnWitness recommendation.
 5. **`below_threshold` is never "not exploited".** The report states this, as it does for
    KEV `not_listed_in_snapshot`.
 
 ## Consequences
 
-- The policy content digests change, because the threshold field is part of a validated
-  policy. Existing `priority.json` files need `prioritise --force`.
+- The threshold field is part of the validated policy's content identity. A
+  `priority.json` for different policy contents requires `prioritise --force`.
 - `cn-auto-demo` lists `exploit_probability` among its unknowns.
-- Reading a year of daily files streams about 365 × 300k rows. The adapter caps each file
+- Reading a year of daily files processes about 365 × 300k rows. The adapter caps each file
   at 64 MiB decompressed and the directory at 4,096 files.

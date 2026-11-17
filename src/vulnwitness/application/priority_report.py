@@ -48,7 +48,8 @@ def build_priority_decision(decision: PriorityDecision) -> ReportSection:
         fact_details.append(
             f"EPSS {probability.epss:.5f} (percentile {probability.percentile:.5f}) scored "
             f"{probability.score_date.isoformat()} by model {probability.model_version}; "
-            f"LEV lower bound {lev.lev:.5f} over {lev.covered_days} of {lev.span_days} days "
+            f"LEV over the supplied files {lev.lev:.5f}, covering "
+            f"{lev.covered_days} of {lev.span_days} days "
             f"since {lev.first_scored.isoformat()}; threshold {probability.threshold:g}"
         )
     for module in decision.facts.exploit_module.modules:

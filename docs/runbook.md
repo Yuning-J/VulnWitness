@@ -614,14 +614,21 @@ are unknown. Artifacts written before this change no longer validate; rerun
 `--epss-dir DIR` adds the `exploit_probability` fact (ADR 0025) from FIRST EPSS daily files
 you download yourself (`epss_scores-YYYY-MM-DD.csv.gz` from https://www.first.org/epss/data);
 VulnWitness ships none, because FIRST states no licence. Files scored after `--as-of` are
-ignored. The fact keeps the latest EPSS score and percentile, the model version, and NIST
-CSWP 41's LEV over the supplied files. LEV is a lower bound: days no file covers add nothing,
-and the report states covered and spanned days. One file per 30 days gives LEV and one per
+ignored after their score-date header, before row parsing and duplicate-date checks.
+Only regular `.csv` and `.csv.gz` files directly in the directory are read; directories,
+symbolic links and other non-regular entries are skipped. Eligible files are read whole,
+bounded per file by 64 MiB compressed and decompressed size caps. The fact keeps the
+latest EPSS score and percentile, the model version, and NIST
+CSWP 41's LEV over the supplied files. Days no file covers add nothing, and the report
+states covered and spanned days. Sparse files carry scores forward for up to 30 days and
+can exceed LEV from a full history, so the estimate is not a general lower bound.
+One file per 30 days gives LEV and one per
 day gives LEV2. The policy's `exploit_probability_threshold` bands max(EPSS, LEV) as
 `at_or_above_threshold` or `below_threshold`. Only `exploitation-demo` declares one (0.1, a
 demonstration value), and a policy without one refuses `--epss-dir`. `below_threshold` is
 a low estimate, never "not exploited". `priority.json` records each used file's name, score
-date, model version and SHA-256.
+date, model version and SHA-256. The threshold rule follows the missing-evidence gate:
+if KEV and SSVC exploitation are both unknown, high EPSS still requires manual triage.
 
 `--exploit-index FILE` adds the `exploit_module` fact (ADR 0026). Build the file from your
 own checkouts of Metasploit Framework and nuclei-templates:
@@ -633,10 +640,13 @@ vulnwitness exploit-index build --metasploit ~/src/metasploit-framework \
 
 It reads `['CVE', '…']` references in `modules/**/*.rb` and `cve-id:` classifications in
 template YAML as text, never running or parsing module code, and keeps each CVE's module
-paths and each checkout's HEAD commit. `present` names up to 16 modules; `not_in_index`
-means only that neither checkout names one, never "no exploit exists". An index built after
+paths, the total module count before the index's 64-module cap, and each checkout's HEAD
+commit (loose or packed ref). Build output separates files read, files skipped and
+unreadable directories. Metasploit Python and Go modules are not indexed. `present` names
+up to 16 modules and reports the true remainder; `not_in_index` means only that neither checkout names one, never "no exploit exists". An index built after
 `--as-of` sets `used_after_reference_date_information`. `exploitation-demo` gives `attend`
-for an affected asset whose CVE has a module (`rule-6b`).
+for an affected asset whose CVE has a module (`rule-6b`), before the missing-evidence gate,
+because module presence is concrete evidence.
 
 ### Export the assessments as OpenVEX
 

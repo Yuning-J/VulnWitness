@@ -65,13 +65,13 @@ def parse_reference_date(value: str) -> date:
 def read_epss_input(directory: Path, register: AssetRegister, reference_date: date) -> EpssInput:
     """The supplied files scored on or before the reference date, read for the register's
     CVEs only."""
-    snapshots, observations = read_epss_directory(
-        directory, {assessment.cve_id for assessment in register.assessments}
-    )
-    used = tuple(snapshot for snapshot in snapshots if snapshot.score_date <= reference_date)
-    if not used:
+    cve_ids = set()
+    for assessment in register.assessments:
+        cve_ids.add(assessment.cve_id)
+    snapshots, observations = read_epss_directory(directory, cve_ids, reference_date)
+    if not snapshots:
         raise ValueError("no supplied EPSS file is scored on or before --as-of")
-    return EpssInput(used, observations)
+    return EpssInput(snapshots, observations)
 
 
 def read_exploit_index(path: Path) -> ExploitIndexInput:

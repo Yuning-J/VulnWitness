@@ -3,7 +3,7 @@
 import pytest
 
 from tests.support.priority import build_priority_inputs
-from vulnwitness.adapters.priority_policy import default_priority_policy_file, load_priority_policy
+from vulnwitness.adapters.priority_policy import load_priority_policy, packaged_priority_policy_file
 from vulnwitness.application.priority_decision import evaluate_priority
 from vulnwitness.domain.asset_register import Applicability, SystemCategory
 from vulnwitness.domain.priority_facts import HighGradeStatus, KevStatus
@@ -12,7 +12,7 @@ from vulnwitness.domain.priority_policy import PriorityPolicy
 
 @pytest.fixture
 def policy() -> PriorityPolicy:
-    return load_priority_policy(default_priority_policy_file()).policy
+    return load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
 
 
 @pytest.mark.parametrize(

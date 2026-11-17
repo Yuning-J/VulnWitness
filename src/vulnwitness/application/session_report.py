@@ -19,6 +19,7 @@ from vulnwitness.domain.cve_lookup import CveLookupResponse, LookupCandidate, Pe
 from vulnwitness.domain.cvss_ranking import rank_cvss_metric
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.investigation import KnowledgeEvidenceSet, NeedOutcome
+from vulnwitness.domain.nvd_metrics import is_nvd_own_metric
 from vulnwitness.domain.nvd_status import (
     classify_nvd_enrichment,
     describe_nvd_status,
@@ -156,7 +157,7 @@ def build_findings(contents: CheckedSession) -> ReportSection:
 
 
 def format_metric(metric: CvssMetric) -> str:
-    scorer = "NVD" if metric.scorer == "nvd@nist.gov" else metric.scorer
+    scorer = "NVD" if is_nvd_own_metric(metric) else metric.scorer
     label = f"{(metric.base_severity or 'unknown').title()} {metric.base_score:g}"
     return (
         f"{label} · CVSS {metric.version} · {scorer} · {metric.scorer_type or 'type not recorded'}"

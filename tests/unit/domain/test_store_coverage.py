@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime
 
+import pytest
+
 from tests.support.builders import build_cve_record, build_cvss_metric, build_versioned_product
 from vulnwitness.domain.cve import KevEntry, Reference
 from vulnwitness.domain.store_coverage import (
@@ -48,7 +50,10 @@ def test_coverage_counts_each_month_and_the_total() -> None:
 
     coverage = measure_store_coverage("store", DIGEST, (enriched, not_scheduled, undated))
 
-    assert [month.month for month in coverage.months] == ["2026-03", "2026-10", "unpublished"]
+    months = []
+    for month in coverage.months:
+        months.append(month.month)
+    assert months == ["2026-03", "2026-10", "unpublished"]
     march, october, unpublished = coverage.months
     assert (march.with_vulnerable_cpe, march.with_nvd_own_cvss3, march.with_cwe) == (1, 1, 1)
     assert (march.with_exploit_reference, march.kev_listed) == (1, 1)
@@ -90,3 +95,13 @@ def test_diff_tells_timestamp_refreshes_from_content_changes() -> None:
     assert diff.changed_fields == {"cwe_ids": 1}
     assert diff.old_semantic_content_sha256 != diff.new_semantic_content_sha256
     assert not diff.lists_truncated
+
+
+@pytest.mark.parametrize("scorer", ["NVD", "nvd@nist.gov"])
+def test_nvd_owned_metrics_count_as_nvd_coverage_and_not_source_coverage(scorer: str) -> None:
+    record = build_cve_record(cvss=(build_cvss_metric(scorer=scorer),))
+
+    coverage = measure_store_coverage("store", DIGEST, (record,))
+
+    assert coverage.total.with_nvd_own_cvss3 == 1
+    assert coverage.total.with_source_cvss == 0

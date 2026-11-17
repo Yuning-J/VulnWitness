@@ -271,7 +271,7 @@ class ExploitProbabilityFact(ContractModel):
     score_date: CalendarDate | None = None
     model_version: str | None = None
     lev: LevEstimate | None = Field(
-        default=None, description="A lower bound over the supplied snapshots only."
+        default=None, description="LEV over the supplied snapshots only."
     )
     threshold: float | None = Field(default=None, gt=0, le=1)
 
@@ -290,11 +290,6 @@ class ExploitProbabilityFact(ContractModel):
             if above != (self.value == "at_or_above_threshold"):
                 raise ValueError("the band does not match the scores and threshold")
         return self
-
-    def composite(self) -> float | None:
-        if self.epss is None or self.lev is None:
-            return None
-        return max(self.epss, self.lev.lev)
 
 
 class ExploitModuleFact(ContractModel):

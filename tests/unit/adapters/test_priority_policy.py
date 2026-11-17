@@ -6,8 +6,8 @@ import pytest
 
 from vulnwitness.adapters.priority_policy import (
     PriorityPolicyError,
-    default_priority_policy_file,
     load_priority_policy,
+    packaged_priority_policy_file,
 )
 
 
@@ -32,7 +32,7 @@ from vulnwitness.adapters.priority_policy import (
     ],
 )
 def test_malformed_policy_is_rejected(tmp_path: Path, malformation: str) -> None:
-    policy_text = default_priority_policy_file().read_text(encoding="utf-8")
+    policy_text = packaged_priority_policy_file("cn-auto-demo").read_text(encoding="utf-8")
     if malformation == "syntax":
         policy_text = "rules: ["
     elif malformation == "duplicate-key":
@@ -78,7 +78,7 @@ def test_malformed_policy_is_rejected(tmp_path: Path, malformation: str) -> None
 
 
 def test_policy_digest_ignores_yaml_formatting_and_changes_with_content(tmp_path: Path) -> None:
-    policy_file = default_priority_policy_file()
+    policy_file = packaged_priority_policy_file("cn-auto-demo")
     loaded_policy = load_priority_policy(policy_file)
     policy_text = policy_file.read_text(encoding="utf-8")
     formatted_file = tmp_path / "formatted.yaml"

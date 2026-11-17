@@ -15,6 +15,7 @@ from vulnwitness.domain.epss import (
 )
 from vulnwitness.domain.evidence import EvidenceAnchor
 from vulnwitness.domain.exploit_index import ExploitIndex, ExploitIndexIdentity
+from vulnwitness.domain.nvd_metrics import is_nvd_own_metric
 from vulnwitness.domain.priority_decision import (
     DecisionResponseDigest,
     PolicyIdentity,
@@ -278,13 +279,14 @@ def extract_source_high_grade_fact(
     """CVSS v3.x or v4.0 from scorers other than NVD; NVD's own grade never counts here."""
     if record is None:
         return SourceHighGradeFact(value="none_available", evidence_ids=())
-    metrics = [
-        metric
-        for metric in record.cvss
-        if metric.scorer != "nvd@nist.gov"
-        and metric.version in ("3.0", "3.1", "4.0")
-        and metric.base_severity not in (None, "NONE")
-    ]
+    metrics = []
+    for metric in record.cvss:
+        if (
+            not is_nvd_own_metric(metric)
+            and metric.version in ("3.0", "3.1", "4.0")
+            and metric.base_severity not in (None, "NONE")
+        ):
+            metrics.append(metric)
     if not metrics:
         return SourceHighGradeFact(value="none_available", evidence_ids=())
     evidence_ids = source_evidence_ids(
@@ -325,8 +327,7 @@ def extract_exploit_probability_fact(
     latest = latest_observation(observations, reference_date)
     if latest is None:
         return ExploitProbabilityFact(value="unknown")
-    if threshold is None:
-        raise ValueError("EPSS files need a policy with exploit_probability_threshold")
+    assert threshold is not None
     lev = compute_lev(observations, reference_date)
     model_version = next(
         snapshot.model_version
@@ -356,7 +357,7 @@ def extract_exploit_module_fact(
     return ExploitModuleFact(
         value="present",
         modules=entry.modules[:MAX_FACT_MODULES],
-        omitted_modules=max(0, len(entry.modules) - MAX_FACT_MODULES),
+        omitted_modules=entry.module_count - len(entry.modules[:MAX_FACT_MODULES]),
     )
 
 

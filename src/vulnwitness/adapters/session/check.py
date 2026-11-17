@@ -7,6 +7,10 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from yaml import YAMLError
 
+from vulnwitness.adapters.priority_policy import (
+    load_priority_policy,
+    packaged_priority_policy_file,
+)
 from vulnwitness.adapters.session.files import check_session_path, read_session_file
 from vulnwitness.adapters.session.narrative_identifiers import returned_identifier_texts
 from vulnwitness.adapters.session.validation import parse_session_document
@@ -146,6 +150,9 @@ class SessionChecker:
             priority = parse_session_document(content, PriorityArtifact)
             if priority.dataset != session.dataset:
                 raise ValueError("priority dataset differs from session.json")
+            policy = load_priority_policy(
+                packaged_priority_policy_file(priority.policy.name)
+            ).policy
             used_anchors: set[str] = set()
             for digest in priority.response_digests:
                 if (
@@ -155,6 +162,12 @@ class SessionChecker:
                     raise ValueError("priority response digest differs from a checked response")
                 used_anchors.update(self._anchors[digest.call])
             for decision in priority.decisions:
+                probability = decision.facts.exploit_probability
+                if probability.value != "unknown":
+                    if not priority.epss_snapshots:
+                        raise ValueError("known exploit probability needs EPSS snapshots")
+                    if probability.threshold != policy.exploit_probability_threshold:
+                        raise ValueError("exploit probability threshold differs from its policy")
                 for fact_name in FACT_NAMES:
                     fact = getattr(decision.facts, fact_name)
                     if not used_anchors.issuperset(fact.evidence_ids):

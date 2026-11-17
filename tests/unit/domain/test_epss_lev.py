@@ -1,4 +1,4 @@
-"""NIST CSWP 41 LEV over supplied EPSS observations: a lower bound with its coverage."""
+"""NIST CSWP 41 LEV over supplied EPSS observations: an estimate with its coverage."""
 
 from datetime import date, timedelta
 
@@ -34,7 +34,7 @@ def test_the_last_window_stops_at_the_reference_date() -> None:
     assert estimate.covered_days == 15
 
 
-def test_uncovered_days_lower_the_bound_and_are_counted() -> None:
+def test_uncovered_days_add_nothing_and_are_counted() -> None:
     estimate = compute_lev([observe(0, 0.5), observe(60, 0.5)], DAY0 + timedelta(60))
 
     assert estimate.lev == pytest.approx(1 - 0.5 * (1 - 0.5 / 30))
@@ -51,3 +51,17 @@ def test_scores_after_the_reference_date_are_not_used() -> None:
     assert latest is not None and latest.epss == 0.1
     with pytest.raises(ValueError, match="no EPSS observation"):
         compute_lev(observations, DAY0 - timedelta(1))
+
+
+def test_sparse_files_can_exceed_lev_from_the_full_daily_history() -> None:
+    daily = []
+    for offset in range(60):
+        daily.append(observe(offset, 0.9 if offset == 15 else 0.0))
+    reference_date = DAY0 + timedelta(days=59)
+
+    sparse = compute_lev([observe(0, 0.0), observe(15, 0.9)], reference_date)
+    full = compute_lev(daily, reference_date)
+
+    assert sparse.lev == pytest.approx(0.9)
+    assert full.lev == pytest.approx(0.03)
+    assert sparse.lev > full.lev

@@ -8,6 +8,7 @@ from pydantic import ConfigDict, Field, model_validator
 from vulnwitness.domain.cnvd import PendingCnvdOutcome
 from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CnvdEntry, CveRecord, Severity
+from vulnwitness.domain.nvd_metrics import is_nvd_own_metric
 
 NvdState = Literal[
     "analysed",
@@ -93,7 +94,7 @@ def compare_cnvd_severity(
 ) -> SourceComparison:
     """Compare CNVD's grade with NVD's own v3.1 metric, else its v3.0 metric.
 
-    A missing record requires its stored pending outcome. Only ``nvd@nist.gov`` scores
+    A missing record requires its stored pending outcome. Only NVD-owned scores
     participate, regardless of scorer type; an unusable v3.1 never falls back to v3.0.
     """
     if record is None:
@@ -137,7 +138,7 @@ def select_nvd_cvss3(record: CveRecord) -> ComparedNvdSeverity | None:
     """NVD's own v3.1 metric, else v3.0; an unusable v3.1 never falls back."""
     for version in ("3.1", "3.0"):
         for metric in record.cvss:
-            if metric.version == version and metric.scorer == "nvd@nist.gov":
+            if metric.version == version and is_nvd_own_metric(metric):
                 return ComparedNvdSeverity(
                     base_severity=metric.base_severity,
                     cvss_version=version,

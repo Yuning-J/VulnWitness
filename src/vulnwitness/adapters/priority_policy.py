@@ -25,10 +25,6 @@ class LoadedPriorityPolicy:
 PACKAGED_POLICY_NAMES = ("cn-auto-demo", "exploitation-demo")
 
 
-def default_priority_policy_file() -> Traversable:
-    return packaged_priority_policy_file("cn-auto-demo")
-
-
 def packaged_priority_policy_file(name: str) -> Traversable:
     """The packaged policy named ``name``; raises ``ValueError`` for any other name."""
     if name not in PACKAGED_POLICY_NAMES:

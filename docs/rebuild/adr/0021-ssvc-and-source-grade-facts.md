@@ -31,7 +31,7 @@ KEV also has a `forensicTriage` column (ADR 0020), which BOD 26-04 ties to remed
 | exploitation | `active`, `poc`, `none`, `unknown` | the CISA Coordinator SSVC assessment on the exact record |
 | automatable | `yes`, `no`, `unknown` | same assessment |
 | technical_impact | `total`, `partial`, `unknown` | same assessment |
-| source_high_grade | `present`, `absent`, `none_available` | CVSS v3.x or v4.0 metrics whose scorer is not `nvd@nist.gov` |
+| source_high_grade | `present`, `absent`, `none_available` | CVSS v3.x or v4.0 metrics not owned by NVD (`nvd@nist.gov` or `NVD`) |
 | forensic_triage | `yes`, `no`, `unknown` | the record's KEV entry |
 
 - The SSVC facts read the first assessment in feed order whose role is `CISA Coordinator`.

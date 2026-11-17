@@ -12,7 +12,7 @@ from tests.support.priority import (
     build_priority_inputs,
     build_register_document,
 )
-from vulnwitness.adapters.priority_policy import default_priority_policy_file, load_priority_policy
+from vulnwitness.adapters.priority_policy import load_priority_policy, packaged_priority_policy_file
 from vulnwitness.adapters.strict_yaml import load_declaration_yaml
 from vulnwitness.application.priority_decision import evaluate_priority
 from vulnwitness.domain.asset_register import AssetRegister
@@ -63,7 +63,7 @@ def test_asset_register_schema_requires_justification_for_explicit_assessments(
 
 
 def test_priority_schema_accepts_serialised_artifact_with_all_explanations() -> None:
-    policy = load_priority_policy(default_priority_policy_file()).policy
+    policy = load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
     asset, assessment, facts = build_priority_inputs(
         kev="unknown", high_grade="present", authorities=("CNVD",)
     )
@@ -85,7 +85,7 @@ def test_priority_schema_accepts_serialised_artifact_with_all_explanations() -> 
     ],
 )
 def test_priority_schema_and_model_reject_inconsistent_or_unknown_facts(invalid_fact: str) -> None:
-    policy = load_priority_policy(default_priority_policy_file()).policy
+    policy = load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
     asset, assessment, facts = build_priority_inputs()
     artifact = build_priority_artifact((evaluate_priority(policy, asset, assessment, facts),))
     artifact_document = json.loads(artifact.to_json_bytes())
@@ -110,7 +110,7 @@ def test_priority_schema_and_model_reject_inconsistent_or_unknown_facts(invalid_
 
 
 def test_priority_schema_keeps_review_names_and_rejects_reviews_without_cnvd_high() -> None:
-    policy = load_priority_policy(default_priority_policy_file()).policy
+    policy = load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
     asset, assessment, facts = build_priority_inputs(high_grade="present", authorities=("CNVD",))
     artifact = build_priority_artifact((evaluate_priority(policy, asset, assessment, facts),))
     document = json.loads(artifact.to_json_bytes())

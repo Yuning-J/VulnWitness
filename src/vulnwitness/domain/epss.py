@@ -1,4 +1,4 @@
-"""EPSS scores from operator-supplied daily snapshots, and NIST's LEV lower bound over them.
+"""EPSS scores from operator-supplied daily snapshots, and LEV over them.
 
 EPSS (FIRST) estimates the probability that a CVE is exploited in the next 30 days. NIST
 CSWP 41 ("Likely Exploited Vulnerabilities", 2025) combines a CVE's EPSS history into LEV,
@@ -9,8 +9,9 @@ the probability that it has already been exploited since EPSS first scored it:
 with 30-day windows from the first scored date, the last one cut at the reference date;
 LEV2 is the same product over 1-day windows. Here each supplied snapshot covers the days
 from its score date up to the next snapshot or 30 days, whichever is first, never past
-the reference date. Days no snapshot covers add nothing, so the result is a lower bound
-on the LEV the full history would give, and ``covered_days`` says how much it rests on.
+the reference date. Days no snapshot covers add nothing; ``covered_days`` says how much
+of the span is covered. Sparse snapshots carry scores forward and can exceed LEV from
+a full history, so this estimate is not a general lower bound.
 
 No EPSS data ships with VulnWitness: FIRST states no licence for it (THIRD_PARTY_DATA.md).
 A score is a probability signal for ordering work. A low score is never evidence that a
@@ -57,9 +58,11 @@ class LevEstimate(ContractModel):
 
 def compute_lev(observations: Sequence[EpssObservation], reference_date: date) -> LevEstimate:
     """LEV over the supplied observations dated on or before ``reference_date``."""
-    usable = sorted(
-        (o for o in observations if o.score_date <= reference_date), key=lambda o: o.score_date
-    )
+    usable = []
+    for observation in observations:
+        if observation.score_date <= reference_date:
+            usable.append(observation)
+    usable.sort(key=lambda observation: observation.score_date)
     if not usable:
         raise ValueError("no EPSS observation on or before the reference date")
     end = reference_date + timedelta(days=1)
@@ -84,5 +87,10 @@ def compute_lev(observations: Sequence[EpssObservation], reference_date: date) -
 def latest_observation(
     observations: Sequence[EpssObservation], reference_date: date
 ) -> EpssObservation | None:
-    usable = [o for o in observations if o.score_date <= reference_date]
-    return max(usable, key=lambda o: o.score_date, default=None)
+    latest = None
+    for observation in observations:
+        if observation.score_date <= reference_date and (
+            latest is None or observation.score_date > latest.score_date
+        ):
+            latest = observation
+    return latest

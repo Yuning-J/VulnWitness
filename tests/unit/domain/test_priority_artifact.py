@@ -6,13 +6,13 @@ import pytest
 from pydantic import ValidationError
 
 from tests.support.priority import build_priority_artifact, build_priority_inputs
-from vulnwitness.adapters.priority_policy import default_priority_policy_file, load_priority_policy
+from vulnwitness.adapters.priority_policy import load_priority_policy, packaged_priority_policy_file
 from vulnwitness.application.priority_decision import evaluate_priority
 from vulnwitness.domain.priority_decision import PriorityArtifact
 
 
 def test_repeated_evaluation_and_serialisation_are_byte_identical() -> None:
-    policy = load_priority_policy(default_priority_policy_file()).policy
+    policy = load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
     asset, assessment, facts = build_priority_inputs()
 
     first_artifact = build_priority_artifact((evaluate_priority(policy, asset, assessment, facts),))
@@ -26,7 +26,7 @@ def test_repeated_evaluation_and_serialisation_are_byte_identical() -> None:
 
 
 def test_artifact_orders_pairs_by_asset_then_cve_and_response_digests_by_call() -> None:
-    policy = load_priority_policy(default_priority_policy_file()).policy
+    policy = load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
     asset, assessment, facts = build_priority_inputs()
     decision = evaluate_priority(policy, asset, assessment, facts)
     decisions = (
@@ -61,7 +61,7 @@ def test_artifact_preserves_the_explicit_after_reference_date_flag() -> None:
 
 @pytest.mark.parametrize("duplicate", ["decision", "response-call"])
 def test_artifact_rejects_duplicate_pair_or_response_call(duplicate: str) -> None:
-    policy = load_priority_policy(default_priority_policy_file()).policy
+    policy = load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
     asset, assessment, facts = build_priority_inputs()
     decision = evaluate_priority(policy, asset, assessment, facts)
     artifact_fields = build_priority_artifact((decision,)).model_dump(mode="json")

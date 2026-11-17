@@ -10,7 +10,7 @@ import yaml
 from tests.support.builders import FIXED_RETRIEVED_AT
 from tests.support.report_sessions import build_cnvd_report_corpus
 from tests.support.workspaces import build_test_workspace
-from vulnwitness.adapters.priority_policy import default_priority_policy_file, load_priority_policy
+from vulnwitness.adapters.priority_policy import load_priority_policy, packaged_priority_policy_file
 from vulnwitness.adapters.session.check import SessionChecker
 from vulnwitness.application.priority_session import build_session_priority
 from vulnwitness.domain.asset_register import (
@@ -259,7 +259,7 @@ def build_priority_report_session(root: Path) -> Path:
     register = AssetRegister.model_validate(
         {"format_version": 1, "assets": assets, "assessments": assessments}
     )
-    policy = load_priority_policy(default_priority_policy_file())
+    policy = load_priority_policy(packaged_priority_policy_file("cn-auto-demo"))
     artifact = build_session_priority(
         SessionChecker(directory).check_with_contents(),
         register,

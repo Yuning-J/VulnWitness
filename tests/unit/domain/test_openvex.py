@@ -7,7 +7,7 @@ from tests.support.priority import (
     build_priority_inputs,
     build_register_document,
 )
-from vulnwitness.adapters.priority_policy import default_priority_policy_file, load_priority_policy
+from vulnwitness.adapters.priority_policy import load_priority_policy, packaged_priority_policy_file
 from vulnwitness.application.priority_decision import evaluate_priority
 from vulnwitness.domain.asset_register import AssetRegister
 from vulnwitness.domain.openvex import (
@@ -59,7 +59,7 @@ def test_statuses_follow_the_analyst_and_unknown_is_under_investigation() -> Non
 def test_affected_statement_quotes_the_recorded_recommendation() -> None:
     register = build_register()
     asset, assessment, facts = build_priority_inputs(kev="listed")
-    policy = load_priority_policy(default_priority_policy_file()).policy
+    policy = load_priority_policy(packaged_priority_policy_file("cn-auto-demo")).policy
     decision = evaluate_priority(policy, asset, assessment, facts)
     decision = decision.model_copy(
         update={"asset": register.assessments[0].asset, "cve_id": "CVE-2026-0001"}

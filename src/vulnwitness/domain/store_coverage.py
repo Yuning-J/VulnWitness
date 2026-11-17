@@ -22,10 +22,11 @@ from vulnwitness.domain.contract_model import ContractModel
 from vulnwitness.domain.cve import CveId, CveRecord
 from vulnwitness.domain.evidence import SHA256_PATTERN
 from vulnwitness.domain.hashing import canonical_sha256
+from vulnwitness.domain.nvd_metrics import is_nvd_own_metric
 from vulnwitness.domain.nvd_status import classify_nvd_enrichment
 from vulnwitness.domain.search import SCHEMA_VERSION, SchemaVersion
+from vulnwitness.domain.source_comparison import select_nvd_cvss3
 
-NVD_SCORER: Final = "nvd@nist.gov"
 EXPLOIT_REFERENCE_TAG: Final = "Exploit"
 SEMANTIC_DIGEST_VERSION: Final = 1
 # Fields that change when a source re-serialises a record without changing its meaning.
@@ -48,11 +49,16 @@ def semantic_record_payload(record: CveRecord) -> dict[str, object]:
     payload = record.model_dump(mode="json", exclude=set(VOLATILE_RECORD_FIELDS))
     cnvd_entries = payload.get("cnvd")
     if isinstance(cnvd_entries, list):
-        payload["cnvd"] = [
-            {key: value for key, value in entry.items() if key != "evidence_id"}
-            for entry in cnvd_entries
-            if isinstance(entry, dict)
-        ]
+        semantic_entries = []
+        for entry in cnvd_entries:
+            if not isinstance(entry, dict):
+                continue
+            semantic_entry = {}
+            for key, value in entry.items():
+                if key != "evidence_id":
+                    semantic_entry[key] = value
+            semantic_entries.append(semantic_entry)
+        payload["cnvd"] = semantic_entries
     return payload
 
 
@@ -64,12 +70,10 @@ def semantic_record_sha256(record: CveRecord) -> str:
 
 def semantic_content_sha256(record_digests: dict[str, str]) -> str:
     """One digest over every record's semantic digest, in CVE ID order."""
-    return canonical_sha256(
-        {
-            "version": SEMANTIC_DIGEST_VERSION,
-            "records": [[cve_id, record_digests[cve_id]] for cve_id in sorted(record_digests)],
-        }
-    )
+    ordered_digests = []
+    for cve_id in sorted(record_digests):
+        ordered_digests.append([cve_id, record_digests[cve_id]])
+    return canonical_sha256({"version": SEMANTIC_DIGEST_VERSION, "records": ordered_digests})
 
 
 class EnrichmentCounts(ContractModel):
@@ -160,9 +164,7 @@ def publication_month(record: CveRecord) -> str:
 
 
 def has_nvd_own_cvss3(record: CveRecord) -> bool:
-    return any(
-        metric.scorer == NVD_SCORER and metric.version in ("3.0", "3.1") for metric in record.cvss
-    )
+    return select_nvd_cvss3(record) is not None
 
 
 def has_ssvc_exploitation(record: CveRecord, value: str) -> bool:
@@ -203,7 +205,7 @@ def count_month(month: str, records: list[CveRecord]) -> MonthCoverage:
         kev_listed=sum(record.kev is not None for record in records),
         with_cnvd=sum(bool(record.cnvd) for record in records),
         with_source_cvss=sum(
-            any(metric.scorer != NVD_SCORER for metric in record.cvss) for record in records
+            any(not is_nvd_own_metric(metric) for metric in record.cvss) for record in records
         ),
         with_source_affected=sum(bool(record.source_affected) for record in records),
         with_source_affected_versions=sum(
@@ -234,12 +236,15 @@ def measure_store_coverage(
         by_month.setdefault(publication_month(record), []).append(record)
         all_records.append(record)
         digests[record.cve_id] = semantic_record_sha256(record)
+    months = []
+    for month in sorted(by_month):
+        months.append(count_month(month, by_month[month]))
     return StoreCoverage(
         store_name=store_name,
         corpus_content_sha256=corpus_content_sha256,
         semantic_content_sha256=semantic_content_sha256(digests),
         records=len(all_records),
-        months=tuple(count_month(month, by_month[month]) for month in sorted(by_month)),
+        months=tuple(months),
         total=count_month("all", all_records),
     )
 
@@ -250,10 +255,16 @@ def diff_store_semantics(
     new_store_name: str,
     new_records: Iterable[CveRecord],
 ) -> StoreSemanticDiff:
-    old_by_id = {record.cve_id: record for record in old_records}
-    new_by_id = {record.cve_id: record for record in new_records}
-    old_digests = {cve_id: semantic_record_sha256(r) for cve_id, r in old_by_id.items()}
-    new_digests = {cve_id: semantic_record_sha256(r) for cve_id, r in new_by_id.items()}
+    old_by_id = {}
+    old_digests = {}
+    for record in old_records:
+        old_by_id[record.cve_id] = record
+        old_digests[record.cve_id] = semantic_record_sha256(record)
+    new_by_id = {}
+    new_digests = {}
+    for record in new_records:
+        new_by_id[record.cve_id] = record
+        new_digests[record.cve_id] = semantic_record_sha256(record)
     added = sorted(new_by_id.keys() - old_by_id.keys())
     removed = sorted(old_by_id.keys() - new_by_id.keys())
     changed: list[str] = []

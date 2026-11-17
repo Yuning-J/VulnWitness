@@ -79,7 +79,7 @@ def test_grade_relative_maps_the_two_source_grades(
             "not_compared",
             "no_nvd_cvss3_metric",
         ),
-        ((build_cvss_metric(scorer="NVD"),), None, "not_compared", "no_nvd_cvss3_metric"),
+        ((build_cvss_metric(scorer="NVD"),), "3.1", "same", None),
         ((build_cvss_metric(scorer_type="secondary"),), "3.1", "same", None),
         ((build_cvss_metric(scorer_type=None),), "3.1", "same", None),
         ((build_cvss_metric(version="3.0"),), "3.0", "same", None),
@@ -128,7 +128,7 @@ def test_grade_relative_maps_the_two_source_grades(
         "v2-only",
         "v4-only",
         "cna-primary-only",
-        "exact-scorer-only",
+        "nvd-json-11-scorer",
         "nvd-secondary",
         "nvd-unknown-type",
         "v30-fallback",
@@ -156,7 +156,7 @@ def test_only_nvd_own_v31_else_v30_participates(
         selected = next(
             metric
             for metric in metrics
-            if metric.scorer == "nvd@nist.gov" and metric.version == version
+            if metric.scorer in ("NVD", "nvd@nist.gov") and metric.version == version
         )
         assert comparison.nvd_raw_severity.scorer == selected.scorer
         assert comparison.nvd_raw_severity.scorer_type == selected.scorer_type
@@ -226,3 +226,15 @@ def test_pending_outcomes_are_not_compared(outcome: PendingCnvdOutcome, expected
     assert comparison.grade_relative == "not_compared"
     assert comparison.nvd_raw_severity is None
     assert comparison.not_compared_reason == "no_nvd_record"
+
+
+@pytest.mark.parametrize("scorer", ["NVD", "nvd@nist.gov"])
+def test_nvd_owned_scores_participate_in_cnvd_comparison(scorer: str) -> None:
+    entry = build_cnvd_entry(severity="medium")
+    record = build_cve_record(cvss=(build_cvss_metric(scorer=scorer, base_severity="HIGH"),))
+
+    comparison = compare_cnvd_severity(entry, record)
+
+    assert comparison.grade_relative == "lower"
+    assert comparison.nvd_raw_severity is not None
+    assert comparison.nvd_raw_severity.scorer == scorer

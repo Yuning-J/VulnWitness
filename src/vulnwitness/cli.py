@@ -1838,7 +1838,7 @@ def main(argv: Sequence[str] | None = None, environment: Mapping[str, str] | Non
     if arguments.command == "vex":
         return run_vex(arguments, parser)
     if arguments.command == "exploit-index":
-        return run_exploit_index(arguments)
+        return run_exploit_index(arguments, utc_now)
     if arguments.command == "session" and arguments.session_command in SEAL_COMMANDS:
         return run_seal_command(arguments)
     try:

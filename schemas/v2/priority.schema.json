@@ -268,9 +268,19 @@
           "description": "The checkout's HEAD commit when it is a git checkout; the working tree is not checked against it.",
           "title": "Commit"
         },
+        "directories_unreadable": {
+          "minimum": 0,
+          "title": "Directories Unreadable",
+          "type": "integer"
+        },
         "files_read": {
           "minimum": 0,
           "title": "Files Read",
+          "type": "integer"
+        },
+        "files_skipped": {
+          "minimum": 0,
+          "title": "Files Skipped",
           "type": "integer"
         },
         "source": {
@@ -285,7 +295,9 @@
       "required": [
         "source",
         "commit",
-        "files_read"
+        "files_read",
+        "files_skipped",
+        "directories_unreadable"
       ],
       "title": "ExploitIndexSource",
       "type": "object"
@@ -400,7 +412,7 @@
             }
           ],
           "default": null,
-          "description": "A lower bound over the supplied snapshots only."
+          "description": "LEV over the supplied snapshots only."
         },
         "model_version": {
           "anyOf": [
