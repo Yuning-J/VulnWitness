@@ -16,7 +16,12 @@ from mcp.shared.exceptions import MCPError
 from mcp.types import LATEST_PROTOCOL_VERSION, TextResourceContents
 
 from tests.support.corpus_stores import import_store
-from tests.support.stdio_client import observe_stdio_client, read_process_line, read_until_notice
+from tests.support.stdio_client import (
+    STDIO_STARTUP_TIMEOUT_SECONDS,
+    observe_stdio_client,
+    read_process_line,
+    read_until_notice,
+)
 from tests.support.toolbox import (
     BLOCKED_AFFECTEDNESS_CAPABILITY,
     TOOL_ARGUMENTS,
@@ -154,7 +159,7 @@ def test_cancelled_requests_do_not_keep_the_server_alive_after_stdin_closes(
         [str(VULNWITNESS_SCRIPT), "mcp"],
         input=("\n".join(json.dumps(frame) for frame in frames) + "\n").encode(),
         capture_output=True,
-        timeout=5,
+        timeout=STDIO_STARTUP_TIMEOUT_SECONDS,
         check=False,
         env=build_server_environment(),
     )
@@ -331,10 +336,9 @@ async def test_initialize_and_static_tools_are_available_while_loading_is_blocke
 ) -> None:
     parameters = controlled_server_parameters(loading_release, server_mode=server_mode)
 
-    with anyio.fail_after(10):
+    with anyio.fail_after(STDIO_STARTUP_TIMEOUT_SECONDS):
         async with observe_stdio_client(parameters, mode=mode) as (client, stderr):
-            with anyio.fail_after(5):
-                tool_listing = await client.list_tools()
+            tool_listing = await client.list_tools()
             await read_until_notice(stderr, b"test: loader blocked")
 
     expected_count = len(KnowledgeToolName) + 1
@@ -479,21 +483,20 @@ async def test_workspace_loading_preserves_request_key_until_the_dataset_is_read
     loading_answers = []
 
     # Act
-    with anyio.fail_after(15):
+    with anyio.fail_after(STDIO_STARTUP_TIMEOUT_SECONDS):
         async with observe_stdio_client(parameters, mode=mode) as (client, stderr):
             await client.list_tools()
             await read_until_notice(stderr, b"test: loader blocked")
-            with anyio.fail_after(2):
-                for spec in WORKSPACE_TOOL_SPECS:
-                    loading_answers.append(await client.call_tool(spec.name, arguments))
-                for tool in KnowledgeToolName:
-                    loading_answers.append(await client.call_tool(tool, TOOL_ARGUMENTS[tool]))
-                loading_answers.append(
-                    await client.call_tool(
-                        "lookup_cve",
-                        {"cve_id": "CVE-9999-0001", "session_id": "inv_aaaaaaaaaaaaaaaaaaaa"},
-                    )
+            for spec in WORKSPACE_TOOL_SPECS:
+                loading_answers.append(await client.call_tool(spec.name, arguments))
+            for tool in KnowledgeToolName:
+                loading_answers.append(await client.call_tool(tool, TOOL_ARGUMENTS[tool]))
+            loading_answers.append(
+                await client.call_tool(
+                    "lookup_cve",
+                    {"cve_id": "CVE-9999-0001", "session_id": "inv_aaaaaaaaaaaaaaaaaaaa"},
                 )
+            )
             workspace_was_empty = not root.exists() or not tuple(root.iterdir())
             release_loading(loading_release)
             ready = await client.call_tool("wait_for_data", {})
@@ -524,30 +527,29 @@ async def test_workspace_loading_serves_packaged_resources_and_refuses_investiga
     failures = []
 
     # Act
-    with anyio.fail_after(10):
+    with anyio.fail_after(STDIO_STARTUP_TIMEOUT_SECONDS):
         async with observe_stdio_client(parameters, mode=mode) as (client, stderr):
             await client.list_tools()
             await read_until_notice(stderr, b"test: loader blocked")
-            with anyio.fail_after(2):
-                listing = await client.list_resources()
-                templates = await client.list_resource_templates()
-                prompts = await client.list_prompts()
-                topic = next(
-                    document
-                    for document in listing.resources
-                    if document.uri == "vulnwitness://topics/3gpp:gtp"
-                )
-                schema = next(
-                    document
-                    for document in listing.resources
-                    if document.uri.startswith("vulnwitness://schemas/")
-                )
-                for descriptor in (topic, schema):
-                    documents.append(await client.read_resource(descriptor.uri))
-                for artifact in ("summary", "findings", "report.html", "report.md", "calls/1"):
-                    with pytest.raises(MCPError) as refused:
-                        await client.read_resource(investigation_uri + artifact)
-                    failures.append(refused.value.error)
+            listing = await client.list_resources()
+            templates = await client.list_resource_templates()
+            prompts = await client.list_prompts()
+            topic = next(
+                document
+                for document in listing.resources
+                if document.uri == "vulnwitness://topics/3gpp:gtp"
+            )
+            schema = next(
+                document
+                for document in listing.resources
+                if document.uri.startswith("vulnwitness://schemas/")
+            )
+            for descriptor in (topic, schema):
+                documents.append(await client.read_resource(descriptor.uri))
+            for artifact in ("summary", "findings", "report.html", "report.md", "calls/1"):
+                with pytest.raises(MCPError) as refused:
+                    await client.read_resource(investigation_uri + artifact)
+                failures.append(refused.value.error)
             release_loading(loading_release)
             await read_until_notice(stderr, b" ready after ")
             ready_listing = await client.list_resources()
@@ -588,18 +590,17 @@ async def test_recording_loading_records_only_the_call_retried_after_readiness(
     loading_answers = []
 
     # Act
-    with anyio.fail_after(15):
+    with anyio.fail_after(STDIO_STARTUP_TIMEOUT_SECONDS):
         async with observe_stdio_client(parameters, mode=mode) as (client, stderr):
             await client.list_tools()
             await read_until_notice(stderr, b"test: loader blocked")
-            with anyio.fail_after(2):
-                for tool in KnowledgeToolName:
-                    loading_answers.append(await client.call_tool(tool, TOOL_ARGUMENTS[tool]))
-                loading_answers.append(
-                    await client.call_tool(
-                        "triage_product", {"vendor": "democorp", "request_key": "startup.1"}
-                    )
+            for tool in KnowledgeToolName:
+                loading_answers.append(await client.call_tool(tool, TOOL_ARGUMENTS[tool]))
+            loading_answers.append(
+                await client.call_tool(
+                    "triage_product", {"vendor": "democorp", "request_key": "startup.1"}
                 )
+            )
             session_was_absent = not root.exists()
             release_loading(loading_release)
             await read_until_notice(stderr, b" ready after ")

@@ -29,10 +29,12 @@ def describe_match(match: ConfigurationMatch) -> str:
 
 
 def describe_configuration(configuration: Configuration) -> str:
-    """``AND`` joins nodes, ``OR`` joins the matches inside a node; ``NOT`` marks negation."""
+    """Each configuration and node uses its stated operator; ``NOT`` marks negation."""
     nodes: list[str] = []
     for node in configuration.nodes:
-        matches = [describe_match(match) for match in node.matches[:MAX_SHOWN_MATCHES]]
+        matches: list[str] = []
+        for match in node.matches[:MAX_SHOWN_MATCHES]:
+            matches.append(describe_match(match))
         hidden = len(node.matches) - MAX_SHOWN_MATCHES + node.omitted_matches
         if hidden > 0:
             matches.append(f"{hidden} more")
@@ -55,7 +57,9 @@ def summarize_configurations(
         f"NVD configurations beyond the product list: {total} "
         "(AND/platform conditions as NVD states them; not evaluated)"
     )
-    lines = [describe_configuration(c) for c in configurations[:MAX_SHOWN_CONFIGURATIONS]]
+    lines: list[str] = []
+    for configuration in configurations[:MAX_SHOWN_CONFIGURATIONS]:
+        lines.append(describe_configuration(configuration))
     if total > MAX_SHOWN_CONFIGURATIONS:
         lines.append(f"{total - MAX_SHOWN_CONFIGURATIONS} more configurations")
     return heading, lines

@@ -17,9 +17,12 @@ from vulnwitness.domain.text import SPELLING_FOLDS, fold_spelling
         ("signal", "signal"),
         ("analyses", "analyses"),
         ("señalización", "señalización"),
+        ("centreon", "centeron"),
+        ("workcentre", "workcenter"),
+        ("wptravelly", "wptravely"),
     ],
 )
-def test_fold(word: str, folded: str) -> None:
+def test_ascii_tokens_fold_substrings_idempotently(word: str, folded: str) -> None:
     assert fold_spelling(word) == folded
     assert fold_spelling(folded) == folded
 

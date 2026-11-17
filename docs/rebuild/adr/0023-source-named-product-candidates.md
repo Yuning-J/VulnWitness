@@ -25,7 +25,10 @@ fuzzy name match into an inventory match would contradict the inventory's meanin
 2. Names compare case-folded, with runs of spaces, hyphens and underscores read as one
    underscore. An entry names a pair through its own vendor and product text or through
    any of its CPEs' vendor and product components. Both requested names must hold on the
-   same entry.
+   same entry. CPE 2.2 URIs and CPE 2.3 formatted strings supply these components;
+   logical ANY/NA or absent names supply no pair. CNA placeholders such as `n/a` and
+   `Unknown` remain verbatim names: they match only the same normalized placeholder,
+   while a named CPE on that entry can independently supply its vendor and product.
 3. Each candidate gives the CVE ID, the naming source, its verbatim vendor and product text
    and NVD's status. Candidates are not items: they never enter `total_available`,
    `matched_products`, ordering, triage selection, exports or version notes, and their

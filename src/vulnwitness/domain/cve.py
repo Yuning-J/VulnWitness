@@ -246,6 +246,7 @@ class CveTag(ContractModel):
 MAX_CONFIGURATIONS = 512
 MAX_CONFIGURATION_NODES = 8
 MAX_CONFIGURATION_MATCHES = 128
+MAX_NOTED_PLATFORMS = 16
 RangeGap = Literal["no_lower_bound", "no_upper_bound"]
 
 
@@ -283,22 +284,27 @@ class ConfigurationNode(ContractModel):
 
 class Configuration(ContractModel):
     """One NVD 2.0 configuration, kept only when it says more than ``affected``: an AND of
-    nodes, a negated node, a running-on platform, or a vulnerable CPE that names no vendor
-    or product. Nothing here is evaluated."""
+    nodes or matches, a negated node, a running-on platform, or a vulnerable CPE that names
+    no vendor or product. Nothing here is evaluated."""
 
     operator: Literal["AND", "OR"] = "OR"
     negate: bool = False
     nodes: tuple[ConfigurationNode, ...] = Field(min_length=1, max_length=MAX_CONFIGURATION_NODES)
     omitted_nodes: int = Field(default=0, ge=0)
 
-    def list_platforms(self, cpe: str) -> tuple[str, ...]:
-        """The running-on CPEs an AND configuration pairs with vulnerable ``cpe``."""
-        if self.operator != "AND" or self.negate:
-            return ()
-        matches = [match for node in self.nodes if not node.negate for match in node.matches]
-        if not any(match.vulnerable and match.cpe == cpe for match in matches):
-            return ()
-        return tuple(match.cpe for match in matches if not match.vulnerable)
+
+class PlatformCondition(ContractModel):
+    """Platform pairings for one vulnerable CPE and range, collected before tree caps.
+
+    Names are unique in feed order. A platform-free occurrence prevents wording that
+    implies this condition always requires one of these platforms. No tree is evaluated.
+    """
+
+    cpe: str = Field(pattern=r"^cpe:2\.3:", max_length=MAX_SOURCE_NAME_CHARS)
+    version_range: VersionRange | None = None
+    platforms: tuple[str, ...] = Field(max_length=MAX_NOTED_PLATFORMS)
+    omitted_platforms: int = Field(default=0, ge=0)
+    has_platform_free_match: bool
 
 
 class CnvdEntry(ContractModel):
@@ -373,6 +379,14 @@ class CveRecord(ContractModel):
     omitted_configurations: int = Field(
         default=0, ge=0, description="Such configurations beyond the stored cap (format 4)."
     )
+    platform_conditions: tuple[PlatformCondition, ...] = Field(
+        default=(),
+        description=(
+            "Platform pairings by vulnerable CPE and version range, collected from all "
+            "NVD 2.0 configurations before tree caps; up to 16 unique platforms per pair "
+            "with the rest counted. Untrusted source statements, not evaluated (format 4)."
+        ),
+    )
     cnvd: tuple[CnvdEntry, ...] = Field(
         default=(), description="CNVD entries ordered by CNVD ID; Chinese text is untrusted data."
     )
@@ -399,16 +413,17 @@ class CveRecord(ContractModel):
             or self.cve_tags
             or self.configurations
             or self.omitted_configurations
+            or self.platform_conditions
         )
 
-    def list_platforms(self, cpe: str) -> tuple[str, ...]:
-        """Running-on CPEs any kept AND configuration pairs with vulnerable ``cpe``."""
-        platforms: list[str] = []
-        for configuration in self.configurations:
-            for platform in configuration.list_platforms(cpe):
-                if platform not in platforms:
-                    platforms.append(platform)
-        return tuple(platforms)
+    def find_platform_condition(
+        self, cpe: str, version_range: VersionRange
+    ) -> PlatformCondition | None:
+        """Platform context for this exact CPE and range, including omitted names."""
+        for condition in self.platform_conditions:
+            if condition.cpe == cpe and condition.version_range == version_range:
+                return condition
+        return None
 
     def list_implicated_products(self) -> tuple[AffectedProduct, ...]:
         """Products a source lists as affected or of unknown status, never ``unaffected`` ones."""

@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from vulnwitness.domain.cpe import split_cpe
+from vulnwitness.domain.cpe import cpe_product_identity
 from vulnwitness.domain.cve import CveRecord, SourceAffectedProduct
 from vulnwitness.domain.product_query import normalize_source_name
 from vulnwitness.domain.text import tokenize
@@ -81,19 +81,10 @@ def list_entry_names(entry: SourceAffectedProduct) -> list[tuple[str, str]]:
     if entry.vendor and entry.product:
         names.append((normalize_source_name(entry.vendor), normalize_source_name(entry.product)))
     for cpe in entry.cpes:
-        components = split_cpe(cpe)
-        if (
-            len(components) > 2
-            and "" not in components[1:3]
-            and not {"*", "-"}
-            & {
-                components[1],
-                components[2],
-            }
-        ):
-            names.append(
-                (normalize_source_name(components[1]), normalize_source_name(components[2]))
-            )
+        identity = cpe_product_identity(cpe)
+        if identity is not None:
+            vendor, product = identity
+            names.append((normalize_source_name(vendor), normalize_source_name(product)))
     return names
 
 

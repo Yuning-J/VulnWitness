@@ -273,3 +273,26 @@ def test_british_spellings_fold_to_american_ones_and_keep_the_query_spelling() -
     assert outcome.matches[0].matched_terms == ("authorisation", "signalling")
     assert outcome.matches[0].score == outcome.matches[1].score
     assert outcome.unindexed_terms == ("colour",)
+
+
+@pytest.mark.parametrize("field", ["vendor", "product"])
+@pytest.mark.parametrize(
+    ("indexed_name", "query_name"),
+    [("centreon", "centeron"), ("workcentre", "workcenter"), ("wptravelly", "wptravely")],
+)
+def test_vendor_and_product_tokens_fold_inside_longer_names_in_both_directions(
+    field: str, indexed_name: str, query_name: str
+) -> None:
+    fields = {field: indexed_name}
+    index = Bm25LexicalIndex([build_record("CVE-9999-0011", "SYNTHETIC: flaw.", **fields)])
+
+    original = index.search(indexed_name, limit=10, allowed_cve_ids=None)
+    folded = index.search(query_name, limit=10, allowed_cve_ids=None)
+
+    assert list_cve_ids(original.matches) == ["CVE-9999-0011"]
+    assert list_cve_ids(folded.matches) == ["CVE-9999-0011"]
+    assert original.matches[0].score == folded.matches[0].score
+    assert original.matches[0].matched_fields == (field,)
+    assert original.matches[0].matched_terms == (indexed_name,)
+    assert folded.matches[0].matched_terms == (query_name,)
+    assert folded.unindexed_terms == ()

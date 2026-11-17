@@ -11,11 +11,15 @@ import anyio
 from mcp import Client, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+# Cold imports and static discovery use the CLI subprocess allowance. Shutdown
+# deadlines are tested after the loader announces that it is running.
+STDIO_STARTUP_TIMEOUT_SECONDS = 60
+
 
 async def read_until_notice(stderr: TextIO, notice: bytes) -> bytes:
     """Read stderr through ``notice`` with a deadline, without blocking the test runner."""
     notices = b""
-    with anyio.fail_after(10):
+    with anyio.fail_after(STDIO_STARTUP_TIMEOUT_SECONDS):
         while notice not in notices or not notices.endswith(b"\n"):
             await anyio.wait_readable(stderr.fileno())
             chunk = os.read(stderr.fileno(), 65536)
@@ -40,9 +44,9 @@ async def observe_stdio_client(
 
 
 def read_process_line(stream: BinaryIO) -> bytes:
-    """Read one subprocess line within five seconds, leaving later lines untouched."""
+    """Read one subprocess line within the startup budget, leaving later lines untouched."""
     line = b""
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + STDIO_STARTUP_TIMEOUT_SECONDS
     while not line.endswith(b"\n"):
         remaining_seconds = deadline - time.monotonic()
         readable, _, _ = select.select([stream], [], [], max(0, remaining_seconds))

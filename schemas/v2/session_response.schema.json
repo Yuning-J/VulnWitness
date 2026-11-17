@@ -1119,7 +1119,7 @@
     },
     "Configuration": {
       "additionalProperties": false,
-      "description": "One NVD 2.0 configuration, kept only when it says more than ``affected``: an AND of\nnodes, a negated node, a running-on platform, or a vulnerable CPE that names no vendor\nor product. Nothing here is evaluated.",
+      "description": "One NVD 2.0 configuration, kept only when it says more than ``affected``: an AND of\nnodes or matches, a negated node, a running-on platform, or a vulnerable CPE that names\nno vendor or product. Nothing here is evaluated.",
       "properties": {
         "negate": {
           "default": false,
@@ -1607,6 +1607,15 @@
           "title": "Omitted Configurations",
           "type": "integer"
         },
+        "platform_conditions": {
+          "default": [],
+          "description": "Platform pairings by vulnerable CPE and version range, collected from all NVD 2.0 configurations before tree caps; up to 16 unique platforms per pair with the rest counted. Untrusted source statements, not evaluated (format 4).",
+          "items": {
+            "$ref": "#/$defs/PlatformCondition"
+          },
+          "title": "Platform Conditions",
+          "type": "array"
+        },
         "protocol_design_claim": {
           "const": "not_established",
           "default": "not_established",
@@ -1681,6 +1690,7 @@
         "cve_tags",
         "configurations",
         "omitted_configurations",
+        "platform_conditions",
         "cnvd",
         "vulnerability_origin",
         "protocol_design_claim",
@@ -3634,6 +3644,15 @@
           "title": "Omitted Configurations",
           "type": "integer"
         },
+        "platform_conditions": {
+          "default": [],
+          "description": "Platform pairings by vulnerable CPE and version range, collected from all NVD 2.0 configurations before tree caps; up to 16 unique platforms per pair with the rest counted. Untrusted source statements, not evaluated (format 4).",
+          "items": {
+            "$ref": "#/$defs/PlatformCondition"
+          },
+          "title": "Platform Conditions",
+          "type": "array"
+        },
         "protocol_design_claim": {
           "const": "not_established",
           "default": "not_established",
@@ -3708,6 +3727,7 @@
         "cve_tags",
         "configurations",
         "omitted_configurations",
+        "platform_conditions",
         "cnvd",
         "vulnerability_origin",
         "protocol_design_claim",
@@ -4056,7 +4076,7 @@
         },
         "required_platforms": {
           "default": [],
-          "description": "Running-on CPEs an NVD AND configuration pairs with the matched CPE.",
+          "description": "Running-on CPEs NVD AND conditions pair with the matched CPE and version range; wording states whether the same condition also appears without a platform.",
           "items": {
             "type": "string"
           },
@@ -4354,6 +4374,56 @@
       ],
       "title": "PlannerOutcome",
       "type": "string"
+    },
+    "PlatformCondition": {
+      "additionalProperties": false,
+      "description": "Platform pairings for one vulnerable CPE and range, collected before tree caps.\n\nNames are unique in feed order. A platform-free occurrence prevents wording that\nimplies this condition always requires one of these platforms. No tree is evaluated.",
+      "properties": {
+        "cpe": {
+          "maxLength": 2048,
+          "pattern": "^cpe:2\\.3:",
+          "title": "Cpe",
+          "type": "string"
+        },
+        "has_platform_free_match": {
+          "title": "Has Platform Free Match",
+          "type": "boolean"
+        },
+        "omitted_platforms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Omitted Platforms",
+          "type": "integer"
+        },
+        "platforms": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Platforms",
+          "type": "array"
+        },
+        "version_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "cpe",
+        "version_range",
+        "platforms",
+        "omitted_platforms",
+        "has_platform_free_match"
+      ],
+      "title": "PlatformCondition",
+      "type": "object"
     },
     "PrefixAdmission": {
       "additionalProperties": false,

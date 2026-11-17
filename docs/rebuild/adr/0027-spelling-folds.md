@@ -15,23 +15,29 @@ descriptions: CNAs write `authorisation`, `sanitised` and `behaviour` beside `au
 
 `domain/text.py` holds `SPELLING_FOLDS`, a fixed table of British word parts and their
 American forms (`signall`→`signal`, `authoris`→`authoriz`, `behaviour`→`behavior`, …).
-`fold_spelling` replaces each part inside an ASCII word.
+`fold_spelling` replaces each part wherever it occurs inside an ASCII token, including
+longer names: `centreon`→`centeron`, `workcentre`→`workcenter` and
+`wptravelly`→`wptravely`. It is a substring replacement table, not a dictionary of words.
 
-- **CVE BM25 index:** indexed words and query words are folded alike. A query word is
+- **CVE BM25 index:** tokens from descriptions, affected vendor and product names, and
+  CWE IDs, plus query tokens, are folded alike. A query word is
   scored as its fold, once, but `matched_terms` and `term_not_indexed` name it in the
   query's own spelling.
 - **FiGHT search:** technique words are folded word by word, and each sent term's alias key
   is built from folded words, so `signalling` and `signaling` share one key. Matched terms
-  and unindexed terms keep the sent spelling. As before, the first spelling sent counts
+  and unindexed terms keep the sent spelling. The first spelling sent counts
   once.
 
 The table leaves out pairs where either spelling is also another word (`analyses`,
 `fulfil`/`fulfill`, `programme`/`program`). No American form contains its British form,
-so folding is idempotent. Topic-card aliases, product names and CPE fields are not folded.
+so folding is idempotent. Stored source text, vendor/product names and CPE strings retain
+their spelling. Exact product-field matching, source-named candidate matching and
+topic-card alias matching do not fold spellings; BM25's vendor/product tokens do. CPE
+strings are not indexed as BM25 fields.
 
 ## Consequences
 
-- Records and techniques written in either spelling now match a query in the other. A
+- Records and techniques written in either spelling match a query in the other. A
   record holding both spellings counts them as one term.
 - Rankings change only for queries or records containing a folded word. The M7b gold sets
   were not re-run here; the next evaluation run should record their Coverage@20 and

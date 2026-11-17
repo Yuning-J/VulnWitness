@@ -23,12 +23,13 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
-from vulnwitness.domain.cpe import split_cpe
+from vulnwitness.domain.cpe import cpe_product_identity, split_cpe
 from vulnwitness.domain.cve import (
     CWE_ID_PATTERN,
     MAX_CONFIGURATION_MATCHES,
     MAX_CONFIGURATION_NODES,
     MAX_CONFIGURATIONS,
+    MAX_NOTED_PLATFORMS,
     MAX_SOURCE_AFFECTED_NAMES,
     MAX_SOURCE_AFFECTED_PRODUCTS,
     MAX_SOURCE_AFFECTED_VERSIONS,
@@ -38,6 +39,7 @@ from vulnwitness.domain.cve import (
     CvssMetric,
     KevEntry,
     LocalizedText,
+    PlatformCondition,
     Reference,
     SourceAffected,
     SsvcAssessment,
@@ -56,8 +58,6 @@ from vulnwitness.domain.taxonomy import (
 # NVD JSON 1.1 has no status field; rejected entries carry this description prefix.
 V1_REJECTED_PREFIX = "** REJECT **"
 UNSPECIFIED_CPE_VERSIONS = frozenset({"", "*", "-"})
-# CPE logical values ANY and NA; neither names a vendor or product.
-CPE_LOGICAL_VALUES = frozenset({"", "*", "-"})
 RANSOMWARE_USE = {"known": "known", "unknown": "unknown"}
 
 
@@ -217,7 +217,9 @@ def _version_range(cpe_match: Mapping[str, Any], cpe_version: str) -> VersionRan
     return None
 
 
-def _affected_products(nodes: Iterable[object]) -> tuple[AffectedProduct, ...]:
+def _affected_products(
+    nodes: Iterable[object], *, keeps_configurations: bool
+) -> tuple[AffectedProduct, ...]:
     affected_products: list[AffectedProduct] = []
     known_products: set[AffectedProduct] = set()
     for cpe_match in _walk_cpe_matches(nodes):
@@ -234,13 +236,20 @@ def _affected_products(nodes: Iterable[object]) -> tuple[AffectedProduct, ...]:
             raise NvdNormalizationError(
                 NormalizationFailureCode.INVALID_CPE, f"not a CPE 2.3 formatted string: {cpe!r}"
             )
-        if components[1] in CPE_LOGICAL_VALUES or components[2] in CPE_LOGICAL_VALUES:
-            # Not a product; the record keeps it under ``configurations`` instead.
-            continue
+        identity = cpe_product_identity(cpe)
+        if identity is None:
+            if keeps_configurations:
+                # NVD 2.0 retains unnamed matches under configurations.
+                continue
+            raise NvdNormalizationError(
+                NormalizationFailureCode.INVALID_CPE,
+                "NVD 1.1 cannot retain a vulnerable CPE without a vendor and product",
+            )
+        vendor, product = identity
         version_range = _version_range(cpe_match, components[3])
         affected_product = AffectedProduct(
-            vendor=components[1],
-            product=components[2],
+            vendor=vendor,
+            product=product,
             cpe=cpe,
             status="affected",
             version_ranges=(version_range,) if version_range else (),
@@ -249,11 +258,6 @@ def _affected_products(nodes: Iterable[object]) -> tuple[AffectedProduct, ...]:
             known_products.add(affected_product)
             affected_products.append(affected_product)
     return tuple(affected_products)
-
-
-def _is_unnamed_cpe(cpe: str) -> bool:
-    components = split_cpe(cpe)
-    return len(components) != 11 or bool({components[1], components[2]} & CPE_LOGICAL_VALUES)
 
 
 def _negate(node: Mapping[str, Any]) -> bool:
@@ -280,8 +284,11 @@ def _configuration_node(node: Mapping[str, Any]) -> tuple[dict[str, object], boo
     """A stored node and whether it holds anything ``affected`` lacks."""
     matches: list[dict[str, object]] = []
     omitted = 0
-    says_more = _negate(node)
-    for value in _optional_list(node, "cpeMatch"):
+    negate = _negate(node)
+    operator = _operator(node, "OR")
+    match_entries = _optional_list(node, "cpeMatch")
+    says_more = negate or (operator == "AND" and len(match_entries) > 1)
+    for value in match_entries:
         cpe_match = _as_mapping(value, "CPE match")
         is_vulnerable = cpe_match.get("vulnerable")
         cpe = _optional_text(cpe_match, "criteria")
@@ -289,7 +296,7 @@ def _configuration_node(node: Mapping[str, Any]) -> tuple[dict[str, object], boo
             raise NvdNormalizationError(
                 NormalizationFailureCode.INVALID_CPE, "CPE match lacks a criteria or flag"
             )
-        says_more = says_more or not is_vulnerable or _is_unnamed_cpe(cpe)
+        says_more = says_more or not is_vulnerable or cpe_product_identity(cpe) is None
         if len(matches) == MAX_CONFIGURATION_MATCHES:
             omitted += 1
             continue
@@ -303,8 +310,8 @@ def _configuration_node(node: Mapping[str, Any]) -> tuple[dict[str, object], boo
             }
         )
     stored: dict[str, object] = {
-        "operator": _operator(node, "OR"),
-        "negate": _negate(node),
+        "operator": operator,
+        "negate": negate,
         "matches": matches,
         "omitted_matches": omitted,
     }
@@ -319,7 +326,8 @@ def _configurations(entries: Iterable[object]) -> dict[str, object]:
     for entry in entries:
         configuration = _as_mapping(entry, "configuration")
         operator = _operator(configuration, "OR")
-        says_more = operator == "AND" or _negate(configuration)
+        negate = _negate(configuration)
+        says_more = operator == "AND" or negate
         nodes: list[dict[str, object]] = []
         node_entries = _optional_list(configuration, "nodes")
         for value in node_entries:
@@ -334,12 +342,68 @@ def _configurations(entries: Iterable[object]) -> dict[str, object]:
         kept.append(
             {
                 "operator": operator,
-                "negate": _negate(configuration),
+                "negate": negate,
                 "nodes": nodes[:MAX_CONFIGURATION_NODES],
                 "omitted_nodes": max(0, len(nodes) - MAX_CONFIGURATION_NODES),
             }
         )
     return {"configurations": kept, "omitted_configurations": omitted}
+
+
+def _platform_match_groups(
+    configuration: Mapping[str, Any],
+) -> Iterable[list[Mapping[str, Any]]]:
+    """Positive matches joined by an AND, or individual alternatives under an OR."""
+    if _negate(configuration):
+        return
+    if _operator(configuration, "OR") == "AND":
+        yield list(_walk_cpe_matches([configuration]))
+        return
+    for value in _optional_list(configuration, "nodes"):
+        node = _as_mapping(value, "configuration node")
+        if _negate(node):
+            continue
+        matches = list(_walk_cpe_matches([node]))
+        if _operator(node, "OR") == "AND":
+            yield matches
+        else:
+            for match in matches:
+                yield [match]
+
+
+def _platform_conditions(entries: Iterable[object]) -> tuple[PlatformCondition, ...]:
+    """Summarize all CPE/range pairings before configuration, node and match caps."""
+    platforms_by_condition: dict[tuple[str, VersionRange | None], dict[str, None]] = {}
+    platform_free_conditions: set[tuple[str, VersionRange | None]] = set()
+    for entry in entries:
+        configuration = _as_mapping(entry, "configuration")
+        for matches in _platform_match_groups(configuration):
+            platforms: dict[str, None] = {}
+            for match in matches:
+                if not match["vulnerable"]:
+                    platforms[_required_text(match, "criteria")] = None
+            for match in matches:
+                if not match["vulnerable"]:
+                    continue
+                cpe = _required_text(match, "criteria")
+                version_range = _version_range(match, split_cpe(cpe)[3])
+                condition_key = (cpe, version_range)
+                if not platforms:
+                    platform_free_conditions.add(condition_key)
+                platforms_by_condition.setdefault(condition_key, {}).update(platforms)
+    conditions: list[PlatformCondition] = []
+    for (cpe, version_range), platforms in platforms_by_condition.items():
+        if platforms:
+            conditions.append(
+                PlatformCondition(
+                    cpe=cpe,
+                    version_range=version_range,
+                    platforms=tuple(platforms)[:MAX_NOTED_PLATFORMS],
+                    omitted_platforms=max(0, len(platforms) - MAX_NOTED_PLATFORMS),
+                    has_platform_free_match=(cpe, version_range) in platform_free_conditions,
+                )
+            )
+    return tuple(conditions)
 
 
 def _descriptions(entries: Iterable[object], source: str) -> tuple[LocalizedText, ...]:
@@ -793,7 +857,9 @@ class NvdNormalizer:
             "cvss": _v2_metrics(_optional_mapping(vulnerability, "metrics")),
             "cwe_ids": _cwe_ids(_optional_list(vulnerability, "weaknesses")),
             # A 2.0 configuration has the node shape (negate, nodes), so it is walked as one.
-            "affected": _affected_products(_optional_list(vulnerability, "configurations")),
+            "affected": _affected_products(
+                _optional_list(vulnerability, "configurations"), keeps_configurations=True
+            ),
             "references": _references(_optional_list(vulnerability, "references"), "source"),
             "kev": _inline_kev(vulnerability),
             "nvd_status": vulnerability.get("vulnStatus"),
@@ -801,6 +867,9 @@ class NvdNormalizer:
             "ssvc": _ssvc(_optional_mapping(vulnerability, "metrics")),
             "cve_tags": _cve_tags(_optional_list(vulnerability, "cveTags")),
             **_configurations(_optional_list(vulnerability, "configurations")),
+            "platform_conditions": _platform_conditions(
+                _optional_list(vulnerability, "configurations")
+            ),
         }
         return _assemble(cve_id, record_fields, nvd_anchor, kev, self._terms.cisa_kev)
 
@@ -838,7 +907,9 @@ class NvdNormalizer:
             "last_modified": _optional_datetime(cve_item, "lastModifiedDate"),
             "cvss": _v1_metrics(_optional_mapping(cve_item, "impact")),
             "cwe_ids": _cwe_ids(problem_types),
-            "affected": _affected_products(_optional_list(configurations, "nodes")),
+            "affected": _affected_products(
+                _optional_list(configurations, "nodes"), keeps_configurations=False
+            ),
             "references": _references(references, "refsource"),
             "kev": None,
         }

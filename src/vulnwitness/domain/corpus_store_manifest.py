@@ -24,7 +24,7 @@ STORE_FORMAT_VERSION: Literal[4] = 4
 # (ADR 0020). This digest guards
 # the published schemas of the manifest, CVE record, evidence anchor and pending entry;
 # changes require judging the persisted shape and reader rules against ADR 0008 §9.
-STORE_FORMAT_SCHEMA_SHA256 = "996cc74d8dfac282a4f506fc341c955e396288485891925c7fac50e43ec5b06f"
+STORE_FORMAT_SCHEMA_SHA256 = "96920c05372c9a97246043642a4fd9e05086de0dc371c11db8622d2afc70cc55"
 # NVD's first year feed; it also holds the CVE IDs of 1999 to 2001.
 FIRST_FEED_YEAR = 2002
 STORE_FILE_NAME_PATTERN = r"^[a-z_]+\.jsonl$"

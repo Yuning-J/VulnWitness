@@ -62,7 +62,9 @@ def count_record_terms(record: CveRecord) -> tuple[Counter[str], dict[str, int]]
     field_masks: dict[str, int] = {}
     field_texts = extract_field_texts(record)
     for field_number, field_name in enumerate(INDEXED_FIELDS):
-        field_tokens = [fold_spelling(t) for t in tokenize(" ".join(field_texts[field_name]))]
+        field_tokens: list[str] = []
+        for token in tokenize(" ".join(field_texts[field_name])):
+            field_tokens.append(fold_spelling(token))
         term_counts.update(field_tokens)
         for token in field_tokens:
             field_masks[token] = field_masks.get(token, 0) | (1 << field_number)
@@ -106,7 +108,10 @@ class Bm25LexicalIndex:
         # same order whatever the query's word order. A British spelling is scored as its
         # American fold, once, and reported in the query's own spelling.
         query_words = sorted(set(tokenize(query_text)))
-        query_terms = sorted({fold_spelling(word) for word in query_words})
+        folded_terms: set[str] = set()
+        for word in query_words:
+            folded_terms.add(fold_spelling(word))
+        query_terms = sorted(folded_terms)
         record_scores: dict[int, float] = {}
         for term in query_terms:
             postings = self._postings.get(term)
