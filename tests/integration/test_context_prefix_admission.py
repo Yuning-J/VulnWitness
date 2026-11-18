@@ -15,6 +15,7 @@ from tests.support.investigation import (
     build_search_call,
     build_test_deployment,
     build_topic_call,
+    choose_fight_source,
     reseal_evidence_set,
     rewrite_step,
     update_trajectory,
@@ -318,6 +319,48 @@ def test_each_tool_admits_a_replayable_prefix(
     assert step.admission is StepAdmission.ADMITTED_PREFIX
     assert step.prefix_admission is not None
     assert sum(count.omitted for count in step.prefix_admission.counts) > 0
+    assert evidence_set.trajectory.budget_used.breach is None
+    assert replay == ReplayCompleted(())
+
+
+def test_direct_fight_prefix_seals_with_unsorted_source_anchors(
+    fixture_bundle: FixtureBundle,
+) -> None:
+    # Arrange
+    deployment = build_test_deployment(fixture_bundle)
+    service = InvestigationService(deployment, DeterministicPlanning(), ignore_checkpoint)
+    request = build_investigation_request(
+        "Diameter signalling vulnerabilities in the mobile core", "mixed"
+    )
+    whole_set = service.investigate(request)
+    fight_source, _ = choose_fight_source("packaged")
+    source_outcome = fight_source.search(
+        whole_set.interpretation.fight_terms, request.budget.max_results_per_call
+    )
+    source_evidence_ids: list[str] = []
+    for anchor in source_outcome.evidence:
+        source_evidence_ids.append(anchor.evidence_id)
+    assert source_evidence_ids != sorted(source_evidence_ids)
+    trimmed_request = request.model_copy(
+        update={
+            "budget": request.budget.model_copy(
+                update={"max_context_bytes": whole_set.trajectory.budget_used.context_bytes - 1}
+            )
+        }
+    )
+
+    # Act
+    evidence_set = service.investigate(trimmed_request)
+    audit_decision_path(evidence_set, deployment.topic_registry, deployment.evidence_catalog)
+    replay = replay_evidence_set(evidence_set, deployment)
+
+    # Assert
+    step = evidence_set.trajectory.steps[1]
+    assert step.call.tool == "fight_direct_search"
+    assert step.admission is StepAdmission.ADMITTED_PREFIX
+    assert step.prefix_admission is not None
+    assert len(step.evidence_ids) > 1
+    assert step.evidence_ids == tuple(sorted(step.evidence_ids))
     assert evidence_set.trajectory.budget_used.breach is None
     assert replay == ReplayCompleted(())
 

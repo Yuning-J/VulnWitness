@@ -362,7 +362,7 @@ class TopicContextService:
             request,
             resolution,
             fight_search.protocol_context,
-            fight_search.evidence,
+            self._collect_evidence(fight_search.evidence, [], []),
             [],
             [fight_search.source_outcome],
             warnings,
