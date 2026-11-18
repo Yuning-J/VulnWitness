@@ -1,7 +1,7 @@
 # Draft knowledge; pending named human review.
 topic_schema_version: '1'
 topic_id: 3gpp:gtp
-version: 0.1.0
+version: 0.1.1
 canonical_name: GPRS Tunnelling Protocol
 exact_aliases:
 - GTP-C
@@ -113,6 +113,10 @@ review:
     cannot filter retrieval by plane. FiGHT 3.1.0 at commit 097cd5f73811dc34916ef84d5acc3fe7aba70450
     clearly matches FGT1572.501, FGT1572.502, FGT1599.505, FGT5031 and FGT5042. These are reference
     links, not added runtime aliases. No dedicated technique-link field exists in the current contract.
+    Review is held back: on the real store, a reviewed card turns the M7b case "GTP
+    vulnerabilities in the mobile core" from needs_unmet into sufficient although its topic
+    call misses the required CVE-2014-3386 (implementation coverage 0.85), a wrong sufficient
+    stop. The card waits for review until its topic call covers the required records of that case.
     A named owner must review scope and evidence before approval. Compact CreateSessionRequest and
     CreatePDPContextRequest template terms are card-local renderings of TS 29.274 V18.7.0 clause
     7.2.1 and TS 29.060 V16.1.0 clause 7.3.1. Linux GTP socket, PDP-context, link, transmit and
