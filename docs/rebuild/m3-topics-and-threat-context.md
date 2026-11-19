@@ -47,16 +47,24 @@ source, CVE relevance tiers and a scoped topic-context service.
 - Known limit: `5G aka New Radio` written with plain spaces is spelled exactly like
   the normative alias `5G AKA` and resolves to it.
 - Both cards are `pending_review`; each match reports the card version, hash and
-  review status, and investigations carry `topic_pending_review`.
+  review status, and investigations carry `topic_pending_review`. A `reviewed` card
+  names its human reviewer, and this public repository records no reviewer names, so
+  both cards stay pending. Marking them reviewed changes only stop and status, never
+  the retrieved CVEs or FiGHT techniques. Measured on 2026-11-18 against the imported
+  NVD store: a reviewed 5G-AKA card turns the M7b cases "5G AKA threats" and "5G AKA
+  vulnerabilities in 5G core implementations" from `needs_unmet` into `sufficient`,
+  matching their gold labels. A reviewed GTP card makes a wrong `sufficient` stop
+  (reason in the card's review basis).
 - The 5G-AKA card separates method-specific evidence from shared authentication
-  context. TS 33.501 V19.7.0 §6.1.3.2.0 defines HRES*/HXRES* and 5G HE AV/5G SE AV
-  for 5G-AKA. These are confirming entities, requiring an independent second card
+  context. TS 33.501 V19.7.0 §3.1 defines 5G HE AV/5G SE AV and §6.1.3.2.0 uses
+  them and HRES*/HXRES* in the 5G-AKA procedure. These are confirming entities, requiring an independent second card
   term. Stars are lost in matching, so RES*/XRES* cannot distinguish the method.
   AUSF, UDM, SEAF, K_SEAF, SUPI/SUCI, SIDF, authentication messages and service
   operations stay ecosystem terms and lexical retrieval cues. Shared cues, even
   beside Open5GS or free5GC, yield at most ecosystem adjacency. TS 29.509 V19.5.0
-  §5.2.2.2 defines both 5G-AKA and EAP-AKA' within Authenticate; the service name
-  cannot select the method. A record mentioning both methods remains eligible
+  defines both methods within Authenticate (§5.2.2.2.1 selects the method,
+  §5.2.2.2.2 gives 5G-AKA, §5.2.2.2.3.2 EAP-AKA'); the service name cannot select
+  the method. A record mentioning both methods remains eligible
   when it has 5G-AKA-specific evidence. Candidate exclusions never veto such a
   record. Generic `5G authentication` does not resolve 5G-AKA.
 - Initial identity handling remains retrievable as ecosystem context. FiGHT uses

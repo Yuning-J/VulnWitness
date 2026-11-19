@@ -1,7 +1,7 @@
 # Draft knowledge; pending named human review.
 topic_schema_version: '1'
 topic_id: 3gpp:5g-aka
-version: 1.1.0
+version: 1.1.1
 canonical_name: 5G Authentication and Key Agreement
 exact_aliases:
 - 5G-AKA
@@ -16,9 +16,11 @@ entities:
   role: Tokenizer form of HRES*, compared with HXRES* by the SEAF in 5G-AKA; TS 33.501 V19.7.0 clause
     6.1.3.2.0. Requires a second independent card term.
 - name: 5G HE AV
-  role: 5G home environment authentication vector for 5G-AKA; TS 33.501 V19.7.0 clause 6.1.3.2.0.
+  role: 5G home environment authentication vector for 5G-AKA; defined in TS 33.501 V19.7.0 clause
+    3.1 and used in the procedure of clause 6.1.3.2.0.
 - name: 5G SE AV
-  role: 5G serving environment authentication vector for 5G-AKA; TS 33.501 V19.7.0 clause 6.1.3.2.0.
+  role: 5G serving environment authentication vector for 5G-AKA; defined in TS 33.501 V19.7.0 clause
+    3.1 and used in the procedure of clause 6.1.3.2.0.
 ecosystem_terms:
 - 5GC
 - 5G core
@@ -67,13 +69,15 @@ review:
   reviewer: null
   reviewed_on: null
   basis: 'Cross-release, whole-protocol, high-recall draft, pending named human review. Exact aliases
-    select 5G-AKA. TS 33.501 V19.7.0 clause 6.1.3.2.0 supplies method-specific entities: HRES*/HXRES*
-    and 5G HE AV/5G SE AV. Card matching loses the stars, so these names need a second independent
+    select 5G-AKA. TS 33.501 V19.7.0 clause 6.1.3.2.0 supplies method-specific entities: HRES*/HXRES*,
+    and 5G HE AV/5G SE AV, which clause 3.1 defines and the clause 6.1.3.2.0 procedure uses.
+    Card matching loses the stars, so these names need a second independent
     term. RES*/XRES* lose their distinguishing stars too and stay ecosystem cues. AUSF, UDM, SEAF,
     K_SEAF, SUPI, SUCI, SIDF, authentication messages and service operations are shared authentication
     or identity context, not evidence selecting the method. They stay ecosystem terms and lexical
     retrieval cues; even beside a product they cannot yield protocol_component_implementation. TS
-    29.509 V19.5.0 clause 5.2.2.2 defines both 5G-AKA and EAP-AKA'' within Authenticate. Nausf_UEAuthentication_Authenticate,
+    29.509 V19.5.0 defines both methods within Authenticate: clause 5.2.2.2.1 selects the method,
+    clause 5.2.2.2.2 gives 5G AKA and clause 5.2.2.2.3.2 gives EAP-AKA''. Nausf_UEAuthentication_Authenticate,
     Nudm_UEAuthentication_Get, Nausf, UEAuthentication, Nudm_UEAU, Authentication Request and Authentication
     Response therefore never confirm the method. EAP-AKA mentions are not a candidate veto: a record
     involving both methods can still have specific 5G-AKA evidence. Initial identity handling remains
@@ -87,7 +91,7 @@ review:
     Radio remains indistinguishable from the exact alias. FiGHT receives ecosystem terms as retrieval
     cues too; these do not establish a method-specific vulnerability. Bare 5G and gNB are too broad
     even for this topic context and are omitted. Authentication vector is the shared phrase
-    in the 5G HE AV and 5G SE AV definitions of TS 33.501 clause 6.1.3.2.0. It retrieves
+    in the 5G HE AV and 5G SE AV definitions of TS 33.501 clause 3.1. It retrieves
     FGT1036.501, whose roaming procedure requests an authentication vector under a spoofed
     PLMN ID. This belongs as authentication threat context shared across methods and generations,
     not as evidence of a 5G-AKA-specific flaw or an alias selecting the method.'
@@ -104,10 +108,10 @@ references:
   locator: 'Theory 5G_aka header: modelled mechanisms and omissions (formal calibration, not normative)'
 - title: 3GPP TS 29.509 V19.5.0
   uri: https://www.etsi.org/deliver/etsi_ts/129500_129599/129509/19.05.00_60/ts_129509v190500p.pdf
-  locator: 5.2, 5.2.2.2.2 and 6.1.3.1
+  locator: 5.2, 5.2.2.2.1, 5.2.2.2.2, 5.2.2.2.3.2 and 6.1.3.1
 - title: 3GPP TS 33.501 V19.7.0
   uri: https://www.etsi.org/deliver/etsi_ts/133500_133599/133501/19.07.00_60/ts_133501v190700p.pdf
-  locator: 5.6, 6.1.2, 6.1.3.2.0 and 6.12.5
+  locator: 3.1, 5.6, 6.1.2, 6.1.3.2.0 and 6.12.5
 - title: CVE-2024-56921 observed spelling
   uri: https://www.cve.org/CVERecord?id=CVE-2024-56921
   locator: Description in the pinned local corpus; observed terminology only
